@@ -205,9 +205,17 @@ spec: [validation.md](validation.md))
   schema (needs a live schema read — Phase 4), package-discipline (needs the
   edit operations' baseline — Phase 3).
 
-**Phase 3 — Edit operations + MCP server**
+**Phase 3 — Edit operations + MCP server** — 🔨 **design** (2026-09-08;
+[edit-operations.md](edit-operations.md))
 - Reference-aware operations on the model, each validated; CLI + MCP tools;
   dry-run everywhere. Simulation as a gate (`simulate` = `test-all` + `compare`).
+- Design: content edits stay file edits (+ `validate`); operations cover
+  structure (add/rename/delete/link/unlink/reorder, rules, GCVs, filter, schema
+  map, driver config) as transactions that refuse an invalid result; packaged
+  artifacts snapshot a baseline and mark `customized` on first edit; an
+  `ExportWriter` bridges the tree to the simulator (and to Designer import /
+  vault diff) for `simulate`; MCP over the official Java SDK, destructive tools
+  annotated. Four decisions to confirm at the end of the note.
 
 **Phase 4 — Vault deploy with safeguards**
 - Structured `vault.diff`; deploy plan; LDIF snapshot + `rollback`; LDAP writes +
