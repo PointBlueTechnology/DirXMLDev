@@ -10,6 +10,7 @@ import com.pointblue.dirxml.dev.source.ExportReader;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -119,6 +120,26 @@ public final class Cli {
                 System.out.print(json ? rep.json() + "\n" : rep.text());
                 System.exit(rep.ok() ? 0 : 1);
             }
+            if (args.length >= 3 && args[0].equals("tree.diff")) {
+                boolean json = false;
+                List<String> pos = new ArrayList<>();
+                for (int i = 1; i < args.length; i++) {
+                    if (args[i].equals("--json")) {
+                        json = true;
+                    } else {
+                        pos.add(args[i]);
+                    }
+                }
+                if (pos.size() < 2) {
+                    System.err.println("usage: tree.diff <fromDir> <toDir> [--json]");
+                    System.exit(2);
+                }
+                DriverSet from = AsCodeReader.read(Paths.get(pos.get(0)));
+                DriverSet to = AsCodeReader.read(Paths.get(pos.get(1)));
+                com.pointblue.dirxml.dev.deploy.ModelDiff diff = com.pointblue.dirxml.dev.deploy.ModelDiff.of(from, to);
+                System.out.print(json ? diff.json() + "\n" : diff.text());
+                System.exit(diff.isEmpty() ? 0 : 1);
+            }
             usage();
             System.exit(2);
         } catch (Exception e) {
@@ -183,6 +204,7 @@ public final class Cli {
         System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
+        System.err.println("  tree.diff <fromDir> <toDir> [--json]  structured diff of two as-code trees (exit 1 if they differ)");
         System.err.println("  simulate <asCodeDir> --cases <dir> [--against <asCodeDir>] [--json]  run the regression corpus against the tree; diff vs another tree");
         System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact");
         System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
