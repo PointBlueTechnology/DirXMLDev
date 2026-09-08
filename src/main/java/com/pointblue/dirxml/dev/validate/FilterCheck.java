@@ -29,7 +29,7 @@ import java.util.Set;
  * <p>Codes: {@code filter-malformed} (E), {@code filter-invalid-value} (E),
  * {@code filter-duplicate-class} / {@code filter-duplicate-attr} (E),
  * {@code filter-dead-attr} (I), {@code schema-map-malformed} (E),
- * {@code schema-map-duplicate} (E), {@code schema-map-unfiltered-class} (I).
+ * {@code schema-map-duplicate} (I), {@code schema-map-unfiltered-class} (I).
  */
 public final class FilterCheck implements Check {
 
@@ -247,17 +247,22 @@ public final class FilterCheck implements Check {
             ndsCount.merge(e.nds(), 1, Integer::sum);
             appToNds.computeIfAbsent(e.app(), k -> new LinkedHashSet<>()).add(e.nds());
         }
+        // Duplicates are legal and common in stock packages (the AD schema map sends
+        // CN to both cn and sAMAccountName): the engine uses the first mapping in
+        // each direction. Reported as INFO so an unintended duplicate is visible.
         for (Map.Entry<String, Integer> en : ndsCount.entrySet()) {
             if (en.getValue() > 1) {
-                r.add(Finding.error("schema-map-duplicate", path,
-                    "nds-name '" + en.getKey() + "' is mapped twice among the " + levelDesc + " entries"));
+                r.add(Finding.info("schema-map-duplicate", path,
+                    "nds-name '" + en.getKey() + "' is mapped " + en.getValue() + " times among the " + levelDesc
+                        + " entries; the engine maps eDir→app with the first"));
             }
         }
         for (Map.Entry<String, Set<String>> en : appToNds.entrySet()) {
             if (en.getValue().size() > 1) {
-                r.add(Finding.error("schema-map-duplicate", path,
-                    "app-name '" + en.getKey() + "' is mapped to two different nds-name(s) among the " + levelDesc
-                        + " entries: " + String.join(", ", en.getValue())));
+                r.add(Finding.info("schema-map-duplicate", path,
+                    "app-name '" + en.getKey() + "' is mapped to " + en.getValue().size() + " nds-names among the "
+                        + levelDesc + " entries (" + String.join(", ", en.getValue())
+                        + "); the engine maps app→eDir with the first"));
             }
         }
     }
