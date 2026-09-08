@@ -24,9 +24,9 @@ Nothing here is new protocol: it is LDAP writes of `DirXML-*` objects plus the
 `RestartDriver` extended operation, exactly what Phase 0 proved the engine
 honours. What is new is the discipline around them.
 
-Not in Phase 4: driver lifecycle beyond what deploy needs (Phase 5), named
-passwords and the shim password (Phase 5 — they are never in the tree),
-provisioning forms (Track P).
+Not in Phase 4: driver lifecycle beyond what deploy needs (Phase 5),
+provisioning forms (Track P). Secrets the tree can't carry (shim and Remote
+Loader passwords, named passwords) **are** in scope — see "Secrets" below.
 
 ## The contract, from the spikes
 
@@ -213,6 +213,66 @@ plan/verify/audit machinery: it prints its plan, snapshots the current state
 first (so a rollback is itself reversible), and verifies that the vault matches
 the snapshot afterwards.
 
+## Secrets — what the tree can never carry
+
+Exports, projects and the tree hold no secrets, but a driver doesn't run
+without them. The deployer treats them as a first-class part of a deploy, never
+as an afterthought a human fixes in iManager.
+
+**Inventory** — what a driver may need, and how the deployer knows:
+
+| secret | how it's detected | how it's set |
+|---|---|---|
+| shim authentication password (`DirXML-ShimAuthPassword`) | the driver has a `shim-auth-id` / auth server | LDAP modify of the write-only attribute — *or* the driver-set password channel; **spike 4a decides which the engine honours** (proof = the driver starts and authenticates) |
+| Remote Loader password | shim-config-info / engine-control values name a remote loader (`remote-loader` parameters) | same spike |
+| named passwords | `validate` already lists every `token-named-password` a policy reads (`named-password` findings); password-ref GCVs (`type="password-ref"`) name them too | `SetNamedPassword` extended op on the driver (or driver set for shared names); `ListNamedPasswords` verifies the name exists; `RemoveNamedPassword` |
+| application-side secrets inside shim parameters (a `password` typed parameter) | shim-config-info definitions with `type="password-ref"` | as named passwords |
+
+**Where they come from** — a per-environment secrets file, gitignored, or the
+environment:
+
+```properties
+# secrets-stg.properties (gitignored; path in stg.secrets=… or IDM_SECRETS)
+AD Driver.shim-auth-password=…
+AD Driver.remote-loader-password=…
+AD Driver.named.exchange-service=…
+driverset.named.smtp-relay=…
+# or, per key: <key>Env=VAR_NAME   /   <key>Command=op read "op://vault/item/field"
+```
+
+A value can be literal, an environment variable, or the output of a command
+(so a password manager or a CI secret store is the real source and nothing
+sensitive sits in a file). The deployer never prints a secret and never writes
+one into a snapshot, an audit line, or a tree.
+
+**In the plan.** Secrets are not diffable — the vault won't return them — so
+they are planned by *need*, not by difference:
+
+- **Initial deploy of a driver** (the driver doesn't exist in the vault):
+  every secret the inventory says it needs is a plan step; a missing one is
+  reported (`secret 'AD Driver.shim-auth-password' not provided`) and the
+  deploy refuses — unless `--allow-missing-secrets`, which creates the driver
+  stopped and lists what must be set before it can start.
+- **Updating a driver**: secrets are *not* touched unless asked:
+  `--secrets all` re-sets every provided secret for the affected drivers
+  (the way to force a rotated password in), `--secrets missing` sets only named
+  passwords that `ListNamedPasswords` shows absent, and
+  `idm vault.secrets --env stg --driver "AD Driver" --set named.exchange-service`
+  sets one outside a deploy (through the same gate and audit).
+- The plan shows secret steps by **name only** (`set secret AD Driver.named.exchange-service`).
+
+**Verification.** Named passwords: the name is in `ListNamedPasswords` after the
+write. Shim / Remote Loader passwords can't be read back; the proof is the
+driver starting and authenticating, which the deploy's post-restart state check
+covers for a running driver (and Phase 5's `driver.start` for a newly created
+one). The audit line records which secrets were set — names, never values.
+
+**Spike 4a** (build step 2, on the test vault's `Querytest` driver and a scratch
+named password): which write path the engine honours for the shim password and
+the Remote Loader password, whether `DirXML-ShimAuthPassword` is LDAP-writable
+by the deploy identity, and the exact `SetNamedPassword` semantics on a driver
+vs the driver set. Findings → `spikes/secrets.md`.
+
 ## Environments and gating
 
 Vault targets live in a local, gitignored `environments.properties` (or the
@@ -248,17 +308,19 @@ client's job; the tool never writes outside `driverSet`.
 2. **`Vault`** (the LDAP side, from the spike code): connect (trust-all
    LDAPS, binary `XmlData`/`DirXML-Data`), read an entry with all attributes,
    add/modify/delete, `DirXML-Policies` replace; extended ops
-   `state/start/stop/restart` with state polling. Integration tests against the
-   test vault on scratch objects under `cn=Library` and the side-effect-free
-   `Querytest` driver (as spike 1b), cleaned up in `finally`. This step also
-   settles the package-checksum question on a scratch packaged object.
+   `state/start/stop/restart` with state polling, `Set/List/RemoveNamedPassword`.
+   Integration tests against the test vault on scratch objects under
+   `cn=Library` and the side-effect-free `Querytest` driver (as spike 1b),
+   cleaned up in `finally`. This step also settles the package-checksum question
+   on a scratch packaged object, and **spike 4a** (secrets write paths).
 3. **`vault.diff`** = readLive + `ModelDiff`.
 4. **Snapshot / rollback**: LDIF writer for entries (all attributes), manifest,
    restore.
-5. **Plan + deploy + verify + audit**, `--dry-run`, `--driver`, `--no-restart`,
-   new-driver creation (stopped, manual).
-6. **Environments + gating** (`environments.properties`, tiers, `--confirm`,
-   `requires`).
+5. **Plan + deploy + verify + audit**, `--yes` / `--step`, `--dry-run`,
+   `--driver`, `--no-restart`, new-driver creation (stopped, manual), secrets
+   (inventory, `--secrets`, `vault.secrets`).
+6. **Environments + gating** (`environments.properties`, secrets sources, tiers,
+   `--confirm`, known-state check + `--capture-drift`, `requires`).
 7. End to end on the test vault: import-live → tree → an edit → `vault.diff`
    shows it → `vault.deploy --yes` → trace shows `Found DirXMLScript policy` for
    the new object after restart (spike 1b's evidence) → `vault.verify` empty →
@@ -282,3 +344,10 @@ discipline), 5 and 7 are not.
    current state is captured into the repo first (`--capture-drift`). A green
    STG deploy of the same commit is an environment option (`prd.requires`),
    not a universal rule.
+5. ✅ **Confirmed 2026-09-08 (Jerry):** secrets the tree can't carry (shim
+   password, Remote Loader password, named passwords) are handled cleanly:
+   sourced from a gitignored per-environment secrets file / environment
+   variables / a command, **required and set on a driver's initial deploy**,
+   never touched on updates unless **forced** (`--secrets all|missing`,
+   `vault.secrets --set`), verified by name where the vault allows, never
+   printed, snapshotted or logged.
