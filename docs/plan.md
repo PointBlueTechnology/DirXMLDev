@@ -222,10 +222,19 @@ spec: [validation.md](validation.md))
   (`show`, `query`, `refs`, `package.diff`). 108 tests; exercised on the real
   RFI and JFW trees.
 
-**Phase 4 — Vault deploy with safeguards**
+**Phase 4 — Vault deploy with safeguards** — 🔨 **design** (2026-09-08;
+[vault-deploy.md](vault-deploy.md))
 - Structured `vault.diff`; deploy plan; LDIF snapshot + `rollback`; LDAP writes +
   `RestartDriver`; environment gating; audit log; post-deploy verification
   (re-read → diff empty; optional canary `SubmitEvent` vs simulator prediction).
+- Design: a pure `ModelDiff` (also `tree.diff`) drives a printed, ordered plan
+  (Library → driver → channel objects → attributes/linkage → driver set →
+  restarts); snapshot of every touched object + driver state before any write;
+  writes stop at the first failure; verify = re-read → diff empty + drivers
+  running; audit line per deploy; environments with tiers, `--confirm` for
+  PRD, and PRD requiring a green STG deploy of the same commit. Deploy never
+  deletes a driver; new drivers are created stopped. Four decisions to
+  confirm at the end of the note.
 
 **Phase 5 — Operate**
 - Driver lifecycle, cache view/clear, migrate/resync, named passwords, trace
