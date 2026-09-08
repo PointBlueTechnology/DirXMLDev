@@ -220,8 +220,13 @@ With `--json` each result is structured for the agent rather than printed.
 2. **`ExportWriter`** + round-trip test against `ExportReader` on RFI/JFW; then a
    simulator smoke test: a case whose `export=` is the written file runs.
 3. **`simulate`** (`BatchRunner` + `Comparer` over the swapped source).
-4. **Rule and configuration operations** (`rule.*`, `gcv.*`, `filter.*`,
-   `schema-map.*`, `driver.set`, `mapping-table.*`) through the registry.
+4. ✅ **Rule and configuration operations** (2026-09-08): `rule.add/delete/
+   move/disable/enable` (rules by `<description>` or `#n`); `gcv.set` (where
+   the driver's scope defines it, in the engine's precedence; `--define` to
+   create) / `gcv.delete` (refuses while read, token or `~name~`);
+   `filter.set-class/set-attr/remove-class/remove-attr`; `schema-map.set/
+   remove`; `driver.set` (`shim-class`, `shim-auth-*`, `param:<name>`,
+   `engine:<name>`); `mapping-table.set-row/delete-row/add-column`. 12 tests.
 5. **Read commands** (`summary`, `query`, `show`, `package.diff`) and the skill /
    agent guide for the whole surface.
 
