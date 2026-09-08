@@ -153,34 +153,37 @@ Cases live where the client's tests live (`cases/` in the client repo, as the
 Amica project is set up), harvested from the Event Logger DB or traces with the
 simulator's `harvest`.
 
-## The MCP server
+## The surface: CLI only (decided 2026-09-08)
 
-A stdio MCP server (`bin/idm mcp`) exposing the same core as the CLI, with typed
-JSON arguments and structured results. One process per tree; the tree path is
-the server's working set (`--tree <dir>`), so tools take artifact paths, not file
-paths.
+Everything is a `bin/idm` command with `--json`, driven from a shell — the way
+agents drive the simulator today. No MCP server in this phase. What that gives
+up, and why it's acceptable now:
 
-| tool | annotations | |
+| MCP would add | why it doesn't earn a second surface yet |
+|---|---|
+| a JSON schema per tool the agent reads | the skill file + `idm help <op>` do the same job, as they do for `bin/sim` |
+| `destructiveHint` so the client confirms | Claude Code already confirms shell commands, and the real safeguards are the operations' own (dry-run, refuse-on-error, Phase 4's snapshot/env gating/`--yes`) — a hint the client *may* honour isn't one |
+| a resident model between calls | reloading a 50-driver tree costs a second or two per command; cacheable later if it bites |
+| reach into clients with no shell (Cursor, Claude Desktop) | not the audience today |
+
+What keeps MCP cheap later: **one operation registry**. Every operation is
+registered once — name, argument spec, handler, `readOnly`/`destructive` flag —
+and the CLI is a dispatcher over it (`idm <op> [args] [--json] [--dry-run]`). An
+MCP server, if a client ever needs one, is a thin adapter over that same
+registry (the official Java SDK, stdio), not a second implementation.
+
+| command | kind | |
 |---|---|---|
-| `model.summary` | read-only | driver set, drivers, counts, unresolved links |
-| `model.query` | read-only | list / describe artifacts, links, references to an artifact, a driver's policy chain in execution order, GCVs in scope, tables in reach |
-| `artifact.read` | read-only | the content of one artifact |
-| `validate` | read-only | the report, `--json` shape |
-| `simulate` | read-only (runs the simulator) | the gate result |
-| `policy.*`, `rule.*`, `resource.*`, `gcv.*`, `filter.*`, `schema-map.*`, `driver.set`, `mapping-table.*` | **destructive**, idempotent where the operation is | as above; every one accepts `dryRun` |
-| `package.diff` | read-only | customization vs the package baseline |
-| `tree.status` | read-only | git status of the tree, last validate/simulate results |
+| `idm summary <tree>` | read | driver set, drivers, counts, unresolved links |
+| `idm query <tree> …` | read | list / describe artifacts, links, **references to an artifact**, a driver's chain in execution order, GCVs in scope, tables in reach |
+| `idm show <tree> <path>` | read | the content of one artifact |
+| `idm validate <tree>` | read | the report |
+| `idm simulate <tree> --cases …` | read (runs the simulator) | the gate result |
+| `idm policy.* / rule.* / resource.* / gcv.* / filter.* / schema-map.* / driver.set / mapping-table.*` | **write** | as above; every one accepts `--dry-run` |
+| `idm package.diff <tree> <path>` | read | customization vs the package baseline |
 
-Destructive tools carry `destructiveHint: true` so a client confirms them;
-read-only ones `readOnlyHint: true`. Nothing in this phase talks to a vault, so
-there is no `deploy` tool yet — Phase 4 adds `vault.*` and `driver.*` with the
-gating plan.md describes.
-
-Implementation: the official Java MCP SDK (`io.modelcontextprotocol.sdk:mcp`,
-Apache-2) over stdio, tools registered from a table so the CLI and the server
-share one operation registry. The SDK is a Maven Central dependency — the first
-non-system-scope dependency besides JUnit and the simulator — fetched once with
-the network on, then offline as today.
+Nothing in this phase talks to a vault; Phase 4 adds `vault.*` and `driver.*`
+with the gating plan.md describes.
 
 ## How an agent works with it
 
@@ -198,38 +201,41 @@ git commit                                          # the tree is the source of 
 # Phase 4: idm vault.diff → deploy STG → verify → promote
 ```
 
-Through MCP the same flow is `policy.add` → the client's file edit → `validate` →
-`simulate`, with each result structured for the agent rather than printed.
+With `--json` each result is structured for the agent rather than printed.
 
 ## Build order
 
-1. **Operation core** (`edit` package): the reverse-reference index; `Transaction`
-   (load → mutate → validate → write-or-refuse); `policy.add/rename/delete/link/
-   unlink/reorder`, `resource.*`; package baseline snapshot + `customized` mark.
-   Tests: each operation on the synthetic driver set from `ValidatorTest`, plus
-   the refusal cases; a rename across a real tree (RFI) leaves `validate` at 0
-   errors and every reference resolved.
+1. ✅ **Operation core** (`edit` package, 2026-09-08): `Registry` (name, args,
+   help, factory — the CLI dispatches from it); `Refs` (the reverse-reference
+   index: links, driver-set linkage, `<include>`s, Map tokens); `Transaction`
+   (load → validate-before → apply → validate-after → refuse on a *new* error →
+   sync-write: only changed files, managed-path deletions, `.git`/baselines/
+   client files untouched; `--dry-run`, `--force`); `ArtifactOps`
+   `policy.add` / `resource.add` / `artifact.set-content` / `artifact.rename` /
+   `artifact.delete` / `policy.link` / `policy.unlink` / `policy.reorder`
+   (orders renumbered 0..n); `Packages` (baseline snapshot + `customized` mark
+   on the first edit of a packaged artifact); `idm refs`. 13 tests, plus a
+   rename + add + link across a copy of the real RFI tree: every reference
+   rewritten, `validate` still 0 errors.
 2. **`ExportWriter`** + round-trip test against `ExportReader` on RFI/JFW; then a
    simulator smoke test: a case whose `export=` is the written file runs.
 3. **`simulate`** (`BatchRunner` + `Comparer` over the swapped source).
 4. **Rule and configuration operations** (`rule.*`, `gcv.*`, `filter.*`,
-   `schema-map.*`, `driver.set`, `mapping-table.*`).
-5. **CLI** for all of the above (one registry, `--json` everywhere).
-6. **MCP server** over the registry; annotated; a client smoke test (Claude Code
-   `claude mcp add`) doing the agent flow above end-to-end on the IG4 tree.
+   `schema-map.*`, `driver.set`, `mapping-table.*`) through the registry.
+5. **Read commands** (`summary`, `query`, `show`, `package.diff`) and the skill /
+   agent guide for the whole surface.
 
-Delegation: 2 (writer, spec = the reader + real exports), 4 (well-specified
-operations against the finished core) and the MCP wiring in 6 are good subagent
-work; the core, the transaction semantics and the simulate gate are not.
+Delegation: 2 (writer, spec = the reader + real exports) and 4 (well-specified
+operations against the finished core) are good subagent work; the core, the
+transaction semantics and the simulate gate are not.
 
-## Decisions to confirm
+## Decisions (confirmed 2026-09-08)
 
-1. **Content edits stay file edits** (operations only for structure) — yes unless
-   you want a rule-builder DSL, which I'd argue against.
+1. **Content edits stay file edits** (operations only for structure). ✅
 2. **Package baseline in the tree** (`.package-baseline/`, `package.customized`
    meta) as the Phase 3 truth; server-side checksum handled by the deployer /
-   Designer writer later.
+   Designer writer later. ✅
 3. **`ExportWriter` as the simulator bridge** (rather than teaching the simulator
-   to read as-code trees) — keeps the simulator independent and gives Designer
-   import + vault diff the same artifact.
-4. **MCP via the official Java SDK** (a Maven Central dependency).
+   to read as-code trees). ✅
+4. **CLI only; no MCP server** — the registry keeps an adapter cheap if a client
+   ever needs one. ✅

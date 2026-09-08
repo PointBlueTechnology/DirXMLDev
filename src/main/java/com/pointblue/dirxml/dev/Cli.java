@@ -45,6 +45,21 @@ public final class Cli {
             if (args.length >= 2 && args[0].equals("check")) {
                 System.exit(doCheck(Paths.get(args[1])));
             }
+            if (args.length >= 1 && com.pointblue.dirxml.dev.edit.EditCli.isOperation(args[0])) {
+                System.exit(com.pointblue.dirxml.dev.edit.EditCli.run(args));
+            }
+            if (args.length >= 3 && args[0].equals("refs")) {
+                DriverSet ds = AsCodeReader.read(Paths.get(args[1]));
+                List<com.pointblue.dirxml.dev.edit.Refs.Ref> refs = com.pointblue.dirxml.dev.edit.Refs.to(ds, args[2]);
+                if (ds.resolve(args[2]) == null) {
+                    System.out.println("(no artifact at '" + args[2] + "')");
+                }
+                for (com.pointblue.dirxml.dev.edit.Refs.Ref ref : refs) {
+                    System.out.println(ref);
+                }
+                System.out.println(refs.size() + " reference(s)");
+                System.exit(0);
+            }
             if (args.length >= 2 && args[0].equals("validate")) {
                 boolean json = false;
                 Path dir = null;
@@ -127,5 +142,8 @@ public final class Cli {
         System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
+        System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact");
+        System.err.println("edit operations (each: load → apply → validate → write unless a new error; --dry-run, --force, --json):");
+        System.err.print(com.pointblue.dirxml.dev.edit.EditCli.usage());
     }
 }

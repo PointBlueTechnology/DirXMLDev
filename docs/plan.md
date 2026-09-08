@@ -214,8 +214,8 @@ spec: [validation.md](validation.md))
   map, driver config) as transactions that refuse an invalid result; packaged
   artifacts snapshot a baseline and mark `customized` on first edit; an
   `ExportWriter` bridges the tree to the simulator (and to Designer import /
-  vault diff) for `simulate`; MCP over the official Java SDK, destructive tools
-  annotated. Four decisions to confirm at the end of the note.
+  vault diff) for `simulate`; CLI only (one operation registry, `--json`/`--dry-run` everywhere; an MCP
+  adapter over the registry only if a client ever needs it). Decisions confirmed.
 
 **Phase 4 — Vault deploy with safeguards**
 - Structured `vault.diff`; deploy plan; LDIF snapshot + `rollback`; LDAP writes +

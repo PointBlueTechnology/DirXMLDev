@@ -143,7 +143,7 @@ public final class AsCodeWriter {
 
     // ---- naming ----
 
-    static String extension(Artifact a) {
+    public static String extension(Artifact a) {
         if (a instanceof Policy) {
             return ".policy.xml";
         }
@@ -161,7 +161,7 @@ public final class AsCodeWriter {
     }
 
     /** A filesystem-safe file/dir name; the manifest keeps the real name. */
-    static String fileSafe(String name) {
+    public static String fileSafe(String name) {
         StringBuilder sb = new StringBuilder();
         for (char c : name.toCharArray()) {
             sb.append((c < 0x20 || "\\/:*?\"<>|".indexOf(c) >= 0) ? '_' : c);
