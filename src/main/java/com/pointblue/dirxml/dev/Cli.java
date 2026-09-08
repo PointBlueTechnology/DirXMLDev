@@ -48,6 +48,15 @@ public final class Cli {
             if (args.length >= 1 && com.pointblue.dirxml.dev.edit.EditCli.isOperation(args[0])) {
                 System.exit(com.pointblue.dirxml.dev.edit.EditCli.run(args));
             }
+            if (args.length >= 1 && args[0].equals("show")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.show(args));
+            }
+            if (args.length >= 1 && args[0].equals("query")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.query(args));
+            }
+            if (args.length >= 1 && args[0].equals("package.diff")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.packageDiff(args));
+            }
             if (args.length >= 3 && args[0].equals("refs")) {
                 DriverSet ds = AsCodeReader.read(Paths.get(args[1]));
                 List<com.pointblue.dirxml.dev.edit.Refs.Ref> refs = com.pointblue.dirxml.dev.edit.Refs.to(ds, args[2]);
@@ -143,6 +152,9 @@ public final class Cli {
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
         System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact");
+        System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
+        System.err.println("  query <asCodeDir> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver]");
+        System.err.println("  package.diff <asCodeDir> <artifactPath>  a customized packaged artifact vs its package baseline");
         System.err.println("edit operations (each: load → apply → validate → write unless a new error; --dry-run, --force, --json):");
         System.err.print(com.pointblue.dirxml.dev.edit.EditCli.usage());
     }
