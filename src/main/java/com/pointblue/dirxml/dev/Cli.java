@@ -17,6 +17,7 @@ import java.util.List;
  * <pre>
  *   import &lt;export.xml&gt; &lt;outDir&gt;   read a driver / driver-set export, write IDM-as-code
  *   check  &lt;asCodeDir&gt;             load an as-code tree, report it, exit 1 on broken links
+ *   validate &lt;asCodeDir&gt; [--json]  run every validation check, exit 1 on any error
  * </pre>
  */
 public final class Cli {
@@ -43,6 +44,25 @@ public final class Cli {
             }
             if (args.length >= 2 && args[0].equals("check")) {
                 System.exit(doCheck(Paths.get(args[1])));
+            }
+            if (args.length >= 2 && args[0].equals("validate")) {
+                boolean json = false;
+                Path dir = null;
+                for (int i = 1; i < args.length; i++) {
+                    if (args[i].equals("--json")) {
+                        json = true;
+                    } else {
+                        dir = Paths.get(args[i]);
+                    }
+                }
+                if (dir == null) {
+                    usage();
+                    System.exit(2);
+                }
+                com.pointblue.dirxml.dev.validate.Report rep =
+                    com.pointblue.dirxml.dev.validate.Validator.standard().validate(dir);
+                System.out.print(json ? rep.json() + "\n" : rep.text());
+                System.exit(rep.ok() ? 0 : 1);
             }
             usage();
             System.exit(2);
@@ -106,5 +126,6 @@ public final class Cli {
         System.err.println("  import-ldif <dump.ldif> <outDir>      read an LDIF of the driver-set subtree, write IDM-as-code");
         System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
+        System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
     }
 }
