@@ -233,8 +233,10 @@ spec: [validation.md](validation.md))
   writes stop at the first failure; verify = re-read → diff empty + drivers
   running; audit line per deploy; environments with tiers, `--confirm` for
   PRD, and PRD requiring a green STG deploy of the same commit. Deploy never
-  deletes a driver; new drivers are created stopped. Four decisions to
-  confirm at the end of the note.
+  deletes a driver; new drivers are created stopped. Deploys run step by step (diff → confirm → write → verify per change) or
+  automated after a backup and one confirmation; a production change must
+  start from a state the repo knows (no drift, or `--capture-drift` first).
+  Three decisions still to confirm at the end of the note.
 
 **Phase 5 — Operate**
 - Driver lifecycle, cache view/clear, migrate/resync, named passwords, trace
