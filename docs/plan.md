@@ -222,8 +222,10 @@ spec: [validation.md](validation.md))
   (`show`, `query`, `refs`, `package.diff`). 108 tests; exercised on the real
   RFI and JFW trees.
 
-**Phase 4 — Vault deploy with safeguards** — 🔨 **design** (2026-09-08;
-[vault-deploy.md](vault-deploy.md))
+**Phase 4 — Vault deploy with safeguards** — ✅ **built and proven on the test
+vault** (2026-09-08; [vault-deploy.md](vault-deploy.md) records what landed and
+what is deliberately deferred: `--delete-driver`, the Remote Loader password,
+`simulate` inside the production gate)
 - Structured `vault.diff`; deploy plan; LDIF snapshot + `rollback`; LDAP writes +
   `RestartDriver`; environment gating; audit log; post-deploy verification
   (re-read → diff empty; optional canary `SubmitEvent` vs simulator prediction).

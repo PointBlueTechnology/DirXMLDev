@@ -436,32 +436,87 @@ public final class Deployer {
             sb.append("\nrun again with --capture-drift to record the vault's current state in the repo as its own commit, then deploy on top of it");
             return sb.toString();
         }
-        // capture: the live state on its own branch, from the last deployed commit (or the current HEAD)
+        // capture: the live state as its own commit on a branch based on the last deployed
+        // commit — or, when nothing was ever deployed here, on the tree's first commit (the
+        // import) — so the intended change can be rebased on top of what production holds
         String ts = Instant.now().toString().replace(':', '-');
         String branch = "as-found/" + env.name + "/" + ts;
         Path wt = Files.createTempDirectory("idm-as-found");
         Files.delete(wt);
         DeployLog.Record last = DeployLog.lastOk(o.tree, env.name);
-        String base = last != null && last.treeCommit != null ? last.treeCommit : "HEAD";
+        String base = last != null && last.treeCommit != null ? last.treeCommit : rootCommit();
         run("git", "-C", o.tree.toAbsolutePath().toString(), "worktree", "add", "-b", branch, wt.toString(), base);
         try {
+            // does the vault differ from the base commit? decided on bytes through the
+            // model, never through git's view (which may normalize line endings)
+            boolean differs;
+            try {
+                differs = !ModelDiff.of(AsCodeReader.read(wt), live).isEmpty();
+            } catch (RuntimeException | IOException e) {
+                differs = true;
+            }
+            // exactly the live state: clear the managed paths first so nothing stale survives,
+            // and make sure git stores the bytes as they are
+            for (String managed : new String[] {"driverset.xml", "config-values.xml", "library", "drivers"}) {
+                deleteRecursively(wt.resolve(managed));
+            }
+            Path attrs = wt.resolve(".gitattributes");
+            if (!Files.exists(attrs)) {
+                Files.writeString(attrs, "# IDM-as-code: content is byte-exact vault data; never normalize line endings\n* -text\n");
+            }
             AsCodeWriter.write(live, wt);
             run("git", "-C", wt.toString(), "add", "-A");
-            run("git", "-C", wt.toString(), "commit", "-q", "-m", env.name + " as found " + ts);
-            String commit = DeployLog.treeCommit(wt);
+            String commit;
+            if (differs) {
+                run("git", "-C", wt.toString(), "commit", "-q", "-m", env.name + " as found " + ts);
+                commit = DeployLog.treeCommit(wt);
+            } else {
+                commit = DeployLog.treeCommit(wt);   // the base itself: the vault matches it
+            }
             DeployLog.Record rec = DeployLog.record(env.name, "deploy");
             rec.treeCommit = commit;
             rec.outcome = "ok";
             rec.changes = 0;
-            rec.detail = "state captured from the vault (--capture-drift), not deployed";
+            rec.detail = differs ? "state captured from the vault (--capture-drift), not deployed"
+                : "vault verified to match this commit (--capture-drift), nothing deployed";
             DeployLog.append(o.tree, rec);
-            sb.append("\ncaptured the vault's state as branch ").append(branch).append(" (commit ")
-                .append(commit == null ? "?" : commit.substring(0, 12))
-                .append(") and recorded it as the known state; merge or rebase your change onto it and deploy again");
+            if (differs) {
+                sb.append("\ncaptured the vault's state as branch ").append(branch).append(" (commit ")
+                    .append(commit == null ? "?" : commit.substring(0, 12))
+                    .append(") and recorded it as the known state; put your change on top of it — `git rebase ")
+                    .append(branch).append("` — then deploy again");
+            } else {
+                sb.append("\nthe vault matches commit ").append(commit == null ? "?" : commit.substring(0, 12))
+                    .append(" exactly; recorded it as the known state — commit deploy-log/ and deploy again");
+            }
         } finally {
             run("git", "-C", o.tree.toAbsolutePath().toString(), "worktree", "remove", "--force", wt.toString());
         }
+        try {
+            // an empty capture leaves no branch behind
+            Process p = new ProcessBuilder("git", "-C", o.tree.toAbsolutePath().toString(), "diff", "--quiet", base, branch)
+                .redirectErrorStream(true).start();
+            p.getInputStream().readAllBytes();
+            if (p.waitFor() == 0) {
+                run("git", "-C", o.tree.toAbsolutePath().toString(), "branch", "-D", branch);
+            }
+        } catch (Exception ignored) {
+            // the branch stays; harmless
+        }
         return sb.toString();
+    }
+
+    /** The tree's first commit (the import), or HEAD when it can't be found. */
+    private String rootCommit() {
+        try {
+            Process p = new ProcessBuilder("git", "-C", o.tree.toAbsolutePath().toString(), "rev-list", "--max-parents=0", "HEAD")
+                .redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
+            String first = out.split("\n")[0].strip();
+            return p.waitFor() == 0 && first.matches("[0-9a-f]{40}") ? first : "HEAD";
+        } catch (Exception e) {
+            return "HEAD";
+        }
     }
 
     /** A temp checkout of the tree at a commit, or null. */

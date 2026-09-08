@@ -6,17 +6,19 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phase 3 complete — edit operations, simulate gate, CLI.** Phases 0–2:
-typed model, IDM-as-code with readers for export / Designer project / LDIF /
-live vault (byte-idempotent), and `validate` — every policy through the engine's
-own compilers in the driver's context, plus linkage, GCV, mapping-table,
-ECMAScript and filter/schema-map checks (running production vaults validate
-with zero errors). Phase 3: the reference-aware edit operations as validated
-transactions, package-aware overrides, `export` (Designer imports it), and
-`simulate` (the regression corpus against the tree, diffed against the tree
-before the edit). CLI only by decision — no MCP server. Next: Phase 4, vault
-deploy with safeguards. See [docs/plan.md](docs/plan.md),
-[docs/edit-operations.md](docs/edit-operations.md) and
+Status: **Phase 4 — vault deploy with safeguards, proven on the test vault.**
+Phases 0–3: typed model, IDM-as-code with readers for export / Designer project
+/ LDIF / live vault (byte-idempotent); `validate` — every policy through the
+engine's own compilers in the driver's context plus linkage, GCV,
+mapping-table, ECMAScript and filter/schema-map checks (running production
+vaults validate with zero errors); the reference-aware edit operations as
+validated transactions with package-aware overrides; `export` (Designer imports
+it) and `simulate` (the regression corpus, diffed against the tree before the
+edit). Phase 4: `vault.diff` / `vault.deploy` (plan → snapshot → `--yes` or
+`--step` → restart → verify → audit) / `vault.rollback`, environments with
+tiers and a production gate that requires a known vault state, secrets sourced
+per environment. CLI only by decision. See [docs/plan.md](docs/plan.md),
+[docs/vault-deploy.md](docs/vault-deploy.md) and
 [docs/agent-guide.md](docs/agent-guide.md).
 
 ```bash
