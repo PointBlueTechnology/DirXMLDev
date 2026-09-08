@@ -105,7 +105,15 @@ public final class Simulate {
                 }
                 if (c.against != null) {
                     if (c.against.finalSame) {
-                        sb.append("       unchanged vs --against\n");
+                        List<String> mid = new ArrayList<>();
+                        for (Comparer.StageDiff s : c.against.stages) {
+                            if (!s.same) {
+                                mid.add(s.name);
+                            }
+                        }
+                        sb.append(mid.isEmpty() ? "       unchanged vs --against\n"
+                            : "       final output unchanged vs --against, but " + mid.size()
+                                + " intermediate stage(s) differ (reconverges): " + String.join(", ", mid) + "\n");
                     } else {
                         sb.append("       CHANGED vs --against — first diverges at stage '")
                             .append(c.against.firstDivergesAt).append("'\n");
