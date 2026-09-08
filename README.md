@@ -6,14 +6,16 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phase 2 complete — validation.** Phase 0 spikes and Phase 1 (typed
-model, IDM-as-code, readers for export / Designer project / LDIF / live vault,
-byte-idempotent round trips) are done. `validate` compiles every policy with
-the engine's own compilers in the driver's context and checks linkage, GCVs,
-mapping tables, ECMAScript and filter/schema map; running production vaults
-validate with zero errors. Next: Phase 3, edit operations + MCP server. See
-[docs/plan.md](docs/plan.md), [docs/model.md](docs/model.md) and
-[docs/validation.md](docs/validation.md).
+Status: **Phase 3 — edit operations (in progress).** Phases 0–2 are done: typed
+model, IDM-as-code with readers for export / Designer project / LDIF / live
+vault (byte-idempotent), and `validate` — every policy through the engine's own
+compilers in the driver's context, plus linkage, GCV, mapping-table, ECMAScript
+and filter/schema-map checks (running production vaults validate with zero
+errors). Phase 3 so far: the reference-aware edit operations as validated
+transactions, and the read commands. Next: the simulate gate. CLI only by
+decision — no MCP server. See [docs/plan.md](docs/plan.md),
+[docs/edit-operations.md](docs/edit-operations.md) and
+[docs/agent-guide.md](docs/agent-guide.md).
 
 ```bash
 bin/idm import <export.xml> <outDir>          # driver / driver-set export → IDM-as-code
@@ -23,7 +25,14 @@ IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…
   bin/idm import-live <driverSetDN> <outDir>  # live vault → IDM-as-code
 bin/idm check <asCodeDir>                     # load a tree, report it, exit 1 on broken links
 bin/idm validate <asCodeDir> [--json]         # every validation check; exit 1 on any error
+bin/idm query <asCodeDir> chain <driver> sub  # orient: artifacts | chain | gcvs | tables; show; refs
+bin/idm policy.add <asCodeDir> --driver D --scope subscriber --name X --link subscriber-command
+bin/idm <operation> <asCodeDir> --… [--dry-run] [--force] [--json]   # bin/idm with no args lists them all
 ```
+
+The edit operations (policies, rules, links, GCVs, filter, schema map, driver
+settings, mapping tables) are transactions: load → apply → validate → write only
+if no new error. See [docs/agent-guide.md](docs/agent-guide.md).
 
 ## What this is
 
