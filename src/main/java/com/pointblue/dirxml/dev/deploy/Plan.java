@@ -346,7 +346,7 @@ public final class Plan {
             sb.append(String.format("  %3d. %s%n", ++n, s));
         }
         for (String d : restart) {
-            sb.append(String.format("  %3d. %-12s %s  (running → restart after the writes)%n", ++n, "restart", d));
+            sb.append(String.format("  %3d. %-12s %s  (after the writes, if the driver is running; a stopped driver loads them when started)%n", ++n, "restart", d));
         }
         for (String d : newDrivers) {
             sb.append("  new driver '").append(d).append("' is created stopped; start it explicitly when its secrets are in place\n");

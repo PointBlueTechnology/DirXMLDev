@@ -157,6 +157,11 @@ public final class Cli {
 
     private static int write(DriverSet ds, Path out) throws Exception {
         AsCodeWriter.write(ds, out);
+        // keep bytes exact under git: a CRLF in a vault object must stay a CRLF in the tree
+        Path attrs = out.resolve(".gitattributes");
+        if (!java.nio.file.Files.exists(attrs)) {
+            java.nio.file.Files.writeString(attrs, "# IDM-as-code: content is byte-exact vault data; never normalize line endings\n* -text\n");
+        }
         report(ds);
         System.out.println("wrote " + out);
         return ds.unresolvedLinks().isEmpty() ? 0 : 1;

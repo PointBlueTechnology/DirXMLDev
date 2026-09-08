@@ -138,10 +138,15 @@ public final class DeployLog {
         }
     }
 
-    /** True if the tree has uncommitted changes (null commit → false). */
+    /**
+     * True if the tree has uncommitted changes to its content. The deploy's own
+     * outputs ({@code deploy-log/}, {@code deploy-snapshots/}) don't count — the
+     * log is committed after a deploy, the snapshots are gitignored by convention.
+     */
     public static boolean treeDirty(Path tree) {
         try {
-            Process p = new ProcessBuilder("git", "-C", tree.toAbsolutePath().toString(), "status", "--porcelain")
+            Process p = new ProcessBuilder("git", "-C", tree.toAbsolutePath().toString(), "status", "--porcelain",
+                "--", ".", ":!" + DIR, ":!deploy-snapshots")
                 .redirectErrorStream(true).start();
             String out;
             try (InputStream in = p.getInputStream()) {

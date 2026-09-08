@@ -465,7 +465,12 @@ public final class Snapshot {
     private static void restorePresentEntry(Store s, Vault.Entry snap, Vault.Entry live) {
         for (Map.Entry<String, List<byte[]>> a : snap.attrs.entrySet()) {
             String name = a.getKey();
-            if (name.equalsIgnoreCase("objectClass") || name.equalsIgnoreCase("cn")) {
+            if (name.equalsIgnoreCase("objectClass") || name.equalsIgnoreCase("cn") || isOperational(name)) {
+                continue;
+            }
+            // only what actually differs: a rollback should touch as little as the deploy did
+            List<byte[]> current = live.attrs.get(name);
+            if (current != null && valuesEqual(a.getValue(), current)) {
                 continue;
             }
             s.replace(snap.dn, name, a.getValue());

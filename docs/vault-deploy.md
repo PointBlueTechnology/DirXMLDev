@@ -305,29 +305,38 @@ client's job; the tool never writes outside `driverSet`.
 
 ## Build order
 
-1. **`ModelDiff`** (pure): artifacts, driver settings/blobs, linkage, driver-set;
-   text rendering and JSON; `idm tree.diff`. Tests on synthetic trees; on RFI
-   tree vs itself (empty) and vs a copy with one of each change.
-2. **`Vault`** (the LDAP side, from the spike code): connect (trust-all
-   LDAPS, binary `XmlData`/`DirXML-Data`), read an entry with all attributes,
-   add/modify/delete, `DirXML-Policies` replace; extended ops
-   `state/start/stop/restart` with state polling, `Set/List/RemoveNamedPassword`.
-   Integration tests against the test vault on scratch objects under
-   `cn=Library` and the side-effect-free `Querytest` driver (as spike 1b),
-   cleaned up in `finally`. This step also settles the package-checksum question
-   on a scratch packaged object, and **spike 4a** (secrets write paths).
-3. **`vault.diff`** = readLive + `ModelDiff`.
-4. **Snapshot / rollback**: LDIF writer for entries (all attributes), manifest,
-   restore.
-5. **Plan + deploy + verify + audit**, `--yes` / `--step`, `--dry-run`,
-   `--driver`, `--no-restart`, new-driver creation (stopped, manual), secrets
-   (inventory, `--secrets`, `vault.secrets`).
-6. **Environments + gating** (`environments.properties`, secrets sources, tiers,
-   `--confirm`, known-state check + `--capture-drift`, `requires`).
-7. End to end on the test vault: import-live → tree → an edit → `vault.diff`
-   shows it → `vault.deploy --yes` → trace shows `Found DirXMLScript policy` for
-   the new object after restart (spike 1b's evidence) → `vault.verify` empty →
-   `vault.rollback` → `vault.verify` against the pre-edit tree empty.
+1. ✅ **`ModelDiff`** (2026-09-08, Sonnet): 11 change kinds, linkage as
+   ordered lists (order numbers normalized), `affectedDrivers()`, text/JSON,
+   `idm tree.diff`; 21 tests incl. real RFI data.
+2. ✅ **`Vault`** + spike 4 ([spikes/vault-objects-and-secrets.md](spikes/vault-objects-and-secrets.md)):
+   JNDI reads/writes with XML attributes as bytes; extended ops for state /
+   start / stop / restart / start option / named passwords; the server does
+   not update `DirXML-pkgChecksum`; shim password writable and readable.
+3. ✅ **`vault.diff`** = `LdifReader.readLive` + `ModelDiff`; on the test
+   vault, the tree imported from it diffs empty.
+4. ✅ **Snapshot / rollback** (Sonnet): LDIF + JSON manifest, absent markers,
+   driver states, restore + differences behind a `Store` seam.
+5. ✅ **Plan + deploy + verify + audit**: `Plan` (ordered, grouped by change,
+   checksum for customized packaged objects, new drivers stopped + their
+   secrets), `Deployer` (`--yes` / `--step` / `--dry-run` / `--driver` /
+   `--no-restart` / `--secrets` / `--allow-missing-secrets`), `DeployLog`,
+   `SecretInventory`, `VaultMapping` (tested as the inverse of the live reader).
+6. ✅ **Environments + gating**: `Environments`, `Secrets` (literal / env /
+   command), tiers, `--confirm`, `requires`, known-state check with
+   `--capture-drift`.
+7. ✅ **End to end on the test vault** (2026-09-08): `import-live` → git →
+   `vault.diff` empty → `policy.add` on `Querytest` → `vault.deploy --dry-run`
+   (plan: add object, replace linkage, restart) → `--yes` (snapshot with an
+   *absent* marker, both writes, restart skipped: driver stopped, verify:
+   vault matches the tree, audit line) → `vault.diff` empty →
+   `vault.rollback --yes` (snapshots first; deletes the object, restores the
+   linkage; verify) → `vault.diff` shows the tree's policy as not deployed, and
+   against the pre-edit commit is empty.
+
+Not done, deliberately deferred: `--delete-driver` (reported, not acted on);
+Remote Loader password (no RL driver on the test vault to learn from);
+`idm vault.secrets` as a standalone command (use `vault.deploy --secrets all`);
+`simulate` as part of the production gate (run it before deploying).
 
 Delegation: 1 and 4 are well-specified subagent work; 2 (live vault, scratch
 discipline), 5 and 7 are not.

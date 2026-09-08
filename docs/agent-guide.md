@@ -39,6 +39,9 @@ IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…
 
 Put it in git before editing. The import is byte-idempotent, so re-importing
 the same source is a no-op diff — which is how you see what changed in a vault.
+The import writes a `.gitattributes` (`* -text`) so git never normalizes line
+endings: vault content is bytes, and a CRLF inside an ECMAScript resource must
+survive a checkout or `vault.diff` will report it. Keep that file.
 
 ## Orient first
 
@@ -123,8 +126,29 @@ git add -A tree/ && git commit -m "AD: normalize Title on subscriber command (#1
 `harvest`, or authored) against the edited tree and diffs them against the
 previous tree — an output that changed is shown, never hidden.
 
-Deploying to a vault is Phase 4 (`vault.diff` → snapshot → deploy → verify);
-until then the tree, validated and simulated, is the deliverable.
+## Deploy it
+
+Vault targets live in a gitignored `environments.properties` (path in
+`IDM_ENVIRONMENTS`; see [vault-deploy.md](vault-deploy.md)); secrets the tree
+can't carry in a gitignored secrets file per environment.
+
+```bash
+bin/idm vault.diff   tree/ --env stg                      # what differs, per object; exit 1 if anything
+bin/idm vault.deploy tree/ --env stg --driver "AD Driver" --dry-run   # the plan, nothing written
+bin/idm vault.deploy tree/ --env stg --driver "AD Driver" --yes       # snapshot → write → restart → verify → audit
+bin/idm vault.deploy tree/ --env stg --step               # or: confirm and verify each change
+bin/idm vault.verify tree/ --env stg                      # re-read: vault == tree
+bin/idm vault.rollback tree/ --env stg --snapshot deploy-snapshots/stg/<ts>.ldif --yes
+```
+
+What the deployer will not do: write anything the tree doesn't `validate`
+clean; delete a driver (it reports one the tree lacks); restart a stopped
+driver (it loads the new configuration when started); touch a secret unless
+the driver is new or you pass `--secrets all|missing`; deploy to a `prd` tier
+without `--confirm <env>`, a committed tree, and a vault that matches the last
+recorded deploy (or `--capture-drift`, which records the vault's current state
+on an `as-found/<env>/<ts>` branch for you to merge first). Every deploy
+appends to `deploy-log/<env>.jsonl` — commit it with the tree.
 
 ## Conventions
 
