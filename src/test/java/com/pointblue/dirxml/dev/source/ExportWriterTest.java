@@ -11,6 +11,9 @@ import com.pointblue.dirxml.dev.model.Scope;
 import com.pointblue.dirxml.dev.validate.ValidatorTest;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
 import com.pointblue.dirxml.sim.DriverExport;
+import com.pointblue.dirxml.sim.EngineContext;
+import com.pointblue.dirxml.sim.MappingTableStore;
+import com.pointblue.dirxml.sim.PolicyStage;
 import com.pointblue.dirxml.sim.Xds;
 
 import org.junit.Rule;
@@ -32,6 +35,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
@@ -192,6 +197,129 @@ public class ExportWriterTest {
         List<String> modelNames = ds.drivers.stream().map(d -> d.name).sorted().collect(Collectors.toList());
         loadedNames.sort(null);
         assertEquals(modelNames, loadedNames);
+    }
+
+    // ---- single-driver export ("Export Driver Configuration") -----------------
+
+    private static final String LIB_SUB_COMMAND_XML =
+        "<policy><rule><description>shared command</description><conditions/><actions>"
+        + "<do-veto/></actions></rule></policy>";
+
+    private static final String USES_TABLE_XML =
+        "<policy><rule><description>uses table</description><conditions/><actions>"
+        + "<do-set-local-variable name=\"y\"><arg-string>"
+        + "<token-map dest=\"dn\" src=\"code\" table=\"..\\..\\Library\\CodeMap\"><token-text>1</token-text></token-map>"
+        + "</arg-string></do-set-local-variable></actions></rule></policy>";
+
+    /**
+     * {@link ValidatorTest#clean()} plus a Library policy linked from AD's
+     * subscriber-command set, a driver policy that uses the Library's {@code
+     * CodeMap} table via {@code <token-map>} without linking it, and a
+     * driver-set GCV — everything {@code toDriverXml}'s "include referenced
+     * policies" behavior needs to exercise.
+     */
+    private static DriverSet singleDriverSample() {
+        DriverSet ds = ValidatorTest.clean();
+        ds.configValues = xml(
+            "<configuration-values><definitions>"
+            + "<definition name=\"drvset.notif.email\" type=\"string\"><value>ops@example.com</value></definition>"
+            + "</definitions></configuration-values>");
+        Driver ad = ds.driver("AD");
+
+        Policy shared = new Policy("lib-sub-command", Scope.LIBRARY, null, xml(LIB_SUB_COMMAND_XML));
+        ds.library.policies.add(shared);
+        ad.links.add(new PolicyLink(PolicySet.SUB_COMMAND, "library/lib-sub-command", 1));
+
+        Policy usesTable = new Policy("sub-uses-table", Scope.SUBSCRIBER, "AD", xml(USES_TABLE_XML));
+        ad.subscriber.policies.add(usesTable);
+
+        return ds;
+    }
+
+    @Test
+    public void toDriverXmlThrowsForUnknownDriver() {
+        DriverSet ds = singleDriverSample();
+        try {
+            ExportWriter.toDriverXml(ds, "NoSuchDriver");
+            org.junit.Assert.fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    @Test
+    public void singleDriverExportReadsBackWithLibraryContentAndGcvResolved() {
+        DriverSet ds1 = singleDriverSample();
+        Element writtenRoot = CanonicalXml.parse(ExportWriter.toDriverXml(ds1, "AD")).getDocumentElement();
+        DriverSet ds2 = ExportReader.read(writtenRoot, "AD.xml");
+
+        assertEquals(1, ds2.drivers.size());
+        Driver ad2 = ds2.driver("AD");
+        assertNotNull(ad2);
+
+        assertTrue("expected no unresolved links, got " + ds2.unresolvedLinks(), ds2.unresolvedLinks().isEmpty());
+
+        // the driver-set GCV, included at export root level for context
+        assertNotNull(ds2.configValues);
+        assertTrue(Xds.serializeElement(ds2.configValues).contains("drvset.notif.email"));
+
+        // the linked Library policy, reachable through the rewritten linkage dn
+        List<PolicyLink> subCommand = ad2.links(PolicySet.SUB_COMMAND);
+        boolean foundLibPolicy = subCommand.stream()
+            .map(l -> ds2.resolve(l.ref))
+            .anyMatch(a -> a instanceof Policy && ((Policy) a).name.equals("lib-sub-command"));
+        assertTrue("expected the Library policy reachable via a resolved link", foundLibPolicy);
+
+        // the unlinked Library mapping table, present because a driver policy's
+        // <token-map> names it
+        boolean foundTable = ad2.resources.stream()
+            .anyMatch(r -> r.name.equals("CodeMap") && r.isMappingTable());
+        assertTrue("expected the CodeMap mapping table in the written export", foundTable);
+    }
+
+    @Test
+    public void singleDriverExportAssemblesSubscriberChainWithLibraryPolicyAndTable() throws Exception {
+        DriverSet ds = singleDriverSample();
+        Path file = tmp.newFolder().toPath().resolve("AD.xml");
+        ExportWriter.writeDriver(ds, "AD", file);
+
+        DriverExport export = DriverExport.load(file);
+        export.mappingTables().forEach(MappingTableStore::register);
+        EngineContext ctx = EngineContext.create("\\[root]\\dvs\\AD");
+        List<PolicyStage> chain = export.subscriberChain(ctx);
+
+        assertTrue("expected the Library policy in the subscriber chain, got " + stageNames(chain),
+            chain.stream().anyMatch(s -> s.name().contains("lib-sub-command")));
+        assertTrue("expected CodeMap among mapping tables, got " + export.mappingTables().keySet(),
+            export.mappingTables().containsKey("CodeMap"));
+    }
+
+    @Test
+    public void realRlandSingleDriverExportAssemblesSubscriberChainWithLibraryPolicyAndTable() throws Exception {
+        Path rfi = Path.of(System.getProperty("user.home"), "tmp", "RFI-DriverSet.xml");
+        assumeTrue("needs the local RFI-DriverSet.xml export", Files.exists(rfi));
+
+        DriverSet ds = ExportReader.read(rfi);
+        Driver rland = ds.driver("RLand");
+        assumeTrue("needs an RLand driver in RFI-DriverSet.xml", rland != null);
+
+        Path written = tmp.newFolder().toPath().resolve("RLand.xml");
+        ExportWriter.writeDriver(ds, "RLand", written);
+
+        DriverExport export = DriverExport.load(written);
+        export.mappingTables().forEach(MappingTableStore::register);
+        EngineContext ctx = EngineContext.create("\\[root]\\RFI-DriverSet\\RLand");
+        List<PolicyStage> chain = export.subscriberChain(ctx);
+
+        assertFalse("expected a non-empty subscriber chain", chain.isEmpty());
+        assertTrue("expected a Library policy stage (lib-BlockMoveEvents), got " + stageNames(chain),
+            chain.stream().anyMatch(s -> s.name().contains("lib-BlockMoveEvents")));
+        assertTrue("expected LocCodeMap among mapping tables, got " + export.mappingTables().keySet(),
+            export.mappingTables().containsKey("LocCodeMap"));
+    }
+
+    private static List<String> stageNames(List<PolicyStage> stages) {
+        return stages.stream().map(PolicyStage::name).collect(Collectors.toList());
     }
 
     // ---- as-code comparison helper ---------------------------------------------
