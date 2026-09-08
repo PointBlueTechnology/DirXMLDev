@@ -5,9 +5,11 @@ import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
+import com.pointblue.dirxml.dev.model.PolicySet;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
+import com.pointblue.dirxml.sim.Xds;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -18,8 +20,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Writes the model back out as a Designer "Export to Configuration File" —
@@ -105,6 +112,219 @@ public final class ExportWriter {
         return CanonicalXml.serialize(doc);
     }
 
+    // ---- single-driver export ("Export Driver Configuration") -----------------
+
+    /** Write the single-driver export of {@code driverName} to {@code file}. */
+    public static void writeDriver(DriverSet ds, String driverName, Path file) {
+        try {
+            Files.write(file, toDriverXml(ds, driverName).getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write export to " + file, e);
+        }
+    }
+
+    /**
+     * Render the Designer "Export Driver Configuration" of one driver: a root
+     * {@code <driver-configuration>} carrying that driver's own {@code
+     * <attributes>}/{@code <children>}, the driver set's GCVs at root level
+     * (sibling of {@code <attributes>}/{@code <children>}, per {@link
+     * ExportReader#read}), and — mirroring Designer's "include referenced
+     * policies" option — every Library artifact the driver's policy-set links
+     * reach, plus any Library mapping table a {@code <token-map table=…>} in one
+     * of the driver's own policies names even when it isn't linked.
+     *
+     * <p>{@link ExportReader#readSingleDriver} has no notion of a nested Library
+     * container in this export form (unlike the driver-set form's {@code
+     * <policy-library>}): a referenced Library artifact is instead embedded as a
+     * plain driver/channel artifact, at whichever scope its link belongs to
+     * (subscriber, publisher, or driver for schema-mapping/input/output/ECMAScript/
+     * GCV-set links), with a {@code <linkage-item dn=…>} synthesized to match that
+     * placement — so both {@code ExportReader.readSingleDriver} (path-based ref
+     * resolution) and the simulator's {@code DriverExport} (name/channel-keyed
+     * lookup) find it.
+     */
+    public static String toDriverXml(DriverSet ds, String driverName) {
+        Driver d = ds.driver(driverName);
+        if (d == null) {
+            throw new IllegalArgumentException("unknown driver: " + driverName);
+        }
+
+        Document doc = CanonicalXml.parse("<driver-configuration/>");
+        Element root = doc.getDocumentElement();
+        root.setAttribute("name", d.name);
+        root.setAttribute("dn", driverDn(ds, d.name));
+        root.setAttribute("driver-set-dn", nz(ds.dn));
+        putMetaAttr(root, d.meta, "package-id");
+        putMetaAttr(root, d.meta, "package-version");
+        putMetaAttr(root, d.meta, "modified");
+
+        if (ds.configValues != null) {
+            Element gcv = doc.createElement("global-config-values");
+            gcv.appendChild(doc.importNode(ds.configValues, true));
+            root.appendChild(gcv);
+        }
+
+        // Every Library artifact this driver's links reach, and which scope (channel
+        // or driver) to embed each one at — keyed by artifact path (= library/<name>).
+        Map<String, Scope> libraryPlacement = collectLibraryPlacement(ds, d);
+
+        Element attrs = doc.createElement("attributes");
+        root.appendChild(attrs);
+        writeCommonDriverAttrs(doc, attrs, d);
+        writeLinkage(doc, attrs, d, l -> dnForRefSingle(ds, d, l.ref, libraryPlacement));
+
+        List<Element> driverIncludes = libraryElementsFor(doc, ds, libraryPlacement, Scope.DRIVER);
+        List<Element> publisherIncludes = libraryElementsFor(doc, ds, libraryPlacement, Scope.PUBLISHER);
+        List<Element> subscriberIncludes = libraryElementsFor(doc, ds, libraryPlacement, Scope.SUBSCRIBER);
+
+        // Library mapping tables referenced by <token-map table=…> but never linked —
+        // the engine still resolves them at compile time, so Designer includes them too.
+        for (Resource table : unlinkedTokenMapTables(ds, d, libraryPlacement.keySet())) {
+            driverIncludes.add(resourceElement(doc, table));
+        }
+
+        Element children = doc.createElement("children");
+        root.appendChild(children);
+        for (Policy p : d.policies) {
+            children.appendChild(policyWrapper(doc, p));
+        }
+        for (Resource r : d.resources) {
+            if (r.scope == Scope.DRIVER) {
+                children.appendChild(r.isGcvDef() ? gcvDefElement(doc, r) : resourceElement(doc, r));
+            }
+        }
+        for (Element e : driverIncludes) {
+            children.appendChild(e);
+        }
+        children.appendChild(channelElement(doc, "publisher", "Publisher", d.publisher.policies,
+            d.resources, Scope.PUBLISHER, publisherIncludes));
+        children.appendChild(channelElement(doc, "subscriber", "Subscriber", d.subscriber.policies,
+            d.resources, Scope.SUBSCRIBER, subscriberIncludes));
+
+        return CanonicalXml.serialize(doc);
+    }
+
+    /**
+     * Which scope each Library artifact reached by one of {@code d}'s links should
+     * be embedded at in a single-driver export: the channel of the linking
+     * policy-set (subscriber/publisher), or driver scope for a set that belongs to
+     * neither channel (schema-mapping, input/output transform, ECMAScript, GCV).
+     * An artifact linked more than once keeps the scope of its first link.
+     */
+    private static Map<String, Scope> collectLibraryPlacement(DriverSet ds, Driver d) {
+        Map<String, Scope> placement = new LinkedHashMap<>();
+        for (PolicyLink l : d.links) {
+            Artifact a = ds.resolve(l.ref);
+            if (a != null && a.scope == Scope.LIBRARY) {
+                placement.putIfAbsent(a.path(), channelOf(l.set));
+            }
+        }
+        return placement;
+    }
+
+    private static Scope channelOf(PolicySet set) {
+        if (set.isSubscriber()) {
+            return Scope.SUBSCRIBER;
+        }
+        if (set.isPublisher()) {
+            return Scope.PUBLISHER;
+        }
+        return Scope.DRIVER;
+    }
+
+    /** The rendered {@code <rule>}/{@code <stylesheet>}/{@code <resource>}/{@code <global-config-def>}
+     * elements for every Library artifact placed at {@code scope}. */
+    private static List<Element> libraryElementsFor(Document doc, DriverSet ds, Map<String, Scope> placement,
+                                                      Scope scope) {
+        List<Element> out = new ArrayList<>();
+        for (Map.Entry<String, Scope> e : placement.entrySet()) {
+            if (e.getValue() != scope) {
+                continue;
+            }
+            Artifact a = ds.resolve(e.getKey());
+            if (a instanceof Policy) {
+                out.add(policyWrapper(doc, (Policy) a));
+            } else if (a instanceof Resource) {
+                Resource r = (Resource) a;
+                out.add(r.isGcvDef() ? gcvDefElement(doc, r) : resourceElement(doc, r));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Library mapping-table resources named by a {@code <token-map table=…>} in one
+     * of {@code d}'s own policies (driver, subscriber, or publisher scope) but not
+     * already reached by a link (per {@code alreadyIncluded}, artifact paths).
+     */
+    private static List<Resource> unlinkedTokenMapTables(DriverSet ds, Driver d, Set<String> alreadyIncluded) {
+        List<Resource> out = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>(alreadyIncluded);
+        List<Policy> scan = new ArrayList<>();
+        scan.addAll(d.policies);
+        scan.addAll(d.subscriber.policies);
+        scan.addAll(d.publisher.policies);
+        for (Policy p : scan) {
+            if (p.content == null) {
+                continue;
+            }
+            for (Element map : Xds.descendantsByName(p.content, "token-map")) {
+                String table = map.getAttribute("table");
+                if (table == null || table.isBlank() || table.contains("$")) {
+                    continue;
+                }
+                String name = leafName(table);
+                String path = Artifact.path(Scope.LIBRARY, null, name);
+                if (seen.contains(path)) {
+                    continue;
+                }
+                Artifact a = ds.resolve(path);
+                if (a instanceof Resource && ((Resource) a).isMappingTable()) {
+                    out.add((Resource) a);
+                    seen.add(path);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The last path/DN component of a {@code table="..\..\Library\Name"} (or {@code cn=Name,...}) reference. */
+    private static String leafName(String s) {
+        String t = s.trim();
+        if (t.contains("=")) {
+            String first = t.split("(?<!\\\\),")[0];
+            return first.substring(first.indexOf('=') + 1).trim();
+        }
+        int i = Math.max(t.lastIndexOf('\\'), t.lastIndexOf('/'));
+        return i >= 0 ? t.substring(i + 1) : t;
+    }
+
+    /**
+     * {@code dnForRef}, specialized for a single-driver export: a link to this
+     * driver's own artifact resolves exactly as in the driver-set form; a link to a
+     * Library artifact instead points at wherever it was embedded in this document
+     * ({@code libraryPlacement}), since this form has no Library container.
+     */
+    private static String dnForRefSingle(DriverSet ds, Driver owner, String ref, Map<String, Scope> libraryPlacement) {
+        Artifact a = ds.resolve(ref);
+        if (a == null) {
+            return dnForUnresolvedRef(ds, owner, ref);
+        }
+        if (a.scope != Scope.LIBRARY) {
+            return dnForArtifact(ds, a);
+        }
+        Scope placed = libraryPlacement.getOrDefault(a.path(), Scope.DRIVER);
+        switch (placed) {
+            case SUBSCRIBER:
+                return "cn=" + a.name + ",cn=Subscriber," + driverDn(ds, owner.name);
+            case PUBLISHER:
+                return "cn=" + a.name + ",cn=Publisher," + driverDn(ds, owner.name);
+            case DRIVER:
+            default:
+                return "cn=" + a.name + "," + driverDn(ds, owner.name);
+        }
+    }
+
     // ---- driver-set-level policy-linkage (meta round trip only) ----------------
 
     private static void writeDriverSetLinkage(Document doc, Element dsAttrs, DriverSet ds) {
@@ -164,6 +384,29 @@ public final class ExportWriter {
         Element attrs = doc.createElement("attributes");
         de.appendChild(attrs);
 
+        writeCommonDriverAttrs(doc, attrs, d);
+        writeLinkage(doc, attrs, d, l -> dnForRef(ds, d, l.ref));
+
+        Element children = doc.createElement("children");
+        de.appendChild(children);
+        for (Policy p : d.policies) {
+            children.appendChild(policyWrapper(doc, p));
+        }
+        for (Resource r : d.resources) {
+            if (r.scope == Scope.DRIVER) {
+                children.appendChild(r.isGcvDef() ? gcvDefElement(doc, r) : resourceElement(doc, r));
+            }
+        }
+        children.appendChild(channelElement(doc, "publisher", "Publisher", d.publisher.policies,
+            d.resources, Scope.PUBLISHER));
+        children.appendChild(channelElement(doc, "subscriber", "Subscriber", d.subscriber.policies,
+            d.resources, Scope.SUBSCRIBER));
+
+        return de;
+    }
+
+    /** The driver attribute blobs common to both export forms (shim, filter, own GCVs, engine values). */
+    private static void writeCommonDriverAttrs(Document doc, Element attrs, Driver d) {
         if (d.shimClass != null) {
             Element jm = doc.createElement("java-module");
             jm.setAttribute("value", d.shimClass);
@@ -204,39 +447,31 @@ public final class ExportWriter {
             wrap.appendChild(doc.importNode(shimInfo, true));
             attrs.appendChild(wrap);
         }
+    }
 
-        if (!d.links.isEmpty()) {
-            Element linkage = doc.createElement("policy-linkage");
-            for (PolicyLink l : d.links) {
-                Element item = doc.createElement("linkage-item");
-                item.setAttribute("dn", dnForRef(ds, d, l.ref));
-                item.setAttribute("order", Integer.toString(l.order));
-                item.setAttribute("policy-set", Integer.toString(l.set.id));
-                linkage.appendChild(item);
-            }
-            attrs.appendChild(linkage);
+    /** Writes {@code <policy-linkage>} for {@code d}'s links, resolving each link's dn via {@code dnFn}. */
+    private static void writeLinkage(Document doc, Element attrs, Driver d, Function<PolicyLink, String> dnFn) {
+        if (d.links.isEmpty()) {
+            return;
         }
-
-        Element children = doc.createElement("children");
-        de.appendChild(children);
-        for (Policy p : d.policies) {
-            children.appendChild(policyWrapper(doc, p));
+        Element linkage = doc.createElement("policy-linkage");
+        for (PolicyLink l : d.links) {
+            Element item = doc.createElement("linkage-item");
+            item.setAttribute("dn", dnFn.apply(l));
+            item.setAttribute("order", Integer.toString(l.order));
+            item.setAttribute("policy-set", Integer.toString(l.set.id));
+            linkage.appendChild(item);
         }
-        for (Resource r : d.resources) {
-            if (r.scope == Scope.DRIVER) {
-                children.appendChild(r.isGcvDef() ? gcvDefElement(doc, r) : resourceElement(doc, r));
-            }
-        }
-        children.appendChild(channelElement(doc, "publisher", "Publisher", d.publisher.policies,
-            d.resources, Scope.PUBLISHER));
-        children.appendChild(channelElement(doc, "subscriber", "Subscriber", d.subscriber.policies,
-            d.resources, Scope.SUBSCRIBER));
-
-        return de;
+        attrs.appendChild(linkage);
     }
 
     private static Element channelElement(Document doc, String tag, String name, List<Policy> policies,
                                            List<Resource> driverResources, Scope scope) {
+        return channelElement(doc, tag, name, policies, driverResources, scope, Collections.emptyList());
+    }
+
+    private static Element channelElement(Document doc, String tag, String name, List<Policy> policies,
+                                           List<Resource> driverResources, Scope scope, List<Element> extraChildren) {
         Element ch = doc.createElement(tag);
         ch.setAttribute("name", name);
         Element children = doc.createElement("children");
@@ -248,6 +483,9 @@ public final class ExportWriter {
             if (r.scope == scope) {
                 children.appendChild(r.isGcvDef() ? gcvDefElement(doc, r) : resourceElement(doc, r));
             }
+        }
+        for (Element e : extraChildren) {
+            children.appendChild(e);
         }
         return ch;
     }
