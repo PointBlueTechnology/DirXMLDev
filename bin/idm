@@ -7,7 +7,7 @@ set -e
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 JH="${IDM_JAVA_HOME:-${SIM_JAVA_HOME:-$(/usr/libexec/java_home -v 21 2>/dev/null || true)}}"
 [ -n "$JH" ] || { echo "ERROR: JDK 21 not found (set IDM_JAVA_HOME)"; exit 1; }
-SIM_VER="${IDM_SIM_VERSION:-1.5.1}"
+SIM_VER="${IDM_SIM_VERSION:-1.5.2}"
 SIM_JAR="$HOME/.m2/repository/com/pointblue/dirxml/dirxml-simulator/$SIM_VER/dirxml-simulator-$SIM_VER.jar"
 [ -f "$SIM_JAR" ] || { echo "ERROR: simulator jar $SIM_VER not installed; run 'mvn install' in the DirXMLSimulator repo"; exit 1; }
 [ -d "$HERE/target/classes" ] || (cd "$HERE" && JAVA_HOME="$JH" mvn -q -o compile)

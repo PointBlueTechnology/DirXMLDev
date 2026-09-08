@@ -184,8 +184,16 @@ public final class ProjectReader {
         for (String libKey : relationKeys(m, "Idm:Libraries")) {
             readLibrary(idx, idOf(libKey), ds);
         }
+        // Driver-set GCV objects: library-scope resources, linked from the driver set
+        // itself (DirXML-Policies on the driver set, set 14) — recorded the way the
+        // export reader records them so consumers can tell "linked" from "present".
+        int gcN = 0;
         for (String gcKey : relationKeys(m, "Idm:GlobalConfigs")) {
-            ds.library.resources.add(gcvDefResource(idx, idOf(gcKey), Scope.LIBRARY, null));
+            Resource r = gcvDefResource(idx, idOf(gcKey), Scope.LIBRARY, null);
+            ds.library.resources.add(r);
+            ds.meta.put("driverset.linkage." + gcN,
+                "cn=" + r.name + ",cn=Library," + ds.dn + "#" + gcN + "#" + PolicySet.GCV.id);
+            gcN++;
         }
 
         for (String drvKey : relationKeys(m, "Idm:Drivers")) {
