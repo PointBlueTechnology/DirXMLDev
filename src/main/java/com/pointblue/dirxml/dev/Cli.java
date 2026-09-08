@@ -48,6 +48,29 @@ public final class Cli {
             if (args.length >= 1 && com.pointblue.dirxml.dev.edit.EditCli.isOperation(args[0])) {
                 System.exit(com.pointblue.dirxml.dev.edit.EditCli.run(args));
             }
+            if (args.length >= 2 && args[0].equals("simulate")) {
+                Path tree = Paths.get(args[1]);
+                Path cases = null;
+                Path against = null;
+                boolean json = false;
+                for (int i = 2; i < args.length; i++) {
+                    if (args[i].equals("--cases") && i + 1 < args.length) {
+                        cases = Paths.get(args[++i]);
+                    } else if (args[i].equals("--against") && i + 1 < args.length) {
+                        against = Paths.get(args[++i]);
+                    } else if (args[i].equals("--json")) {
+                        json = true;
+                    }
+                }
+                if (cases == null) {
+                    System.err.println("usage: simulate <asCodeDir> --cases <casesDir> [--against <asCodeDir>] [--json]");
+                    System.exit(2);
+                }
+                com.pointblue.dirxml.dev.simulate.Simulate.Outcome o = new com.pointblue.dirxml.dev.simulate.Simulate(
+                    com.pointblue.dirxml.dev.source.ExportWriter::writeDriver).run(tree, cases, against);
+                System.out.print(json ? o.json() + "\n" : o.text());
+                System.exit(o.ok() ? 0 : 1);
+            }
             if (args.length >= 3 && args[0].equals("export")) {
                 // export <tree> <out.xml>: a Designer driver-set export Designer can import
                 DriverSet ds = AsCodeReader.read(Paths.get(args[1]));
@@ -160,6 +183,7 @@ public final class Cli {
         System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
+        System.err.println("  simulate <asCodeDir> --cases <dir> [--against <asCodeDir>] [--json]  run the regression corpus against the tree; diff vs another tree");
         System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact");
         System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
         System.err.println("  query <asCodeDir> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver]");
