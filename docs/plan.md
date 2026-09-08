@@ -205,17 +205,22 @@ spec: [validation.md](validation.md))
   schema (needs a live schema read — Phase 4), package-discipline (needs the
   edit operations' baseline — Phase 3).
 
-**Phase 3 — Edit operations + MCP server** — 🔨 **design** (2026-09-08;
-[edit-operations.md](edit-operations.md))
-- Reference-aware operations on the model, each validated; CLI + MCP tools;
-  dry-run everywhere. Simulation as a gate (`simulate` = `test-all` + `compare`).
-- Design: content edits stay file edits (+ `validate`); operations cover
-  structure (add/rename/delete/link/unlink/reorder, rules, GCVs, filter, schema
-  map, driver config) as transactions that refuse an invalid result; packaged
-  artifacts snapshot a baseline and mark `customized` on first edit; an
-  `ExportWriter` bridges the tree to the simulator (and to Designer import /
-  vault diff) for `simulate`; CLI only (one operation registry, `--json`/`--dry-run` everywhere; an MCP
-  adapter over the registry only if a client ever needs it). Decisions confirmed.
+**Phase 3 — Edit operations (CLI)** — ✅ **complete** (2026-09-08;
+[edit-operations.md](edit-operations.md), [agent-guide.md](agent-guide.md))
+- Reference-aware operations on the model, each validated; dry-run everywhere.
+  Simulation as a gate (`simulate` = `test-all` + `compare`). **CLI only** by
+  decision — one operation registry; an MCP adapter only if a client ever
+  needs one.
+- Delivered: content edits are file edits (+ `validate`); operations for
+  structure — `policy.*`, `resource.*`, `artifact.*`, `rule.*`, `gcv.*`,
+  `filter.*`, `schema-map.*`, `driver.set`, `mapping-table.*` — as transactions
+  (load → apply → validate → refuse on a *new* error → write only changed
+  files); packaged artifacts keep a `.package-baseline/` snapshot and are marked
+  `customized` on first edit; `ExportWriter` (driver-set form for Designer
+  import and the Phase 4 diff; single-driver form for the simulator);
+  `idm simulate <tree> --cases <dir> [--against <tree>]`; read commands
+  (`show`, `query`, `refs`, `package.diff`). 108 tests; exercised on the real
+  RFI and JFW trees.
 
 **Phase 4 — Vault deploy with safeguards**
 - Structured `vault.diff`; deploy plan; LDIF snapshot + `rollback`; LDAP writes +
