@@ -166,6 +166,42 @@ writes, after the linkage that referenced them has been replaced.
 objects they reference); `--no-restart` writes without restarting (the result
 says the drivers are running stale configuration until restarted).
 
+### Two ways to walk the plan
+
+- **Automated** (`--yes`): snapshot everything, confirm the whole plan once,
+  then write → restart → verify as above. The normal path for dev/stg and for
+  small, well-simulated production changes.
+- **Step by step** (`--step`): the plan is grouped into *changes* (one artifact,
+  one driver's linkage, one driver's config blob …). For each change the
+  deployer shows its diff, asks, writes it, immediately re-reads and verifies
+  that object, and only then moves to the next; a `no` skips the change,
+  `quit` stops with everything so far written and verified, and the audit line
+  records exactly which changes went in. Restarts come at the end (or after each
+  change with `--restart-each`, for changes you want to watch land one at a
+  time). The snapshot is still taken up front, so rollback covers a partial
+  step-by-step deploy too.
+
+Both modes go through the same plan, snapshot, verify and audit; `--step` is
+the same deploy with a confirmation and a verification per change instead of
+per plan.
+
+### Production changes start from a known state
+
+A production vault may only be changed from a state the repo knows. Before
+writing to a `prd` tier the deployer re-reads the vault and compares it with
+what the audit log says was last deployed there (the tree at that commit):
+
+- **no drift** — proceed;
+- **drift** (someone changed production outside the tool, or nothing was ever
+  deployed by it) — refuse, print the drift as a diff, and offer
+  `--capture-drift`: import the live state into the tree as its own commit
+  ("prd as found 2026-09-08"), so the repo now holds production's real state
+  and the intended change is applied on top of it, visibly, in the next
+  deploy. There is no `--ignore-drift`.
+
+The pre-deploy snapshot is always taken, so the state immediately before any
+production change is also on disk (and, with `--capture-drift`, in git).
+
 ## Rollback
 
 `vault.rollback --env <name> --snapshot <file> [--yes]`: for each object in the
@@ -197,9 +233,9 @@ The gate, by tier:
 
 | tier | to deploy |
 |---|---|
-| `dev` | `--yes` |
-| `stg` | `--yes`; validate clean |
-| `prd` | `--yes --confirm prd` (the environment's name typed out); validate clean; **a green STG deploy of the same tree commit** in `deploy-log/stg.jsonl` (`prd.requires=stg`); and `simulate` green if the tree has a corpus (`--cases`) |
+| `dev` | `--yes` or `--step` |
+| `stg` | `--yes` or `--step`; validate clean |
+| `prd` | `--confirm prd` (the environment's name typed out) with `--yes` or `--step`; validate clean; **current state known** (no drift vs the last deploy recorded in `deploy-log/prd.jsonl`, or `--capture-drift` first); `simulate` green if the tree has a corpus (`--cases`); and, when the environment sets `prd.requires=stg`, a green STG deploy of the same tree commit in `deploy-log/stg.jsonl` |
 
 A deploy identity per environment, with rights only on its driver set, is the
 client's job; the tool never writes outside `driverSet`.
@@ -231,13 +267,18 @@ client's job; the tool never writes outside `driverSet`.
 Delegation: 1 and 4 are well-specified subagent work; 2 (live vault, scratch
 discipline), 5 and 7 are not.
 
-## Decisions to confirm
+## Decisions
 
 1. **Deploy never deletes a driver** without `--delete-driver`; a new driver is
-   created stopped with start option manual.
+   created stopped with start option manual. *(to confirm)*
 2. **Packaged objects: content only**; `DirXML-pkg*` left to the server; the
-   live checksum behaviour measured and recorded, not assumed.
+   live checksum behaviour measured and recorded, not assumed. *(to confirm)*
 3. **Snapshots and the audit log live in the client repo** (`deploy-snapshots/`
-   gitignored, `deploy-log/` committed).
-4. **PRD requires a green STG deploy of the same tree commit** — enforced from
-   the audit log, not a flag.
+   gitignored, `deploy-log/` committed). *(to confirm)*
+4. ✅ **Confirmed 2026-09-08 (Jerry):** a deploy is either **step by step** —
+   diff, confirm, write and verify each change — or **automated** after a
+   backup and one confirmation; and **a production change always starts from a
+   known state**: the vault must match what the repo last deployed, or its
+   current state is captured into the repo first (`--capture-drift`). A green
+   STG deploy of the same commit is an environment option (`prd.requires`),
+   not a universal rule.
