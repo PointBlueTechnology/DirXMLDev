@@ -6,8 +6,19 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phase 0 — spikes.** See [docs/plan.md](docs/plan.md) for the full plan and
-[docs/spikes/](docs/spikes/) for findings.
+Status: **Phase 1 — model + IDM-as-code (in progress).** Phase 0 spikes are complete
+([docs/spikes/](docs/spikes/)). The typed model, canonical serializer, as-code
+writer/reader, and the export + LDIF/live readers are built and validated on real
+driver sets (byte-idempotent round trips; zero unresolved links); the Designer
+project reader is next. See [docs/plan.md](docs/plan.md) and [docs/model.md](docs/model.md).
+
+```bash
+bin/idm import <export.xml> <outDir>          # driver / driver-set export → IDM-as-code
+bin/idm import-ldif <dump.ldif> <outDir>      # LDIF of the driver-set subtree → IDM-as-code
+IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…" \
+  bin/idm import-live <driverSetDN> <outDir>  # live vault → IDM-as-code
+bin/idm check <asCodeDir>                     # load a tree, report it, exit 1 on broken links
+```
 
 ## What this is
 

@@ -1,0 +1,17 @@
+#!/bin/sh
+# DirXML Dev launcher: bin/idm <command> [args]
+# Finds JDK 21 (IDM_JAVA_HOME, else java_home -v 21), builds the classpath from
+# target/classes + lib/*.jar + the simulator jar in ~/.m2, and runs the CLI.
+# JVM options (e.g. -Dldap.url=… for import-live) go in IDM_JAVA_OPTS.
+set -e
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+JH="${IDM_JAVA_HOME:-${SIM_JAVA_HOME:-$(/usr/libexec/java_home -v 21 2>/dev/null || true)}}"
+[ -n "$JH" ] || { echo "ERROR: JDK 21 not found (set IDM_JAVA_HOME)"; exit 1; }
+SIM_VER="${IDM_SIM_VERSION:-1.5.1}"
+SIM_JAR="$HOME/.m2/repository/com/pointblue/dirxml/dirxml-simulator/$SIM_VER/dirxml-simulator-$SIM_VER.jar"
+[ -f "$SIM_JAR" ] || { echo "ERROR: simulator jar $SIM_VER not installed; run 'mvn install' in the DirXMLSimulator repo"; exit 1; }
+[ -d "$HERE/target/classes" ] || (cd "$HERE" && JAVA_HOME="$JH" mvn -q -o compile)
+CP="$HERE/target/classes:$SIM_JAR"
+for j in "$HERE"/lib/*.jar; do CP="$CP:$j"; done
+# shellcheck disable=SC2086  # IDM_JAVA_OPTS is intentionally word-split
+exec "$JH/bin/java" $IDM_JAVA_OPTS -cp "$CP" com.pointblue.dirxml.dev.Cli "$@"
