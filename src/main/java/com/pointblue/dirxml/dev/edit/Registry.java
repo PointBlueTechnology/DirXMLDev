@@ -127,6 +127,33 @@ public final class Registry {
                 Arrays.asList(a.getOrDefault("order", "").split("\n"))),
             req("driver", "driver name"), req("set", "policy-set key"),
             req("order", "the members in order (repeat --order <path> for each)"));
+
+        // rules
+        Arg rulePath = req("path", "path of a DirXML Script policy");
+        Arg ruleId = req("rule", "the rule's <description>, or #n (1-based position)");
+        Arg rulePos = opt("at", "first|last|after:<rule>|before:<rule> (default last)");
+        register("rule.add", "insert a <rule> into a DirXML Script policy",
+            a -> new RuleOps.Add(a.get("path"), contentOf(a), a.get("at")),
+            rulePath, req("content-file", "file holding the <rule> XML"), rulePos);
+        register("rule.delete", "remove a rule",
+            a -> new RuleOps.Delete(a.get("path"), a.get("rule")), rulePath, ruleId);
+        register("rule.move", "move a rule to another position",
+            a -> new RuleOps.Move(a.get("path"), a.get("rule"), a.get("at")), rulePath, ruleId, rulePos);
+        register("rule.disable", "set <rule disabled=\"true\"> — the engine skips it",
+            a -> new RuleOps.SetDisabled(a.get("path"), a.get("rule"), true), rulePath, ruleId);
+        register("rule.enable", "clear a rule's disabled flag",
+            a -> new RuleOps.SetDisabled(a.get("path"), a.get("rule"), false), rulePath, ruleId);
+
+        // GCVs
+        register("gcv.set", "set a GCV's value where the driver's scope defines it (or create it with --define)",
+            a -> new GcvOps.Set(a.get("driver"), a.get("name"), a.getOrDefault("value", ""),
+                a.get("define"), a.get("display-name")),
+            req("name", "GCV name"), req("value", "the value"), driver,
+            opt("define", "create the GCV when absent: its type (string|boolean|integer|dn|enum|…)"),
+            opt("display-name", "display name for --define (default: the name)"));
+        register("gcv.delete", "remove a GCV definition; refuses while any policy reads it",
+            a -> new GcvOps.Delete(a.get("driver"), a.get("name")),
+            req("name", "GCV name"), driver);
     }
 
     private static Scope scopeOf(Map<String, String> a) {
