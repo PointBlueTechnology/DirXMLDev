@@ -16,6 +16,11 @@ the decisions already made, and the **non-negotiable safeguards**.
 - The proprietary IDM jars live in `lib/` (gitignored) — `lib/` may symlink to the
   simulator's `lib/`. Client artifacts, LDIFs, traces, and credentials are never
   committed.
+- **`bin/idm validate` after every edit to an as-code tree**, and read the errors
+  as the engine's own verdict — they come from its compilers, in the driver's
+  context (`docs/validation.md`). A validator check that fires on a *running*
+  production vault is a bug in the check, not the vault: calibrate on real driver
+  sets before an ERROR ships.
 
 ## Building blocks you can reuse (from the simulator, on the classpath)
 
