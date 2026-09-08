@@ -6,12 +6,12 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phase 2 — validation (in progress).** Phase 0 spikes and Phase 1
-(typed model, IDM-as-code, readers for export / Designer project / LDIF / live
-vault, byte-idempotent round trips) are complete. `validate` compiles every
-policy with the engine's own compilers in the driver's context and checks
-linkage, GCVs and mapping tables; a running production vault validates with
-zero errors. ECMAScript and filter/schema-map checks are being added. See
+Status: **Phase 2 complete — validation.** Phase 0 spikes and Phase 1 (typed
+model, IDM-as-code, readers for export / Designer project / LDIF / live vault,
+byte-idempotent round trips) are done. `validate` compiles every policy with
+the engine's own compilers in the driver's context and checks linkage, GCVs,
+mapping tables, ECMAScript and filter/schema map; running production vaults
+validate with zero errors. Next: Phase 3, edit operations + MCP server. See
 [docs/plan.md](docs/plan.md), [docs/model.md](docs/model.md) and
 [docs/validation.md](docs/validation.md).
 

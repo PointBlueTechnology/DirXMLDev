@@ -34,7 +34,8 @@ A running production vault must validate with zero errors. If it doesn't, the
 check is wrong, not the vault — fix the check. (That rule caught three false
 positives on the first pass: DirXML Script policies in the schema-mapping set
 are legal; `GCDefinitions.merge` keeps the *first* definition, not the last;
-and the engine tolerates ragged mapping-table rows.)
+the engine tolerates ragged mapping-table rows; and stock schema maps map one
+NDS name to several application names.)
 
 ## Findings
 
@@ -140,7 +141,7 @@ ECMAScript resources and the `es:` calls that use them.
 
 | code | sev | meaning |
 |---|---|---|
-| `ecmascript-syntax` | E | the resource does not parse (Rhino, the engine's own ECMAScript runtime); message = Rhino's error with line/column |
+| `ecmascript-syntax` | E | the resource does not parse (Rhino, the engine's own ECMAScript runtime — shaded as `com.novell.soa.script.mozilla.javascript` in `lib/js.jar`); message = Rhino's error with line/column |
 | `ecmascript-function-undefined` | E | a policy calls `es:name(…)` (in a `token-xpath`, `if-xpath`, or an XSLT expression) and no ECMAScript resource linked in the driver's set 3 defines `name` |
 | `ecmascript-unlinked` | W | an ECMAScript resource no driver's set 3 links (driver-scope resources only; Library ones are shared) |
 | `ecmascript-empty` | W | an ECMAScript resource with no content |
@@ -160,7 +161,7 @@ The driver filter and the schema map.
 | `filter-duplicate-class` / `filter-duplicate-attr` | E | the same class twice, or the same attribute twice in a class |
 | `filter-dead-attr` | I | an attribute set to sync/notify in a class that is `ignore` on both channels — never reaches a policy |
 | `schema-map-malformed` | E | a `<class-name>` / `<attr-name>` without both `<nds-name>` and `<app-name>` |
-| `schema-map-duplicate` | E | the same `nds-name` mapped twice at the same level, or the same `app-name` mapped to two nds names at the same level (the engine's mapping is then ambiguous) |
+| `schema-map-duplicate` | I | the same `nds-name` mapped twice at the same level, or the same `app-name` mapped to two nds names at the same level. Legal and common in stock packages (the AD map sends `CN` to both `cn` and `sAMAccountName`) — the engine uses the first mapping in each direction — so it's informational, there to make an *unintended* duplicate visible |
 | `schema-map-unfiltered-class` | I | a class in the schema map that isn't in the filter (harmless; usually a leftover) |
 
 ### `check-failed` (E)
