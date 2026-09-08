@@ -85,14 +85,17 @@ reports it and `vault.deploy --delete-driver D` is the explicit path.
 
 A packaged object in the vault carries `DirXML-pkgGUID`,
 `DirXML-pkgAssociationId`, `DirXML-pkgInitialState`, `DirXML-pkgChecksum`
-(spike 1). The deployer **modifies content and leaves those attributes alone**;
-it never fabricates them on new objects (the tree's project-derived package
-meta is not a vault attribute). What it does add: whether the server updates
-`DirXML-pkgChecksum` when `XmlData` changes is unknown — the first build step
-measures it on a scratch packaged object in the test vault, and the answer
-goes into `spikes/package-checksum-live.md`. Either way the tree keeps the
-truth (`.package-baseline/`, `package.customized`), and Designer's "modified"
-comparison is against its own baseline.
+(spike 1). The deployer **modifies content and leaves the identity attributes
+alone**; it never fabricates them on new objects (the tree's project-derived
+package meta is not a vault attribute). **Measured
+([spikes/vault-objects-and-secrets.md](spikes/vault-objects-and-secrets.md)):
+the server does not update `DirXML-pkgChecksum` when content changes**, so a
+deployed override would look unmodified to Designer and to package upgrade.
+Therefore, when the deployer writes a packaged artifact the tree marks
+`package.customized`, it also sets `DirXML-pkgChecksum` to a content-derived
+integer (CRC32 of the canonical content) so the vault's checksum pair differs
+from the baseline — Designer's "modified" test is plain inequality (spike 2).
+The tree keeps the truth (`.package-baseline/`, `package.customized`).
 
 ## The diff
 
@@ -223,9 +226,9 @@ as an afterthought a human fixes in iManager.
 
 | secret | how it's detected | how it's set |
 |---|---|---|
-| shim authentication password (`DirXML-ShimAuthPassword`) | the driver has a `shim-auth-id` / auth server | LDAP modify of the write-only attribute — *or* the driver-set password channel; **spike 4a decides which the engine honours** (proof = the driver starts and authenticates) |
-| Remote Loader password | shim-config-info / engine-control values name a remote loader (`remote-loader` parameters) | same spike |
-| named passwords | `validate` already lists every `token-named-password` a policy reads (`named-password` findings); password-ref GCVs (`type="password-ref"`) name them too | `SetNamedPassword` extended op on the driver (or driver set for shared names); `ListNamedPasswords` verifies the name exists; `RemoveNamedPassword` |
+| shim authentication password (`DirXML-ShimAuthPassword`) | the driver has a `shim-auth-id` / auth server | LDAP modify — **measured (spike 4a): writable by the deploy identity, and readable back, so it can be verified by re-read** (the value is never shown) |
+| Remote Loader password | shim-config-info / engine-control values name a remote loader (`remote-loader` parameters) | to locate on a Remote Loader driver (not on the test driver); expected to be a driver attribute or a named password |
+| named passwords | `validate` already lists every `token-named-password` a policy reads (`named-password` findings); password-ref GCVs (`type="password-ref"`) name them too | `SetNamedPassword` extended op on the driver (or driver set for shared names) — **measured: works on both**; `ListNamedPasswords` verifies the name exists; `RemoveNamedPassword` |
 | application-side secrets inside shim parameters (a `password` typed parameter) | shim-config-info definitions with `type="password-ref"` | as named passwords |
 
 **Where they come from** — a per-environment secrets file, gitignored, or the

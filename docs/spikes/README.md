@@ -26,3 +26,11 @@ java -cp "target/classes:$(ls lib/*.jar | tr '\n' ':')$HOME/.m2/repository/com/p
 It creates `cn=dirxmldev-spike-<ts>,cn=Library,<driverSetDn>`, reads/modifies it,
 prints the server-side attributes, and deletes it in a `finally`. Record the
 output in [`ldap-write.md`](ldap-write.md).
+
+## Phase 4 spike (test vault only — it writes scratch objects)
+
+`com.pointblue.dirxml.dev.spike.VaultSpike` — object classes, package checksum,
+secrets; same `-Dspike.*` properties plus `-Dspike.driver=<side-effect-free
+driver DN>`; findings in [`vault-objects-and-secrets.md`](vault-objects-and-secrets.md).
+The guarded `VaultTest` runs the same primitives under JUnit with
+`-Dvault.url/.bindDn/.password/.driverSetDn[/.driver]`.
