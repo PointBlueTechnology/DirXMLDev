@@ -1,6 +1,6 @@
 # Phase 4 design — vault deploy with safeguards
 
-Status: **design** (2026-09-08). Follows [plan.md](plan.md) Phase 4; builds on
+Status: **design confirmed, building** (2026-09-08). Follows [plan.md](plan.md) Phase 4; builds on
 the Phase 0 spikes ([spikes/ldap-write.md](spikes/ldap-write.md),
 [spikes/engine-pickup.md](spikes/engine-pickup.md),
 [spikes/extended-ops-api.md](spikes/extended-ops-api.md)), the model, the
@@ -331,12 +331,12 @@ discipline), 5 and 7 are not.
 
 ## Decisions
 
-1. **Deploy never deletes a driver** without `--delete-driver`; a new driver is
-   created stopped with start option manual. *(to confirm)*
+1. ✅ **Deploy never deletes a driver** without `--delete-driver`; a new driver is
+   created stopped with start option manual. *(confirmed 2026-09-08)*
 2. **Packaged objects: content only**; `DirXML-pkg*` left to the server; the
-   live checksum behaviour measured and recorded, not assumed. *(to confirm)*
+   live checksum behaviour measured and recorded, not assumed. *(confirmed 2026-09-08)*
 3. **Snapshots and the audit log live in the client repo** (`deploy-snapshots/`
-   gitignored, `deploy-log/` committed). *(to confirm)*
+   gitignored, `deploy-log/` committed). *(confirmed 2026-09-08)*
 4. ✅ **Confirmed 2026-09-08 (Jerry):** a deploy is either **step by step** —
    diff, confirm, write and verify each change — or **automated** after a
    backup and one confirmation; and **a production change always starts from a

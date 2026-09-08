@@ -238,8 +238,7 @@ spec: [validation.md](validation.md))
   start from a state the repo knows (no drift, or `--capture-drift` first).
   Secrets the tree can't carry (shim / Remote Loader / named passwords)
   come from a gitignored per-environment source, are required on a driver's
-  initial deploy and only re-set when forced. Three decisions still to confirm
-  at the end of the note.
+  initial deploy and only re-set when forced. All five decisions confirmed.
 
 **Phase 5 — Operate**
 - Driver lifecycle, cache view/clear, migrate/resync, named passwords, trace
