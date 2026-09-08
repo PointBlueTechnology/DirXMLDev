@@ -154,6 +154,51 @@ public final class Registry {
         register("gcv.delete", "remove a GCV definition; refuses while any policy reads it",
             a -> new GcvOps.Delete(a.get("driver"), a.get("name")),
             req("name", "GCV name"), driver);
+
+        // filter
+        Arg drv = req("driver", "driver name");
+        Arg cls = req("class", "class name (NDS name)");
+        Arg pub = opt("publisher", "sync|ignore|notify|reset");
+        Arg sub = opt("subscriber", "sync|ignore|notify|reset");
+        register("filter.set-class", "add a class to the driver filter, or change its channel settings",
+            a -> new ConfigOps.FilterSetClass(a.get("driver"), a.get("class"), a),
+            drv, cls, pub, sub, opt("publisher-create-homedir", "true|false"), opt("publisher-track-template-member", "true|false"));
+        register("filter.set-attr", "add an attribute to a filter class, or change its settings",
+            a -> new ConfigOps.FilterSetAttr(a.get("driver"), a.get("class"), a.get("attr"), a),
+            drv, cls, req("attr", "attribute name (NDS name)"), pub, sub, opt("merge-authority", "default|edir|app|none"),
+            opt("publisher-optimize-modify", "true|false"), opt("subscriber-optimize-modify", "true|false"));
+        register("filter.remove-class", "remove a class (and its attributes) from the filter",
+            a -> new ConfigOps.FilterRemoveClass(a.get("driver"), a.get("class")), drv, cls);
+        register("filter.remove-attr", "remove an attribute from a filter class",
+            a -> new ConfigOps.FilterRemoveAttr(a.get("driver"), a.get("class"), a.get("attr")),
+            drv, cls, req("attr", "attribute name"));
+
+        // schema map
+        register("schema-map.set", "map a class (--nds-class/--app-class), an attribute within it (add --nds-attr/--app-attr), or a top-level attribute (--nds-attr/--app-attr alone)",
+            a -> new ConfigOps.SchemaMapSet(a.get("driver"), a.get("nds-class"), a.get("app-class"), a.get("nds-attr"), a.get("app-attr")),
+            drv, opt("nds-class", "eDirectory class name"), opt("app-class", "application class name"),
+            opt("nds-attr", "eDirectory attribute name"), opt("app-attr", "application attribute name"));
+        register("schema-map.remove", "remove a class mapping, an attribute mapping within a class, or a top-level attribute mapping",
+            a -> new ConfigOps.SchemaMapRemove(a.get("driver"), a.get("nds-class"), a.get("nds-attr")),
+            drv, opt("nds-class", "eDirectory class name"), opt("nds-attr", "eDirectory attribute name"));
+
+        // driver settings
+        register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, param:<shim parameter>, engine:<engine control value>",
+            a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.get("value")),
+            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), req("value", "the value"));
+
+        // mapping tables
+        Arg table = req("path", "mapping-table resource path");
+        Arg keyCol = opt("key-column", "column that identifies the row (default: the first)");
+        register("mapping-table.set-row", "add or update a row, keyed by --key-column (default: the first column)",
+            a -> new ConfigOps.TableSetRow(a.get("path"), a.get("key-column"), ConfigOps.columnValues(a.get("col"))),
+            table, req("col", "name=value (repeat --col for each column)"), keyCol);
+        register("mapping-table.delete-row", "delete the row whose key column has --key",
+            a -> new ConfigOps.TableDeleteRow(a.get("path"), a.get("key-column"), a.get("key")),
+            table, req("key", "the key column's value"), keyCol);
+        register("mapping-table.add-column", "add a column (empty in every existing row)",
+            a -> new ConfigOps.TableAddColumn(a.get("path"), a.get("column"), a.get("type")),
+            table, req("column", "column name"), opt("type", "nocase|case|numeric (default nocase)"));
     }
 
     private static Scope scopeOf(Map<String, String> a) {

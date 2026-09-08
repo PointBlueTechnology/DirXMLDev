@@ -145,12 +145,12 @@ public final class GcvOps {
                     }
                 }
                 List<Element> defs = Xds.childrenByName(cv, "definitions");
-                Element definitions = defs.isEmpty() ? (Element) cv.appendChild(cv.getOwnerDocument().createElement("definitions")) : defs.get(0);
-                Element def = cv.getOwnerDocument().createElement("definition");
+                Element definitions = defs.isEmpty() ? (Element) cv.appendChild(cv.getOwnerDocument().createElementNS(null, "definitions")) : defs.get(0);
+                Element def = cv.getOwnerDocument().createElementNS(null, "definition");
                 def.setAttribute("display-name", defineDisplayName == null || defineDisplayName.isBlank() ? name : defineDisplayName);
                 def.setAttribute("name", name);
                 def.setAttribute("type", defineType);
-                Element v = cv.getOwnerDocument().createElement("value");
+                Element v = cv.getOwnerDocument().createElementNS(null, "value");
                 v.setTextContent(value);
                 def.appendChild(v);
                 definitions.appendChild(def);
@@ -162,7 +162,7 @@ public final class GcvOps {
             Element def = home.definition;
             List<Element> values = Xds.childrenByName(def, "value");
             if (values.isEmpty()) {
-                Element v = def.getOwnerDocument().createElement("value");
+                Element v = def.getOwnerDocument().createElementNS(null, "value");
                 v.setTextContent(value);
                 def.appendChild(v);
             } else {
