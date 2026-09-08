@@ -1,0 +1,25 @@
+# build
+target/
+*.class
+
+# proprietary NetIQ/OpenText jars — never commit (lib/ may be a symlink)
+lib/*.jar
+lib
+
+# client artifacts & operational data — never commit
+*.ldif
+*.trace
+*.log
+TraceLog*.txt
+artifacts/
+exports/
+trace samples/
+
+# credentials / local-only cases
+cases/**/case.properties
+*.local.properties
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store

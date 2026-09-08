@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.pointblue.dirxml</groupId>
+    <artifactId>dirxml-dev</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>DirXML Dev</name>
+    <description>Agent-driven IDM (DirXML) development: a typed model of a driver set,
+        IDM-as-code on disk, validation, and vault deploy/operate with safeguards —
+        built on the DirXML Policy Simulator as its test engine.</description>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <simulator.version>1.5.0</simulator.version>
+    </properties>
+
+    <dependencies>
+        <!-- The simulator: readers (project/export/LDIF/live), engine harness, regression tooling. -->
+        <dependency>
+            <groupId>com.pointblue.dirxml</groupId>
+            <artifactId>dirxml-simulator</artifactId>
+            <version>${simulator.version}</version>
+        </dependency>
+
+        <!-- NetIQ / OpenText IDM jars (proprietary; system scope; lib/ is gitignored and may be a
+             symlink to the simulator's lib/). System-scope deps don't propagate transitively,
+             so they are declared here as well. -->
+        <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${project.basedir}/lib/dirxml.jar</systemPath></dependency>
+        <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml_misc</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${project.basedir}/lib/dirxml_misc.jar</systemPath></dependency>
+        <dependency><groupId>com.netiq.idm</groupId><artifactId>nxsl</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/nxsl.jar</systemPath></dependency>
+        <dependency><groupId>com.netiq.idm</groupId><artifactId>xp</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/xp.jar</systemPath></dependency>
+        <dependency><groupId>com.netiq.idm</groupId><artifactId>CommonDriverShim</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/CommonDriverShim.jar</systemPath></dependency>
+        <dependency><groupId>com.netiq.idm</groupId><artifactId>jclient</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/jclient.jar</systemPath></dependency>
+        <dependency><groupId>com.netiq.idm</groupId><artifactId>dhutil</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/dhutil.jar</systemPath></dependency>
+        <dependency><groupId>com.netiq.idm</groupId><artifactId>XDS</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/XDS.jar</systemPath></dependency>
+        <dependency><groupId>com.netiq.idm</groupId><artifactId>js</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/js.jar</systemPath></dependency>
+        <!-- Novell JLDAP SDK: DirXML LDAP extended operations (driver control, deploy, submit). -->
+        <dependency><groupId>com.novell.ldap</groupId><artifactId>jldap</artifactId><version>4.3</version><scope>system</scope><systemPath>${project.basedir}/lib/ldap.jar</systemPath></dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>dirxml-dev-${project.version}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.2</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>
