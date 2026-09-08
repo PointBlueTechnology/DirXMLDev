@@ -618,9 +618,12 @@ public final class Snapshot {
 
     private static boolean isOperational(String name) {
         String n = name.toLowerCase(Locale.ROOT);
-        return n.startsWith("create") || n.startsWith("modify") || n.startsWith("entry")
+        // eDirectory operational attributes: creatorsName, createTimestamp, modifiersName,
+        // modifyTimestamp, entryFlags, subordinateCount, GUID, revision, localEntryID,
+        // structuralObjectClass, subschemaSubentry (ACL and DirXML-pkg* are restorable)
+        return n.startsWith("creat") || n.startsWith("modif") || n.startsWith("entry")
             || n.startsWith("subordinate") || n.startsWith("guid") || n.startsWith("revision")
-            || n.startsWith("localentryid");
+            || n.startsWith("localentryid") || n.startsWith("structuralobjectclass") || n.startsWith("subschema");
     }
 
     private static int componentCount(String dn) {

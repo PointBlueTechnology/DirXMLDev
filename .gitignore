@@ -23,3 +23,8 @@ cases/**/case.properties
 .idea/
 *.iml
 .DS_Store
+
+# vault targets and secrets — never committed
+environments.properties
+secrets*.properties
+deploy-snapshots/

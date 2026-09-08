@@ -120,6 +120,9 @@ public final class Cli {
                 System.out.print(json ? rep.json() + "\n" : rep.text());
                 System.exit(rep.ok() ? 0 : 1);
             }
+            if (args.length >= 2 && args[0].startsWith("vault.")) {
+                System.exit(com.pointblue.dirxml.dev.deploy.DeployCli.run(args));
+            }
             if (args.length >= 3 && args[0].equals("tree.diff")) {
                 boolean json = false;
                 List<String> pos = new ArrayList<>();
