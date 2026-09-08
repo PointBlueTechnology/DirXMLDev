@@ -236,7 +236,10 @@ spec: [validation.md](validation.md))
   deletes a driver; new drivers are created stopped. Deploys run step by step (diff → confirm → write → verify per change) or
   automated after a backup and one confirmation; a production change must
   start from a state the repo knows (no drift, or `--capture-drift` first).
-  Three decisions still to confirm at the end of the note.
+  Secrets the tree can't carry (shim / Remote Loader / named passwords)
+  come from a gitignored per-environment source, are required on a driver's
+  initial deploy and only re-set when forced. Three decisions still to confirm
+  at the end of the note.
 
 **Phase 5 — Operate**
 - Driver lifecycle, cache view/clear, migrate/resync, named passwords, trace
