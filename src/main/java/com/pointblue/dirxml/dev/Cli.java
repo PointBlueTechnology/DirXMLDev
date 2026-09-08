@@ -26,6 +26,9 @@ public final class Cli {
             if (args.length >= 3 && args[0].equals("import")) {
                 System.exit(doImport(Paths.get(args[1]), Paths.get(args[2])));
             }
+            if (args.length >= 3 && args[0].equals("import-project")) {
+                System.exit(write(com.pointblue.dirxml.dev.source.ProjectReader.read(Paths.get(args[1])), Paths.get(args[2])));
+            }
             if (args.length >= 3 && args[0].equals("import-ldif")) {
                 System.exit(write(com.pointblue.dirxml.dev.source.LdifReader.read(Paths.get(args[1])), Paths.get(args[2])));
             }
@@ -86,9 +89,10 @@ public final class Cli {
         }
         List<PolicyLink> broken = ds.unresolvedLinks();
         if (!broken.isEmpty()) {
-            System.out.println("WARNING: " + broken.size() + " link(s) resolve to nothing — a shared/Library "
-                + "policy missing from the source (re-export with referenced policies, or use a "
-                + "driver-set export/LDIF/live):");
+            System.out.println("WARNING: " + broken.size() + " link(s) resolve to nothing — the target isn't in "
+                + "this source: a Library/shared policy left out of a single-driver export (re-export with "
+                + "referenced policies, or use a driver-set export/LDIF/live), or a dangling reference "
+                + "in the source itself:");
             for (PolicyLink l : broken) {
                 System.out.println("    - " + l);
             }
@@ -97,7 +101,10 @@ public final class Cli {
 
     private static void usage() {
         System.err.println("usage:");
-        System.err.println("  import <export.xml> <outDir>   read a driver / driver-set export, write IDM-as-code");
-        System.err.println("  check  <asCodeDir>             load an as-code tree and report it (exit 1 on broken links)");
+        System.err.println("  import <export.xml> <outDir>          read a driver / driver-set export, write IDM-as-code");
+        System.err.println("  import-project <projectDir> <outDir>  read a Designer project, write IDM-as-code");
+        System.err.println("  import-ldif <dump.ldif> <outDir>      read an LDIF of the driver-set subtree, write IDM-as-code");
+        System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
+        System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
     }
 }

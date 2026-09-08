@@ -157,7 +157,9 @@ last, not first.
 
 ## Phases
 
-**Phase 0 — Spikes (de-risk the two unknowns, days)**
+**Phase 0 — Spikes (de-risk the two unknowns, days)** — ✅ **complete** (2026-09-08;
+findings in [spikes/](spikes/): LDAP write PASS, engine pickup PASS via trace,
+modified state = checksum pair, checksum not reproducible, extended-op API).
 1. *LDAP write path*: write `XmlData` on a test policy, add a `DirXML-Policies`
    linkage, set a GCV, `RestartDriver`; confirm the engine runs it. Learn which
    changes need a restart.
@@ -171,10 +173,18 @@ last, not first.
 3. *Extended-op inventory*: exercise `Start/Stop/RestartDriver`, `GetDriverState`,
    `SubmitEvent` (DxCMD Phase 2 blueprint) against the test vault.
 
-**Phase 1 — The model + IDM-as-code (foundation)**
+**Phase 1 — The model + IDM-as-code (foundation)** — ✅ **complete** (2026-09-08;
+spec: [model.md](model.md))
 - Typed model populated from all four sources; canonical serializer; as-code
   import/export; a manifest. Round-trip tests: source → model → as-code → model
   must be byte-stable.
+- Delivered: model, `CanonicalXml`, as-code writer/reader, readers for a
+  driver/driver-set **export**, a Designer **project**, an **LDIF** dump and the
+  **live vault**; `bin/idm import|import-project|import-ldif|import-live|check`;
+  GCV-definition objects modeled so policy-set-14 links resolve. Validated on real
+  data from every source (RFI export: 19 drivers; IG4 live: 19; Amica PRD project:
+  50 drivers / 1,774 files) — byte-idempotent round trips; the only unresolved
+  links are dangling references present in the sources themselves.
 
 **Phase 2 — Validation (offline safeguards)**
 - `validate`: DTD, XSLT/ECMAScript compile, linkage integrity, GCV/mapping-table

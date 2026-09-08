@@ -6,14 +6,16 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phase 1 — model + IDM-as-code (in progress).** Phase 0 spikes are complete
+Status: **Phase 1 complete — model + IDM-as-code.** Phase 0 spikes are done
 ([docs/spikes/](docs/spikes/)). The typed model, canonical serializer, as-code
-writer/reader, and the export + LDIF/live readers are built and validated on real
-driver sets (byte-idempotent round trips; zero unresolved links); the Designer
-project reader is next. See [docs/plan.md](docs/plan.md) and [docs/model.md](docs/model.md).
+writer/reader, and readers for all four sources (export, Designer project, LDIF,
+live vault) are built and validated on real driver sets — byte-idempotent round
+trips. Next: Phase 2, validation. See [docs/plan.md](docs/plan.md) and
+[docs/model.md](docs/model.md).
 
 ```bash
 bin/idm import <export.xml> <outDir>          # driver / driver-set export → IDM-as-code
+bin/idm import-project <projectDir> <outDir>  # Designer project → IDM-as-code
 bin/idm import-ldif <dump.ldif> <outDir>      # LDIF of the driver-set subtree → IDM-as-code
 IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…" \
   bin/idm import-live <driverSetDN> <outDir>  # live vault → IDM-as-code
