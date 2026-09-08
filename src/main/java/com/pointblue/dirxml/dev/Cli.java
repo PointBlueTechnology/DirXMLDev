@@ -48,6 +48,14 @@ public final class Cli {
             if (args.length >= 1 && com.pointblue.dirxml.dev.edit.EditCli.isOperation(args[0])) {
                 System.exit(com.pointblue.dirxml.dev.edit.EditCli.run(args));
             }
+            if (args.length >= 3 && args[0].equals("export")) {
+                // export <tree> <out.xml>: a Designer driver-set export Designer can import
+                DriverSet ds = AsCodeReader.read(Paths.get(args[1]));
+                com.pointblue.dirxml.dev.source.ExportWriter.write(ds, Paths.get(args[2]));
+                report(ds);
+                System.out.println("wrote " + args[2]);
+                System.exit(0);
+            }
             if (args.length >= 1 && args[0].equals("show")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.show(args));
             }
@@ -149,6 +157,7 @@ public final class Cli {
         System.err.println("  import-project <projectDir> <outDir>  read a Designer project, write IDM-as-code");
         System.err.println("  import-ldif <dump.ldif> <outDir>      read an LDIF of the driver-set subtree, write IDM-as-code");
         System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
+        System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
         System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact");
