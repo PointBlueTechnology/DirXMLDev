@@ -51,12 +51,12 @@ public class ValidatorTest {
         "<mapping-table><col-def name=\"code\" type=\"nocase\"/><col-def name=\"dn\" type=\"nocase\"/>"
             + "<row><col>1</col><col>ou=a</col></row></mapping-table>";
 
-    static Element xml(String s) {
+    public static Element xml(String s) {
         return CanonicalXml.parse(s).getDocumentElement();
     }
 
     /** A driver set with one well-formed driver: schema map, filter, GCVs, a table, two linked policies. */
-    static DriverSet clean() {
+    public static DriverSet clean() {
         DriverSet ds = new DriverSet("dvs");
         ds.dn = "cn=dvs,o=system";
         Resource table = new Resource("CodeMap", Scope.LIBRARY, null, Resource.MAPPING_TABLE);
