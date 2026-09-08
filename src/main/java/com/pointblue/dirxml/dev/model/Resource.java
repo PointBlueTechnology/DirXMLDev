@@ -12,6 +12,8 @@ public final class Resource extends Artifact {
 
     public static final String MAPPING_TABLE = "application/vnd.novell.dirxml.mapping-table+xml";
     public static final String ECMASCRIPT = "text/ecmascript";
+    /** A (package) GCV definition object — linked in policy set 14. */
+    public static final String GCV_DEF = "application/vnd.novell.dirxml.gcv+xml";
 
     public String contentType;
     /** XML content, or null for a text resource. */
@@ -30,6 +32,10 @@ public final class Resource extends Artifact {
 
     public boolean isEcmaScript() {
         return contentType != null && contentType.contains("ecmascript");
+    }
+
+    public boolean isGcvDef() {
+        return contentType != null && contentType.contains("gcv");
     }
 
     public boolean isText() {
