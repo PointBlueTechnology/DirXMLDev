@@ -6,14 +6,16 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phase 3 — edit operations (in progress).** Phases 0–2 are done: typed
-model, IDM-as-code with readers for export / Designer project / LDIF / live
-vault (byte-idempotent), and `validate` — every policy through the engine's own
-compilers in the driver's context, plus linkage, GCV, mapping-table, ECMAScript
-and filter/schema-map checks (running production vaults validate with zero
-errors). Phase 3 so far: the reference-aware edit operations as validated
-transactions, and the read commands. Next: the simulate gate. CLI only by
-decision — no MCP server. See [docs/plan.md](docs/plan.md),
+Status: **Phase 3 complete — edit operations, simulate gate, CLI.** Phases 0–2:
+typed model, IDM-as-code with readers for export / Designer project / LDIF /
+live vault (byte-idempotent), and `validate` — every policy through the engine's
+own compilers in the driver's context, plus linkage, GCV, mapping-table,
+ECMAScript and filter/schema-map checks (running production vaults validate
+with zero errors). Phase 3: the reference-aware edit operations as validated
+transactions, package-aware overrides, `export` (Designer imports it), and
+`simulate` (the regression corpus against the tree, diffed against the tree
+before the edit). CLI only by decision — no MCP server. Next: Phase 4, vault
+deploy with safeguards. See [docs/plan.md](docs/plan.md),
 [docs/edit-operations.md](docs/edit-operations.md) and
 [docs/agent-guide.md](docs/agent-guide.md).
 
@@ -25,6 +27,8 @@ IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…
   bin/idm import-live <driverSetDN> <outDir>  # live vault → IDM-as-code
 bin/idm check <asCodeDir>                     # load a tree, report it, exit 1 on broken links
 bin/idm validate <asCodeDir> [--json]         # every validation check; exit 1 on any error
+bin/idm export <asCodeDir> <out.xml>          # a Designer driver-set export of the tree
+bin/idm simulate <asCodeDir> --cases <dir> [--against <asCodeDir>]   # the regression corpus, diffed
 bin/idm query <asCodeDir> chain <driver> sub  # orient: artifacts | chain | gcvs | tables; show; refs
 bin/idm policy.add <asCodeDir> --driver D --scope subscriber --name X --link subscriber-command
 bin/idm <operation> <asCodeDir> --… [--dry-run] [--force] [--json]   # bin/idm with no args lists them all

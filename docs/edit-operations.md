@@ -1,7 +1,8 @@
 # Phase 3 design — edit operations, the simulate gate, and the MCP server
 
-Status: **design** (2026-09-08). Follows [plan.md](plan.md) Phase 3; builds on the
-model ([model.md](model.md)) and the validator ([validation.md](validation.md)).
+Status: **implemented** (2026-09-08; build-order section at the end records what
+landed). Follows [plan.md](plan.md) Phase 3; builds on the model
+([model.md](model.md)) and the validator ([validation.md](validation.md)).
 
 ## What Phase 3 delivers
 
@@ -217,9 +218,16 @@ With `--json` each result is structured for the agent rather than printed.
    on the first edit of a packaged artifact); `idm refs`. 13 tests, plus a
    rename + add + link across a copy of the real RFI tree: every reference
    rewritten, `validate` still 0 errors.
-2. **`ExportWriter`** + round-trip test against `ExportReader` on RFI/JFW; then a
-   simulator smoke test: a case whose `export=` is the written file runs.
-3. **`simulate`** (`BatchRunner` + `Comparer` over the swapped source).
+2. ✅ **`ExportWriter`** (2026-09-08): driver-set form (`idm export`; RFI tree
+   → export → tree identical but for count meta) and the single-driver form the
+   simulator loads (referenced Library artifacts embedded in the scope their
+   linking set implies, Map-token tables included, driver-set GCVs at the
+   root); round-trip and simulator smoke tests on synthetic data and RFI.
+3. ✅ **`simulate`** (2026-09-08): `idm simulate <tree> --cases <dir>
+   [--against <tree>] [--json]` — cases re-rendered with the source swapped to a
+   per-driver export of the tree, `BatchRunner` verdicts, `Comparer` per stage
+   vs the other tree; "final unchanged but N stages differ (reconverges)" is
+   reported, not hidden. Exit 1 on fail/error/changed. 4 tests.
 4. ✅ **Rule and configuration operations** (2026-09-08): `rule.add/delete/
    move/disable/enable` (rules by `<description>` or `#n`); `gcv.set` (where
    the driver's scope defines it, in the engine's precedence; `--define` to
@@ -227,8 +235,12 @@ With `--json` each result is structured for the agent rather than printed.
    `filter.set-class/set-attr/remove-class/remove-attr`; `schema-map.set/
    remove`; `driver.set` (`shim-class`, `shim-auth-*`, `param:<name>`,
    `engine:<name>`); `mapping-table.set-row/delete-row/add-column`. 12 tests.
-5. **Read commands** (`summary`, `query`, `show`, `package.diff`) and the skill /
-   agent guide for the whole surface.
+5. ✅ **Read commands** (`show`, `query artifacts|chain|gcvs|tables`, `refs`,
+   `package.diff`) and [agent-guide.md](agent-guide.md).
+
+**Phase 3 is complete (2026-09-08).** 108 tests. Not done, deliberately: a
+`summary` command (`check` already reports the set), and a `tree@HEAD` shorthand
+for `--against` (check out the previous revision into a directory for now).
 
 Delegation: 2 (writer, spec = the reader + real exports) and 4 (well-specified
 operations against the finished core) are good subagent work; the core, the
