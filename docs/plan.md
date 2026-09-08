@@ -186,10 +186,23 @@ spec: [model.md](model.md))
   50 drivers / 1,774 files) — byte-idempotent round trips; the only unresolved
   links are dangling references present in the sources themselves.
 
-**Phase 2 — Validation (offline safeguards)**
+**Phase 2 — Validation (offline safeguards)** — 🔨 **in progress** (spec:
+[validation.md](validation.md))
 - `validate`: DTD, XSLT/ECMAScript compile, linkage integrity, GCV/mapping-table
   references, schema-map/filter vs schema, package-discipline check. Wire the
   simulator's existing diagnostics into it; `--json` output.
+- Done: `bin/idm validate <dir> [--json]`; well-formedness pre-pass; links;
+  **compile through the engine's own compilers** in the driver's context (GCVs
+  substituted into the policy text as the engine does at load — an undefined
+  `~gcv~` is fatal at driver start; mapping tables and `<include>`s resolvable);
+  GCV token references; mapping-table reach and columns. Calibrated: RFI export
+  and IG4 live vault validate with 0 errors; Amica PRD errors all trace to the
+  project itself. Simulator 1.5.2 carries the engine-fidelity fixes this needed
+  (`~gcv~` substitution, GCV precedence, includes).
+- In progress: ECMAScript (Rhino parse + `es:` call resolution) and filter /
+  schema-map checks. Deferred: schema-map/filter vs the *vault* schema (needs a
+  live schema read — Phase 4), package-discipline (needs the edit operations'
+  baseline — Phase 3).
 
 **Phase 3 — Edit operations + MCP server**
 - Reference-aware operations on the model, each validated; CLI + MCP tools;

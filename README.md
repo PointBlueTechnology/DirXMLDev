@@ -6,12 +6,14 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phase 1 complete — model + IDM-as-code.** Phase 0 spikes are done
-([docs/spikes/](docs/spikes/)). The typed model, canonical serializer, as-code
-writer/reader, and readers for all four sources (export, Designer project, LDIF,
-live vault) are built and validated on real driver sets — byte-idempotent round
-trips. Next: Phase 2, validation. See [docs/plan.md](docs/plan.md) and
-[docs/model.md](docs/model.md).
+Status: **Phase 2 — validation (in progress).** Phase 0 spikes and Phase 1
+(typed model, IDM-as-code, readers for export / Designer project / LDIF / live
+vault, byte-idempotent round trips) are complete. `validate` compiles every
+policy with the engine's own compilers in the driver's context and checks
+linkage, GCVs and mapping tables; a running production vault validates with
+zero errors. ECMAScript and filter/schema-map checks are being added. See
+[docs/plan.md](docs/plan.md), [docs/model.md](docs/model.md) and
+[docs/validation.md](docs/validation.md).
 
 ```bash
 bin/idm import <export.xml> <outDir>          # driver / driver-set export → IDM-as-code
@@ -20,6 +22,7 @@ bin/idm import-ldif <dump.ldif> <outDir>      # LDIF of the driver-set subtree �
 IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…" \
   bin/idm import-live <driverSetDN> <outDir>  # live vault → IDM-as-code
 bin/idm check <asCodeDir>                     # load a tree, report it, exit 1 on broken links
+bin/idm validate <asCodeDir> [--json]         # every validation check; exit 1 on any error
 ```
 
 ## What this is
