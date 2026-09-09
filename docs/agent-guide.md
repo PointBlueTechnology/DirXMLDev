@@ -114,6 +114,23 @@ bin/idm package.diff tree/ "drivers/AD Driver/subscriber/NOVLADDCFG-sub-ctp-Enti
 shows exactly what was customized. Commit the baseline with the change. (The
 vault-side "modified" mark is set by the deployer when it writes the object.)
 
+## Add a driver
+
+New drivers are authored in the tree, not in Designer. Three sources:
+
+```bash
+bin/idm driver.add tree/ --name "AD Driver 2" --from-export ad-export.xml   # a vendor/package export (driver-set form keeps Library scope)
+bin/idm driver.add tree/ --name "AD Driver TEST" --copy-of "AD Driver"      # a deep copy: artifacts, config and links re-pointed
+bin/idm driver.add tree/ --name Loop --shim-class com.example.Shim         # blank: channels, empty filter, no policies
+```
+
+The operation is a transaction like the others: the new driver must validate
+in this tree, so an export whose GCVs are defined at the driver-set level of
+its origin will be refused until those GCVs exist here (define them first with
+`gcv.set --define`). Deploy it like any other change; the deployer creates the
+objects and refuses until the driver's required secrets are in the environment's
+secrets file (or `--allow-missing-secrets`).
+
 ## Prove the change
 
 ```bash
