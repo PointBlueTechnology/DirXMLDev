@@ -44,6 +44,17 @@ The edit operations (policies, rules, links, GCVs, filter, schema map, driver
 settings, mapping tables) are transactions: load → apply → validate → write only
 if no new error. See [docs/agent-guide.md](docs/agent-guide.md).
 
+## Use it as a Claude Code skill
+
+`.claude/skills/dirxml-dev/` teaches an agent the loop and the rules (validate
+→ simulate → diff → deploy staging → verify → canary → promote, with the
+safeguards as rules) and the recipes (implement a requirement, promote,
+investigate a misbehaving driver, onboard a vault, add a driver). It is picked
+up automatically when Claude Code runs in this repo; to use it from a client
+repo, copy or symlink the directory into that repo's `.claude/skills/`. The
+simulator's `dirxml-policy-testing` skill covers testing policies against
+events; this one covers everything around it.
+
 ## What this is
 
 The simulator already gives an agent the *read* and *test* halves of IDM work
