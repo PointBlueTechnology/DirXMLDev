@@ -22,6 +22,8 @@ import java.util.TreeSet;
  *   stg.tier=stg                # dev | stg | prd
  *   stg.secrets=secrets-stg.properties   # optional; see Secrets
  *   prd.requires=stg            # optional: a green STG deploy of the same commit first
+ *   stg.sshHost=idm-stg          # optional: the engine host, for driver.trace tail (key-based ssh)
+ *   stg.sshUser=root
  * </pre>
  */
 public final class Environments {
@@ -38,9 +40,11 @@ public final class Environments {
         public final String requires;     // an environment name, or null
         public final Path secretsFile;    // may be null
         public final boolean trustAll;
+        public final String sshHost;      // may be null: no trace tail
+        public final String sshUser;
 
         Environment(String name, String url, String bindDn, String password, String driverSetDn,
-                    Tier tier, String requires, Path secretsFile, boolean trustAll) {
+                    Tier tier, String requires, Path secretsFile, boolean trustAll, String sshHost, String sshUser) {
             this.name = name;
             this.url = url;
             this.bindDn = bindDn;
@@ -50,6 +54,8 @@ public final class Environments {
             this.requires = requires;
             this.secretsFile = secretsFile;
             this.trustAll = trustAll;
+            this.sshHost = sshHost;
+            this.sshUser = sshUser;
         }
 
         public Vault.Config vaultConfig() {
@@ -144,8 +150,12 @@ public final class Environments {
         Path secretsFile = secrets == null || secrets.isBlank() ? null
             : (file == null ? Paths.get(secrets) : file.toAbsolutePath().getParent().resolve(secrets));
         boolean trustAll = !"false".equals(props.getProperty(name + ".trustAll"));
+        String sshHost = props.getProperty(name + ".sshHost");
+        String sshUser = props.getProperty(name + ".sshUser");
         return new Environment(name, url, bindDn, password, driverSet, tier,
-            requires == null || requires.isBlank() ? null : requires.trim(), secretsFile, trustAll);
+            requires == null || requires.isBlank() ? null : requires.trim(), secretsFile, trustAll,
+            sshHost == null || sshHost.isBlank() ? null : sshHost.trim(),
+            sshUser == null || sshUser.isBlank() ? null : sshUser.trim());
     }
 
     private String req(String name, String key) throws IOException {

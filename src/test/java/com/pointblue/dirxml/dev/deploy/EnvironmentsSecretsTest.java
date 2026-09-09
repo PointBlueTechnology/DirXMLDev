@@ -28,6 +28,7 @@ public class EnvironmentsSecretsTest {
             "stg.driverSet=cn=driverset1,o=system",
             "stg.tier=stg",
             "stg.secrets=secrets-stg.properties",
+            "stg.sshHost=idm-stg", "stg.sshUser=root",
             "prd.url=ldaps://idm-prd:636",
             "prd.bindDn=cn=deploy,o=system",
             "prd.passwordEnv=IDM_TEST_NO_SUCH_VAR",
@@ -41,7 +42,10 @@ public class EnvironmentsSecretsTest {
         assertEquals(Environments.Tier.STG, stg.tier);
         assertEquals(dir.resolve("secrets-stg.properties").toAbsolutePath(), stg.secretsFile.toAbsolutePath());
         assertNull(stg.requires);
+        assertEquals("idm-stg", stg.sshHost);
+        assertEquals("root", stg.sshUser);
         assertEquals("ldaps://idm-stg:636", stg.vaultConfig().url);
+        assertNull(envs.get("bad".equals("x") ? "x" : "stg").requires);
         try {
             envs.get("prd");
             fail("passwordEnv not set must fail");
