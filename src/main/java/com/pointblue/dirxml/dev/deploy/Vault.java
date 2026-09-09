@@ -2,7 +2,27 @@ package com.pointblue.dirxml.dev.deploy;
 
 import com.novell.ldap.LDAPConnection;
 import com.novell.ldap.LDAPJSSESecureSocketFactory;
+import com.novell.nds.dirxml.ldap.CloseChunkedResultRequest;
+import com.novell.nds.dirxml.ldap.ChunkedResultResponseBase;
+import com.novell.nds.dirxml.ldap.DeleteCacheEntriesRequest;
+import com.novell.nds.dirxml.ldap.DriverResyncRequest;
+import com.novell.nds.dirxml.ldap.GetChunkedResultRequest;
+import com.novell.nds.dirxml.ldap.GetChunkedResultResponse;
 import com.novell.nds.dirxml.ldap.GetDriverStartOptionRequest;
+import com.novell.nds.dirxml.ldap.GetDriverStatsRequest;
+import com.novell.nds.dirxml.ldap.GetDriverStatsResponse;
+import com.novell.nds.dirxml.ldap.GetJvmStatsRequest;
+import com.novell.nds.dirxml.ldap.GetJvmStatsResponse;
+import com.novell.nds.dirxml.ldap.GetVersionRequest;
+import com.novell.nds.dirxml.ldap.GetVersionResponse;
+import com.novell.nds.dirxml.ldap.MigrateAppRequest;
+import com.novell.nds.dirxml.ldap.QueueEventRequest;
+import com.novell.nds.dirxml.ldap.SubmitCommandRequest;
+import com.novell.nds.dirxml.ldap.SubmitCommandResponse;
+import com.novell.nds.dirxml.ldap.SubmitEventRequest;
+import com.novell.nds.dirxml.ldap.SubmitEventResponse;
+import com.novell.nds.dirxml.ldap.ViewCacheEntriesRequest;
+import com.novell.nds.dirxml.ldap.ViewCacheEntriesResponse;
 import com.novell.nds.dirxml.ldap.GetDriverStartOptionResponse;
 import com.novell.nds.dirxml.ldap.GetDriverStateRequest;
 import com.novell.nds.dirxml.ldap.GetDriverStateResponse;
@@ -302,6 +322,13 @@ public final class Vault implements AutoCloseable {
                 GetDriverStateResponse.register();
                 GetDriverStartOptionResponse.register();
                 ListNamedPasswordsResponse.register();
+                ViewCacheEntriesResponse.register();
+                GetChunkedResultResponse.register();
+                GetVersionResponse.register();
+                GetDriverStatsResponse.register();
+                GetJvmStatsResponse.register();
+                SubmitEventResponse.register();
+                SubmitCommandResponse.register();
                 URI u = URI.create(config.url);
                 int port = u.getPort() > 0 ? u.getPort() : ("ldaps".equals(u.getScheme()) ? 636 : 389);
                 LDAPConnection conn;
@@ -398,6 +425,126 @@ public final class Vault implements AutoCloseable {
         }
         throw new VaultException("driver " + driverDn + " did not reach " + stateName(wanted) + " within " + seconds
             + "s (states seen: " + seen + ")", null);
+    }
+
+    // ---- operate: cache, events, stats, trace ----------------------------------------
+
+    public static final String TRACE_LEVEL = "DirXML-TraceLevel";
+    public static final String TRACE_FILE = "DirXML-TraceFile";
+    private static final int MAX_CHUNK = 64512;   // dxcmd's chunk size
+
+    /** One page of a driver's event cache. */
+    public static final class CachePage {
+        public final String xds;          // "" when empty
+        public final int nextToken;
+        public final boolean empty;
+
+        CachePage(String xds, int nextToken) {
+            this.xds = xds;
+            this.nextToken = nextToken;
+            this.empty = xds.isEmpty();
+        }
+    }
+
+    /** Read up to {@code count} cached events from {@code position} (0 = first). Works on a running driver too. */
+    public CachePage viewCache(String driverDn, int position, int count) {
+        try {
+            ViewCacheEntriesResponse resp = (ViewCacheEntriesResponse) ops().extendedOperation(
+                new ViewCacheEntriesRequest(driverDn, 1, position, count, 0));
+            int next = resp.getPositionToken();
+            if (resp.getDataHandle() == 0 || resp.getDataSize() == 0) {
+                return new CachePage("", next);
+            }
+            return new CachePage(new String(chunked(resp), StandardCharsets.UTF_8), next);
+        } catch (Exception e) {
+            throw new VaultException("ViewCacheEntries " + driverDn + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Raw DeleteCacheEntries (parameter semantics settled by spike 5a). */
+    public void deleteCacheEntries(String driverDn, int p2, int p3, String p4, int priority) {
+        extOp("DeleteCacheEntries", driverDn, () -> ops().extendedOperation(new DeleteCacheEntriesRequest(driverDn, p2, p3, p4, priority)));
+    }
+
+    /** Queue an XDS event into the driver's subscriber cache (no result document). */
+    public void queueEvent(String driverDn, byte[] xds) {
+        extOp("QueueEvent", driverDn, () -> ops().extendedOperation(new QueueEventRequest(driverDn, xds)));
+    }
+
+    /** Submit an XDS document to a running driver's publisher channel; returns the result document (may be empty). */
+    public String submitEvent(String driverDn, byte[] xds) {
+        try {
+            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new SubmitEventRequest(driverDn, 1, xds));
+            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new VaultException("SubmitEvent " + driverDn + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Submit an XDS command to a running driver's subscriber channel; returns the result document (may be empty). */
+    public String submitCommand(String driverDn, byte[] xds) {
+        try {
+            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new SubmitCommandRequest(driverDn, 1, xds));
+            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new VaultException("SubmitCommand " + driverDn + ": " + e.getMessage(), e);
+        }
+    }
+
+    public void migrateApp(String driverDn, byte[] xds) {
+        extOp("MigrateApp", driverDn, () -> ops().extendedOperation(new MigrateAppRequest(driverDn, xds)));
+    }
+
+    /** Resync events since {@code since} (epoch millis; 0 = full resync). */
+    public void resync(String driverDn, long sinceMillis) {
+        extOp("DriverResync", driverDn, () -> ops().extendedOperation(new DriverResyncRequest(driverDn, new java.util.Date(sinceMillis))));
+    }
+
+    /** The engine version as the packed int the engine reports. */
+    public int engineVersion() {
+        try {
+            return ((GetVersionResponse) ops().extendedOperation(new GetVersionRequest())).getVersion();
+        } catch (Exception e) {
+            throw new VaultException("GetVersion: " + e.getMessage(), e);
+        }
+    }
+
+    /** The driver's statistics document (XML), or "" when the engine returns none. */
+    public String driverStats(String driverDn, int arg) {
+        try {
+            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new GetDriverStatsRequest(driverDn, arg));
+            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new VaultException("GetDriverStats " + driverDn + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** The engine JVM's statistics document (XML), or "" when none. */
+    public String jvmStats(int a, int b) {
+        try {
+            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new GetJvmStatsRequest(a, b));
+            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new VaultException("GetJvmStats: " + e.getMessage(), e);
+        }
+    }
+
+    private byte[] chunked(ChunkedResultResponseBase resp) throws Exception {
+        int handle = resp.getDataHandle();
+        int size = resp.getDataSize();
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(size);
+        int remaining = size;
+        while (remaining > 0) {
+            byte[] reply = ((GetChunkedResultResponse) ops().extendedOperation(
+                new GetChunkedResultRequest(handle, Math.min(remaining, MAX_CHUNK), 0))).getData();
+            if (reply == null || reply.length == 0) {
+                break;
+            }
+            out.write(reply, 0, reply.length);
+            remaining -= reply.length;
+        }
+        ops().extendedOperation(new CloseChunkedResultRequest(handle));
+        return out.toByteArray();
     }
 
     // ---- named passwords -------------------------------------------------------------
