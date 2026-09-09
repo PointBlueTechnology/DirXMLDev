@@ -1,6 +1,6 @@
 # Phase 6 design — Designer round-trip, agent workflows, documentation
 
-Status: **design** (2026-09-09). Follows [plan.md](plan.md) Phase 6; builds on
+Status: **design confirmed, building** (2026-09-09). Follows [plan.md](plan.md) Phase 6; builds on
 everything before it — the reader for Designer projects
 (`source.ProjectReader`), the tree operations, the deployer and the operate
 surface. This is the last phase of the driver-development plan; Track P
@@ -103,7 +103,8 @@ changes to the project's files:
 | linkage changed | rewrite the owner's ordered **Reference** relations for that set (`Idm:EventPolicies` … on the channel; `Idm:MappingPolicies` / `InputPolicies` / `OutputPolicies` / `ExtensionFunctions` on the driver; `Idm:GlobalConfigs` on the driver for set 14), keeping the `#<ID>.<Type>_` keys |
 | driver setting / config blob changed | the attribute in the driver's CObject (`DirXML-JavaModule`, `DirXML-ShimAuthServer`, `DirXML-ShimAuthID`; `DirXML-ShimConfigInfo` / `DirXML-EngineControlValues` as the inline escaped-XML CString the reader decodes), the filter's `_contents.xml`, the driver's `<ID>_<ServerID>_DirXML-ConfigValues.xml` (per server: every server file the project has) |
 | driver-set GCVs / linkage | the driver set's config-values file(s) and its `Idm:GlobalConfigs` |
-| driver added / removed | **out of scope** — a new driver in Designer needs the Application, Server association, package installation records and more that the model doesn't carry; the writer refuses and says so (create the driver in Designer, or deploy to the vault and let Designer import it) |
+| driver added | a **non-packaged** driver (no package meta on it) is written: `<ID>.Driver_` with its attributes, `Subscriber_` / `Publisher_` / `Filter_` children and relations, its artifacts, the driver set's `Idm:Drivers` relation — Designer's verdict in spike 6a decides whether that is enough. A **packaged** driver is refused with a clear message: the project needs Designer's `IdmPackage` installation records, which only Designer produces — deploy it to the vault and let Designer *Import from the Identity Vault* |
+| driver removed | **refused** (as deploy refuses): a driver is removed from a project deliberately, in Designer |
 
 Everything the model doesn't carry — packages, jobs, entitlements, servers,
 notification templates, the workspace metadata, `_initial_state.xml` files,
@@ -126,12 +127,32 @@ never touches a file it has no reason to.**
 ### Not in scope
 
 Generating a project from nothing (a vault with no Designer origin → Designer
-imports from the vault instead), provisioning objects (Track P), the
+imports from the vault instead), packaged-driver creation in a project (the
+package catalog is Designer's), provisioning objects (Track P), the
 workspace's `.metadata`, and `_initial_state.xml` maintenance for objects the
 tree didn't touch.
 
+## 4. Creating drivers in the tree — `driver.add`
+
+New drivers are authored in the tree and created in the vault by the deployer
+(Phase 4: stopped, start option manual, secrets from the inventory). Phase 3
+lacked the tree operation; it lands here:
+
+| form | what it does |
+|---|---|
+| `driver.add --name N --from-export <driver-export.xml>` | a vendor / packaged driver arrives as the configuration Designer exported once (with referenced policies); the export's driver — artifacts, linkage, filter, GCVs, shim config — is merged into the tree as driver N (its Library policies added to the Library when absent, matched by name when present) |
+| `driver.add --name N --copy-of D` | clone driver D (artifacts, links re-pointed to the clone, config blobs), then `gcv.set` / `driver.set` the differences — the dev→test→prod pattern |
+| `driver.add --name N --shim-class C [--auth-server S] [--auth-id I]` | a blank driver: empty filter, no policies, no GCVs — for hand-built shims |
+
+Each is a transaction like every other operation (validate → refuse on a new
+error → write). A driver that came from an export keeps its package meta, so
+the deployer will create it in the vault and the project writer will refuse to
+write it into a project (see the table above).
+
 ## Build order
 
+0. **`driver.add`** (three forms) in the edit registry; tests; a from-export
+   run on a real driver export.
 1. **Docs generation** (`docs` package; Sonnet) — renderer over the model +
    `ModelDiff`; deterministic; tests on the synthetic set and RFI.
 2. **The skill** (me) — `skill/dirxml-dev/`, installable; walked through once
@@ -144,13 +165,15 @@ tree didn't touch.
    scope adjusted.
 5. `idm export-project` CLI, agent guide + skill updated, plan closed.
 
-## Decisions to confirm
+## Decisions (confirmed 2026-09-09)
 
-1. **Order: docs → skill → writer.** The writer is last because it's the one
+1. ✅ **Order: docs → skill → writer.** The writer is last because it's the one
    piece whose acceptance test needs a human with Designer.
-2. **The writer updates an existing project only; new drivers are out of
-   scope** (Designer's own vault import covers that case).
-3. **Designer's own verdict decides the writer's scope** (spike 6a); nothing is
-   patched around what Designer rejects.
-4. **Documentation is Markdown-first, deterministic, and lives in the client
+2. ✅ **New drivers are authored in the tree (`driver.add`) and created in the
+   vault by the deployer.** The project writer attempts non-packaged drivers
+   (Designer's verdict in spike 6a) and refuses packaged ones, pointing at
+   Designer's vault import — the package catalog is Designer's.
+3. ✅ **Designer's own verdict decides the writer's scope** (spike 6a); nothing
+   is patched around what Designer rejects.
+4. ✅ **Documentation is Markdown-first, deterministic, and lives in the client
    repo** next to the tree.
