@@ -266,7 +266,7 @@ public final class Operate {
 
         StringBuilder text = new StringBuilder();
         text.append(String.format("%-30s %-10s %-16s %6s %6s %-6s%n",
-            "DRIVER", "STATE", "START", "CACHE", "UNPR", "TRACE"));
+            "DRIVER", "STATE", "START", "CACHE B", "UNPR B", "TRACE"));
         StringBuilder json = new StringBuilder("[");
         for (int i = 0; i < drivers.size(); i++) {
             Vault.Entry d = drivers.get(i);
@@ -1076,21 +1076,60 @@ public final class Operate {
         }
         try {
             Document doc = CanonicalXml.parse(xml);
+            // the engine's shape (spike 5): <memory_stats><heap><initial/><comitted/><used/><total/></heap>…
+            // <thread_stats><daemon_count/><current_count/><peak_count/>…  ("comitted" is the engine's spelling)
             Element heap = firstElement(doc, "heap");
             s.heapUsed = childText(heap, "used");
-            s.heapCommitted = childText(heap, "committed");
+            s.heapCommitted = childText(heap, "comitted");
+            if ("?".equals(s.heapCommitted)) {
+                s.heapCommitted = childText(heap, "committed");
+            }
             s.heapTotal = childText(heap, "total");
             if ("?".equals(s.heapTotal)) {
                 s.heapTotal = childText(heap, "max");
             }
-            Element threads = firstElement(doc, "threads");
-            s.threadsCurrent = childText(threads, "current");
-            s.threadsDaemon = childText(threads, "daemon");
-            s.threadsPeak = childText(threads, "peak");
+            Element threads = firstElement(doc, "thread_stats");
+            if (threads == null) {
+                threads = firstElement(doc, "threads");
+            }
+            s.threadsCurrent = childText(threads, "current_count");
+            if ("?".equals(s.threadsCurrent)) {
+                s.threadsCurrent = childText(threads, "current");
+            }
+            s.threadsDaemon = childText(threads, "daemon_count");
+            if ("?".equals(s.threadsDaemon)) {
+                s.threadsDaemon = childText(threads, "daemon");
+            }
+            s.threadsPeak = childText(threads, "peak_count");
+            if ("?".equals(s.threadsPeak)) {
+                s.threadsPeak = childText(threads, "peak");
+            }
         } catch (RuntimeException ignored) {
             // leave every field "?"
         }
         return s;
+    }
+
+    /** The sum of the integer children of every element named {@code tag}; -1 when there is none. */
+    private static long sumChildren(Document doc, String tag) {
+        org.w3c.dom.NodeList list = doc.getElementsByTagName(tag);
+        if (list.getLength() == 0) {
+            return -1;
+        }
+        long sum = 0;
+        for (int i = 0; i < list.getLength(); i++) {
+            org.w3c.dom.Node n = list.item(i).getFirstChild();
+            for (; n != null; n = n.getNextSibling()) {
+                if (n instanceof Element) {
+                    try {
+                        sum += Long.parseLong(n.getTextContent().trim());
+                    } catch (NumberFormatException ignored) {
+                        // a nested container, not a count
+                    }
+                }
+            }
+        }
+        return sum;
     }
 
     static DriverStat parseDriverStats(String name, String xml) {
@@ -1103,8 +1142,12 @@ public final class Operate {
         }
         try {
             Document doc = CanonicalXml.parse(xml);
-            s.reportedEvents = firstTagText(doc, "reported-event-count");
-            s.commands = firstTagText(doc, "command-count");
+            // the engine's shape (spike 5): per channel <operations><reported-events><modify>12</modify>…</reported-events>
+            // <commands><query>48</query>…</commands> — a count per operation type; report the totals
+            long reported = sumChildren(doc, "reported-events");
+            long commands = sumChildren(doc, "commands");
+            s.reportedEvents = reported < 0 ? firstTagText(doc, "reported-event-count") : Long.toString(reported);
+            s.commands = commands < 0 ? firstTagText(doc, "command-count") : Long.toString(commands);
         } catch (RuntimeException ignored) {
             // leave "?"
         }

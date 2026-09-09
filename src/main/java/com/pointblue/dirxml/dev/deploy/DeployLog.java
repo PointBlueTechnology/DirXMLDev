@@ -280,7 +280,7 @@ public final class DeployLog {
         return sb.append(']').toString();
     }
 
-    static String q(String s) {
+    public static String q(String s) {
         StringBuilder sb = new StringBuilder("\"");
         for (char c : s.toCharArray()) {
             switch (c) {

@@ -6,7 +6,7 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phase 4 — vault deploy with safeguards, proven on the test vault.**
+Status: **Phases 0–5 built and proven on the test vault.**
 Phases 0–3: typed model, IDM-as-code with readers for export / Designer project
 / LDIF / live vault (byte-idempotent); `validate` — every policy through the
 engine's own compilers in the driver's context plus linkage, GCV,
@@ -17,9 +17,13 @@ it) and `simulate` (the regression corpus, diffed against the tree before the
 edit). Phase 4: `vault.diff` / `vault.deploy` (plan → snapshot → `--yes` or
 `--step` → restart → verify → audit) / `vault.rollback`, environments with
 tiers and a production gate that requires a known vault state, secrets sourced
-per environment. CLI only by decision. See [docs/plan.md](docs/plan.md),
-[docs/vault-deploy.md](docs/vault-deploy.md) and
-[docs/agent-guide.md](docs/agent-guide.md).
+per environment. Phase 5: operate — `driverset.status`, `driver.start|stop|
+restart|cache|migrate|resync|secrets|trace` (incl. `trace tail` over SSH),
+`engine.version|stats`, and `driver.submit`, the DxCMD Phase 2 canary that
+compares what the live engine hands the shim with the simulator's prediction.
+CLI only by decision. See [docs/plan.md](docs/plan.md),
+[docs/vault-deploy.md](docs/vault-deploy.md), [docs/operate.md](docs/operate.md)
+and [docs/agent-guide.md](docs/agent-guide.md).
 
 ```bash
 bin/idm import <export.xml> <outDir>          # driver / driver-set export → IDM-as-code
