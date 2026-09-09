@@ -157,13 +157,26 @@ write it into a project (see the table above).
    `ModelDiff`; deterministic; tests on the synthetic set and RFI.
 2. ✅ **The skill** (me) — `skill/dirxml-dev/`, installable; walked through once
    end to end on the test vault by an agent session following only the skill.
-3. 🔨 **`ProjectWriter`** — id minting, CObject writer, relation editing on the
+3. ✅ **`ProjectWriter`** — id minting, CObject writer, relation editing on the
    existing files (DOM-level, preserving Designer's formatting where it
    matters), the change table above; tests against `test11` and a copy of the
    Amica project with the untouched-file invariant.
 4. **Spike 6a with Jerry in Designer**; findings → `spikes/designer-writer.md`;
    scope adjusted.
-5. `idm export-project` CLI, agent guide + skill updated, plan closed.
+5. ✅ `idm export-project` CLI, agent guide + skill updated. Plan closes after 4.
+
+Built 2026-09-09 (`source.ProjectWriter`, `source.CObjectXml`, 13 tests on copies
+of `test11` and the Amica project; 203 tests green). Proven by hand: on a copy
+of `test11`, `policy.add` on Querytest → `export-project` created the CObject and
+contents files, changed exactly one existing file (the `Subscriber_`), and
+`import-project` of the result equals the tree (`tree.diff`: no differences).
+Known limits: `ARTIFACT_KIND_CHANGED` is reported, not written; driver-set-level
+GCV linkage (`DRIVERSET_LINKAGE`) is not rewritten because the model does not
+record whether a `library/*` GCV object is owned by the `Library_` or the
+driver set; a touched CObject file is re-indented in 2-space block style and
+embedded XML in attribute values escapes control characters as decimal
+references — same content, different bytes than Designer writes. Spike 6a
+input: `~/designer_workspace/test11-roundtrip` (the copy above).
 
 ## Decisions (confirmed 2026-09-09)
 

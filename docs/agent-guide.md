@@ -191,6 +191,27 @@ policy change: the live engine's Subscriber channel hands the shim a document,
 the trace shows which, and the simulator's prediction from the tree must match
 it.
 
+## Hand it back to Designer
+
+Teams that keep a Designer project get it updated from the tree, not
+re-imported:
+
+```bash
+bin/idm export-project tree/ ~/designer_workspace/Client --dry-run   # what it would touch
+bin/idm export-project tree/ ~/designer_workspace/Client             # writes; result lists created/changed/deleted files
+bin/idm docs tree/ --out docs/ --since HEAD~5                        # README, one page per driver, library, changes
+```
+
+The writer edits only the files the diff calls for: a changed policy rewrites
+its `_contents.xml`; an added one gets a new 8-character id, its CObject and
+contents files, and a Child relation on its owner; a removed one loses its
+files and every relation that pointed at it; a rename keeps the id; linkage
+rewrites the ordered relations on the driver or channel. Everything else in
+the project is byte-identical afterwards. It refuses a driver that carries
+package metadata (Designer's catalog owns those; deploy to the vault and
+import there) and never deletes a driver. Commit the project after it runs
+and open it in Designer once before trusting a new kind of change.
+
 ## Conventions
 
 - One operation or one content edit per commit, with the result's file list in

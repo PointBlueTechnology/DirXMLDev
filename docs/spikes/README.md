@@ -42,3 +42,4 @@ queue/view/clear parameters, live trace level, SubmitCommand/SubmitEvent
 observed in the driver trace over SSH; `-Dspike.phase=a|b`,
 `-Dspike.ssh=root@host`; findings in [`operate.md`](operate.md).
 - [pdt-analysis.md](pdt-analysis.md) — NetIQ Package Deployment Tool 1.0 analyzed (2026-09-09): a REST/UI wrapper that shells out to Designer's `DesignerHeadless` application; the headless command surface, package jar format, Route A (drive Designer headless) vs Route B (native Phase 7), and ranked recommendations.
+- [designer-headless.md](designer-headless.md) — Designer's headless application launches on macOS: `listContents -L P` listed 480 base packages in 20 s, `#OPERATION_SUCCESS`; `-l` wants a file; next spike is `deployDriver -f`.
