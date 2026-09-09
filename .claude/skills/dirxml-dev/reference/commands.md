@@ -44,3 +44,8 @@ Gating: reads are free; start/restart/trace/secrets need `--yes` on stg and `--y
 ## Document
 
 `docs tree/ --out docs/ [--driver D] [--since <commit>] [--format md|html]`
+
+## Designer and documentation
+
+- `export-project <tree> <projectDir> [--dry-run] [--json]` — update an existing Designer project in place from the tree (only the files the diff needs; refuses packaged new drivers and driver deletes)
+- `docs <tree> --out <dir> [--driver D…] [--since <commit>] [--format md|html]` — README, `drivers/<name>.md`, `library.md`, `changes.md`

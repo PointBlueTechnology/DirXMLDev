@@ -21,7 +21,11 @@ per environment. Phase 5: operate — `driverset.status`, `driver.start|stop|
 restart|cache|migrate|resync|secrets|trace` (incl. `trace tail` over SSH),
 `engine.version|stats`, and `driver.submit`, the DxCMD Phase 2 canary that
 compares what the live engine hands the shim with the simulator's prediction.
-CLI only by decision. See [docs/plan.md](docs/plan.md),
+Phase 6: `docs` (the driver set documented from the model), the
+`dirxml-dev` skill, `driver.add`, and `export-project`, which updates an
+existing Designer project in place from the tree (content, added/removed/
+renamed artifacts, linkage, driver settings, GCVs; non-packaged new drivers;
+packaged drivers refused). CLI only by decision. See [docs/plan.md](docs/plan.md),
 [docs/vault-deploy.md](docs/vault-deploy.md), [docs/operate.md](docs/operate.md)
 and [docs/agent-guide.md](docs/agent-guide.md).
 
@@ -34,6 +38,8 @@ IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…
 bin/idm check <asCodeDir>                     # load a tree, report it, exit 1 on broken links
 bin/idm validate <asCodeDir> [--json]         # every validation check; exit 1 on any error
 bin/idm export <asCodeDir> <out.xml>          # a Designer driver-set export of the tree
+bin/idm export-project <asCodeDir> <projectDir> [--dry-run]   # update an existing Designer project in place
+bin/idm docs <asCodeDir> --out <dir> [--since <commit>] [--format md|html]   # documentation from the model
 bin/idm simulate <asCodeDir> --cases <dir> [--against <asCodeDir>]   # the regression corpus, diffed
 bin/idm query <asCodeDir> chain <driver> sub  # orient: artifacts | chain | gcvs | tables; show; refs
 bin/idm policy.add <asCodeDir> --driver D --scope subscriber --name X --link subscriber-command

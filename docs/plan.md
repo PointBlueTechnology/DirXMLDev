@@ -290,7 +290,9 @@ install, upgrade, downgrade, uninstall happen in its catalog UI. Two pieces:
   a vault. The analysis recommends that route first (catalog reader → headless
   runner → `driver.add --base` → wrapped upgrade/downgrade/uninstall on
   dev/stg) and the native tree-side install second, once Designer-installed
-  drivers exist to compare against. Design note pending Jerry's call.
+  drivers exist to compare against. Headless launch on this Mac proven
+  ([spikes/designer-headless.md](spikes/designer-headless.md)). Design note
+  pending Jerry's call.
 - **Package authoring from customized configuration** (Jerry, 2026-09-09):
   `idm package.build` turns what a tree customized — overridden packaged
   policies, new policies/resources/tables/ECMAScript, GCV definitions, filter
