@@ -123,6 +123,9 @@ public final class Cli {
             if (args.length >= 2 && args[0].startsWith("vault.")) {
                 System.exit(com.pointblue.dirxml.dev.deploy.DeployCli.run(args));
             }
+            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine."))) {
+                System.exit(com.pointblue.dirxml.dev.operate.OperateCli.run(args));
+            }
             if (args.length >= 3 && args[0].equals("tree.diff")) {
                 boolean json = false;
                 List<String> pos = new ArrayList<>();
@@ -218,6 +221,18 @@ public final class Cli {
         System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
         System.err.println("  query <asCodeDir> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver]");
         System.err.println("  package.diff <asCodeDir> <artifactPath>  a customized packaged artifact vs its package baseline");
+        System.err.println("operate (docs/operate.md; environments.properties, tiers, deploy-log audit):");
+        System.err.println("  driverset.status --env E [--json]");
+        System.err.println("  driver.status --env E --driver D [--json] [--tree DIR]");
+        System.err.println("  driver.start|stop|restart --env E --driver D [--wait N] [--yes] [--confirm E]");
+        System.err.println("  driver.cache view --env E --driver D [--count N] [--out DIR] [--json]");
+        System.err.println("  driver.cache clear --env E --driver D --yes [--confirm E]");
+        System.err.println("  driver.migrate --env E --driver D --xds FILE --yes [--confirm E]");
+        System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
+        System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
+        System.err.println("  driver.trace show|set|reset --env E --driver D [--level N] [--file F]");
+        System.err.println("  engine.version --env E");
+        System.err.println("  engine.stats --env E [--driver D…] [--json]");
         System.err.println("edit operations (each: load → apply → validate → write unless a new error; --dry-run, --force, --json):");
         System.err.print(com.pointblue.dirxml.dev.edit.EditCli.usage());
     }
