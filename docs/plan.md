@@ -257,11 +257,18 @@ what is deliberately deferred: `--delete-driver`, the Remote Loader password,
   live engine handed the shim with the simulator's prediction (MATCH on the
   test vault). Decisions confirmed.
 
-**Phase 6 — Designer round-trip + workflows**
+**Phase 6 — Designer round-trip + workflows** — 🔨 **design** (2026-09-09;
+[designer-roundtrip.md](designer-roundtrip.md))
 - Designer-format writer (from the Phase 0 findings) for teams that need it.
 - Agent workflows/skills: "implement requirement X" → edit → validate → simulate →
   diff → deploy STG → verify → promote PRD, with package-aware overrides and docs
   generation from the model.
+- Design: docs generation from the model first (`idm docs`), then the agent
+  workflow skill (the loop, the rules, the recipes), then the Designer writer as
+  an *update of an existing project* (content, new/removed/renamed artifacts,
+  linkage, driver config; new drivers out of scope) verified by round trip, an
+  untouched-file invariant, and a human-in-the-loop spike in Designer. Four
+  decisions to confirm at the end of the note.
 
 **Track P — Provisioning forms (the form builder)**
 Runs alongside Phases 3–4 once the model exists; it is a distinct object model
