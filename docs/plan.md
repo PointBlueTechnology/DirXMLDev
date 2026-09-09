@@ -282,8 +282,15 @@ install, upgrade, downgrade, uninstall happen in its catalog UI. Two pieces:
   directives, dependencies and mandatory/optional features, and preserving the
   tree's customizations across an upgrade (three-way: package old → package
   new → customized). Scope and feasibility come from the analysis of NetIQ's
-  Package Deployment Tool 1.0 (how it drives Designer's `packagemanager`
-  bundle, its catalog channels, its merge rules) — in progress.
+  Package Deployment Tool 1.0 — done, [spikes/pdt-analysis.md](spikes/pdt-analysis.md):
+  PDT has no package logic of its own; it shells out to Designer's headless
+  application (`-application com.novell.idm.rcp.DesignerHeadless`, present in
+  the local Designer 4.10.1), whose `deployDriver -f` mode installs packages
+  into a throw-away project and exports the driver to a file without touching
+  a vault. The analysis recommends that route first (catalog reader → headless
+  runner → `driver.add --base` → wrapped upgrade/downgrade/uninstall on
+  dev/stg) and the native tree-side install second, once Designer-installed
+  drivers exist to compare against. Design note pending Jerry's call.
 - **Package authoring from customized configuration** (Jerry, 2026-09-09):
   `idm package.build` turns what a tree customized — overridden packaged
   policies, new policies/resources/tables/ECMAScript, GCV definitions, filter
