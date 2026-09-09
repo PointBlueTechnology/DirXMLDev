@@ -146,6 +146,38 @@ public final class Cli {
                 System.out.print(json ? diff.json() + "\n" : diff.text());
                 System.exit(diff.isEmpty() ? 0 : 1);
             }
+            if (args.length >= 2 && args[0].equals("docs")) {
+                Path tree = Paths.get(args[1]);
+                Path out = null;
+                List<String> drivers = new ArrayList<>();
+                String since = null;
+                String format = "md";
+                for (int i = 2; i < args.length; i++) {
+                    switch (args[i]) {
+                        case "--out":
+                            out = Paths.get(args[++i]);
+                            break;
+                        case "--driver":
+                            drivers.add(args[++i]);
+                            break;
+                        case "--since":
+                            since = args[++i];
+                            break;
+                        case "--format":
+                            format = args[++i];
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                if (out == null) {
+                    System.err.println("usage: docs <asCodeDir> --out <dir> [--driver D…] [--since <commit>] [--format md|html]");
+                    System.exit(2);
+                }
+                com.pointblue.dirxml.dev.docs.DocsGenerator.generate(tree, out, drivers, since, format);
+                System.out.println("wrote " + out);
+                System.exit(0);
+            }
             usage();
             System.exit(2);
         } catch (Exception e) {
@@ -216,6 +248,7 @@ public final class Cli {
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
         System.err.println("  tree.diff <fromDir> <toDir> [--json]  structured diff of two as-code trees (exit 1 if they differ)");
+        System.err.println("  docs <asCodeDir> --out <dir> [--driver D…] [--since <commit>] [--format md|html]  generate documentation from the model");
         System.err.println("  simulate <asCodeDir> --cases <dir> [--against <asCodeDir>] [--json]  run the regression corpus against the tree; diff vs another tree");
         System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact");
         System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
