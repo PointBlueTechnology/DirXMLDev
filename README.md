@@ -57,9 +57,9 @@ policies headlessly; regression corpus; compare; coverage). This repo adds the
 - **validation** (DTD, XSLT/ECMAScript compile, linkage, GCV/mapping-table refs, schema);
 - **vault deploy** over LDAP + the DirXML extended operations, with diff/dry-run,
   snapshot/rollback, environment gating, and package-aware overrides;
-- **driver operations** (start/stop/restart, state, cache, migrate, passwords);
+- **driver operations** (status, start/stop/restart, cache view/clear, migrate/resync, named passwords, trace incl. tail over SSH, engine stats) and the **submit canary** (live engine vs simulator);
 - **provisioning forms** (Track P — the form builder for PRDs);
-- surfaced as a **CLI** and an **MCP server** with destructive tools annotated.
+- surfaced as a **CLI** (`bin/idm`), one operation registry, `--json` everywhere; no MCP server by decision.
 
 ## Requirements
 
@@ -75,5 +75,5 @@ mvn test
 ## Layout
 
 - `docs/plan.md` — the plan (architecture, phases, decisions, safeguards).
-- `docs/spikes/` — Phase 0 spike findings.
-- `src/` — (Phase 1+) the model, as-code, validation, deployer.
+- `docs/spikes/` — spike findings (Phase 0, 4, 5).
+- `src/` — model, as-code, validate, edit, simulate, deploy, operate.
