@@ -242,10 +242,17 @@ what is deliberately deferred: `--delete-driver`, the Remote Loader password,
   come from a gitignored per-environment source, are required on a driver's
   initial deploy and only re-set when forced. All five decisions confirmed.
 
-**Phase 5 — Operate**
+**Phase 5 — Operate** — 🔨 **design** (2026-09-09; [operate.md](operate.md))
 - Driver lifecycle, cache view/clear, migrate/resync, named passwords, trace
   level, jobs — via the existing extended ops. (Much of this is `DxCacheReader`
   generalized.)
+- Design: `driverset.status` / `driver.status|start|stop|restart|cache view|clear|
+  migrate|resync|secrets|trace show|set|reset|tail` / `engine.version|stats`
+  behind the deploy's environments, tiers and audit log; gating by what an
+  operation can break; a cleared cache is saved first; trace tail over the
+  environment's SSH host, and start/restart verified from the driver's trace;
+  `driver.submit` only if spike 5c shows the engine runs a submitted event.
+  Spikes 5a–5c first. Four decisions to confirm at the end of the note.
 
 **Phase 6 — Designer round-trip + workflows**
 - Designer-format writer (from the Phase 0 findings) for teams that need it.
