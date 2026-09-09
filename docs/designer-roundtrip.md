@@ -151,13 +151,13 @@ write it into a project (see the table above).
 
 ## Build order
 
-0. **`driver.add`** (three forms) in the edit registry; tests; a from-export
+0. ✅ **`driver.add`** (three forms) in the edit registry; tests; a from-export
    run on a real driver export.
-1. **Docs generation** (`docs` package; Sonnet) — renderer over the model +
+1. ✅ **Docs generation** (`docs` package; Sonnet) — renderer over the model +
    `ModelDiff`; deterministic; tests on the synthetic set and RFI.
-2. **The skill** (me) — `skill/dirxml-dev/`, installable; walked through once
+2. ✅ **The skill** (me) — `skill/dirxml-dev/`, installable; walked through once
    end to end on the test vault by an agent session following only the skill.
-3. **`ProjectWriter`** — id minting, CObject writer, relation editing on the
+3. 🔨 **`ProjectWriter`** — id minting, CObject writer, relation editing on the
    existing files (DOM-level, preserving Designer's formatting where it
    matters), the change table above; tests against `test11` and a copy of the
    Amica project with the untouched-file invariant.

@@ -272,6 +272,49 @@ what is deliberately deferred: `--delete-driver`, the Remote Loader password,
   `driver.add` (from an export, a copy, or blank) so new drivers are authored
   in the tree and created by the deployer. Decisions confirmed.
 
+**Phase 7 — Packages** — 📝 **queued** (2026-09-09; design note to follow the
+PDT analysis)
+Today the tree can *override* packaged content (baseline kept, `customized`
+mark, checksum written on deploy) but packages themselves are Designer's:
+install, upgrade, downgrade, uninstall happen in its catalog UI. Two pieces:
+- **Package lifecycle without Designer's UI** — install/upgrade/downgrade/
+  uninstall a package into the tree from a package jar, honoring the install
+  directives, dependencies and mandatory/optional features, and preserving the
+  tree's customizations across an upgrade (three-way: package old → package
+  new → customized). Scope and feasibility come from the analysis of NetIQ's
+  Package Deployment Tool 1.0 (how it drives Designer's `packagemanager`
+  bundle, its catalog channels, its merge rules) — in progress.
+- **Package authoring from customized configuration** (Jerry, 2026-09-09):
+  `idm package.build` turns what a tree customized — overridden packaged
+  policies, new policies/resources/tables/ECMAScript, GCV definitions, filter
+  and schema-map additions — into a package that installs cleanly on top of
+  the base packages, so a client's customizations become a versioned,
+  installable, upgradeable unit instead of loose overrides. The format is
+  known from Designer's catalog (`/Applications/Designer/packages/`): a jar
+  with `META-INF/MANIFEST.MF` (`Bundle-SymbolicName`, `Short-Name`, `Type`,
+  `Base-Package`, `Internal-Version`, base64 `Supported-Drivers` /
+  `Dependencies` / `Features`), `plugin.xml` (a `packageregistration`
+  extension: package id + version, display and symbolic names) and
+  `package_import.xml` — `<package id="XXXXXXXX_yyyyMMddHHmmssSSSS" …
+  checksum= directive-checksum=>` with `idm-*` metadata, base64 license and
+  readme, an `idm-installationdirective` (features, dependencies,
+  supported-drivers, driver-level `ds-attributes` such as
+  `global-config-values` and `configuration-manifest`), a `package-folder`
+  tree (Policies / Resources / Jobs / Entitlements / Provisioning …) and one
+  `ds-object` per artifact (`DirXML-Rule`, `DirXML-Resource` with
+  `DirXML-ContentType`, `DirXML-GlobalConfigDef`) carrying `XmlData`,
+  `idm-packageguid`, `idm-packageassocguid`, `idm-contentchecksum`,
+  `idm-directivechecksum` and a base64 per-object directive
+  (`<placement location="publisher"/>` + `<policy-linkage><policy-set
+  channel= name= order="Weight" value="500"/>`). Open questions for the design
+  note: the two checksum algorithms (the vault-side one is known — CRC32 of
+  content; the package-level and directive checksums must be derived from
+  Designer's `packagemanager.jar`), how an override of a base-package policy
+  is expressed (a new package that *replaces* linkage vs. one that ships the
+  customized object under a new name and unlinks the original), package ids
+  vs. the `pkg-assoc-id` meta the tree already records, and whether Designer
+  accepts a package it did not build (it must; that is the acceptance test).
+
 **Track P — Provisioning forms (the form builder)**
 Runs alongside Phases 3–4 once the model exists; it is a distinct object model
 (`Model/Provisioning/` in a project; `srvprv*` objects under the User Application
