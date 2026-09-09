@@ -1,6 +1,6 @@
 # Phase 5 design — operate
 
-Status: **design confirmed; spikes done** (2026-09-09; findings in [spikes/operate.md](spikes/operate.md)). Follows [plan.md](plan.md) Phase 5; builds on
+Status: **built and proven on the test vault** (2026-09-09; spike findings in [spikes/operate.md](spikes/operate.md)). Follows [plan.md](plan.md) Phase 5; builds on
 [vault-deploy.md](vault-deploy.md) (`Vault`, environments, tiers, secrets, the
 audit log) and [spikes/extended-ops-api.md](spikes/extended-ops-api.md).
 
@@ -87,25 +87,36 @@ stg.sshUser=root
 stg.traceDir=/var/opt/novell/eDirectory/log   # where trace files land when a driver sets a relative name
 ```
 
-## Build order
+## Build order — all done (2026-09-09)
 
-1. **`Vault` operate primitives** + **spikes 5a/5b/5c** on the test vault's
+Everything below landed. Proven live on the test vault through the CLI:
+`driverset.status` (19 drivers), `driver.status`, `engine.version` (4.8.7.0
+build 3), `engine.stats` (JVM heap/threads + per-driver cache and operation
+counters — the leak-hunting view), `driver.cache view` (33 queued events on the
+stopped AD driver), `driver.secrets list`, `driver.trace show|tail|--since|--grep`,
+and the write path on `Querytest`: `driver.start` → `driver.trace set` →
+**`driver.submit --tree` (canary: MATCH — the live engine handed the shim what
+the simulator predicted)** → `driver.trace reset` → `driver.stop`, every step
+audited. `driver.cache clear` was proven by spike 5a (`(0, size)`) and is
+tested against a fake engine. Not done: `driver.trace set --for N` auto-reset;
+`SubmitEvent` (publisher) stays unavailable.
+
+1. ✅ **`Vault` operate primitives** + **spikes 5a/5b/5c** on the test vault's
    `Querytest` driver: cache view (port `DxCacheReader`'s chunked read), cache
    clear (resolve `DeleteCacheEntries`' parameters with a scratch queued event),
    migrate / resync (shape only — Querytest has no application), trace attribute
    read/write and whether a level change is honoured live, `GetVersion` /
    `GetDriverStats` / JVM stats, `SubmitEvent` semantics (the open item from
    spike 1b). Findings → `spikes/operate.md`.
-2. **`Operate`** (the command layer): gating by tier and operation class, audit
+2. ✅ **`Operate`** (the command layer, Sonnet): gating by tier and operation class, audit
    lines, the wait/verify loops, cache-clear's snapshot; `driverset.status` /
    `driver.status` rendering (text + `--json`).
-3. **`driver.trace tail`** over SSH (environment `sshHost`/`sshUser`), and the
+3. ✅ **`driver.trace tail`** over SSH (environment `sshHost`/`sshUser`), and the
    start/restart trace verification.
-4. **`driver.cache view --out`** as a simulator case, `driver.secrets`, and the
+4. ✅ **`driver.cache view --out`** as a simulator case, `driver.secrets`, and the
    CLI (`OperateCli`) for all of the above.
-5. **`driver.submit`** as the canary, if 5c says how; otherwise documented as
-   still open.
-6. Docs: agent guide "operate" section; the skill's missing-inputs table points
+5. ✅ **`driver.submit`** as the canary (subscriber channel; 5c/5d).
+6. ✅ Docs: agent guide "operate" section; the skill's missing-inputs table points
    at `driver.cache view --out` and `driver.trace tail` as input sources.
 
 Delegation: 2 and 4 (well-specified against the finished primitives) are

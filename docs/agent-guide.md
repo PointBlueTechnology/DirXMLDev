@@ -150,6 +150,30 @@ recorded deploy (or `--capture-drift`, which records the vault's current state
 on an `as-found/<env>/<ts>` branch for you to merge first). Every deploy
 appends to `deploy-log/<env>.jsonl` — commit it with the tree.
 
+## Operate it
+
+```bash
+bin/idm driverset.status --env stg                          # every driver: state, start option, cache bytes, trace
+bin/idm driver.status    --env stg --driver "AD Driver"     # + trace file, named passwords, recent audit
+bin/idm engine.stats     --env stg --driver "AD Driver"     # JVM heap/threads + cache and operation counters
+bin/idm driver.cache view --env stg --driver "AD Driver" --out cases/ad-cache   # queued events → a simulator case
+bin/idm driver.trace tail --env stg --driver "AD Driver" --since 10 --grep "Applying rule"
+bin/idm driver.start|stop|restart --env stg --driver "AD Driver" [--yes]
+bin/idm driver.trace set --env stg --driver "AD Driver" --level 3 --file /var/opt/novell/eDirectory/log/ad.trace
+bin/idm driver.submit --env stg --driver "AD Driver" --xds event.xds --yes --tree tree/   # the canary
+bin/idm driver.cache clear --env stg --driver "AD Driver" --yes --confirm stg
+```
+
+Gating follows what an operation can break ([operate.md](operate.md)): reads
+are free; start/restart/trace/secrets need `--yes` on stg and `--yes --confirm`
+on prd; stop/resync/migrate/submit need `--yes` everywhere; `cache clear`
+shows the count and first/last event, saves the events to
+`deploy-snapshots/`, and needs `--yes` (plus `--confirm` on stg/prd). Every
+state change is audited. `driver.submit --tree` is the ground truth for a
+policy change: the live engine's Subscriber channel hands the shim a document,
+the trace shows which, and the simulator's prediction from the tree must match
+it.
+
 ## Conventions
 
 - One operation or one content edit per commit, with the result's file list in

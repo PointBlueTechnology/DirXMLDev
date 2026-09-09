@@ -189,11 +189,37 @@ public final class OperateCli {
                         result = Operate.traceSet(engine, env, driver, level, file, yes, confirm, tree);
                     } else if ("reset".equals(sub)) {
                         result = Operate.traceReset(engine, env, driver, yes, confirm, tree);
+                    } else if ("tail".equals(sub)) {
+                        return traceTail(engine, env, driver, opts, json);
                     } else {
-                        System.err.println("usage: driver.trace show|set|reset --env E --driver D [--level N] [--file F]");
+                        System.err.println("usage: driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow]");
                         return 2;
                     }
                     break;
+                }
+
+                case "driver.submit": {
+                    String xdsFile = first(opts, "xds");
+                    if (driver == null || xdsFile == null) {
+                        System.err.println("usage: driver.submit --env E --driver D --xds <file> --yes [--confirm E] [--tree DIR] [--json]");
+                        return 2;
+                    }
+                    String gate = Operate.gate(env, Operate.OpClass.HEAVY, yes, confirm);
+                    if (gate != null) {
+                        System.err.println("REFUSED — " + gate);
+                        return 1;
+                    }
+                    String xds = java.nio.file.Files.readString(Paths.get(xdsFile), java.nio.charset.StandardCharsets.UTF_8);
+                    Path simTree = opts.containsKey("tree") ? tree : null;
+                    Submit.Outcome o = Submit.run(vault, env, driver,
+                        com.pointblue.dirxml.dev.deploy.VaultMapping.driverDn(env.driverSetDn, driver), xds, simTree);
+                    com.pointblue.dirxml.dev.deploy.DeployLog.Record rec = com.pointblue.dirxml.dev.deploy.DeployLog.record(env.name, "operate");
+                    rec.outcome = "ok";
+                    rec.detail = "driver.submit '" + driver + "': SubmitCommand from " + xdsFile
+                        + (o.matches == null ? "" : o.matches ? " — canary MATCH" : " — canary MISMATCH");
+                    com.pointblue.dirxml.dev.deploy.DeployLog.append(tree, rec);
+                    System.out.print(o.text());
+                    return o.matches != null && !o.matches ? 1 : 0;
                 }
 
                 case "engine.version":
@@ -214,6 +240,46 @@ public final class OperateCli {
         }
     }
 
+    /** {@code driver.trace tail}: the driver's trace file on the engine host over SSH. */
+    private static int traceTail(Operate.Engine engine, Environments.Environment env, String driver,
+                                 Map<String, List<String>> opts, boolean json) throws Exception {
+        if (env.sshHost == null) {
+            System.err.println("environment '" + env.name + "' has no sshHost; add " + env.name + ".sshHost / .sshUser to tail traces");
+            return 2;
+        }
+        com.pointblue.dirxml.dev.deploy.Vault.Entry d = engine.read(
+            com.pointblue.dirxml.dev.deploy.VaultMapping.driverDn(env.driverSetDn, driver));
+        String file = d == null ? null : d.string(com.pointblue.dirxml.dev.deploy.Vault.TRACE_FILE);
+        if (file == null || file.isBlank()) {
+            System.err.println("driver '" + driver + "' has no DirXML-TraceFile; set one with driver.trace set --file");
+            return 1;
+        }
+        int lines = opts.containsKey("lines") ? Integer.parseInt(first(opts, "lines")) : 50;
+        String grep = first(opts, "grep");
+        TraceTail tail = new TraceTail(env.sshUser, env.sshHost);
+        if (opts.containsKey("follow")) {
+            Process p = tail.follow(file, lines, grep, System.out::println);
+            Runtime.getRuntime().addShutdownHook(new Thread(p::destroy));
+            p.waitFor();
+            return 0;
+        }
+        List<String> out = opts.containsKey("since")
+            ? tail.since(file, Integer.parseInt(first(opts, "since")), grep)
+            : tail.tail(file, lines, grep);
+        if (json) {
+            StringBuilder sb = new StringBuilder("{\"file\":\"" + file.replace("\\", "\\\\").replace("\"", "\\\"") + "\",\"lines\":[");
+            for (int i = 0; i < out.size(); i++) {
+                sb.append(i == 0 ? "" : ",").append(com.pointblue.dirxml.dev.deploy.DeployLog.q(out.get(i)));
+            }
+            System.out.println(sb.append("]}"));
+        } else {
+            for (String line : out) {
+                System.out.println(line);
+            }
+        }
+        return 0;
+    }
+
     private static String first(Map<String, List<String>> opts, String key) {
         List<String> v = opts.get(key);
         return v == null || v.isEmpty() ? null : v.get(0);
@@ -229,7 +295,8 @@ public final class OperateCli {
         System.err.println("  driver.migrate --env E --driver D --xds FILE --yes [--confirm E]");
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
-        System.err.println("  driver.trace show|set|reset --env E --driver D [--level N] [--file F]");
+        System.err.println("  driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow]");
+        System.err.println("  driver.submit --env E --driver D --xds <file> --yes [--tree DIR]   SubmitCommand; with --tree, the simulator canary");
         System.err.println("  engine.version --env E");
         System.err.println("  engine.stats --env E [--driver D…] [--json]");
     }
