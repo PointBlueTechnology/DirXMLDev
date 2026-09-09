@@ -187,6 +187,20 @@ public final class Registry {
             a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.get("value")),
             drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), req("value", "the value"));
 
+        // drivers
+        register("driver.add", "add a driver: from a driver export, as a copy of another driver, or blank",
+            a -> new DriverOps.Add(a.get("name"),
+                a.get("from-export") == null || a.get("from-export").isBlank() ? null : Paths.get(a.get("from-export")),
+                a.get("source-driver") != null ? a.get("source-driver") : a.get("copy-of"),
+                a.get("copy-of") != null, a.get("shim-class"), a.get("auth-server"), a.get("auth-id")),
+            req("name", "the new driver's name"),
+            opt("from-export", "a driver export (Designer, with referenced policies) to merge in as this driver"),
+            opt("source-driver", "with a driver-set export: which driver to take"),
+            opt("copy-of", "an existing driver to clone"),
+            opt("shim-class", "for a blank driver: the shim class"),
+            opt("auth-server", "for a blank driver: the authentication server/URL"),
+            opt("auth-id", "for a blank driver: the authentication id"));
+
         // mapping tables
         Arg table = req("path", "mapping-table resource path");
         Arg keyCol = opt("key-column", "column that identifies the row (default: the first)");

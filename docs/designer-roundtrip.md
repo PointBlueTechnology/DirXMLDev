@@ -140,7 +140,7 @@ lacked the tree operation; it lands here:
 
 | form | what it does |
 |---|---|
-| `driver.add --name N --from-export <driver-export.xml>` | a vendor / packaged driver arrives as the configuration Designer exported once (with referenced policies); the export's driver — artifacts, linkage, filter, GCVs, shim config — is merged into the tree as driver N (its Library policies added to the Library when absent, matched by name when present) |
+| `driver.add --name N --from-export <export.xml> [--source-driver D]` | a vendor / packaged driver arrives as the configuration Designer exported once (a single-driver export with *include referenced policies*, or a driver-set export with `--source-driver`); the export's driver — artifacts, linkage, filter, GCVs, shim config — is merged into the tree as driver N, its Library artifacts added to the Library when absent and kept when present (matched by name). The transaction validates the result: a driver whose policies read GCVs the target driver set lacks is refused with the missing names — set them first (`gcv.set --define`) |
 | `driver.add --name N --copy-of D` | clone driver D (artifacts, links re-pointed to the clone, config blobs), then `gcv.set` / `driver.set` the differences — the dev→test→prod pattern |
 | `driver.add --name N --shim-class C [--auth-server S] [--auth-id I]` | a blank driver: empty filter, no policies, no GCVs — for hand-built shims |
 
