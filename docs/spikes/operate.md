@@ -70,3 +70,18 @@ measured here**; `driver.trace set` will re-read the attribute back and say
 - `driver.submit --channel subscriber`: `SubmitCommand`, result document
   printed; the canary compares it with the simulator's subscriber run.
 - Trace over SSH: read stdout only — ssh's warnings go to stderr.
+
+## 5d — the canary works (2026-09-09, after the spikes)
+
+`operate.Submit` on a running `Querytest`: `SubmitCommand` with a scratch
+modify → the live engine's result document was the shim's status
+(`NOT IMPLEMENTED`); the driver's trace (over SSH, `Submitting document to
+subscriber shim:`) gave the exact document the shim received; the same input
+run through the simulator from the vault's tree (single-driver export from
+`ExportWriter`) gave the same document — **MATCH** by canonical comparison.
+That is DxCMD Phase 2's ground truth, on one event, for the Subscriber channel:
+the harness predicts what the engine does. (The simulator printed
+`warning: skipping a <configuration-values> block: … GCV reference is not
+allowed here` while loading the export — a GCV-ref definition in a block the
+simulator merges wholesale; harmless for the run, worth a look in the
+simulator's `DriverExport.gcvDefinitions`.)
