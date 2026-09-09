@@ -161,9 +161,9 @@ write it into a project (see the table above).
    existing files (DOM-level, preserving Designer's formatting where it
    matters), the change table above; tests against `test11` and a copy of the
    Amica project with the untouched-file invariant.
-4. **Spike 6a with Jerry in Designer**; findings → `spikes/designer-writer.md`;
-   scope adjusted.
-5. ✅ `idm export-project` CLI, agent guide + skill updated. Plan closes after 4.
+4. ✅ **Spike 6a with Jerry in Designer** — passed 2026-09-09; findings in
+   [spikes/designer-writer.md](spikes/designer-writer.md); scope unchanged.
+5. ✅ `idm export-project` CLI, agent guide + skill updated. **Phase 6 closed 2026-09-09.**
 
 Built 2026-09-09 (`source.ProjectWriter`, `source.CObjectXml`, 13 tests on copies
 of `test11` and the Amica project; 203 tests green). Proven by hand: on a copy

@@ -257,8 +257,10 @@ what is deliberately deferred: `--delete-driver`, the Remote Loader password,
   live engine handed the shim with the simulator's prediction (MATCH on the
   test vault). Decisions confirmed.
 
-**Phase 6 — Designer round-trip + workflows** — 🔨 **design** (2026-09-09;
-[designer-roundtrip.md](designer-roundtrip.md))
+**Phase 6 — Designer round-trip + workflows** — ✅ **complete** (2026-09-09;
+[designer-roundtrip.md](designer-roundtrip.md)): `idm docs`, the `dirxml-dev`
+skill, `driver.add`, `export-project` (spike 6a: Designer opened a
+writer-updated project cleanly — [spikes/designer-writer.md](spikes/designer-writer.md)).
 - Designer-format writer (from the Phase 0 findings) for teams that need it.
 - Agent workflows/skills: "implement requirement X" → edit → validate → simulate →
   diff → deploy STG → verify → promote PRD, with package-aware overrides and docs
