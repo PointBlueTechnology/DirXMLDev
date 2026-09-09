@@ -176,7 +176,7 @@ record whether a `library/*` GCV object is owned by the `Library_` or the
 driver set; a touched CObject file is re-indented in 2-space block style and
 embedded XML in attribute values escapes control characters as decimal
 references — same content, different bytes than Designer writes. Spike 6a
-input: `~/designer_workspace/test11-roundtrip` (the copy above).
+input: `~/designer_workspace/test11rt` (the copy above; a first copy named test11-roundtrip kept `test11.proj` and Designer reported "No valid .proj file" — the `.proj`/`.cproj` files and their `name`/`cprojectURI` must match the project folder name).
 
 ## Decisions (confirmed 2026-09-09)
 
