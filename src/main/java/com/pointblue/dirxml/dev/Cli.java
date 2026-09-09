@@ -80,6 +80,29 @@ public final class Cli {
                 System.out.println("wrote " + args[2]);
                 System.exit(0);
             }
+            if (args.length >= 3 && args[0].equals("export-project")) {
+                // export-project <tree> <projectDir> [--dry-run] [--json]: update a Designer project to match a tree
+                boolean dryRun = false;
+                boolean json = false;
+                List<String> pos = new ArrayList<>();
+                for (int i = 1; i < args.length; i++) {
+                    if (args[i].equals("--dry-run")) {
+                        dryRun = true;
+                    } else if (args[i].equals("--json")) {
+                        json = true;
+                    } else {
+                        pos.add(args[i]);
+                    }
+                }
+                if (pos.size() < 2) {
+                    System.err.println("usage: export-project <tree> <projectDir> [--dry-run] [--json]");
+                    System.exit(2);
+                }
+                com.pointblue.dirxml.dev.source.ProjectWriter.Result r =
+                    com.pointblue.dirxml.dev.source.ProjectWriter.update(Paths.get(pos.get(0)), Paths.get(pos.get(1)), dryRun);
+                System.out.print(json ? r.json() + "\n" : r.text());
+                System.exit(r.ok ? 0 : 1);
+            }
             if (args.length >= 1 && args[0].equals("show")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.show(args));
             }
@@ -245,6 +268,7 @@ public final class Cli {
         System.err.println("  import-ldif <dump.ldif> <outDir>      read an LDIF of the driver-set subtree, write IDM-as-code");
         System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
         System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
+        System.err.println("  export-project <tree> <projectDir> [--dry-run] [--json]  update an existing Designer project to match a tree");
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
         System.err.println("  tree.diff <fromDir> <toDir> [--json]  structured diff of two as-code trees (exit 1 if they differ)");
