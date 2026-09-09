@@ -266,9 +266,11 @@ what is deliberately deferred: `--delete-driver`, the Remote Loader password,
 - Design: docs generation from the model first (`idm docs`), then the agent
   workflow skill (the loop, the rules, the recipes), then the Designer writer as
   an *update of an existing project* (content, new/removed/renamed artifacts,
-  linkage, driver config; new drivers out of scope) verified by round trip, an
-  untouched-file invariant, and a human-in-the-loop spike in Designer. Four
-  decisions to confirm at the end of the note.
+  linkage, driver config; non-packaged new drivers attempted, packaged ones
+  refused — Designer's package catalog) verified by round trip, an
+  untouched-file invariant, and a human-in-the-loop spike in Designer; plus
+  `driver.add` (from an export, a copy, or blank) so new drivers are authored
+  in the tree and created by the deployer. Decisions confirmed.
 
 **Track P — Provisioning forms (the form builder)**
 Runs alongside Phases 3–4 once the model exists; it is a distinct object model
