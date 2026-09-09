@@ -34,3 +34,10 @@ secrets; same `-Dspike.*` properties plus `-Dspike.driver=<side-effect-free
 driver DN>`; findings in [`vault-objects-and-secrets.md`](vault-objects-and-secrets.md).
 The guarded `VaultTest` runs the same primitives under JUnit with
 `-Dvault.url/.bindDn/.password/.driverSetDn[/.driver]`.
+
+## Phase 5 spike (test vault only — starts/stops the Querytest driver)
+
+`com.pointblue.dirxml.dev.spike.OperateSpike` — engine/driver stats, cache
+queue/view/clear parameters, live trace level, SubmitCommand/SubmitEvent
+observed in the driver trace over SSH; `-Dspike.phase=a|b`,
+`-Dspike.ssh=root@host`; findings in [`operate.md`](operate.md).

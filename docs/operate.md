@@ -1,6 +1,6 @@
 # Phase 5 design — operate
 
-Status: **design** (2026-09-09). Follows [plan.md](plan.md) Phase 5; builds on
+Status: **design confirmed; spikes done** (2026-09-09; findings in [spikes/operate.md](spikes/operate.md)). Follows [plan.md](plan.md) Phase 5; builds on
 [vault-deploy.md](vault-deploy.md) (`Vault`, environments, tiers, secrets, the
 audit log) and [spikes/extended-ops-api.md](spikes/extended-ops-api.md).
 
@@ -44,7 +44,7 @@ Remote Loader lifecycle (the RL process is outside the vault), `--delete-driver`
 | `driver.stop` | `StopDriver` → `waitForState(STOPPED)`; some shims take >60 s to stop (spike 1b) — default wait 180 s | the cache is kept; events keep queueing |
 | `driver.restart` | `RestartDriver` (proven in spike 1b) | what deploy does |
 | `driver.cache view` | `ViewCacheEntries` paged through the chunked-result protocol (as `DxCacheReader`); `--out` writes the events as a simulator case dir (`cache.xds` + `input.xds`), the same shape `bin/sim dxcache` produces | read-only; the driver may be running |
-| `driver.cache clear` | `DeleteCacheEntries` — **its three middle parameters are unresolved** (spike report §9.1); **spike 5a** settles them on `Querytest` with a scratch queued event before the command exists | destructive: every queued event is discarded |
+| `driver.cache clear` | `DeleteCacheEntries(dn, 0, size, "", 0)` — spike 5a: `(position, count)`, `count=0` rejected, `size` from `GetDriverStats`; verify with `ViewCacheEntries` | destructive: every queued event is discarded |
 | `driver.migrate` | `MigrateApp(dn, xds)` with an XDS file (`<nds><input><query class-name=…>` as iManager's Migrate from Application builds it) | the driver must be running |
 | `driver.resync` | `DriverResync(dn, since)` — epoch **seconds**; no `--since` = `Date(0)` = full resync | the driver must be running; a full resync of a big tree is a real load |
 | `driver.secrets list/set/remove` | `List/Set/RemoveNamedPassword`; `set` reads the value from the environment's secrets file (`<driver>.named.<name>`) or `--stdin`, never from an argument | `vault.secrets` from the Phase 4 note lands here |
@@ -52,7 +52,7 @@ Remote Loader lifecycle (the RL process is outside the vault), `--delete-driver`
 | `driver.trace tail` | `ssh <env.sshUser>@<env.sshHost> tail -n N [-f] <traceFile>` — the trace file is on the engine host, readable over the key-based SSH the environment names; `--grep` filters; `--since` = the last N minutes by the trace's own timestamps | read-only; this is how spike 1b proved engine pickup, made routine |
 | `engine.version` | `GetVersion` (packed int → `DxConst.parseDirXMLVersion`) | |
 | `engine.stats` | `GetDriverStats` per driver, and the engine's JVM stats if the ext op exposes them (`GetJvmStats` — to confirm in the jar); the "which driver is leaking heap" question from the test vault's ndsd deaths | read-only |
-| `driver.submit` | `SubmitEvent` / `SubmitCommand` — **only after spike 5c** resolves why spike 1b's submitted event never reached the channels (the response is an ack; the event may need a running publisher / a different document shape) | the DxCMD Phase 2 canary: run the same event through the simulator and the live engine, compare |
+| `driver.submit` | `SubmitCommand` (subscriber channel) — spike 5c: runs through the channel on a running driver, the shim's status comes back in the result document. `SubmitEvent` (publisher) delivers nothing (5c, as 1b) — not offered | the DxCMD Phase 2 canary for the subscriber channel: the same command through the simulator and the live engine, compared |
 
 ## Safeguards
 
@@ -111,7 +111,7 @@ stg.traceDir=/var/opt/novell/eDirectory/log   # where trace files land when a dr
 Delegation: 2 and 4 (well-specified against the finished primitives) are
 subagent work; 1, 3 and 5 (live vault, SSH, the open semantics) are not.
 
-## Decisions to confirm
+## Decisions (confirmed 2026-09-09 — "your defaults are good")
 
 1. **Tiering by what an operation can break** (table above), with `cache clear`
    the only operation that insists on showing you what it's about to discard.
