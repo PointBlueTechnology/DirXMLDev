@@ -397,10 +397,10 @@ public final class PackageInstall implements Operation {
                         }
                         break;
                     case "shim-auth-id":
-                        d.shimAuthId = text == null ? null : text.trim();
+                        d.shimAuthId = text == null || text.isBlank() ? null : text.trim();
                         break;
                     case "shim-auth-server":
-                        d.shimAuthServer = text == null ? null : text.trim();
+                        d.shimAuthServer = text == null || text.isBlank() ? null : text.trim();
                         break;
                     case "shim-auth-password":
                         namedPasswords.add("shim-auth-password");

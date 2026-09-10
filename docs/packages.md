@@ -174,8 +174,9 @@ What install does, per F2/F8/F9/F11/F12/F13 (in this order, as Designer does):
 
 ### 3.4 Vault side
 
+**Built 2026-09-10 ([spikes/package-vault-stamps.md](spikes/package-vault-stamps.md)).**
 The deployer already writes content and, for customized objects, a
-CRC32-of-content checksum. It becomes package-faithful: `DirXML-pkgGUID`,
+CRC32-of-content checksum. It is now package-faithful: `DirXML-pkgGUID`,
 `DirXML-pkgAssociationId`, `DirXML-pkgChecksum` (the installed number, F2),
 `DirXML-pkgLinkages`, `DirXML-pkgInitialState` from the baseline, the driver's
 `DirXML-pkgGUID` (base only) and `DirXML-pkgExtensions` — all from artifact and
@@ -301,14 +302,16 @@ publishing to nu.novell.com (not ours).
 ## 8. Build order
 
 1. ✅ **`PackageChecksum` + spike 7a** (2026-09-10; the whole local catalog recomputes).
-2. **Catalog**: `PackageJar` reader/writer, unpacked form, `catalog.json`,
-   `package.fetch|import|list|show|diff|resolve` (delegable, well specified).
+2. ✅ **Catalog**: `PackageJar` reader/writer, unpacked form, `catalog.json`,
+   `package.fetch|import|list|show|diff|resolve` (Sonnet, merged 2026-09-10;
+   `package.diff` with `--catalog` = two package versions, without = an
+   artifact vs its baseline).
 3. ✅ **Installer** into the tree as a transaction (`package.install`,
    `driver.add --packages`, prompts as XSLT via the engine's processor,
    weights, package-level linkage, filter merge, stamps, manifest record)
    + spike 7b (2026-09-10).
-4. **Vault stamping** in the deployer + reader reverse mapping;
-   `package.status|adopt`; round trip on the test vault (me).
+4. ✅ **Vault stamping** in the deployer + reader reverse mapping; round trip
+   on the test vault (2026-09-10). `package.status|adopt` next.
 5. **Upgrade/downgrade/uninstall** (delegable once 3 exists).
 6. **`package.build` + `package.site`**, then 7c with Jerry; docs, skill,
    agent guide; plan closed.

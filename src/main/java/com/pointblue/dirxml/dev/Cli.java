@@ -36,12 +36,13 @@ public final class Cli {
             }
             if (args.length >= 3 && args[0].equals("import-live")) {
                 // import-live <driverSetDN> <outDir>  (connection from -Dldap.url/-Dldap.bindDn/-Dldap.password)
-                com.pointblue.dirxml.sim.JndiLdapSearch.Config c = new com.pointblue.dirxml.sim.JndiLdapSearch.Config();
+                com.pointblue.dirxml.dev.deploy.Vault.Config c = new com.pointblue.dirxml.dev.deploy.Vault.Config();
                 c.url = need("ldap.url");
                 c.bindDn = need("ldap.bindDn");
-                c.bindPassword = need("ldap.password");
-                c.trustAllCerts = !"false".equals(System.getProperty("ldap.trustAll"));
-                System.exit(write(com.pointblue.dirxml.dev.source.LdifReader.readLive(c, args[1]), Paths.get(args[2])));
+                c.password = need("ldap.password");
+                c.trustAll = !"false".equals(System.getProperty("ldap.trustAll"));
+                // every attribute (package stamps included) — the same reader vault.diff / deploy use
+                System.exit(write(com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, args[1]), Paths.get(args[2])));
             }
             if (args.length >= 2 && args[0].equals("check")) {
                 System.exit(doCheck(Paths.get(args[1])));

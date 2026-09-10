@@ -30,7 +30,7 @@ import java.util.Set;
  */
 public final class Plan {
 
-    public enum Op { ADD, MODIFY, DELETE, SET_SECRET, RESTART, START_OPTION }
+    public enum Op { ADD, MODIFY, DELETE, SET_SECRET, RESTART, START_OPTION, AUX_CLASS }
 
     /** One operation. {@code values} is what to write (null for DELETE/RESTART; secrets carry only the key). */
     public static final class Step {
@@ -67,6 +67,18 @@ public final class Plan {
     public final Set<String> restart = new LinkedHashSet<>();       // driver names that will be restarted
     public final Set<String> touchedDns = new LinkedHashSet<>();    // for the snapshot
     public final Set<String> newDrivers = new LinkedHashSet<>();
+
+    /** Top, DirXML-Driver, plus the package aux classes the stamps need (as Designer's drivers carry them). */
+    static List<String> driverClasses(Map<String, List<byte[]>> stamps) {
+        List<String> c = new ArrayList<>(List.of("Top", "DirXML-Driver"));
+        if (stamps.containsKey(VaultMapping.PKG_EXTENSIONS)) {
+            c.add(VaultMapping.PKG_TARGET_AUX);
+        }
+        if (stamps.containsKey(VaultMapping.PKG_GUID)) {
+            c.add(VaultMapping.PKG_ITEM_AUX);   // the driver's own DirXML-pkgGUID lives in the item aux class
+        }
+        return c;
+    }
 
     private Plan() {
     }
@@ -125,6 +137,10 @@ public final class Plan {
                         bucket.add(new Step(Op.ADD, dn, null, classes, attrs,
                             dn + "  " + VaultMapping.objectClass(a) + " (" + size(attrs) + ")", c.path, a.driver));
                     } else {
+                        if (!stamps.isEmpty()) {
+                            bucket.add(new Step(Op.AUX_CLASS, dn, null, List.of(VaultMapping.PKG_ITEM_AUX), null,
+                                dn + "  objectClass += " + VaultMapping.PKG_ITEM_AUX, c.path, a.driver));
+                        }
                         for (Map.Entry<String, List<byte[]>> e : attrs.entrySet()) {
                             bucket.add(new Step(Op.MODIFY, dn, e.getKey(), null, Map.of(e.getKey(), e.getValue()),
                                 dn + "  " + e.getKey() + " (" + size(Map.of(e.getKey(), e.getValue())) + ")", c.path, a.driver));
@@ -187,6 +203,10 @@ public final class Plan {
                     String dn = VaultMapping.driverDn(dsDn, c.driver);
                     p.touchedDns.add(dn);
                     Map<String, List<byte[]>> dstamps = VaultMapping.driverPackageAttributes(d);
+                    List<String> aux = driverClasses(dstamps).subList(2, driverClasses(dstamps).size());
+                    if (!aux.isEmpty()) {
+                        driverAttrs.add(new Step(Op.AUX_CLASS, dn, null, aux, null, dn + "  objectClass += " + String.join(", ", aux), c.path + "#stamps", c.driver));
+                    }
                     for (String attr : List.of(VaultMapping.PKG_GUID, VaultMapping.PKG_EXTENSIONS)) {
                         List<byte[]> values = dstamps.getOrDefault(attr, Collections.emptyList());
                         driverAttrs.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, values),
@@ -202,8 +222,7 @@ public final class Plan {
                     Map<String, List<byte[]>> attrs = VaultMapping.driverAttributes(d);
                     Map<String, List<byte[]>> dstamps = VaultMapping.driverPackageAttributes(d);
                     attrs.putAll(dstamps);
-                    containers.add(new Step(Op.ADD, dn, null,
-                        dstamps.isEmpty() ? List.of("Top", "DirXML-Driver") : List.of("Top", "DirXML-Driver", VaultMapping.PKG_TARGET_AUX), attrs,
+                    containers.add(new Step(Op.ADD, dn, null, driverClasses(dstamps), attrs,
                         dn + "  DirXML-Driver (new driver, created stopped)", c.path, c.driver));
                     for (Scope s : new Scope[] {Scope.SUBSCRIBER, Scope.PUBLISHER}) {
                         String cdn = VaultMapping.channelDn(dsDn, c.driver, s);

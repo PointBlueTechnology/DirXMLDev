@@ -292,7 +292,9 @@ catalog ([spikes/designer-package-layer.md](spikes/designer-package-layer.md));
 whole catalog ([spikes/package-checksums.md](spikes/package-checksums.md));
 `package.install` / `driver.add --packages` reproduce Designer's install
 ([spikes/package-install-parity.md](spikes/package-install-parity.md));
-step 2 (catalog commands) in progress;**
+step 2 (catalog: fetch/import/list/show/diff/resolve) merged; step 4
+(vault stamps, proven live: [spikes/package-vault-stamps.md](spikes/package-vault-stamps.md))
+done; next `package.status|adopt`, upgrade/uninstall, `package.build`/`package.site`;**
 vault/jar/site facts in [spikes/package-format.md](spikes/package-format.md).
 The PDT analysis ([spikes/pdt-analysis.md](spikes/pdt-analysis.md)) and the
 headless spike stay as reference; the headless route is not pursued.
