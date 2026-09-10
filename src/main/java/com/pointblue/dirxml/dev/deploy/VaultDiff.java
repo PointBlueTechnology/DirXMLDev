@@ -24,12 +24,33 @@ public final class VaultDiff {
 
     /** Read the environment's driver set live into a model. */
     public static DriverSet readLive(Environments.Environment env) {
-        JndiLdapSearch.Config c = new JndiLdapSearch.Config();
-        c.url = env.url;
-        c.bindDn = env.bindDn;
-        c.bindPassword = env.password;
-        c.trustAllCerts = env.trustAll;
-        return LdifReader.readLive(c, env.driverSetDn);
+        // every attribute of the subtree (package stamps included), through our own connection
+        List<com.pointblue.dirxml.sim.LdifDriverSource.Entry> entries = new java.util.ArrayList<>();
+        try (Vault v = Vault.connect(env.vaultConfig())) {
+            Vault.Entry root = v.read(env.driverSetDn);
+            if (root == null) {
+                throw new IllegalArgumentException("driver set " + env.driverSetDn + " not found in " + env.url);
+            }
+            entries.add(toSourceEntry(root));
+            for (Vault.Entry e : v.search(env.driverSetDn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
+                if (!e.dn.equalsIgnoreCase(root.dn)) {
+                    entries.add(toSourceEntry(e));
+                }
+            }
+        }
+        return LdifReader.fromEntries(entries, env.url + "/" + env.driverSetDn);
+    }
+
+    static com.pointblue.dirxml.sim.LdifDriverSource.Entry toSourceEntry(Vault.Entry e) {
+        java.util.Map<String, List<String>> attrs = new java.util.LinkedHashMap<>();
+        for (java.util.Map.Entry<String, List<byte[]>> a : e.attrs.entrySet()) {
+            List<String> vals = new java.util.ArrayList<>();
+            for (byte[] b : a.getValue()) {
+                vals.add(new String(b, java.nio.charset.StandardCharsets.UTF_8));
+            }
+            attrs.put(a.getKey().toLowerCase(), vals);
+        }
+        return new com.pointblue.dirxml.sim.LdifDriverSource.Entry(e.dn, attrs);
     }
 
     /** The diff of the live vault against the tree. */

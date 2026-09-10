@@ -40,6 +40,15 @@ public final class VaultMapping {
     public static final String DRIVER_FILTER = "DirXML-DriverFilter";
     public static final String ENGINE_CONTROL_VALUES = "DirXML-EngineControlValues";
     public static final String PKG_CHECKSUM = "DirXML-pkgChecksum";
+    public static final String PKG_GUID = "DirXML-pkgGUID";
+    public static final String PKG_ASSOC = "DirXML-pkgAssociationId";
+    public static final String PKG_LINKAGES = "DirXML-pkgLinkages";
+    public static final String PKG_INITIAL_STATE = "DirXML-pkgInitialState";
+    public static final String PKG_EXTENSIONS = "DirXML-pkgExtensions";
+    public static final String PKG_ITEM_AUX = "DirXML-PkgItemAux";
+    public static final String PKG_TARGET_AUX = "DirXML-PkgTargetAux";
+    /** Artifact meta keys (the live/LDIF readers' lowercase attribute names) that are package stamps. */
+    public static final List<String> STAMP_KEYS = List.of("dirxml-pkgguid", "dirxml-pkgassociationid", "dirxml-pkgchecksum", "dirxml-pkglinkages");
 
     private VaultMapping() {
     }
@@ -148,6 +157,43 @@ public final class VaultMapping {
                 m.put(CONTENT_TYPE, Vault.value(ct));
             }
         }
+        return m;
+    }
+
+    /**
+     * The package stamps of an installed artifact, as the vault stores them ({@code DirXML-PkgItemAux}):
+     * GUID record, association id, installed checksum and linkage record from meta; the initial state from the
+     * tree's package baseline. Empty for a non-packaged artifact.
+     */
+    public static Map<String, List<byte[]>> packageAttributes(java.nio.file.Path tree, Artifact a) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        put(m, PKG_GUID, a.meta.get("dirxml-pkgguid"));
+        put(m, PKG_ASSOC, a.meta.get("dirxml-pkgassociationid"));
+        put(m, PKG_CHECKSUM, a.meta.get("dirxml-pkgchecksum"));
+        put(m, PKG_LINKAGES, a.meta.get("dirxml-pkglinkages"));
+        if (!m.isEmpty() && tree != null) {
+            try {
+                String baseline = com.pointblue.dirxml.dev.edit.Packages.baseline(tree, a);
+                if (baseline != null) {
+                    m.put(PKG_INITIAL_STATE, List.of(baseline.getBytes(StandardCharsets.UTF_8)));
+                }
+            } catch (java.io.IOException e) {
+                // no initial state then
+            }
+        }
+        return m;
+    }
+
+    /** True if the artifact carries package stamps (so its object needs {@code DirXML-PkgItemAux}). */
+    public static boolean isStamped(Artifact a) {
+        return a.meta.get("dirxml-pkgguid") != null || a.meta.get("dirxml-pkgassociationid") != null;
+    }
+
+    /** The driver's package stamps ({@code DirXML-PkgTargetAux}): base package record and filter-extension cache. */
+    public static Map<String, List<byte[]>> driverPackageAttributes(Driver d) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        put(m, PKG_GUID, d.meta.get("dirxml-pkgguid"));
+        put(m, PKG_EXTENSIONS, d.meta.get("dirxml-pkgextensions"));
         return m;
     }
 

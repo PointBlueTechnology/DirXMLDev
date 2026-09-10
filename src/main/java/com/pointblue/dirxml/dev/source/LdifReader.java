@@ -325,6 +325,9 @@ public final class LdifReader {
     private static void copyMeta(Entry e, Map<String, String> meta, String objectClass) {
         meta.put("objectClass", objectClass);
         for (String a : e.attributeNames()) {
+            if (a.equals("dirxml-pkginitialstate")) {
+                continue;   // the package initial state is the tree's .package-baseline, not meta
+            }
             if (a.startsWith("dirxml-pkg") || a.equals("dirxml-contenttype") || a.equals("dirxml-driverstartoption")
                 || a.equals("dirxml-tracelevel") || a.equals("dirxml-tracefile")) {
                 String v = e.first(a);
