@@ -241,8 +241,10 @@ definitions sorted by name, never values; templates/jobs/entitlements/idPolicy
 per §1.3 of the research, marked inferred until recomputed). Directive checksum
 = CRC32 of the stored directive string; package checksum = CRC32 of folder
 checksums 1..8, folder = CRC32 of children's stored checksums sorted by
-association id. Spike 7a proves it over the whole local Designer catalog
-before anything else is built.
+association id. **Spike 7a done (2026-09-10,
+[spikes/package-checksums.md](spikes/package-checksums.md)): exact for every
+kind except jobs (1/30, recipe still inferred; stored value carried through)
+and 29 stale package-level values Designer never validates.**
 
 ## 5. Verification
 
