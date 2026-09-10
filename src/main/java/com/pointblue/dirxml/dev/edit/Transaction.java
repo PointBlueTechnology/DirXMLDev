@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -86,11 +87,28 @@ public final class Transaction {
         }
     }
 
+    /** An artifact this operation created as a package item: reported as touched, never marked customized. */
+    public void installed(Artifact a) {
+        touched.add(a.path());
+    }
+
     /** An artifact this operation renamed, so its pre-existing findings follow it. */
     public void renamed(String oldPath, String newPath) {
         renamed.put(oldPath, newPath);
         touched.remove(oldPath);
         touched.add(newPath);
+    }
+
+    private final List<String> notes = new ArrayList<>();
+
+    /** Something the reader of the result should know (a skipped item, a secret to provide). */
+    public void note(String n) {
+        notes.add(n);
+    }
+
+    /** Keep content as an artifact's package baseline (the initial state of a fresh install). */
+    public void baseline(Artifact a, String content) {
+        pendingBaselines.put(Packages.baselineFile(tree, a), content);
     }
 
     void pendingBaseline(Path file, String content) {
@@ -113,6 +131,7 @@ public final class Transaction {
         r.touched.addAll(touched);
         r.renamed.putAll(renamed);
         r.customized.addAll(customizedNow);
+        r.notes.addAll(notes);
         Report after = validator.validate(ds);
         r.report = after;
         r.newErrors.addAll(newErrors(before, after));

@@ -70,6 +70,14 @@ public final class Registry {
         SPECS.put(name, new Spec(name, help, Arrays.asList(args), f));
     }
 
+    private static java.util.Map<String, String> readAnswers(String file) {
+        try {
+            return com.pointblue.dirxml.dev.packages.PackageInstall.readAnswers(file == null || file.isBlank() ? null : Paths.get(file));
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("cannot read answers file " + file + ": " + e.getMessage());
+        }
+    }
+
     private static Arg req(String name, String help) {
         return new Arg(name, true, help);
     }
@@ -188,15 +196,32 @@ public final class Registry {
             drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), req("value", "the value"));
 
         // drivers
+        register("package.install", "install a package jar onto a driver (type 2) or the Library (type 3), Designer's way",
+            a -> new com.pointblue.dirxml.dev.packages.PackageInstall(
+                com.pointblue.dirxml.dev.packages.PackageInstall.jarsOf(a.get("jar"), a.get("catalog"), a.get("package")),
+                a.get("driver"), readAnswers(a.get("answers")), !"true".equals(a.get("new-driver"))),
+            opt("jar", "the package jar(s), comma-separated, in install order (or give --catalog and --package)"),
+            opt("catalog", "a package catalog directory (jars/<SHORT>/<SHORT>_<ver>.jar)"),
+            opt("package", "SHORT[_version][,SHORT[_version]…] in the catalog (newest version when omitted); base first"),
+            opt("driver", "the driver to install onto (omit for a driver-set package into the Library)"),
+            opt("answers", "name=value file answering the package prompts (see package.prompts)"),
+            opt("new-driver", "true when the driver was just created (prompts run in driver-creation mode)"));
         register("driver.add", "add a driver: from a driver export, as a copy of another driver, or blank",
             a -> new DriverOps.Add(a.get("name"),
                 a.get("from-export") == null || a.get("from-export").isBlank() ? null : Paths.get(a.get("from-export")),
                 a.get("source-driver") != null ? a.get("source-driver") : a.get("copy-of"),
-                a.get("copy-of") != null, a.get("shim-class"), a.get("auth-server"), a.get("auth-id")),
+                a.get("copy-of") != null, a.get("shim-class"), a.get("auth-server"), a.get("auth-id"))
+                .withPackages(a.get("packages") == null && a.get("package") == null ? null
+                    : com.pointblue.dirxml.dev.packages.PackageInstall.jarsOf(a.get("packages"), a.get("catalog"), a.get("package")),
+                    readAnswers(a.get("answers"))),
             req("name", "the new driver's name"),
             opt("from-export", "a driver export (Designer, with referenced policies) to merge in as this driver"),
             opt("source-driver", "with a driver-set export: which driver to take"),
             opt("copy-of", "an existing driver to clone"),
+            opt("packages", "package jars, comma-separated, base first: the driver is built from the base package and the set installed"),
+            opt("catalog", "with --package: the package catalog directory"),
+            opt("package", "with --catalog: SHORT[_ver][,…] to install, base first"),
+            opt("answers", "name=value file answering the packages' prompts"),
             opt("shim-class", "for a blank driver: the shim class"),
             opt("auth-server", "for a blank driver: the authentication server/URL"),
             opt("auth-id", "for a blank driver: the authentication id"));

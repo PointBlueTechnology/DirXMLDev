@@ -49,3 +49,9 @@ Gating: reads are free; start/restart/trace/secrets need `--yes` on stg and `--y
 
 - `export-project <tree> <projectDir> [--dry-run] [--json]` — update an existing Designer project in place from the tree (only the files the diff needs; refuses packaged new drivers and driver deletes)
 - `docs <tree> --out <dir> [--driver D…] [--since <commit>] [--format md|html]` — README, `drivers/<name>.md`, `library.md`, `changes.md`
+
+## Packages (Phase 7, in progress)
+
+- `package.install <tree> --jar a.jar[,b.jar…] | --catalog DIR --package SHORT[_ver][,…] --driver D [--answers FILE] [--new-driver true]` — install a package set onto a driver in one transaction, Designer's way (prompts, weights, filter merge, stamps, installed checksums); without `--driver`, a driver-set package into the Library
+- `driver.add <tree> --name N --packages base.jar,… | --catalog DIR --package SHORT[,…] [--answers FILE]` — a new packaged driver built from the base package and its features
+- a refusal naming "mandatory prompts without a value" lists the prompt names to put in the answers file (`name=value`; `eNull` = empty; password prompts are named passwords for the environment's secrets file)

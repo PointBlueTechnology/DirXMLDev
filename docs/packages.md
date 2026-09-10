@@ -86,12 +86,17 @@ reads canonical files, not base64 blobs.
 
 ### 3.2 Install into the tree
 
-- `package.install tree/ --catalog DIR --driver D --package SHORT[_ver] [--feature …] [--answers FILE] [--dry-run|--force|--json]`
-  (type 2, onto an existing driver), `--library` (type 3, onto the Library:
-  placement `context="driver-set" location="library"`), `--vault` (type 4:
-  notification templates — deferred, see §7).
-- `driver.add tree/ --name N --base SHORT[_ver] [--feature …] [--answers FILE]`
-  — a new packaged driver: the base package's driver `ds-attributes` build the
+- `package.install tree/ --jar a.jar[,b.jar…] | --catalog DIR --package SHORT[_ver][,…] --driver D [--answers FILE] [--new-driver true] [--dry-run|--force|--json]`
+  (type 2, onto an existing driver; several packages in **one transaction**,
+  base first — Designer installs the resolved set and validates afterwards,
+  and a common package's policies may reference GCVs its companion
+  defines); without `--driver` a type-3 package installs into the Library
+  (placement `context="driver-set" location="library"`); `--vault` (type 4:
+  notification templates) is deferred, see §7. **Built 2026-09-10; parity
+  with Designer proven ([spikes/package-install-parity.md](spikes/package-install-parity.md)).**
+- `driver.add tree/ --name N --packages base.jar,feature.jar… | --catalog DIR --package SHORT[,…] [--answers FILE]`
+  (built; `--base SHORT --feature …` resolves through the catalog once the
+  resolver lands) — a new packaged driver: the base package's driver `ds-attributes` build the
   driver (`name`, shim from `configuration-manifest`/`shim-config-info`,
   `global-config-values`, filter, options), then the resolved packages install
   onto it. This replaces the Designer-headless idea in the PDT analysis.
@@ -130,8 +135,9 @@ What install does, per F2/F8/F9/F11/F12/F13 (in this order, as Designer does):
    precedence (sync/app > notify/edir > ignore/default > reset/none) into the
    driver's filter and maintain the extensions cache (`DirXML-pkgExtensions`,
    F11) in the driver's meta so an uninstall removes exactly its entries.
-7. Record the install in the driver's manifest (`packages:` list of the 5-field
-   records with features and the answers used, minus secrets) — the tree's
+7. Record the install in the driver's manifest (`package.installed.<SHORT>` =
+   the 5-field record, `;base` for the base package; named passwords the
+   packages expect in `package.named-passwords`) — the tree's
    own installed-package record, since the vault has none (F9); validate;
    write.
 
@@ -255,12 +261,11 @@ and 29 stale package-level values Designer never validates.**
    warning, elsewhere a bug). Then the installed recipe against test11 and the
    test vault: for every non-customized object, `DirXML-pkgChecksum` must
    equal our installed checksum.
-2. **7b — install parity**: install `NOVLEDIRBASE` + its default features into
-   a fresh tree with `driver.add --base`, and compare with the eDirectory
-   driver Designer installed in `test11` (project reader): `ModelDiff` empty
-   except ids and timestamps; stamps identical field by field. Same for a
-   feature package onto an existing driver (test vault's AD driver vs the
-   catalog's `NOVLADDCFG` at the installed version).
+2. **7b — install parity** ✅ (2026-09-10, [spikes/package-install-parity.md](spikes/package-install-parity.md)):
+   the eDirectory driver's four packages installed with `driver.add
+   --packages` match Designer's `test11` driver object for object (18/18
+   installed checksums, every set in the vault's order). A feature package
+   onto an existing driver is covered by the same path (`package.install`).
 3. **7c — Designer accepts our work** (Jerry in Designer): (i) import the test
    vault after we deploy a package-installed driver — Designer shows the
    packages installed, nothing "modified"; (ii) add our rendered site as a
@@ -295,12 +300,13 @@ publishing to nu.novell.com (not ours).
 
 ## 8. Build order
 
-1. **`PackageChecksum` + spike 7a** (me; the whole local catalog must recompute).
+1. ✅ **`PackageChecksum` + spike 7a** (2026-09-10; the whole local catalog recomputes).
 2. **Catalog**: `PackageJar` reader/writer, unpacked form, `catalog.json`,
    `package.fetch|import|list|show|diff|resolve` (delegable, well specified).
-3. **Installer** into the tree as a transaction (`package.install`,
-   `driver.add --base`, prompts as XSLT, weights, filter merge, stamps,
-   manifest record) + spike 7b (me).
+3. ✅ **Installer** into the tree as a transaction (`package.install`,
+   `driver.add --packages`, prompts as XSLT via the engine's processor,
+   weights, package-level linkage, filter merge, stamps, manifest record)
+   + spike 7b (2026-09-10).
 4. **Vault stamping** in the deployer + reader reverse mapping;
    `package.status|adopt`; round trip on the test vault (me).
 5. **Upgrade/downgrade/uninstall** (delegable once 3 exists).
