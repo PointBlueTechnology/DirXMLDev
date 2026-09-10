@@ -6,7 +6,8 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phases 0–6 built and proven on the test vault and in Designer.**
+Status: **Phases 0–6 built and proven on the test vault and in Designer; Phase 7
+(our own package management) built — Designer's verdict (spike 7c) pending.**
 Phases 0–3: typed model, IDM-as-code with readers for export / Designer project
 / LDIF / live vault (byte-idempotent); `validate` — every policy through the
 engine's own compilers in the driver's context plus linkage, GCV,
@@ -25,7 +26,12 @@ Phase 6: `docs` (the driver set documented from the model), the
 `dirxml-dev` skill, `driver.add`, and `export-project`, which updates an
 existing Designer project in place from the tree (content, added/removed/
 renamed artifacts, linkage, driver settings, GCVs; non-packaged new drivers;
-packaged drivers refused). CLI only by decision. See [docs/plan.md](docs/plan.md),
+packaged drivers refused). Phase 7: a git catalog of package jars fetched from
+the update site; `package.install` / `driver.add --packages` reproduce Designer's
+install (18/18 installed checksums identical to Designer's), the deployer writes
+the package stamps to the vault, `package.upgrade|uninstall|status|adopt`, and
+`package.build` turns a tree's hand-made content into a Designer-valid package
+served by `package.site`. CLI only by decision. See [docs/plan.md](docs/plan.md),
 [docs/vault-deploy.md](docs/vault-deploy.md), [docs/operate.md](docs/operate.md)
 and [docs/agent-guide.md](docs/agent-guide.md).
 
