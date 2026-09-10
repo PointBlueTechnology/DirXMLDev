@@ -51,6 +51,9 @@ public final class PackageInstall implements Operation {
     public static final String META_DESIGNER_ID = "designer.id";
     public static final String META_START_OPTION = "dirxml-driverstartoption";
 
+    /** The language whose bundle resolves xlfid markers (Designer uses its own UI language). */
+    public static final String LANGUAGE = System.getProperty("idm.package.language", "en");
+
     public static final String FILTER_EXT = "application/vnd.novell.dirxml.filter-ext+xml";
     public static final String PKG_PROMPT = "application/vnd.novell.dirxml.pkg-prompt+xml";
 
@@ -211,12 +214,18 @@ public final class PackageInstall implements Operation {
          * than through {@link #run}.
          */
         void index() {
+            // Designer resolves xlfid(key)default markers against the package's language bundle at install
+            Map<String, String> lang = p.propertiesFor(LANGUAGE);
             for (PackageJar.Item it : p.items) {
                 if (it.assocId != null) {
                     byAssoc.put(it.assocId, it);
-                    directives.put(it.assocId, CanonicalXml.parse(it.directive).getDocumentElement());
+                    Element dir = CanonicalXml.parse(it.directive).getDocumentElement();
+                    Xlf.localize(dir, lang);
+                    directives.put(it.assocId, dir);
                     if (it.content != null) {
-                        contents.put(it.assocId, CanonicalXml.parse(NxslCanonical.serialize(it.content)).getDocumentElement());
+                        Element c = CanonicalXml.parse(NxslCanonical.serialize(it.content)).getDocumentElement();
+                        Xlf.localize(c, lang);
+                        contents.put(it.assocId, c);
                     }
                 }
             }
@@ -225,6 +234,7 @@ public final class PackageInstall implements Operation {
         void run() throws Refusal, IOException {
             index();
             Element packageDirective = CanonicalXml.parse(p.directive).getDocumentElement();
+            Xlf.localize(packageDirective, p.propertiesFor(LANGUAGE));
             // 1. prompts
             prompts(packageDirective);
             // 2. driver attributes from the package directive
@@ -298,7 +308,7 @@ public final class PackageInstall implements Operation {
                     if (it.directive == null) {
                         continue;
                     }
-                    prompts.add(PromptEngine.read(it));
+                    prompts.add(PromptEngine.read(it, p.propertiesFor(LANGUAGE)));
                 }
             }
             prompts.sort((a, b) -> Integer.compare(a.order, b.order));
