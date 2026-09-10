@@ -55,3 +55,16 @@ the package directive and prompt definitions, English by default
 hashes definition names and types, never display names, and no catalog policy
 carries markers in its content (the AD and eDir configuration packages have
 none; the only marker left in a Designer project is on a job, out of scope).
+
+**Two more observations from check 3.** (a) Designer had dropped the custom
+package-site URL between sessions, so a later Check for Package Updates saw
+nothing new until the site was added again — a Designer quirk to expect when
+serving packages from `package.site`; re-add the URL and check again. (b)
+Designer lists a package by its display `name` ("eDir custom policies"), not
+its short name (PBTEDIRCUST, shown only in the version column and the
+catalog tree); `package.build --name` is what people will look for.
+
+**Verdict.** Designer accepts what DirXMLDev builds (a package from a tree's
+hand-made content, served from our site), recognizes what DirXMLDev installs
+and deploys (a driver built from vendor packages shows as packaged, nothing
+modified), and installs our package like any other. Phase 7 closed.

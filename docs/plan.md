@@ -274,8 +274,11 @@ writer-updated project cleanly — [spikes/designer-writer.md](spikes/designer-w
   `driver.add` (from an export, a copy, or blank) so new drivers are authored
   in the tree and created by the deployer. Decisions confirmed.
 
-**Phase 7 — Packages: our own package management** — 🔨 **design** (2026-09-09;
-[packages.md](packages.md))
+**Phase 7 — Packages: our own package management** — ✅ **complete** (2026-09-10;
+[packages.md](packages.md); Designer's verdict in
+[spikes/designer-package-acceptance.md](spikes/designer-package-acceptance.md):
+a package we built imports from our site, a driver we installed and deployed
+shows as packaged with nothing modified, and our package installs in Designer)
 Jerry's decision: no Designer at runtime; package definitions fetched from
 the update site (live at `https://nu.novell.com/designer/packages/idm/updatesite{1,2}_0_0/`)
 and kept in a git catalog (jars + a diffable unpacked form, renderable as an
