@@ -70,6 +70,10 @@ public final class Registry {
         SPECS.put(name, new Spec(name, help, Arrays.asList(args), f));
     }
 
+    private static java.nio.file.Path pathOrNull(String dir) {
+        return dir == null || dir.isBlank() ? null : Paths.get(dir);
+    }
+
     private static com.pointblue.dirxml.dev.packages.Catalog catalogOf(String dir) {
         try {
             return dir == null || dir.isBlank() ? null : com.pointblue.dirxml.dev.packages.Catalog.open(Paths.get(dir));
@@ -218,6 +222,25 @@ public final class Registry {
             a -> new com.pointblue.dirxml.dev.packages.PackageAdopt(a.get("driver"), catalogOf(a.get("catalog"))),
             opt("driver", "one driver (default: every driver and the Library)"),
             opt("catalog", "a package catalog, to resolve project-style package ids to names and versions"));
+        register("package.uninstall", "remove an installed package; refuses while another installed package depends on it, or while a base package's features remain, unless --all",
+            a -> new com.pointblue.dirxml.dev.packages.PackageUninstall(a.get("driver"), a.get("package"),
+                a.containsKey("yes"), a.containsKey("all"), pathOrNull(a.get("catalog"))),
+            opt("driver", "the driver the package is installed on (omit for a driver-set package in the Library)"),
+            req("package", "the installed package's SHORT name"),
+            opt("yes", "remove customized objects too (flag; without it they're refused, named)"),
+            opt("all", "also remove packages that depend on this one, or (for a base package) its remaining features"),
+            opt("catalog", "a package catalog, to read other installed packages' declared dependencies"));
+        register("package.upgrade", "replace an installed package with another version (--downgrade for an older one; same mechanics)",
+            a -> new com.pointblue.dirxml.dev.packages.PackageUpgrade(a.get("driver"),
+                com.pointblue.dirxml.dev.packages.PackageInstall.jarOf(a.get("jar"), a.get("catalog"), a.get("package")),
+                readAnswers(a.get("answers")), a.containsKey("yes"), a.containsKey("downgrade"), pathOrNull(a.get("catalog"))),
+            opt("driver", "the driver the package is installed on (omit for a driver-set package in the Library)"),
+            opt("jar", "the new version's package jar (or give --catalog and --package)"),
+            opt("catalog", "a package catalog directory (jars/<SHORT>/<SHORT>_<ver>.jar)"),
+            opt("package", "SHORT_version in the catalog, the version to move to"),
+            opt("answers", "name=value file answering the package's prompts (existing driver values pre-fill them)"),
+            opt("yes", "remove customized objects the new version dropped (flag; without it they're refused, named)"),
+            opt("downgrade", "moving to an older version (flag; informational — the mechanics are identical)"));
         register("driver.add", "add a driver: from a driver export, as a copy of another driver, or blank",
             a -> new DriverOps.Add(a.get("name"),
                 a.get("from-export") == null || a.get("from-export").isBlank() ? null : Paths.get(a.get("from-export")),

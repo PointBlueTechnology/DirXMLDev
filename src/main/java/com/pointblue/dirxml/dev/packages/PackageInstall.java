@@ -203,7 +203,14 @@ public final class PackageInstall implements Operation {
             this.tx = tx;
         }
 
-        void run() throws Refusal, IOException {
+        /**
+         * Indexes {@link #p}'s items by association id ({@link #byAssoc}, {@link #directives},
+         * {@link #contents}) — the bookkeeping {@link #run} needs before prompts, and what
+         * {@code package.upgrade} needs too, since it drives {@link #create}/{@link #link}/
+         * {@link #stamp}/{@link #packageLinkage} on this same {@link Install} directly rather
+         * than through {@link #run}.
+         */
+        void index() {
             for (PackageJar.Item it : p.items) {
                 if (it.assocId != null) {
                     byAssoc.put(it.assocId, it);
@@ -213,6 +220,10 @@ public final class PackageInstall implements Operation {
                     }
                 }
             }
+        }
+
+        void run() throws Refusal, IOException {
+            index();
             Element packageDirective = CanonicalXml.parse(p.directive).getDocumentElement();
             // 1. prompts
             prompts(packageDirective);
@@ -959,6 +970,23 @@ public final class PackageInstall implements Operation {
         Map.entry(PolicySet.SUB_CREATE, "creation"), Map.entry(PolicySet.SUB_MATCH, "matching"),
         Map.entry(PolicySet.SUB_EVENT, "event"), Map.entry(PolicySet.GCV, "gcv"), Map.entry(PolicySet.ECMASCRIPT, "ecma-script"));
 
+    /**
+     * The artifacts a package installed on target {@code d} (or the Library,
+     * when {@code d} is null) could possibly own: the driver's own artifacts
+     * plus the Library's — never another driver's. The same catalog package
+     * (same package id) can be installed independently on more than one
+     * driver in a tree, so {@code package.uninstall}/{@code package.upgrade}
+     * must never search the whole driver set by package id alone — that would
+     * also catch the other driver's, unrelated, install of the same package.
+     */
+    static List<Artifact> targetArtifacts(DriverSet ds, Driver d) {
+        List<Artifact> out = new ArrayList<>(ds.library.artifacts());
+        if (d != null) {
+            out.addAll(d.artifacts());
+        }
+        return out;
+    }
+
     static Element copy(Element e) {
         return CanonicalXml.parse(CanonicalXml.serialize(e)).getDocumentElement();
     }
@@ -1110,7 +1138,18 @@ public final class PackageInstall implements Operation {
 
     /** Sets the per-run options the inner install reads; called by {@link #apply}. */
     private void bind() {
-        this_answers.set(answers);
+        bindOptions(answers, propertyWizard);
+    }
+
+    /**
+     * Sets the options an {@link Install} reads from its {@code ThreadLocal}s
+     * ({@link #answersFor}/{@link #propertyWizardFlag} — the {@link Install} itself
+     * carries no reference to the operation that owns it). {@code package.upgrade}
+     * drives an {@link Install} directly (not through {@link #apply}) and must bind
+     * its own answers/wizard flag first.
+     */
+    static void bindOptions(Map<String, String> answers, boolean propertyWizard) {
+        this_answers.set(answers == null ? Map.of() : answers);
         this_wizard.set(propertyWizard);
     }
 }
