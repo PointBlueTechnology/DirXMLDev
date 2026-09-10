@@ -24,21 +24,25 @@ public final class VaultDiff {
 
     /** Read the environment's driver set live into a model. */
     public static DriverSet readLive(Environments.Environment env) {
-        // every attribute of the subtree (package stamps included), through our own connection
+        return readLive(env.vaultConfig(), env.driverSetDn);
+    }
+
+    /** Every attribute of the driver-set subtree (package stamps included), through our own connection. */
+    public static DriverSet readLive(Vault.Config config, String driverSetDn) {
         List<com.pointblue.dirxml.sim.LdifDriverSource.Entry> entries = new java.util.ArrayList<>();
-        try (Vault v = Vault.connect(env.vaultConfig())) {
-            Vault.Entry root = v.read(env.driverSetDn);
+        try (Vault v = Vault.connect(config)) {
+            Vault.Entry root = v.read(driverSetDn);
             if (root == null) {
-                throw new IllegalArgumentException("driver set " + env.driverSetDn + " not found in " + env.url);
+                throw new IllegalArgumentException("driver set " + driverSetDn + " not found in " + config.url);
             }
             entries.add(toSourceEntry(root));
-            for (Vault.Entry e : v.search(env.driverSetDn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
+            for (Vault.Entry e : v.search(driverSetDn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
                 if (!e.dn.equalsIgnoreCase(root.dn)) {
                     entries.add(toSourceEntry(e));
                 }
             }
         }
-        return LdifReader.fromEntries(entries, env.url + "/" + env.driverSetDn);
+        return LdifReader.fromEntries(entries, config.url + "/" + driverSetDn);
     }
 
     static com.pointblue.dirxml.sim.LdifDriverSource.Entry toSourceEntry(Vault.Entry e) {

@@ -269,6 +269,30 @@ public final class Vault implements AutoCloseable {
         }
     }
 
+    /** Add auxiliary object classes to an existing entry (no-op for classes it already has). */
+    public void addObjectClasses(String dn, List<String> classes) {
+        try {
+            Entry e = read(dn);
+            if (e == null) {
+                throw new VaultException("add object classes " + dn + ": no such object", null);
+            }
+            BasicAttribute oc = new BasicAttribute("objectClass");
+            for (String c : classes) {
+                if (!e.hasClass(c)) {
+                    oc.add(c);
+                }
+            }
+            if (oc.size() == 0) {
+                return;
+            }
+            ldap.modifyAttributes(dn, javax.naming.directory.DirContext.ADD_ATTRIBUTE, new BasicAttributes(true) {{ put(oc); }});
+        } catch (VaultException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new VaultException("add object classes " + dn + ": " + e.getMessage(), e);
+        }
+    }
+
     /** Replace an attribute's values (an empty list removes the attribute). */
     public void replace(String dn, String attr, List<byte[]> values) {
         try {

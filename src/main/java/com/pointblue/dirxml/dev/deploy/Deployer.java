@@ -271,6 +271,9 @@ public final class Deployer {
             case DELETE:
                 vault.delete(s.dn);
                 break;
+            case AUX_CLASS:
+                vault.addObjectClasses(s.dn, s.objectClasses);
+                break;
             case START_OPTION:
                 vault.setDriverStartOption(s.dn, Vault.START_MANUAL);
                 break;
