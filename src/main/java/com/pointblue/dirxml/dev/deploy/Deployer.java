@@ -152,7 +152,7 @@ public final class Deployer {
                     }
                 }
             }
-            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart);
+            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree);
             for (String del : o.deleteDrivers) {
                 if (from.driver(del) != null && to.driver(del) == null) {
                     plan.notes.add("--delete-driver " + del + ": not implemented yet (delete the driver's subtree manually)");

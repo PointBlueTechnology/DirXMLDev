@@ -78,7 +78,7 @@ public final class Vault implements AutoCloseable {
     /** Attributes read and written as raw bytes. Names are matched case-insensitively by the server. */
     public static final List<String> BINARY_ATTRS = List.of(
         "XmlData", "DirXML-Data", "DirXML-ConfigValues", "DirXML-ShimConfigInfo", "DirXML-DriverFilter",
-        "DirXML-EngineControlValues", "DirXML-pkgInitialState");
+        "DirXML-EngineControlValues", "DirXML-pkgInitialState", "DirXML-pkgExtensions");
 
     public static final int STATE_STOPPED = 0;
     public static final int STATE_STARTING = 1;

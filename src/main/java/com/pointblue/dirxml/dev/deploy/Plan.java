@@ -79,6 +79,12 @@ public final class Plan {
      */
     public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
                           Map<String, List<String>> liveNamedPasswords, boolean restartRunning) {
+        return of(diff, to, dsDn, secrets, secretsMode, liveNamedPasswords, restartRunning, null);
+    }
+
+    /** @param tree the tree (for package baselines → {@code DirXML-pkgInitialState}); null when not available */
+    public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
+                          Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree) {
         Plan p = new Plan();
         List<Step> containers = new ArrayList<>();
         List<Step> library = new ArrayList<>();
@@ -101,8 +107,12 @@ public final class Plan {
                     }
                     String dn = VaultMapping.artifactDn(dsDn, a);
                     p.touchedDns.add(dn);
-                    Map<String, List<byte[]>> attrs = VaultMapping.attributes(a);
-                    if (Packages.isPackaged(a) && Packages.isCustomized(a)) {
+                    Map<String, List<byte[]>> attrs = "package-stamps".equals(c.what)
+                        ? new LinkedHashMap<>() : VaultMapping.attributes(a);
+                    Map<String, List<byte[]>> stamps = VaultMapping.packageAttributes(tree, a);
+                    if (!stamps.isEmpty()) {
+                        attrs.putAll(stamps);   // an installed object: Designer's stamps, the installed checksum included
+                    } else if (Packages.isPackaged(a) && Packages.isCustomized(a)) {
                         byte[] content = VaultMapping.contentBytes(a);
                         if (content != null) {
                             attrs.put(VaultMapping.PKG_CHECKSUM, Vault.value(VaultMapping.customizedChecksum(content)));
@@ -110,7 +120,9 @@ public final class Plan {
                     }
                     List<Step> bucket = a.scope == Scope.LIBRARY ? library : a.scope == Scope.DRIVER ? driverScope : channel;
                     if (c.kind == ModelDiff.Kind.ARTIFACT_ADDED) {
-                        bucket.add(new Step(Op.ADD, dn, null, List.of("Top", VaultMapping.objectClass(a)), attrs,
+                        List<String> classes = stamps.isEmpty() ? List.of("Top", VaultMapping.objectClass(a))
+                            : List.of("Top", VaultMapping.objectClass(a), VaultMapping.PKG_ITEM_AUX);
+                        bucket.add(new Step(Op.ADD, dn, null, classes, attrs,
                             dn + "  " + VaultMapping.objectClass(a) + " (" + size(attrs) + ")", c.path, a.driver));
                     } else {
                         for (Map.Entry<String, List<byte[]>> e : attrs.entrySet()) {
@@ -170,13 +182,28 @@ public final class Plan {
                 case DRIVER_LINKAGE:
                     driversNeedingLinkage.add(c.driver);
                     break;
+                case DRIVER_STAMPS: {
+                    Driver d = to.driver(c.driver);
+                    String dn = VaultMapping.driverDn(dsDn, c.driver);
+                    p.touchedDns.add(dn);
+                    Map<String, List<byte[]>> dstamps = VaultMapping.driverPackageAttributes(d);
+                    for (String attr : List.of(VaultMapping.PKG_GUID, VaultMapping.PKG_EXTENSIONS)) {
+                        List<byte[]> values = dstamps.getOrDefault(attr, Collections.emptyList());
+                        driverAttrs.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, values),
+                            dn + "  " + attr + (values.isEmpty() ? " (remove)" : " (" + size(Map.of(attr, values)) + ")"), c.path + "#stamps", c.driver));
+                    }
+                    break;
+                }
                 case DRIVER_ADDED: {
                     Driver d = to.driver(c.driver);
                     String dn = VaultMapping.driverDn(dsDn, c.driver);
                     p.newDrivers.add(c.driver);
                     p.touchedDns.add(dn);
                     Map<String, List<byte[]>> attrs = VaultMapping.driverAttributes(d);
-                    containers.add(new Step(Op.ADD, dn, null, List.of("Top", "DirXML-Driver"), attrs,
+                    Map<String, List<byte[]>> dstamps = VaultMapping.driverPackageAttributes(d);
+                    attrs.putAll(dstamps);
+                    containers.add(new Step(Op.ADD, dn, null,
+                        dstamps.isEmpty() ? List.of("Top", "DirXML-Driver") : List.of("Top", "DirXML-Driver", VaultMapping.PKG_TARGET_AUX), attrs,
                         dn + "  DirXML-Driver (new driver, created stopped)", c.path, c.driver));
                     for (Scope s : new Scope[] {Scope.SUBSCRIBER, Scope.PUBLISHER}) {
                         String cdn = VaultMapping.channelDn(dsDn, c.driver, s);
@@ -189,8 +216,10 @@ public final class Plan {
                         String adn = VaultMapping.artifactDn(dsDn, a);
                         p.touchedDns.add(adn);
                         Map<String, List<byte[]>> aa = VaultMapping.attributes(a);
+                        Map<String, List<byte[]>> astamps = VaultMapping.packageAttributes(tree, a);
+                        aa.putAll(astamps);
                         (a.scope == Scope.DRIVER ? driverScope : channel).add(new Step(Op.ADD, adn, null,
-                            List.of("Top", VaultMapping.objectClass(a)), aa,
+                            astamps.isEmpty() ? List.of("Top", VaultMapping.objectClass(a)) : List.of("Top", VaultMapping.objectClass(a), VaultMapping.PKG_ITEM_AUX), aa,
                             adn + "  " + VaultMapping.objectClass(a) + " (" + size(aa) + ")", c.path, c.driver));
                     }
                     driversNeedingLinkage.add(c.driver);

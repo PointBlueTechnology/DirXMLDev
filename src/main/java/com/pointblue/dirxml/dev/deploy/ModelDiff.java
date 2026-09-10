@@ -38,7 +38,7 @@ public final class ModelDiff {
     /** The kind of one {@link Change}. */
     public enum Kind {
         ARTIFACT_ADDED, ARTIFACT_REMOVED, ARTIFACT_CHANGED, ARTIFACT_KIND_CHANGED,
-        DRIVER_ADDED, DRIVER_REMOVED, DRIVER_SETTING, DRIVER_CONFIG, DRIVER_LINKAGE,
+        DRIVER_ADDED, DRIVER_REMOVED, DRIVER_SETTING, DRIVER_CONFIG, DRIVER_LINKAGE, DRIVER_STAMPS,
         DRIVERSET_GCVS, DRIVERSET_LINKAGE
     }
 
@@ -329,6 +329,8 @@ public final class ModelDiff {
             if (!Objects.equals(oldXml, newXml)) {
                 changes.add(new Change(Kind.ARTIFACT_CHANGED, a.driver, a.path(), null,
                     "~ changed " + describeKind(a) + " " + a.path(), textDiff(oldXml, newXml)));
+            } else {
+                stampsMaybeChanged(a, b);
             }
             return;
         }
@@ -339,6 +341,7 @@ public final class ModelDiff {
         String newRepr = rb.isText() ? rb.text : serializeOrNull(rb.content);
         boolean contentChanged = !Objects.equals(oldRepr, newRepr);
         if (!ctChanged && !contentChanged) {
+            stampsMaybeChanged(a, b);
             return;
         }
         List<String> lines = new ArrayList<>();
@@ -351,6 +354,23 @@ public final class ModelDiff {
         }
         changes.add(new Change(Kind.ARTIFACT_CHANGED, a.driver, a.path(), null,
             "~ changed " + describeKind(a) + " " + a.path(), String.join("\n", lines)));
+    }
+
+    /** Package stamps (GUID, association id, installed checksum, linkage record) differ while the content is the same. */
+    private void stampsMaybeChanged(Artifact a, Artifact b) {
+        List<String> lines = new ArrayList<>();
+        for (String k : com.pointblue.dirxml.dev.deploy.VaultMapping.STAMP_KEYS) {
+            String x = a.meta.get(k);
+            String y = b.meta.get(k);
+            if (!Objects.equals(x, y)) {
+                lines.add("- " + k + ": " + display(x));
+                lines.add("+ " + k + ": " + display(y));
+            }
+        }
+        if (!lines.isEmpty()) {
+            changes.add(new Change(Kind.ARTIFACT_CHANGED, a.driver, a.path(), "package-stamps",
+                "~ package stamps " + describeKind(a) + " " + a.path(), String.join("\n", lines)));
+        }
     }
 
     private void kindChanged(Artifact a, Artifact b) {
@@ -372,6 +392,19 @@ public final class ModelDiff {
         settingChange(a, "shim-class", a.shimClass, b.shimClass);
         settingChange(a, "shim-auth-server", a.shimAuthServer, b.shimAuthServer);
         settingChange(a, "shim-auth-id", a.shimAuthId, b.shimAuthId);
+        List<String> lines = new ArrayList<>();
+        for (String k : List.of("dirxml-pkgguid", "dirxml-pkgextensions")) {
+            String x = a.meta.get(k);
+            String y = b.meta.get(k);
+            if (!Objects.equals(x, y)) {
+                lines.add("- " + k + ": " + (x == null ? "(none)" : k.equals("dirxml-pkgextensions") ? "(" + x.length() + " chars)" : x));
+                lines.add("+ " + k + ": " + (y == null ? "(none)" : k.equals("dirxml-pkgextensions") ? "(" + y.length() + " chars)" : y));
+            }
+        }
+        if (!lines.isEmpty()) {
+            changes.add(new Change(Kind.DRIVER_STAMPS, a.name, "drivers/" + a.name, "package-stamps",
+                "~ package stamps of driver " + a.name, String.join("\n", lines)));
+        }
     }
 
     private void settingChange(Driver a, String what, String oldV, String newV) {
