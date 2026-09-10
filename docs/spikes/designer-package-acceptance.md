@@ -7,7 +7,7 @@ Designer accept what DirXMLDev builds and installs?
 |---|---|
 | 1. A package **we built** (`PBTEDIRCUST 1.0.0` — the JFW eDir driver's two hand-made policies and the five driver GCVs they read, `package.build` → `package.site`, served from `file:///…/DirXMLDev-e2e/site/`) added as a package site and imported into Designer's catalog | **passed** (Jerry, 2026-09-10): "imported PBTEDIRCUST from the site with no complaints" — the update-site layout, the jar (manifest, plugin.xml, package_import.xml) and every stored checksum satisfy Designer's import checks |
 | 2. A driver **we installed and deployed** (`PkgTest7` on the test vault, from NOVLEDIRBASE 2.1.2 + NOVLEDIRDCFG 2.1.0) imported from the vault into a project: both packages shown installed, nothing marked modified | **passed** (Jerry, 2026-09-10): "PkgTest7 shows both packages installed, nothing modified" — the stamps the deployer writes (`DirXML-PkgItemAux`/`DirXML-PkgTargetAux`, GUID records, association ids, installed checksums, linkage records, initial state) are what Designer's importer expects |
-| 3. PBTEDIRCUST installed by Designer onto an eDirectory driver: two policies and a GCV object appear and validate | pending |
+| 3. PBTEDIRCUST installed by Designer onto an eDirectory driver: two policies and a GCV object appear and validate | **passed** (Jerry, 2026-09-10): "all three are there and the project validates" |
 
 Note on 2: a vault import never brings a package into Designer; the objects
 carry only ids (`DirXML-pkgGUID`, association id) that Designer resolves
@@ -41,3 +41,17 @@ and Eclipse's update core caches a site's `site.xml` for the session, so a
 version published after the first check is offered only after a restart.
 The builder now declares the driver type anyway (1.0.1), matching what
 vendor packages do.
+
+**Found by check 2, fixed the same day: `xlfid` labels.** Package texts carry
+`xlfid(<key>)<default>` localization markers (GCV display names, descriptions,
+enum choices, prompts, driver attributes). Designer resolves them at install
+against the package's `<properties lang="…">` bundle for its UI language
+(`XmlUtil.localizeXMLWithXLIFF`; no bundle → the default text). Our installer
+copied them verbatim, so Designer showed `xlfid(NOVLEDIRDCFG.globalconfig…)
+Synchronization Settings` on `PkgTest7`'s GCV page. `packages.Xlf` now
+resolves every marker (attributes and text) in item directives, item content,
+the package directive and prompt definitions, English by default
+(`-Didm.package.language`). Checksums are unaffected: Designer's GCV recipe
+hashes definition names and types, never display names, and no catalog policy
+carries markers in its content (the AD and eDir configuration packages have
+none; the only marker left in a Designer project is on a job, out of scope).

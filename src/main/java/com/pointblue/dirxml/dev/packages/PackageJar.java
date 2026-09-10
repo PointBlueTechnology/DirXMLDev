@@ -52,6 +52,8 @@ public final class PackageJar {
     public Document doc;
     public String directive;             // package installation-directive, as serialized by Designer
     public Map<Integer, String> folderNames = new LinkedHashMap<>();
+    /** {@code <properties lang="xx">} bundles: language → key/value (Designer's localization source). */
+    public Map<String, Map<String, String>> properties = new LinkedHashMap<>();
     public Map<Integer, String> folderProvisioningData = new LinkedHashMap<>();
     public List<Item> items = new ArrayList<>();
 
@@ -83,6 +85,24 @@ public final class PackageJar {
             Document dd = com.novell.xml.dom.DocumentFactory.newDocument();
             dd.appendChild(dd.importNode(dirRoot, true));
             p.directive = NxslCanonical.serialize(dd);
+        }
+        for (Element props : PackageChecksum.children(p.pkg, "properties")) {
+            String lang = props.getAttribute("lang");
+            String b64 = text(props).replaceAll("\\s", "");
+            if (lang.isEmpty() || b64.isEmpty()) {
+                continue;
+            }
+            try {
+                java.util.Properties pr = new java.util.Properties();
+                pr.load(new java.io.StringReader(new String(Base64.getDecoder().decode(b64), StandardCharsets.UTF_8)));
+                Map<String, String> m = new LinkedHashMap<>();
+                for (String k : pr.stringPropertyNames()) {
+                    m.put(k, pr.getProperty(k));
+                }
+                p.properties.put(lang, m);
+            } catch (Exception e) {
+                // an unreadable bundle: the default texts apply
+            }
         }
         for (Element folder : PackageChecksum.children(p.pkg, "package-folder")) {
             int fid = parseInt(folder.getAttribute("id"));
@@ -120,6 +140,15 @@ public final class PackageJar {
             }
         }
         return p;
+    }
+
+    /** The localization bundle for a language ({@code en} first, then the language's base, else empty). */
+    public Map<String, String> propertiesFor(String lang) {
+        Map<String, String> m = properties.get(lang);
+        if (m == null && lang != null && lang.contains("_")) {
+            m = properties.get(lang.substring(0, lang.indexOf('_')));
+        }
+        return m == null ? Map.of() : m;
     }
 
     public String manifestAttr(String name) {

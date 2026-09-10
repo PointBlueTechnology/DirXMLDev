@@ -40,9 +40,15 @@ public final class PromptEngine {
 
     /** Reads a prompt resource (its content and directive) into a {@link Prompt}. */
     public static Prompt read(PackageJar.Item item) {
+        return read(item, Map.of());
+    }
+
+    /** Reads a prompt resource; {@code lang} is the package's language bundle for xlfid markers. */
+    public static Prompt read(PackageJar.Item item, Map<String, String> lang) {
         Prompt p = new Prompt();
         p.name = item.name;
         Element dir = CanonicalXml.parse(item.directive).getDocumentElement();
+        Xlf.localize(dir, lang);
         Element placement = child(dir, "placement");
         p.order = placement == null ? 0 : parseInt(placement.getAttribute("order"), 0);
         Element targets = child(dir, "package-item-targets");
@@ -60,6 +66,7 @@ public final class PromptEngine {
         p.targetStylesheet = ts == null ? null : firstElement(ts);
         p.definitions = item.content == null ? CanonicalXml.parse("<configuration-values><definitions/></configuration-values>").getDocumentElement()
             : CanonicalXml.parse(NxslCanonical.serialize(item.content)).getDocumentElement();
+        Xlf.localize(p.definitions, lang);
         return p;
     }
 
