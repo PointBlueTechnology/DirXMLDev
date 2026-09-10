@@ -131,6 +131,33 @@ its origin will be refused until those GCVs exist here (define them first with
 objects and refuses until the driver's required secrets are in the environment's
 secrets file (or `--allow-missing-secrets`).
 
+## Packages
+
+Packages are Designer's unit of vendor and custom content. DirXMLDev keeps
+its own catalog (a git directory of package jars) and installs, inspects and
+builds packages without Designer ([packages.md](packages.md)):
+
+```bash
+bin/idm package.fetch  --catalog ~/idm-packages --short NOVLADBASE --latest      # from the update site
+bin/idm package.import --catalog ~/idm-packages /Applications/Designer/packages/eclipse/plugins   # or a Designer install
+bin/idm package.show   --catalog ~/idm-packages NOVLADBASE
+bin/idm package.resolve --catalog ~/idm-packages --base NOVLADBASE --feature NOVLADDCFG
+bin/idm driver.add tree/ --name "AD Driver" --catalog ~/idm-packages --package NOVLADBASE,NOVLADDCFG --answers ad.properties
+bin/idm package.install tree/ --catalog ~/idm-packages --package NOVLADENTEX --driver "AD Driver" --answers ad.properties
+bin/idm package.status tree/ --catalog ~/idm-packages          # installed, customized, newer versions
+bin/idm package.build  --catalog ~/idm-packages tree/ --driver "AD Driver" --short PBTADCUST --name "AD customizations" --vendor pointbluetech
+bin/idm package.site   --catalog ~/idm-packages --out /var/www/packages   # an update site Designer users can add
+```
+
+An install is a transaction like any other edit, and reproduces Designer's
+install exactly (prompts, placement, weights, stamps); the deployer writes
+the package stamps to the vault, so Designer sees the packages when it
+imports. A refusal naming mandatory prompts lists what the answers file
+needs. Content that references GCVs another package defines installs in
+the same transaction as that package (`--package a,b,c`). A tree imported
+before package stamps were read needs `package.adopt` (or a fresh
+`import-live`).
+
 ## Prove the change
 
 ```bash
