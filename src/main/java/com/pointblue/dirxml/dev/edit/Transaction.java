@@ -53,6 +53,7 @@ public final class Transaction {
     private final Set<String> touched = new LinkedHashSet<>();
     private final Map<String, String> renamed = new LinkedHashMap<>();
     private final Map<Path, String> pendingBaselines = new LinkedHashMap<>();
+    private final Set<Path> pendingBaselineDeletes = new LinkedHashSet<>();
     private final Set<String> customizedNow = new LinkedHashSet<>();
 
     private Transaction(Path tree, DriverSet ds, Validator validator) {
@@ -115,6 +116,16 @@ public final class Transaction {
         pendingBaselines.put(file, content);
     }
 
+    /**
+     * Remove an artifact's package baseline (its {@code .package-baseline/} file) —
+     * an uninstalled or upgrade-dropped package object no longer has one. Deletion
+     * is deferred to {@link #run} like everything else, so {@code dryRun} reports it
+     * without touching disk.
+     */
+    public void dropBaseline(Artifact a) {
+        pendingBaselineDeletes.add(Packages.baselineFile(tree, a));
+    }
+
     // ---- run ----
 
     /** Apply the operation and write (unless dryRun); never throws for a refusal or a new error. */
@@ -149,6 +160,14 @@ public final class Transaction {
                 if (!dryRun) {
                     Files.createDirectories(b.getKey().getParent());
                     Files.writeString(b.getKey(), b.getValue(), StandardCharsets.UTF_8);
+                }
+            }
+            for (Path f : pendingBaselineDeletes) {
+                if (Files.exists(f)) {
+                    r.deletedFiles.add(tree.relativize(f).toString().replace('\\', '/'));
+                    if (!dryRun) {
+                        Files.delete(f);
+                    }
                 }
             }
         } finally {
