@@ -46,6 +46,16 @@ public final class DriverOps {
         private final String authServer;
         private final String authId;
 
+        private java.util.List<Path> packages = java.util.List.of();
+        private java.util.Map<String, String> answers = java.util.Map.of();
+
+        /** {@code --packages}: a base package (first) and its features; the driver is built from the base and the set installed. */
+        public Add withPackages(java.util.List<Path> jars, java.util.Map<String, String> answers) {
+            this.packages = jars == null ? java.util.List.of() : jars;
+            this.answers = answers == null ? java.util.Map.of() : answers;
+            return this;
+        }
+
         public Add(String name, Path export, String sourceDriver, boolean copy, String shimClass, String authServer, String authId) {
             this.name = name;
             this.export = export;
@@ -92,11 +102,15 @@ public final class DriverOps {
                 Driver from = pick(ds, sourceDriver, "the tree");
                 d = clone(from, name, ds);
             } else {
-                if (shimClass == null || shimClass.isBlank()) {
-                    throw new Refusal("give --from-export <file>, --copy-of <driver>, or --shim-class <class>");
+                String shim = shimClass;
+                if ((shim == null || shim.isBlank()) && !packages.isEmpty()) {
+                    shim = com.pointblue.dirxml.dev.packages.PackageInstall.shimClassOf(packages.get(0));
+                }
+                if (shim == null || shim.isBlank()) {
+                    throw new Refusal("give --from-export <file>, --copy-of <driver>, --shim-class <class>, or --packages <base jar,…>");
                 }
                 d = new Driver(name);
-                d.shimClass = shimClass;
+                d.shimClass = shim;
                 d.shimAuthServer = authServer;
                 d.shimAuthId = authId;
                 d.config.put(Driver.DRIVER_FILTER, CanonicalXml.parse("<filter/>").getDocumentElement());
@@ -110,6 +124,9 @@ public final class DriverOps {
             ds.drivers.add(d);
             for (Artifact a : d.artifacts()) {
                 tx.touch(a);
+            }
+            if (!packages.isEmpty()) {
+                new com.pointblue.dirxml.dev.packages.PackageInstall(packages, name, answers, false).apply(ds, tx);
             }
         }
 

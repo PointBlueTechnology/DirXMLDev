@@ -26,6 +26,7 @@ public final class Result {
     public final List<String> customized = new ArrayList<>();   // packaged artifacts marked customized by this op
     public Report report;                                   // validation of the result (null if refused before validating)
     public final List<Finding> newErrors = new ArrayList<>();
+    public final List<String> notes = new ArrayList<>();       // what the operation wants the reader to know (skips, secrets needed, …)
 
     Result(String operation) {
         this.operation = operation;
@@ -57,6 +58,9 @@ public final class Result {
         }
         for (String f : deletedFiles) {
             sb.append("  deleted  ").append(f).append('\n');
+        }
+        for (String n : notes) {
+            sb.append("  note     ").append(n).append('\n');
         }
         if (!newErrors.isEmpty()) {
             sb.append("  new validation error(s) introduced by this operation:\n");
@@ -90,6 +94,7 @@ public final class Result {
         sb.append(",\"customized\":").append(arr(customized));
         sb.append(",\"changedFiles\":").append(arr(changedFiles));
         sb.append(",\"deletedFiles\":").append(arr(deletedFiles));
+        sb.append(",\"notes\":").append(arr(notes));
         sb.append(",\"newErrors\":[");
         first = true;
         for (Finding f : newErrors) {
