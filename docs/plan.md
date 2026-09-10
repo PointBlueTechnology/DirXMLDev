@@ -296,7 +296,7 @@ step 2 (catalog: fetch/import/list/show/diff/resolve) merged; step 4
 (vault stamps, proven live: [spikes/package-vault-stamps.md](spikes/package-vault-stamps.md))
 done; `package.status|adopt`, `package.build` (hand-made artifacts + the GCVs they
 read → a Designer-valid jar), `package.site` done 2026-09-10; upgrade/downgrade/
-uninstall in progress (agent); then 7c with Jerry;**
+uninstall merged; every build step done — 7c with Jerry is the acceptance test;**
 vault/jar/site facts in [spikes/package-format.md](spikes/package-format.md).
 The PDT analysis ([spikes/pdt-analysis.md](spikes/pdt-analysis.md)) and the
 headless spike stay as reference; the headless route is not pursued.
