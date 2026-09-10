@@ -6,8 +6,7 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phases 0–6 built and proven on the test vault and in Designer; Phase 7
-(our own package management) built — Designer's verdict (spike 7c) pending.**
+Status: **Phases 0–7 built and proven on the test vault and in Designer.**
 Phases 0–3: typed model, IDM-as-code with readers for export / Designer project
 / LDIF / live vault (byte-idempotent); `validate` — every policy through the
 engine's own compilers in the driver's context plus linkage, GCV,
