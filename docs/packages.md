@@ -143,6 +143,22 @@ What install does, per F2/F8/F9/F11/F12/F13 (in this order, as Designer does):
 
 ### 3.3 Upgrade, downgrade, uninstall
 
+**Built 2026-09-10** (`package.upgrade --driver D --jar new.jar | --catalog DIR --package SHORT_ver [--answers] [--yes]`,
+`package.uninstall --driver D --package SHORT [--yes] [--all]`; 6 lifecycle tests on
+the eDirectory set). Rules as implemented, from Designer's code: uninstalling a
+package removes only the link entries its own directives own (stamped with
+its package id in `DirXML-pkgLinkages`), wherever they are — so removing the
+driver-specific companion unlinks the common package's policies it had
+linked, and leaves the common package's own GCV link alone; on upgrade a
+customized object keeps its content and mark while its baseline and stamps
+move to the new version; filter extensions are re-merged only for changed
+classes/attributes when the old jar is in the catalog, fully otherwise; a
+dependant package refuses the uninstall unless `--all`; the base refuses
+while features remain unless `--all`. Not yet exercised: matching across
+versions by container (association id or name only), re-applying other
+packages' linkage after an upgrade (implemented, untested), driver-level GCV
+value merge on upgrade.
+
 - `package.upgrade tree/ --catalog DIR --driver D --package SHORT[_ver] [--answers FILE]`
   (and `--downgrade`, the same with an older version): Designer's mechanics
   (F7) made explicit and shown first as a `ModelDiff`: objects matched across
@@ -318,7 +334,7 @@ publishing to nu.novell.com (not ours).
    + spike 7b (2026-09-10).
 4. ✅ **Vault stamping** in the deployer + reader reverse mapping; round trip
    on the test vault; `package.status|adopt` (2026-09-10).
-5. **Upgrade/downgrade/uninstall** (delegable once 3 exists).
+5. ✅ **Upgrade/downgrade/uninstall** (Sonnet, merged 2026-09-10).
 6. ✅ **`package.build` + `package.site`** (2026-09-10); then 7c with Jerry
    (inputs: `~/IdeaProjects/DirXMLDev-e2e/site` as a package site, the
    `PkgTest7` driver on the test vault); docs, skill, agent guide; plan closed.

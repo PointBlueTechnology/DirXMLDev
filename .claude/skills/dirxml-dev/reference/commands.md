@@ -54,6 +54,8 @@ Gating: reads are free; start/restart/trace/secrets need `--yes` on stg and `--y
 
 - `package.install <tree> --jar a.jar[,b.jar…] | --catalog DIR --package SHORT[_ver][,…] --driver D [--answers FILE] [--new-driver true]` — install a package set onto a driver in one transaction, Designer's way (prompts, weights, filter merge, stamps, installed checksums); without `--driver`, a driver-set package into the Library
 - `driver.add <tree> --name N --packages base.jar,… | --catalog DIR --package SHORT[,…] [--answers FILE]` — a new packaged driver built from the base package and its features
+- `package.upgrade <tree> --driver D --jar new.jar | --catalog DIR --package SHORT_ver [--answers FILE] [--yes]` — Designer's uninstall-old + install-new: customized objects keep their content, baselines and stamps move; downgrade allowed with a note
+- `package.uninstall <tree> --driver D --package SHORT [--yes] [--all]` — removes the package's objects, the links it owns, its filter entries and record; refuses while another package depends on it (`--all` removes dependants) or the base while features remain; customized objects need `--yes`
 - `package.status <tree> [--driver D] [--catalog DIR] [--json]` — per driver: installed packages (manifest record cross-checked with object stamps), customized objects (installed checksum ≠ recomputed), catalog presence and newer versions
 - `package.adopt <tree> [--driver D] [--catalog DIR]` — write the installed-package records from the object stamps (a tree imported from a vault or a Designer project has stamps but no record)
 - `package.fetch|import|list|show|diff|resolve --catalog DIR …` — the package catalog (a git directory of jars + a diffable unpacked form; `package.fetch` pulls from the update site)
