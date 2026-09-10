@@ -785,34 +785,7 @@ public final class PackageInstall implements Operation {
 
         /** Designer's installed content checksum: content + the names of the sets the object is linked into. */
         long installedChecksum(Artifact a) {
-            List<String> sets = linkedSetNames(a);
-            if (a instanceof Policy) {
-                Policy pol = (Policy) a;
-                String cls = pol.policyKind() == Policy.Kind.XSLT ? PackageChecksum.STYLESHEET : PackageChecksum.RULE;
-                return PackageChecksum.content(cls, a.name, toNxsl(pol.content), null, null, sets);
-            }
-            Resource r = (Resource) a;
-            if (r.isGcvDef()) {
-                return PackageChecksum.gcv(a.name, toNxsl(r.content), sets);
-            }
-            return PackageChecksum.content(PackageChecksum.RESOURCE, a.name, r.content == null ? null : toNxsl(r.content),
-                r.text, r.contentType, sets);
-        }
-
-        /** Set names in Designer's {@code addPolicySetRefs} order. */
-        List<String> linkedSetNames(Artifact a) {
-            List<String> out = new ArrayList<>();
-            List<Driver> drivers = d != null ? List.of(d) : ds.drivers;
-            for (PolicySet s : ADD_POLICY_SET_REFS_ORDER) {
-                for (Driver drv : drivers) {
-                    for (PolicyLink l : drv.links(s)) {
-                        if (l.ref.equals(a.path())) {
-                            out.add(DESIGNER_SET_NAMES.get(s));
-                        }
-                    }
-                }
-            }
-            return out;
+            return InstalledChecksum.of(ds, d, a);
         }
 
         // ---- filter extensions ----

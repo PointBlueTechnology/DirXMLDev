@@ -148,6 +148,9 @@ public final class Cli {
             if (args.length >= 2 && args[0].startsWith("vault.")) {
                 System.exit(com.pointblue.dirxml.dev.deploy.DeployCli.run(args));
             }
+            if (args.length >= 2 && args[0].equals("package.status")) {
+                System.exit(com.pointblue.dirxml.dev.packages.PackageStatus.cli(args));
+            }
             if (args.length >= 1 && args[0].startsWith("package.")) {
                 // package.diff without --catalog is handled above (a tree/artifact diff); everything else,
                 // and package.diff --catalog …, is the catalog's own command set.
