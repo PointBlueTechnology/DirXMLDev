@@ -457,7 +457,7 @@ public final class PackageCli {
     private static int build(Catalog catalog, List<String> pos, Map<String, List<String>> opts, boolean json) throws IOException {
         if (pos.isEmpty() || first(opts, "short") == null || first(opts, "name") == null) {
             System.err.println("usage: package.build --catalog DIR <tree> --short SHORT --name \"Display Name\" [--driver D] [--vendor V] [--version M.m.r]"
-                + " [--description …] [--readme FILE] [--include path]… [--new-version-of SHORT_ver|jar] [--depends SHORT[_ver]]… [--base] [--customized keep] [--gcvs referenced|all|none] [--json]");
+                + " [--description …] [--readme FILE] [--include path]… [--new-version-of SHORT_ver|jar] [--depends SHORT[_ver]]… [--base] [--customized keep] [--gcvs referenced|all|none] [--supported-driver ID]… [--json]");
             return 2;
         }
         PackageBuilder.Options o = new PackageBuilder.Options();
@@ -486,6 +486,8 @@ public final class PackageCli {
         if (first(opts, "gcvs") != null) {
             o.gcvs = first(opts, "gcvs");
         }
+        o.supportedDrivers.addAll(opts.getOrDefault("supported-driver", List.of()));
+        o.catalog = catalog;
         if (first(opts, "new-version-of") != null) {
             String spec = first(opts, "new-version-of");
             o.newVersionOf = spec.endsWith(".jar") ? Paths.get(spec) : PackageInstall.jarOf(null, catalog.dir.toString(), spec);

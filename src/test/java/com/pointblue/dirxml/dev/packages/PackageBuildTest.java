@@ -49,6 +49,9 @@ public class PackageBuildTest {
         assertEquals(2, p.type);
         assertEquals("com.pointblue.pbttest", p.symbolicName);
         assertTrue(p.version.startsWith("1.0.0."));
+        // Designer offers a package only on drivers of a declared type: derived from the driver's type here (no base jar in the catalog)
+        String sd = new String(java.util.Base64.getMimeDecoder().decode(p.manifestAttr("Supported-Drivers")), java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(sd, sd.contains("driver-id=\"EDIR-Driver\""));
         Catalog catalog = Catalog.open(Files.createTempDirectory("pbuild-cat"));
         Catalog.AddResult a = catalog.add(r.jar, "built");
         assertTrue(a.refusal, a.ok());

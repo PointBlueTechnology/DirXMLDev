@@ -63,6 +63,8 @@ public final class PackageBuilder {
         public boolean base;                                   // build a base package (default: a feature package)
         public String customized = "refuse";                   // refuse | keep
         public String gcvs = "referenced";                     // referenced | all | none: driver-level GCV definitions to ship as a GCV object
+        public List<String> supportedDrivers = new ArrayList<>();   // driver type ids (e.g. EDIR-Driver); default: the target's base package's list, else the driver's type
+        public Catalog catalog;                                // optional: where the base package's jar is looked up for the supported-driver list
     }
 
     public static final class Result {
@@ -532,8 +534,72 @@ public final class PackageBuilder {
             deps.appendChild(dep);
         }
         root.appendChild(deps);
-        root.appendChild(dd.createElementNS(null, "supported-drivers"));
+        root.appendChild(supportedDrivers(dd, d, o, installed, r));
         return root;
+    }
+
+    /**
+     * {@code <supported-drivers>}: Designer offers a driver package for install only on drivers of a type the
+     * package names. Explicit {@code --supported-driver} ids win; else the list is copied from the target's base
+     * package jar (catalog); else derived from the driver's type meta ({@code designer.driver-type}, e.g. EDIR-Driver).
+     */
+    static Element supportedDrivers(Document dd, Driver d, Options o, Map<String, String> installed, Result r) {
+        Element sd = dd.createElementNS(null, "supported-drivers");
+        if (d == null) {
+            return sd;   // a driver-set package is not driver-specific
+        }
+        if (!o.supportedDrivers.isEmpty()) {
+            for (String id : o.supportedDrivers) {
+                definition(dd, sd, "Driver for " + id.replace("-Driver", ""), id, id.replace("-Driver", ""));
+            }
+            return sd;
+        }
+        for (Map.Entry<String, String> e : installed.entrySet()) {
+            if (!e.getValue().endsWith(";base") || o.catalog == null) {
+                continue;
+            }
+            PackageStatus.Installed base = PackageStatus.parse(e.getValue());
+            try {
+                Path jar = PackageInstall.jarOf(null, o.catalog.dir.toString(), base.shortName + "_" + base.version);
+                String b64 = PackageJar.read(jar).manifestAttr("Supported-Drivers");
+                if (b64 != null) {
+                    String xml = new String(Base64.getMimeDecoder().decode(b64), StandardCharsets.UTF_8);
+                    Element from = CanonicalXml.parse(xml).getDocumentElement();
+                    for (Element def : PromptEngine.children(from, "definition")) {
+                        sd.appendChild(dd.importNode(def, true));
+                    }
+                    r.notes.add("supported drivers copied from the base package " + base.shortName + ": " + names(sd));
+                    return sd;
+                }
+            } catch (Exception ex) {
+                r.notes.add("base package " + base.shortName + "_" + base.version + " not in the catalog; supported drivers derived from the driver's type");
+            }
+        }
+        String type = d.meta.get("designer.driver-type");
+        if (type != null && !type.isBlank()) {
+            definition(dd, sd, "Driver for " + type.replace("-Driver", ""), type, type.replace("-Driver", ""));
+            r.notes.add("supported drivers from the driver's type: " + type);
+        } else {
+            r.notes.add("no supported driver type known (no base package in the catalog, no driver type in the tree): "
+                + "Designer will not offer this package on any driver — give --supported-driver <id>, e.g. EDIR-Driver, AD-Driver");
+        }
+        return sd;
+    }
+
+    private static void definition(Document dd, Element sd, String displayName, String driverId, String id) {
+        Element def = dd.createElementNS(null, "definition");
+        def.setAttribute("display-name", displayName);
+        def.setAttribute("driver-id", driverId);
+        def.setAttribute("id", id);
+        sd.appendChild(def);
+    }
+
+    private static String names(Element sd) {
+        List<String> out = new ArrayList<>();
+        for (Element def : PromptEngine.children(sd, "definition")) {
+            out.add(def.getAttribute("driver-id"));
+        }
+        return String.join(", ", out);
     }
 
     private static Result refuse(Result r, String why) {
