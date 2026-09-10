@@ -70,6 +70,14 @@ public final class Registry {
         SPECS.put(name, new Spec(name, help, Arrays.asList(args), f));
     }
 
+    private static com.pointblue.dirxml.dev.packages.Catalog catalogOf(String dir) {
+        try {
+            return dir == null || dir.isBlank() ? null : com.pointblue.dirxml.dev.packages.Catalog.open(Paths.get(dir));
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("cannot open catalog " + dir + ": " + e.getMessage());
+        }
+    }
+
     private static java.util.Map<String, String> readAnswers(String file) {
         try {
             return com.pointblue.dirxml.dev.packages.PackageInstall.readAnswers(file == null || file.isBlank() ? null : Paths.get(file));
@@ -206,6 +214,10 @@ public final class Registry {
             opt("driver", "the driver to install onto (omit for a driver-set package into the Library)"),
             opt("answers", "name=value file answering the package prompts (see package.prompts)"),
             opt("new-driver", "true when the driver was just created (prompts run in driver-creation mode)"));
+        register("package.adopt", "write the installed-package records from the objects' package stamps (trees imported from a vault or a project)",
+            a -> new com.pointblue.dirxml.dev.packages.PackageAdopt(a.get("driver"), catalogOf(a.get("catalog"))),
+            opt("driver", "one driver (default: every driver and the Library)"),
+            opt("catalog", "a package catalog, to resolve project-style package ids to names and versions"));
         register("driver.add", "add a driver: from a driver export, as a copy of another driver, or blank",
             a -> new DriverOps.Add(a.get("name"),
                 a.get("from-export") == null || a.get("from-export").isBlank() ? null : Paths.get(a.get("from-export")),

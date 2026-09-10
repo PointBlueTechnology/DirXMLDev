@@ -311,7 +311,7 @@ publishing to nu.novell.com (not ours).
    weights, package-level linkage, filter merge, stamps, manifest record)
    + spike 7b (2026-09-10).
 4. ✅ **Vault stamping** in the deployer + reader reverse mapping; round trip
-   on the test vault (2026-09-10). `package.status|adopt` next.
+   on the test vault; `package.status|adopt` (2026-09-10).
 5. **Upgrade/downgrade/uninstall** (delegable once 3 exists).
 6. **`package.build` + `package.site`**, then 7c with Jerry; docs, skill,
    agent guide; plan closed.
