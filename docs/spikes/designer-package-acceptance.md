@@ -23,3 +23,21 @@ it; packaged GCV objects deployed earlier without `DirXML-pkgLinkages`
 (Designer warns; ours carry it); two vendor packages absent from the
 importing Designer's catalog (their objects are de-packaged on import — the
 behaviour that makes `package.site` necessary).
+
+**Check 3, first attempt (2026-09-10): the package was not offered on the driver.**
+Cause found in Designer's code, not in our jar: the driver's Add Package dialog
+lists project-catalog packages plus the package *bundles* registered in the
+OSGi extension registry (`PackageMgrUtil.getUnImportedPackageBundles` ←
+`PackageBundleCache.getPackageBundles` ← extension point
+`com.novell.idm.packagemanager.packageregistration`). A jar downloaded by
+Check for Package Updates is only copied into `packages/eclipse/plugins`; it
+becomes a registered bundle when Designer restarts — the update action ends
+with a restart prompt (`PkgUpdateAction`: `PlatformUI.getWorkbench().restart()`
+on "yes"). Declining the restart leaves the package downloaded but invisible.
+Two smaller facts from the same reading: an empty `<supported-drivers/>`
+means "any driver" (`PackageBundleValueObject.isDriverTypeSupported` returns
+true for an empty list), so the builder's original omission did not hide it;
+and Eclipse's update core caches a site's `site.xml` for the session, so a
+version published after the first check is offered only after a restart.
+The builder now declares the driver type anyway (1.0.1), matching what
+vendor packages do.
