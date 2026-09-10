@@ -109,7 +109,8 @@ public final class Cli {
             if (args.length >= 1 && args[0].equals("query")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.query(args));
             }
-            if (args.length >= 1 && args[0].equals("package.diff")) {
+            if (args.length >= 1 && args[0].equals("package.diff") && !hasCatalogFlag(args)) {
+                // package.diff <tree> <artifactPath>: a customized packaged artifact vs its baseline in a tree.
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.packageDiff(args));
             }
             if (args.length >= 3 && args[0].equals("refs")) {
@@ -145,6 +146,11 @@ public final class Cli {
             }
             if (args.length >= 2 && args[0].startsWith("vault.")) {
                 System.exit(com.pointblue.dirxml.dev.deploy.DeployCli.run(args));
+            }
+            if (args.length >= 1 && args[0].startsWith("package.")) {
+                // package.diff without --catalog is handled above (a tree/artifact diff); everything else,
+                // and package.diff --catalog …, is the catalog's own command set.
+                System.exit(com.pointblue.dirxml.dev.packages.PackageCli.run(args));
             }
             if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine."))) {
                 System.exit(com.pointblue.dirxml.dev.operate.OperateCli.run(args));
@@ -225,6 +231,15 @@ public final class Cli {
         return ds.unresolvedLinks().isEmpty() ? 0 : 1;
     }
 
+    private static boolean hasCatalogFlag(String[] args) {
+        for (String a : args) {
+            if (a.equals("--catalog")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static String need(String prop) {
         String v = System.getProperty(prop);
         if (v == null || v.isBlank()) {
@@ -278,6 +293,13 @@ public final class Cli {
         System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
         System.err.println("  query <asCodeDir> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver]");
         System.err.println("  package.diff <asCodeDir> <artifactPath>  a customized packaged artifact vs its package baseline");
+        System.err.println("package catalog (docs/packages.md; a jars+unpacked-form repository kept in git):");
+        System.err.println("  package.fetch   --catalog DIR [--site NAME|URL] [--short SHORT[_ver]…] [--all-versions] [--dry-run] [--json]");
+        System.err.println("  package.import  --catalog DIR <jar|dir> [--json]");
+        System.err.println("  package.list    --catalog DIR [--driver-type ID] [--type 2|3|4] [--base] [--json]");
+        System.err.println("  package.show    --catalog DIR SHORT[_ver] [--json]");
+        System.err.println("  package.diff    --catalog DIR SHORT_v1 SHORT_v2 [--json]");
+        System.err.println("  package.resolve --catalog DIR --base SHORT[_ver] [--feature SHORT…] [--driver-set-has SHORT_ver…] [--vault-has SHORT_ver…] [--json]");
         System.err.println("operate (docs/operate.md; environments.properties, tiers, deploy-log audit):");
         System.err.println("  driverset.status --env E [--json]");
         System.err.println("  driver.status --env E --driver D [--json] [--tree DIR]");
