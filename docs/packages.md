@@ -188,7 +188,7 @@ inequality test stays satisfied.
 
 ### 3.5 Building packages from customized configuration
 
-`package.build tree/ --catalog DIR --driver D --short SHORT --name "…" --vendor pointbluetech --version M.m.r [--include PATH…] [--new-version-of SHORT]`
+**Built 2026-09-10.** `package.build --catalog DIR tree/ --driver D --short SHORT --name "…" --vendor V --version M.m.r [--include PATH…] [--new-version-of SHORT_ver|jar] [--depends SHORT…] [--gcvs referenced|all|none] [--customized keep] [--base]`
 
 Turns tree content into a package jar (F15: ids `XXXXXXXX_yyyyMMddHHmmssSSSS`,
 version `M.m.r.yyyyMMddHHmmss`, symbolic `com.<vendor>.<short>`, MANIFEST /
@@ -211,14 +211,20 @@ same code the installer uses; no signature). Contents:
 - **Customized packaged objects are not included by default.** Designer's
   model gives an object one owning package (`DirXML-pkgGUID` is single-valued),
   so a vendor policy we modified cannot become "ours" while staying the
-  vendor's. `package.build` lists them and stops unless told what to do:
-  `--customized copy` clones each into the package under
-  `SHORT-<original name>` with a weight that places it immediately after the
-  original, and records in the tree that the original is unlinked (an ordinary
-  linkage customization Designer displays as such and an upgrade keeps);
-  `--customized keep` leaves them as customizations, documented in the
-  package readme. The tree after `--customized copy` runs the same chain as
-  before (the copy replaces the original in the set), which `simulate` proves.
+  vendor's. `package.build` lists them and refuses unless `--customized keep`
+  leaves them as customizations (noted in the result). `--customized copy`
+  (clone under `SHORT-<original>` after the original, unlink the original)
+  is designed but **not built yet** — it is a tree edit, not a build option,
+  and waits for a real case.
+- **Driver-level GCVs the content reads** (`~name~`, `if-/token-global-variable`)
+  that live in the driver's own config values ship as a `SHORT-GCVs` object
+  with their current values as defaults (`--gcvs referenced`, the default;
+  `all` ships every definition; `none`). Definitions that come from another
+  package or the driver set are reported, not shipped — the package depends
+  on them. Proven: the eDirectory driver's two hand-made policies + 5 GCVs
+  build, pass Designer's import checks (every stored checksum recomputes),
+  install onto a fresh package-built driver with identical content, and a
+  new version reuses the package id and association ids (`PackageBuildTest`).
 - Dependencies: the base package and every package whose objects the included
   content links or references (`Refs`), as `<dependency>` entries with the
   installed versions as `min-version`; supported drivers from the driver's
@@ -229,7 +235,7 @@ is installable by `package.install` and by Designer (acceptance test §5).
 
 ### 3.6 Serving the catalog
 
-`package.site --catalog DIR --out DIR` renders the Eclipse update-site layout
+**Built 2026-09-10.** `package.site --catalog DIR --out DIR [--description …]` renders the Eclipse update-site layout
 (F16: `site.xml`, `features/SHORT.feature_ver.jar`, `plugins/SHORT_ver.jar`,
 `deprecations/`) from the catalog. Published as a static directory (GitHub
 Pages, an internal web server, or `file://`), it is a package site Designer
@@ -313,8 +319,9 @@ publishing to nu.novell.com (not ours).
 4. ✅ **Vault stamping** in the deployer + reader reverse mapping; round trip
    on the test vault; `package.status|adopt` (2026-09-10).
 5. **Upgrade/downgrade/uninstall** (delegable once 3 exists).
-6. **`package.build` + `package.site`**, then 7c with Jerry; docs, skill,
-   agent guide; plan closed.
+6. ✅ **`package.build` + `package.site`** (2026-09-10); then 7c with Jerry
+   (inputs: `~/IdeaProjects/DirXMLDev-e2e/site` as a package site, the
+   `PkgTest7` driver on the test vault); docs, skill, agent guide; plan closed.
 
 ## 9. Decisions to confirm
 

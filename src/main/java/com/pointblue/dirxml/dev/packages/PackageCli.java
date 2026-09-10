@@ -70,6 +70,10 @@ public final class PackageCli {
                 return diff(catalog, pos, json);
             case "package.resolve":
                 return resolve(catalog, opts, json);
+            case "package.build":
+                return build(catalog, pos, opts, json);
+            case "package.site":
+                return site(catalog, opts, json);
             default:
                 System.err.println("unknown command " + cmd);
                 return 2;
@@ -447,6 +451,81 @@ public final class PackageCli {
     }
 
     // ---- shared helpers ----
+
+    // ---- package.build ----
+
+    private static int build(Catalog catalog, List<String> pos, Map<String, List<String>> opts, boolean json) throws IOException {
+        if (pos.isEmpty() || first(opts, "short") == null || first(opts, "name") == null) {
+            System.err.println("usage: package.build --catalog DIR <tree> --short SHORT --name \"Display Name\" [--driver D] [--vendor V] [--version M.m.r]"
+                + " [--description …] [--readme FILE] [--include path]… [--new-version-of SHORT_ver|jar] [--depends SHORT[_ver]]… [--base] [--customized keep] [--gcvs referenced|all|none] [--json]");
+            return 2;
+        }
+        PackageBuilder.Options o = new PackageBuilder.Options();
+        o.tree = Paths.get(pos.get(0));
+        o.driver = first(opts, "driver");
+        o.shortName = first(opts, "short");
+        o.name = first(opts, "name");
+        if (first(opts, "vendor") != null) {
+            o.vendor = first(opts, "vendor");
+        }
+        if (first(opts, "version") != null) {
+            o.version = first(opts, "version");
+        }
+        if (first(opts, "description") != null) {
+            o.description = first(opts, "description");
+        }
+        if (first(opts, "readme") != null) {
+            o.readme = java.nio.file.Files.readString(Paths.get(first(opts, "readme")));
+        }
+        o.include.addAll(opts.getOrDefault("include", List.of()));
+        o.depends.addAll(opts.getOrDefault("depends", List.of()));
+        o.base = opts.containsKey("base");
+        if (first(opts, "customized") != null) {
+            o.customized = first(opts, "customized");
+        }
+        if (first(opts, "gcvs") != null) {
+            o.gcvs = first(opts, "gcvs");
+        }
+        if (first(opts, "new-version-of") != null) {
+            String spec = first(opts, "new-version-of");
+            o.newVersionOf = spec.endsWith(".jar") ? Paths.get(spec) : PackageInstall.jarOf(null, catalog.dir.toString(), spec);
+        }
+        java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("pkgbuild");
+        PackageBuilder.Result r = PackageBuilder.build(o, tmp);
+        if (r.ok) {
+            Catalog.AddResult a = catalog.add(r.jar, "built");
+            if (!a.ok()) {
+                r.ok = false;
+                r.refusal = "built, but the catalog refused it: " + a.refusal;
+            } else {
+                r.jar = catalog.dir.resolve("jars").resolve(a.shortName).resolve(a.shortName + "_" + a.version + ".jar");
+                r.notes.add("added to the catalog as " + a.shortName + "_" + a.version + " (sha256 " + a.sha256.substring(0, 12) + "…)");
+            }
+        }
+        System.out.print(json ? r.json() + "\n" : r.text());
+        return r.ok ? 0 : 1;
+    }
+
+    // ---- package.site ----
+
+    private static int site(Catalog catalog, Map<String, List<String>> opts, boolean json) throws IOException {
+        String out = first(opts, "out");
+        if (out == null) {
+            System.err.println("usage: package.site --catalog DIR --out DIR [--description …] [--json]");
+            return 2;
+        }
+        String description = first(opts, "description") == null ? "Packages built with DirXMLDev" : first(opts, "description");
+        List<String> written = SiteWriter.write(catalog, Paths.get(out), description);
+        if (json) {
+            System.out.println("{\"out\":" + q(out) + ",\"features\":" + jsonArr(written) + "}");
+        } else {
+            System.out.println("package.site: wrote " + out + " (" + written.size() + " feature(s))");
+            for (String w : written) {
+                System.out.println("  " + w);
+            }
+        }
+        return 0;
+    }
 
     private static String first(Map<String, List<String>> opts, String key) {
         List<String> v = opts.get(key);
