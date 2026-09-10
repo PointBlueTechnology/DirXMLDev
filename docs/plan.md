@@ -288,6 +288,8 @@ deployer writes every `DirXML-pkg*` attribute, and **`package.build`** — a
 package from a tree's customized configuration (Jerry, 2026-09-09) — plus
 `package.site`. Checksums verified by recomputation against Designer's
 catalog ([spikes/designer-package-layer.md](spikes/designer-package-layer.md));
+**build step 1 done 2026-09-10: `packages.PackageChecksum` reproduces the
+whole catalog ([spikes/package-checksums.md](spikes/package-checksums.md));**
 vault/jar/site facts in [spikes/package-format.md](spikes/package-format.md).
 The PDT analysis ([spikes/pdt-analysis.md](spikes/pdt-analysis.md)) and the
 headless spike stay as reference; the headless route is not pursued.
