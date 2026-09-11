@@ -41,7 +41,31 @@ removed again; the vault ended clean.
   as `DirXML-pkgInitialState` (unit-tested; not exercised live — no stock
   object was touched).
 
-## Still open (needs a PRD, i.e. step P2b's `prd.add`)
+## Scratch PRD deployed (2026-09-11, after P2b)
+
+`form.add --kind request --name "DirXMLDev Scratch" --from "Request Form"`
++ `prd.add --name "DirXMLDev Scratch PRD" --from-template NoApproval
+--request-form "DirXMLDev Scratch" --display-name "en~DirXMLDev Scratch PRD"`
+(category set to `accounts`, status Active, request binding rebuilt: title,
+subHeading, recipient, reason) → `validate` 0 errors → `vault.deploy --env
+idm254 --yes`: containers ensured (skipped), form added, `cn=RequestDefs`
+ensured (skipped), PRD added (`srvprvRequest`, 6.6 KB: XmlData + request +
+process XML + status/flow/grant/revoke/category/localized names/descr) →
+verify OK. **Both scratch objects are on idm254 until the pickup check is
+done; remove them with the tree (delete the two entries, `vault.deploy`).**
+
+REST facts learned for the pickup check: an OAuth token comes from
+`POST /osp/a/idm/auth/oauth2/token` (password grant, `client_id=rbpm`,
+the lab's client secret); `GET /IDMProv/rest/access/permissions?q=…` (the
+permission index the Requests page uses) returns 0 items for `uaadmin` even
+for the stock `HelpdeskTicket`, so it cannot tell whether a PRD was picked
+up; `GET /IDMProv/rest/access/prds` is 404 on 4.10.1; the `/workflow/rest/v1`
+paths are not the ones the vendor swagger names (`No endpoint GET …`). The
+pickup check is therefore a UI check (Administration → Workflows / the
+request form under Requests), with and without Administration → Caching →
+flush.
+
+## Still open
 
 - **Runtime pickup**: whether the Identity Applications serve a changed form
   or a new PRD without a cache flush/restart. Test plan: deploy a scratch PRD
