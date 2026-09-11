@@ -2,12 +2,16 @@ package com.pointblue.dirxml.dev.ascode;
 
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
+import com.pointblue.dirxml.dev.model.Prd;
+import com.pointblue.dirxml.dev.model.Provisioning;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
+import com.pointblue.dirxml.sim.Xds;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -81,7 +85,53 @@ public final class AsCodeReader {
                 d.links.add(new PolicyLink(ps, attr(l, "ref"), Integer.parseInt(attr(l, "order"))));
             }
         }
+        Path provManifest = dir.resolve("provisioning").resolve("provisioning.xml");
+        if (Files.exists(provManifest)) {
+            d.provisioning = readProvisioning(dir.resolve("provisioning"));
+        }
         return d;
+    }
+
+    private static Provisioning readProvisioning(Path dir) throws IOException {
+        Element m = manifest(dir.resolve("provisioning.xml"));
+        Provisioning p = new Provisioning();
+        p.dn = attr(m, "dn");
+        readMeta(m, p.meta);
+        for (Element fe : children(m, "form")) {
+            Form.Kind kind = Form.Kind.byDir(attr(fe, "kind"));
+            Path file = dir.resolve(attr(fe, "file"));
+            String json = Files.exists(file) ? Files.readString(file, StandardCharsets.UTF_8) : "";
+            Form f = new Form(kind, attr(fe, "name"), json);
+            readMeta(fe, f.meta);
+            p.forms.add(f);
+        }
+        for (Element pe : children(m, "prd")) {
+            Prd prd = new Prd(attr(pe, "name"));
+            Path prdDir = dir.resolve(attr(pe, "dir"));
+            Path defFile = prdDir.resolve("definition.xml");
+            if (Files.exists(defFile)) {
+                prd.definition = xml(defFile);
+            }
+            Path reqFile = prdDir.resolve("request.xml");
+            if (Files.exists(reqFile)) {
+                prd.request = xml(reqFile);
+            }
+            Path procFile = prdDir.resolve("process.xml");
+            if (Files.exists(procFile)) {
+                prd.process = xml(procFile);
+            } else if (prd.definition != null) {
+                List<Element> procs = Xds.childrenByName(prd.definition, "process");
+                if (!procs.isEmpty()) {
+                    prd.process = procs.get(0);
+                }
+            }
+            for (Element propEl : children(pe, "property")) {
+                prd.properties.computeIfAbsent(attr(propEl, "key"), k -> new ArrayList<>()).add(propEl.getTextContent());
+            }
+            readMeta(pe, prd.meta);
+            p.prds.add(prd);
+        }
+        return p;
     }
 
     private static void readArtifact(Element a, Path baseDir, String driver,
