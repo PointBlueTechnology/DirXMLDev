@@ -206,8 +206,12 @@ Identity Applications cache" after touching provisioning objects.
 3. **P2b typed ops** — Option B commands + `FormCheck` + PRD binding sync;
    parity test: a form authored by us re-saved by the vendor builder is
    semantically identical. (partly delegable once the model exists)
-4. **P4 deploy** — object kinds in the mapping/plan/deployer; spike P4a on the
-   test vault (needs Tomcat running) for runtime pickup. (me)
+4. ◐ **P4 deploy** (2026-09-11) — forms/PRDs in `ModelDiff`/`VaultMapping`/
+   `Plan`/`Deployer` (`ENSURE_CONTAINER` step, compact JSON on the wire, PRD
+   attributes, stamps + content checksum for customized objects, no driver
+   restart); **live on idm254: untouched vault diffs empty; scratch form
+   add/modify/delete verified** ([spikes/forms-deploy-live.md](spikes/forms-deploy-live.md)).
+   Open: runtime pickup by the Identity Applications (needs a PRD → after P2b).
 5. **P3 preview** — Option C. (delegable)
 6. Designer writer/reader parity (`export-project` adds forms + PRD digests),
    docs, skill recipes ("add a field to the request form of PRD X").
