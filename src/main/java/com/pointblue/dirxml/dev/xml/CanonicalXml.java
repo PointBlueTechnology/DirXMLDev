@@ -129,6 +129,22 @@ public final class CanonicalXml {
         return serialize(parse(xml));
     }
 
+    /**
+     * Re-parses {@code el} through this class's own parser/serializer pipeline
+     * and returns the resulting (structurally equivalent) element. Use this on
+     * content read through a different parser — e.g. the engine's own
+     * {@code XmlDocument} DOM, which (unlike a conformant JDK parser) does not
+     * normalize {@code \r\n} line endings in text content to {@code \n} on parse
+     * — <i>before</i> keeping it in a model that will later round-trip through
+     * {@link #parse}/{@link #serialize} itself (as the as-code tree does): without
+     * this, the first write (straight from the other parser's DOM) keeps the
+     * {@code \r}, while every later write (after an as-code read, which reparses
+     * with this class) does not, so the tree would never stabilize.
+     */
+    public static Element normalize(Element el) {
+        return parse(serialize(el)).getDocumentElement();
+    }
+
     // ------------------------------------------------------------------
     // Serialization internals
     // ------------------------------------------------------------------

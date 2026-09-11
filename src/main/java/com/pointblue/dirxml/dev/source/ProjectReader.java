@@ -3,11 +3,15 @@ package com.pointblue.dirxml.dev.source;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
+import com.pointblue.dirxml.dev.model.Prd;
+import com.pointblue.dirxml.dev.model.Provisioning;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
+import com.pointblue.dirxml.dev.xml.CanonicalXml;
 import com.pointblue.dirxml.sim.Xds;
 
 import org.w3c.dom.Element;
@@ -196,13 +200,318 @@ public final class ProjectReader {
             gcN++;
         }
 
+        Map<String, Driver> driversByDesignerId = new LinkedHashMap<>();
         for (String drvKey : relationKeys(m, "Idm:Drivers")) {
             String drvId = idOf(drvKey);
             if (idx.metaById.containsKey(drvId)) {
-                ds.drivers.add(readDriver(idx, drvId, ds));
+                Driver d = readDriver(idx, drvId, ds);
+                ds.drivers.add(d);
+                driversByDesignerId.put(drvId, d);
             }
         }
+        attachProvisioning(idx, ds, projectDir, driversByDesignerId);
         return ds;
+    }
+
+    // ---- provisioning (Model/Provisioning/<AppConfigDir>: JSON forms + PRDs) --------
+
+    /**
+     * Attaches each {@code Model/Provisioning/<AppConfigDir>} to its driver. A
+     * project ties an AppConfig folder to its driver indirectly: the folder's
+     * digest {@code <guid>} is also the id of an {@code .Application_} CObject
+     * elsewhere in the project (the "NProv" modeler node for that app), and
+     * <i>that</i> object holds an {@code Idm:Drivers} reference to the real
+     * driver — checked against {@code test11} (one AppConfig, resolves) and
+     * {@code testc7} (two AppConfigs; the second, "AppConfig1", doesn't resolve
+     * this way and there is no second Composer-shimmed driver to fall back to
+     * either — so it lands in {@code driverset.meta["provisioning.unresolved.*"]}
+     * rather than crashing or guessing). When the guid doesn't resolve, we fall
+     * back to the driver whose shim class is {@code com.novell.idm.driver.ComposerDriverShim},
+     * but only if the project has exactly one such driver and it doesn't already
+     * have provisioning attached (never overwrite an already-resolved one).
+     */
+    private static void attachProvisioning(Index idx, DriverSet ds, Path projectDir, Map<String, Driver> driversByDesignerId) {
+        Path provRoot = projectDir.resolve("Model").resolve("Provisioning");
+        if (!Files.isDirectory(provRoot)) {
+            return;
+        }
+        List<Path> dirs = new ArrayList<>();
+        try (Stream<Path> s = Files.list(provRoot)) {
+            s.filter(Files::isDirectory).sorted().forEach(dirs::add);
+        } catch (IOException e) {
+            return;
+        }
+        for (Path dir : dirs) {
+            String dirName = dir.getFileName().toString();
+            Path digestFile = dir.resolve(dirName + ".digest");
+            if (!Files.exists(digestFile)) {
+                continue;
+            }
+            Element digest;
+            try {
+                digest = Xds.parseFile(digestFile).getDocumentElement();
+            } catch (Exception e) {
+                continue;
+            }
+            String guid = firstChildText(digest, "guid");
+            String display = firstChildText(digest, "display");
+            Driver target = guid == null ? null : resolveDriverByAppGuid(idx, guid, driversByDesignerId);
+            if (target == null) {
+                target = fallbackComposerDriver(ds);
+            }
+            if (target == null || target.provisioning != null) {
+                ds.meta.put("provisioning.unresolved." + dirName,
+                    (guid == null ? "" : "guid=" + guid) + (display == null ? "" : " display='" + display + "'"));
+                continue;
+            }
+            Provisioning p = new Provisioning();
+            p.dn = target.dn != null ? "cn=AppConfig," + target.dn : null;
+            p.meta.put("designer.dir", dirName);
+            readFormsDir(dir.resolve("WorkflowForms"), p);
+            readPrdsDir(dir.resolve("RequestDefs"), p);
+            target.provisioning = p;
+        }
+    }
+
+    private static Driver resolveDriverByAppGuid(Index idx, String guid, Map<String, Driver> byDesignerId) {
+        Element app = idx.parseMeta(guid);
+        if (app == null) {
+            return null;
+        }
+        for (String key : relationKeys(app, "Idm:Drivers")) {
+            Driver d = byDesignerId.get(idOf(key));
+            if (d != null) {
+                return d;
+            }
+        }
+        return null;
+    }
+
+    /** The project's sole {@code ComposerDriverShim} driver, if exactly one and unclaimed; null otherwise. */
+    private static Driver fallbackComposerDriver(DriverSet ds) {
+        Driver only = null;
+        for (Driver d : ds.drivers) {
+            if ("com.novell.idm.driver.ComposerDriverShim".equals(d.shimClass)) {
+                if (only != null) {
+                    return null;
+                }
+                only = d;
+            }
+        }
+        return only;
+    }
+
+    private static void readFormsDir(Path workflowFormsDir, Provisioning p) {
+        if (!Files.isDirectory(workflowFormsDir)) {
+            return;
+        }
+        for (Form.Kind kind : Form.Kind.values()) {
+            Path dir = workflowFormsDir.resolve(kind.container);
+            if (!Files.isDirectory(dir)) {
+                continue;
+            }
+            String ext = "." + (kind == Form.Kind.REQUEST ? "formRequest" : kind == Form.Kind.APPROVAL ? "formApproval" : "formTemplate");
+            List<Path> files = new ArrayList<>();
+            try (Stream<Path> s = Files.list(dir)) {
+                s.filter(f -> f.getFileName().toString().endsWith(ext)).sorted().forEach(files::add);
+            } catch (IOException e) {
+                continue;
+            }
+            for (Path f : files) {
+                String fn = f.getFileName().toString();
+                String name = fn.substring(0, fn.length() - ext.length());
+                String json;
+                try {
+                    json = Files.readString(f, StandardCharsets.UTF_8);
+                } catch (IOException e) {
+                    continue;
+                }
+                Form form = new Form(kind, name, json);
+                Path digestFile = dir.resolve(name + ".digest");
+                if (Files.exists(digestFile)) {
+                    try {
+                        readItemDigestMeta(Xds.parseFile(digestFile).getDocumentElement(), form.meta);
+                    } catch (Exception e) {
+                        // no digest meta; content already captured
+                    }
+                }
+                p.forms.add(form);
+            }
+        }
+    }
+
+    private static void readPrdsDir(Path requestDefsDir, Provisioning p) {
+        if (!Files.isDirectory(requestDefsDir)) {
+            return;
+        }
+        List<Path> files = new ArrayList<>();
+        try (Stream<Path> s = Files.list(requestDefsDir)) {
+            s.filter(f -> f.getFileName().toString().endsWith(".prd")).sorted().forEach(files::add);
+        } catch (IOException e) {
+            return;
+        }
+        for (Path f : files) {
+            try {
+                p.prds.add(readPrdFile(f, requestDefsDir));
+            } catch (Exception e) {
+                // an unreadable PRD is skipped rather than failing the whole project
+            }
+        }
+    }
+
+    /**
+     * The {@code .prd} file is the union document ({@code docs/spikes/json-forms-format.md}
+     * §3): {@code <prov-req-defn>} containing {@code <provision-request>} and
+     * {@code <process>} inline. Split it: {@link Prd#request} is the removed
+     * {@code <provision-request>} child; {@link Prd#process}, like the vault, stays
+     * a child of {@link Prd#definition} too (see {@link Prd} class doc).
+     */
+    private static Prd readPrdFile(Path prdFile, Path dir) throws IOException {
+        // Xds/XmlDocument (the engine's own DOM) does not normalize \r\n line endings
+        // in text content the way a conformant parser does; CanonicalXml.normalize
+        // re-parses through our own pipeline so a PRD's content is already in the
+        // shape the as-code tree's own reader would produce (see its javadoc) —
+        // otherwise a script with CRLF line endings (seen on the test vault) would
+        // make the very first write differ from every write after a tree round trip.
+        Element root = CanonicalXml.normalize(Xds.parseFile(prdFile).getDocumentElement());
+        String fileName = prdFile.getFileName().toString();
+        String name = fileName.substring(0, fileName.length() - ".prd".length());
+
+        Element request = null;
+        List<Element> provReq = Xds.childrenByName(root, "provision-request");
+        if (!provReq.isEmpty()) {
+            request = provReq.get(0);
+            root.removeChild(request);
+        }
+        Element process = null;
+        List<Element> procs = Xds.childrenByName(root, "process");
+        if (!procs.isEmpty()) {
+            process = procs.get(0);
+        }
+
+        Path digestFile = dir.resolve(name + ".digest");
+        Element digest = null;
+        if (Files.exists(digestFile)) {
+            try {
+                digest = Xds.parseFile(digestFile).getDocumentElement();
+                String cn = digest.getAttribute("cn");
+                if (cn.startsWith("cn=")) {
+                    name = cn.substring(3);
+                }
+            } catch (Exception e) {
+                // keep the filename-derived name
+            }
+        }
+
+        Prd prd = new Prd(name);
+        prd.definition = root;
+        prd.request = request;
+        prd.process = process;
+
+        putProjectProp(prd, "status", root.getAttribute("status"));
+        putProjectProp(prd, "flow-strategy", root.getAttribute("flow-strategy"));
+        putProjectProp(prd, "grant", root.getAttribute("grant"));
+        putProjectProp(prd, "revoke", root.getAttribute("revoke"));
+        putProjectProp(prd, "category-key", root.getAttribute("prov-category"));
+        if (process != null) {
+            putProjectProp(prd, "process-type", process.getAttribute("process-type"));
+        }
+        // vault shape: one value, "lang~text" pairs joined by "|" (verified against
+        // the test vault's srvprvLocalizedNames/Descrs) — built here the same way so
+        // the project and the vault compare equal.
+        String names = joinLangText(root, "display-name");
+        if (names != null) {
+            prd.properties.put("localized-names", new ArrayList<>(List.of(names)));
+        }
+        String descrs = joinLangText(root, "description");
+        if (descrs != null) {
+            prd.properties.put("localized-descrs", new ArrayList<>(List.of(descrs)));
+        }
+        String enDescr = langText(root, "description", "en");
+        if (enDescr != null) {
+            prd.properties.put("description", new ArrayList<>(List.of(enDescr)));
+        }
+
+        if (digest != null) {
+            readItemDigestMeta(digest, prd.meta);
+        }
+        return prd;
+    }
+
+    private static void putProjectProp(Prd prd, String key, String value) {
+        if (value != null && !value.isEmpty()) {
+            prd.properties.put(key, new ArrayList<>(List.of(value)));
+        }
+    }
+
+    /** {@code lang~text|lang~text|…} over every {@code <childName xml:lang>} child, document order. */
+    private static String joinLangText(Element root, String childName) {
+        List<Element> els = Xds.childrenByName(root, childName);
+        if (els.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Element el : els) {
+            String lang = xmlLang(el);
+            String text = Xds.text(el);
+            if (lang == null || text == null) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append('|');
+            }
+            sb.append(lang).append('~').append(text);
+        }
+        return sb.length() == 0 ? null : sb.toString();
+    }
+
+    private static String langText(Element root, String childName, String lang) {
+        for (Element el : Xds.childrenByName(root, childName)) {
+            if (lang.equals(xmlLang(el))) {
+                return Xds.text(el);
+            }
+        }
+        return null;
+    }
+
+    private static String xmlLang(Element el) {
+        String v = el.getAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
+        if (v != null && !v.isEmpty()) {
+            return v;
+        }
+        v = el.getAttribute("xml:lang");
+        return v.isEmpty() ? null : v;
+    }
+
+    private static String firstChildText(Element parent, String localName) {
+        List<Element> c = Xds.childrenByName(parent, localName);
+        return c.isEmpty() ? null : Xds.text(c.get(0));
+    }
+
+    /** Digest {@code <item .../>} attributes/children -&gt; {@code project.*} meta keys (docs/forms.md §3). */
+    private static void readItemDigestMeta(Element digest, Map<String, String> meta) {
+        putAttrMeta(digest, "protected", meta, "project.protected");
+        putAttrMeta(digest, "readonly", meta, "project.readonly");
+        putChildTextMeta(digest, "guid", meta, "project.guid");
+        putChildTextMeta(digest, "dirguid", meta, "project.dirguid");
+        putChildTextMeta(digest, "dirrev", meta, "project.dirrev");
+        putChildTextMeta(digest, "package-id", meta, "project.package-id");
+        putChildTextMeta(digest, "pkg-assoc-id", meta, "project.pkg-assoc-id");
+        putChildTextMeta(digest, "pkg-checksum", meta, "project.pkg-checksum");
+    }
+
+    private static void putAttrMeta(Element el, String attrName, Map<String, String> meta, String key) {
+        String v = el.getAttribute(attrName);
+        if (v != null && !v.isEmpty()) {
+            meta.put(key, v);
+        }
+    }
+
+    private static void putChildTextMeta(Element el, String childName, Map<String, String> meta, String key) {
+        String v = firstChildText(el, childName);
+        if (v != null && !v.isEmpty()) {
+            meta.put(key, v);
+        }
     }
 
     private static void readLibrary(Index idx, String libId, DriverSet ds) {
