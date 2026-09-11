@@ -245,8 +245,9 @@ Identity Applications cache" after touching provisioning objects.
    `Plan`/`Deployer` (`ENSURE_CONTAINER` step, compact JSON on the wire, PRD
    attributes, stamps + content checksum for customized objects, no driver
    restart); **live on idm254: untouched vault diffs empty; scratch form
-   add/modify/delete verified** ([spikes/forms-deploy-live.md](spikes/forms-deploy-live.md)).
-   Open: runtime pickup by the Identity Applications (needs a PRD → after P2b).
+   add/modify/delete verified; a scratch PRD from `prd.add` picked up by the
+   Identity Applications with no cache flush, its form served exactly like a
+   stock one** ([spikes/forms-deploy-live.md](spikes/forms-deploy-live.md)). ✅
 5. ✅ **P3 preview** (2026-09-11) — `form.preview` (`forms.FormPreview`):
    self-contained page with the vendored open-source Form.io renderer 4.21.7
    (MIT) and placeholder components for the NetIQ types; live data sources
@@ -277,9 +278,13 @@ Identity Applications cache" after touching provisioning objects.
 
 ### Human spike (step 6, pending)
 
-Jerry opens `~/designer_workspace/test11rt-forms` (a copy of `test11` that
-`export-project` updated with the `form.add`/`prd.add` example above) from the
-file system in Designer and checks:
+Jerry opens `~/designer_workspace/test11pf` (a copy of `test11` — `.proj`,
+`.cproj` and `.project` renamed to match the folder — that `export-project`
+updated from `~/IdeaProjects/DirXMLDev-e2e/tree-test11pf`: `form.add` of
+"DirXMLDev Writer Test" from "Request Form" + a required textarea
+`justification` + `form.localize --sync`, and `prd.add` of "DirXMLDev Writer
+PRD" from `NoApproval` with `justification` mapped; exactly four files differ
+from `test11`) from the file system in Designer and checks:
 
 1. The project imports without a "repair" prompt or error.
 2. Under the User Application driver's Provisioning → Workflow Forms →
