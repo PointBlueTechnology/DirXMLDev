@@ -1,0 +1,88 @@
+{
+  "label": "",
+  "hideLabel": true,
+  "disableAddingRemovingRows": true,
+  "defaultOpen": false,
+  "layoutFixed": false,
+  "enableRowGroups": false,
+  "reorder": false,
+  "mask": false,
+  "tableView": true,
+  "alwaysEnabled": false,
+  "type": "datagrid",
+  "input": true,
+  "key": "",
+  "customDefaultValue": "\nvalue = [{\"preActivity_SourceExpression\": \"\",\"preActivity_TargetFormField\": \"\",\"preActivity_DataType\": \"\"}];\n",
+  "components": [],
+  "logic": [
+    {
+      "name": "Refresh preActivity mapping",
+      "trigger": {
+        "type": "javascript",
+        "javascript": "\nvar key = utils.getSelectFieldKey(form.components,instance.component.parentKey);\nvar selectFieldValue = utils.findValueGivenAKey(data,key); \nvar currentPreActivityValue = utils.getValueFromDataItemMappingKeyValuePair(instance.component.activityType+key);\nif(currentPreActivityValue === \"not found\"){\n  utils.addToDataItemMappingKeyValuePair(instance.component.activityType+key, selectFieldValue);\n  if(!utils.isEmptyString(selectFieldValue)){\n    result = true;\n  }\n  else{\n    result = false;\n  }\n}\nelse{\n  if(!utils.isEmptyString(selectFieldValue) && currentPreActivityValue !== selectFieldValue){\n         utils.updateDataItemMappingKeyValuePair(instance.component.activityType+key,selectFieldValue);\n     result = true;\n  }else{\n    result = false;\n  }\n}"
+      },
+      "actions": [
+        {
+          "name": "Fetch form fields for preActivity mapping",
+          "type": "value",
+          "value": "\nvar key = utils.getSelectFieldKey(form.components,instance.component.parentKey);\nvar selectFieldValue = utils.findValueGivenAKey(data,key);\nif(utils.getValueFromDataItemMappingKeyValuePair('postActivity'+key) !== selectFieldValue){\n var postKey = instance.component.parentKey+\"_postActivity\";\nutils.setValueGivenAKey(data,postKey,undefined);\n}\n\nutils.getFieldsForDataItemMapping(selectFieldValue,instance.component.key, instance.component.activityType).then((data)=>\n{\n instance.setFieldValue(data);       \n}).catch((error)=>\n{\n  var temp = [ {\n       \"preActivity_SourceExpression\": \"\",\n       \"preActivity_TargetFormField\": \"\",\n       \"preActivity_DataType\": \"\"\n  }];\n  \n instance.setFieldValue(temp); console.error(error);\n});\n"
+        }
+      ]
+    }
+  ],
+  "activityType": "preActivity",
+  "parentKey": "requestDataItemMapping",
+  "tab": 0,
+  "defaultValue": [
+    {
+      "postActivity_SourceFormField": "",
+      "postActivity_TargetExpression": "",
+      "postActivity_DataType": ""
+    }
+  ],
+  "validate": {
+    "customMessage": "",
+    "json": "",
+    "required": false,
+    "custom": "",
+    "customPrivate": false
+  },
+  "conditional": {
+    "show": "",
+    "when": "",
+    "json": "",
+    "eq": ""
+  },
+  "addAnother": "",
+  "groupToggle": false,
+  "encrypted": false,
+  "customConditional": "",
+  "placeholder": "",
+  "prefix": "",
+  "customClass": "",
+  "suffix": "",
+  "multiple": false,
+  "protected": false,
+  "unique": false,
+  "persistent": true,
+  "hidden": false,
+  "clearOnHide": true,
+  "dataGridLabel": false,
+  "labelPosition": "top",
+  "labelWidth": 30,
+  "labelMargin": 3,
+  "description": "",
+  "errorLabel": "",
+  "tooltip": "",
+  "tabindex": "",
+  "disabled": false,
+  "autofocus": false,
+  "dbIndex": false,
+  "calculateValue": "",
+  "allowCalculateOverride": false,
+  "widget": null,
+  "refreshOn": "",
+  "clearOnRefresh": false,
+  "validateOn": "change",
+  "tree": true
+}
