@@ -331,6 +331,17 @@ public final class Plan {
             }
         }
 
+        boolean provisioningTouched = !provisioning.isEmpty();
+        for (ModelDiff.Change c : diff.changes()) {
+            if (c.kind.isProvisioning()) {
+                provisioningTouched = true;
+            }
+        }
+        if (provisioningTouched) {
+            p.notes.add("provisioning objects change: the Identity Applications may cache forms and PRDs — "
+                + "flush the cache (Administration → Caching) or restart the applications if a change is not visible "
+                + "(runtime pickup not yet measured, see docs/spikes/forms-deploy-live.md)");
+        }
         p.steps.addAll(containers);
         p.steps.addAll(library);
         p.steps.addAll(driverScope);

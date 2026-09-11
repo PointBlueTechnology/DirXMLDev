@@ -277,8 +277,6 @@ public final class Deployer {
             case ENSURE_CONTAINER:
                 if (!vault.exists(s.dn)) {
                     vault.add(s.dn, s.objectClasses, s.values);
-                } else {
-                    r.skipped.add(s.description + " — already there");
                 }
                 break;
             case START_OPTION:
