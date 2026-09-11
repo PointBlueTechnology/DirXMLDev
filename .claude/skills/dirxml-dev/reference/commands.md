@@ -37,8 +37,21 @@ Edit a form (transactions; each re-syncs the PRD bindings that reference it):
 - `form.sync tree/ --form <form> [--driver D]` — re-normalize a document saved into the tree and re-sync bindings.
 Binding sync = Designer's rules (request-form field list from the components;
 approval bindings are references; data items are kept/pruned, never invented —
-map a new field explicitly, see P2b). Packaged forms/PRDs: never refused,
+map a new field explicitly, see below). Packaged forms/PRDs: never refused,
 marked customized, baselined under `.package-baseline/`.
+
+Typed operations (P2b — no GUI; every one re-syncs bindings the same way):
+- `form.add <tree> --kind request|approval|template --name N [--from <form>] [--title T] [--driver D]` — blank, or a copy of another form's document.
+- `form.field.add <tree> <form> --key K --type T [--label L] [--required] [--hidden] [--multiple] [--after K|--before K|--first] [--in <container>] [--json '<extra>'] [--minimal] [--driver D]` — a captured builder template for `T` (or `--minimal`'s `{label,key,type,input}`), placed and flagged as asked; refuses a duplicate key anywhere in the document.
+- `form.field.set <tree> <form> --key K [--label L] [--required true|false] [--hidden true|false] [--multiple true|false] [--type T] [--prop path=value]… [--driver D]` — `--prop` is a dotted path, JSON-typed value.
+- `form.field.remove <tree> <form> --key K [--driver D]` — refuses while a PRD data item maps it unless `--force` (the sync then prunes the mapping).
+- `form.field.move <tree> <form> --key K (--after K|--before K|--first|--last) [--in <container>] [--driver D]` — reorder or reparent.
+- `form.set <tree> <form> (--title T|--display form|workflowWizard|--inline-script <file>|--external-script <url> [--remove]) [--driver D]` — top-level properties; a script is reviewed as a file.
+- `form.localize <tree> <form> --lang L (--set "Label=Text"…|--sync) [--driver D]` — `--sync` tops up every declared language with an entry (English/source text) for anything missing.
+- `form.rename <tree> <form> --to N [--driver D]` — rewrites every `form-id` reference and `flowdata.<act>/<old>/` prefix across the driver's PRDs.
+- `form.delete <tree> <form> [--driver D]` — refuses while any PRD binds it (`--force` never overrides that); a packaged form needs `--force`.
+- `prd.map <tree> <prd> --field K [--activity A] [--target <expr>|--source <expr>] [--unmap]` — the explicit mapping step binding sync never does; default target/source follow BindingSync's own conventions (`flowdata.<start>/<form id_>/K`, `flowdata.get('<start>/<request form id_>/K')`).
+- `prd.add <tree> --name N --from-template <template PRD> --request-form F [--approval-form G] [--category K] [--display-name "lang~Text"] [--driver D]` — copies a template PRD (status `Template`) into a new Active one; the request field list is rebuilt by binding sync, mappings kept only where the field still exists.
 
 ## Change (transactions; `--dry-run`, `--force` — don't)
 
