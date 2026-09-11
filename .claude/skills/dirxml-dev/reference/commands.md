@@ -53,6 +53,11 @@ Typed operations (P2b — no GUI; every one re-syncs bindings the same way):
 - `prd.map <tree> <prd> --field K [--activity A] [--target <expr>|--source <expr>] [--unmap]` — the explicit mapping step binding sync never does; default target/source follow BindingSync's own conventions (`flowdata.<start>/<form id_>/K`, `flowdata.get('<start>/<request form id_>/K')`).
 - `prd.add <tree> --name N --from-template <template PRD> --request-form F [--approval-form G] [--category K] [--display-name "lang~Text"] [--driver D]` — copies a template PRD (status `Template`) into a new Active one; the request field list is rebuilt by binding sync, mappings kept only where the field still exists.
 
+Look at a form without the Identity Applications:
+- `form.preview tree/ <form> [--driver D] [--out page.html] [--lang en]` — a self-contained HTML page (open-source Form.io renderer + placeholders for the NetIQ component types; live data sources are not fetched). Open it in a browser; it is a layout/conditional check, not the vendor renderer.
+
+Deploy: forms and PRDs ride the normal `vault.diff`/`vault.deploy`/`vault.rollback` (no driver restart; the plan says when the Identity Applications may need a cache flush).
+
 ## Change (transactions; `--dry-run`, `--force` — don't)
 
 `policy.add` `resource.add` `artifact.set-content` `artifact.rename` `artifact.delete` `policy.link` `policy.unlink` `policy.reorder`

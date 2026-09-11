@@ -247,7 +247,10 @@ Identity Applications cache" after touching provisioning objects.
    restart); **live on idm254: untouched vault diffs empty; scratch form
    add/modify/delete verified** ([spikes/forms-deploy-live.md](spikes/forms-deploy-live.md)).
    Open: runtime pickup by the Identity Applications (needs a PRD → after P2b).
-5. **P3 preview** — Option C. (delegable)
+5. ✅ **P3 preview** (2026-09-11) — `form.preview` (`forms.FormPreview`):
+   self-contained page with the vendored open-source Form.io renderer 4.21.7
+   (MIT) and placeholder components for the NetIQ types; live data sources
+   neutralized; verified on the stock Help-desk request form.
 6. Designer writer/reader parity (`export-project` adds forms + PRD digests),
    docs, skill recipes ("add a field to the request form of PRD X").
 

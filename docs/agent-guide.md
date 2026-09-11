@@ -128,6 +128,17 @@ no components, a duplicate or missing key, an unknown component type, a
 doesn't compile, a request form with no button, incomplete localization, and a
 PRD binding/mapping that's stale, drifted, or unbound.
 
+To look at a form before deploying it, without the Identity Applications:
+
+```bash
+bin/idm form.preview tree/ "Help-desk Request Form" --out helpdesk.html   # self-contained page: open-source Form.io renderer + placeholders for NetIQ components
+```
+
+It is a layout and conditional-logic check (live data sources are shown as
+"not fetched"), not the vendor renderer. Deploying forms and PRDs is the
+normal `vault.diff` → `vault.deploy` → verify path; no driver restarts, and
+the plan says when the Identity Applications may need a cache flush.
+
 ## Two kinds of change
 
 **Content** — the rules inside a policy, a stylesheet, a script, a table's rows:
