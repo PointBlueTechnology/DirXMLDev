@@ -144,6 +144,85 @@ public final class Registry {
             req("form", "form name, kind/name or driver/kind/name"),
             opt("driver", "the User Application driver"));
 
+        // provisioning: typed form/PRD operations (Track P step P2b)
+        Arg formRef = req("form", "form name, kind/name (request|approval|template) or driver/kind/name");
+        Arg formDriver = opt("driver", "the User Application driver (needed when several drivers have a form of that name)");
+        register("form.add", "create a new form (blank, or --from another form's document)",
+            a -> new FormOps.Add(a.get("driver"), a.get("kind"), a.get("name"), a.get("from"), a.get("title")),
+            req("kind", "request|approval|template"), req("name", "the new form's name"),
+            opt("from", "copy this form's document (new title)"), opt("title", "the new form's title (default: its name)"),
+            driver);
+
+        register("form.field.add", "add a new component to a form",
+            a -> new FormOps.FieldAdd(a.get("driver"), a.get("form"), a.get("key"), a.get("type"), a.get("label"),
+                a.containsKey("required"), a.containsKey("hidden"), a.containsKey("multiple"), a.containsKey("minimal"),
+                a.get("after"), a.get("before"), a.containsKey("first"), a.get("in"), a.get("json")),
+            formRef, req("key", "the new component's key"), req("type", "component type (a captured template name, or any Form.io type)"),
+            opt("label", "label text"), opt("required", "flag: validate.required = true"), opt("hidden", "flag: hidden = true"),
+            opt("multiple", "flag: multiple = true"), opt("minimal", "flag: force the minimal {label,key,type,input} shape"),
+            opt("after", "place after this key"), opt("before", "place before this key"), opt("first", "flag: place first"),
+            opt("in", "place inside this container/panel/columns component (its first column, if columns)"),
+            opt("json", "extra properties as a JSON object, deep-merged in last"), formDriver);
+
+        register("form.field.set", "change an existing component's properties",
+            a -> new FormOps.FieldSet(a.get("driver"), a.get("form"), a.get("key"), a.get("label"),
+                boolOrNull(a.get("required")), boolOrNull(a.get("hidden")), boolOrNull(a.get("multiple")), a.get("type"),
+                repeatable(a.get("prop"))),
+            formRef, req("key", "the component's key"), opt("label", "new label"),
+            opt("required", "true|false"), opt("hidden", "true|false"), opt("multiple", "true|false"), opt("type", "new component type"),
+            opt("prop", "dotted-path=JSON-value (repeat --prop for each, e.g. validate.maxLength=50)"), formDriver);
+
+        register("form.field.remove", "remove a component; refuses while a PRD data item maps it unless --force",
+            a -> new FormOps.FieldRemove(a.get("driver"), a.get("form"), a.get("key")),
+            formRef, req("key", "the component's key"), formDriver);
+
+        register("form.field.move", "reorder or reparent a component",
+            a -> new FormOps.FieldMove(a.get("driver"), a.get("form"), a.get("key"), a.get("after"), a.get("before"),
+                a.containsKey("first"), a.containsKey("last"), a.get("in")),
+            formRef, req("key", "the component's key"), opt("after", "place after this key"), opt("before", "place before this key"),
+            opt("first", "flag: place first"), opt("last", "flag: place last"),
+            opt("in", "reparent inside this container/panel/columns component"), formDriver);
+
+        register("form.set", "change a form's title, display mode, inline script (from a file) or an external script",
+            a -> new FormOps.SetForm(a.get("driver"), a.get("form"), a.get("title"), a.get("display"),
+                scriptFileOf(a.get("inline-script")), a.get("external-script"), a.containsKey("remove")),
+            formRef, opt("title", "new title"), opt("display", "form|workflowWizard"),
+            opt("inline-script", "a file holding the new inlinescripts text"),
+            opt("external-script", "a script URL to add (or remove, with --remove)"),
+            opt("remove", "flag: with --external-script, remove it instead of adding it"), formDriver);
+
+        register("form.localize", "set explicit localized strings, or top up every declared language with missing entries",
+            a -> new FormOps.Localize(a.get("driver"), a.get("form"), a.get("lang"), repeatable(a.get("set")), a.containsKey("sync")),
+            formRef, req("lang", "language code, e.g. fr"),
+            opt("set", "Label=Localized (repeat --set for each)"),
+            opt("sync", "flag: add, to every declared language, an entry for every label/placeholder/tooltip/option/button text missing one"),
+            formDriver);
+
+        register("form.rename", "rename a form and rewrite every PRD reference to it (form-id attributes and flowdata prefixes)",
+            a -> new FormOps.Rename(a.get("driver"), a.get("form"), a.get("to")),
+            formRef, req("to", "the new name"), formDriver);
+
+        register("form.delete", "delete a form; refuses while any PRD binds it (never overridden by --force); a packaged form needs --force",
+            a -> new FormOps.Delete(a.get("driver"), a.get("form")),
+            formRef, formDriver);
+
+        register("prd.map", "add, replace or (--unmap) remove a field's data-item mapping",
+            a -> new FormOps.PrdMap(a.get("driver"), a.get("prd"), a.get("field"), a.get("activity"),
+                a.get("target"), a.get("source"), a.containsKey("unmap")),
+            req("prd", "PRD name"), req("field", "the form field's key"),
+            opt("activity", "map an approval activity's data item instead of the request form's"),
+            opt("target", "override the default flowdata target (request form only)"),
+            opt("source", "override the default flowdata.get(...) source (activity only; required if the request form has no same-named field)"),
+            opt("unmap", "flag: remove the mapping instead"), driver);
+
+        register("prd.add", "copy a template PRD (status Template) into a new Active PRD bound to the given forms",
+            a -> new FormOps.PrdAdd(a.get("driver"), a.get("name"), a.get("from-template"), a.get("request-form"),
+                a.get("approval-form"), a.get("category"), a.get("display-name")),
+            req("name", "the new PRD's name"), req("from-template", "the template PRD's name (status Template, e.g. NoApproval)"),
+            req("request-form", "the request form to bind"), opt("approval-form", "the approval form to bind to the first user-activity, if any"),
+            opt("category", "prov-category (default: the template's)"), opt("display-name", "lang~Text override for one language (default: the new PRD's name, every language)"),
+            driver);
+
         register("policy.link", "link an artifact into a driver's policy set",
             a -> new ArtifactOps.Link(a.get("path"), a.get("driver"), setOf(a.get("set")),
                 a.containsKey("at") ? ArtifactOps.Position.parse(a.get("at")) : null),
@@ -301,6 +380,32 @@ public final class Registry {
     private static String contentOf(Map<String, String> a) throws IOException {
         String f = a.get("content-file");
         return f == null || f.isBlank() ? null : Files.readString(Paths.get(f), StandardCharsets.UTF_8);
+    }
+
+    private static String scriptFileOf(String file) throws IOException {
+        return file == null || file.isBlank() ? null : Files.readString(Paths.get(file), StandardCharsets.UTF_8);
+    }
+
+    /** {@code "true"}/{@code "false"} -> a boolean; anything else (including absent) -> null (unchanged). */
+    private static Boolean boolOrNull(String v) {
+        if (v == null) {
+            return null;
+        }
+        if (v.equalsIgnoreCase("true")) {
+            return Boolean.TRUE;
+        }
+        if (v.equalsIgnoreCase("false")) {
+            return Boolean.FALSE;
+        }
+        return null;
+    }
+
+    /** A repeatable {@code --arg} (joined with {@code \n} by the CLI) split back into its values; empty list when absent. */
+    private static List<String> repeatable(String joined) {
+        if (joined == null || joined.isBlank()) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(Arrays.asList(joined.split("\n")));
     }
 
     /** Check required args are present; returns the problem or null. */
