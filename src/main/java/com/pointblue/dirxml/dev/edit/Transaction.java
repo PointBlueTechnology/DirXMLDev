@@ -55,6 +55,7 @@ public final class Transaction {
     private final Map<Path, String> pendingBaselines = new LinkedHashMap<>();
     private final Set<Path> pendingBaselineDeletes = new LinkedHashSet<>();
     private final Set<String> customizedNow = new LinkedHashSet<>();
+    private boolean force;
 
     private Transaction(Path tree, DriverSet ds, Validator validator) {
         this.tree = tree;
@@ -76,6 +77,17 @@ public final class Transaction {
 
     public Path tree() {
         return tree;
+    }
+
+    /**
+     * Whether this run was given {@code --force}. Most operations don't need this —
+     * {@code force} already governs whether new validation errors block the write
+     * (see {@link #run}) — but a few (e.g. {@code form.field.remove}, {@code form.delete})
+     * use it as an explicit go-ahead for a refusal that validation would never itself
+     * flag as an error (removing a still-mapped field, deleting a packaged form).
+     */
+    public boolean force() {
+        return force;
     }
 
     // ---- what operations tell the transaction ----
@@ -140,6 +152,7 @@ public final class Transaction {
 
     /** Apply the operation and write (unless dryRun); never throws for a refusal or a new error. */
     public Result run(Operation op, boolean dryRun, boolean force) throws IOException {
+        this.force = force;
         Result r = new Result(op.name());
         r.dryRun = dryRun;
         Report before = validator.validate(ds);
