@@ -1,8 +1,12 @@
 package com.pointblue.dirxml.dev.deploy;
 
+import com.pointblue.dirxml.dev.json.Json;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Form;
+import com.pointblue.dirxml.dev.model.Prd;
+import com.pointblue.dirxml.dev.model.Provisioning;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
@@ -39,7 +43,14 @@ public final class ModelDiff {
     public enum Kind {
         ARTIFACT_ADDED, ARTIFACT_REMOVED, ARTIFACT_CHANGED, ARTIFACT_KIND_CHANGED,
         DRIVER_ADDED, DRIVER_REMOVED, DRIVER_SETTING, DRIVER_CONFIG, DRIVER_LINKAGE, DRIVER_STAMPS,
-        DRIVERSET_GCVS, DRIVERSET_LINKAGE
+        DRIVERSET_GCVS, DRIVERSET_LINKAGE,
+        FORM_ADDED, FORM_REMOVED, FORM_CHANGED, PRD_ADDED, PRD_REMOVED, PRD_CHANGED;
+
+        /** Provisioning objects (JSON forms, PRDs) are read by the Identity Applications, not the engine: no driver restart. */
+        public boolean isProvisioning() {
+            return this == FORM_ADDED || this == FORM_REMOVED || this == FORM_CHANGED
+                || this == PRD_ADDED || this == PRD_REMOVED || this == PRD_CHANGED;
+        }
     }
 
     /**
@@ -121,7 +132,7 @@ public final class ModelDiff {
             return new ArrayList<>(affected);
         }
         for (Change c : changes) {
-            if (c.driver != null && c.kind != Kind.DRIVER_ADDED && c.kind != Kind.DRIVER_REMOVED) {
+            if (c.driver != null && c.kind != Kind.DRIVER_ADDED && c.kind != Kind.DRIVER_REMOVED && !c.kind.isProvisioning()) {
                 affected.add(c.driver);
             }
         }
@@ -268,6 +279,7 @@ public final class ModelDiff {
             diffDriverSettings(a, b);
             diffDriverConfig(a, b);
             diffDriverLinkage(a, b);
+            diffProvisioning(a, b);
         }
 
         diffDriverSetGcvs();
@@ -371,6 +383,149 @@ public final class ModelDiff {
             changes.add(new Change(Kind.ARTIFACT_CHANGED, a.driver, a.path(), "package-stamps",
                 "~ package stamps " + describeKind(a) + " " + a.path(), String.join("\n", lines)));
         }
+    }
+
+    // ---- provisioning (JSON forms + PRDs) ----
+
+    /** Paths: {@code drivers/<d>/provisioning/forms/<kind>/<name>} and {@code drivers/<d>/provisioning/prds/<name>}. */
+    public static String formPath(Driver d, Form f) {
+        return "drivers/" + d.name + "/provisioning/forms/" + f.kind.dir + "/" + f.name;
+    }
+
+    public static String prdPath(Driver d, Prd p) {
+        return "drivers/" + d.name + "/provisioning/prds/" + p.name;
+    }
+
+    private void diffProvisioning(Driver a, Driver b) {
+        Provisioning pa = a.provisioning;
+        Provisioning pb = b.provisioning;
+        if (pa == null && pb == null) {
+            return;
+        }
+        Map<String, Form> fromForms = new TreeMap<>();
+        Map<String, Form> toForms = new TreeMap<>();
+        if (pa != null) {
+            for (Form f : pa.forms) {
+                fromForms.put(f.kind.dir + "/" + f.name, f);
+            }
+        }
+        if (pb != null) {
+            for (Form f : pb.forms) {
+                toForms.put(f.kind.dir + "/" + f.name, f);
+            }
+        }
+        Set<String> keys = new TreeSet<>(fromForms.keySet());
+        keys.addAll(toForms.keySet());
+        for (String k : keys) {
+            Form x = fromForms.get(k);
+            Form y = toForms.get(k);
+            if (x == null) {
+                changes.add(new Change(Kind.FORM_ADDED, b.name, formPath(b, y), null, "+ added form " + formPath(b, y), null));
+            } else if (y == null) {
+                changes.add(new Change(Kind.FORM_REMOVED, a.name, formPath(a, x), null, "- removed form " + formPath(a, x), null));
+            } else {
+                formMaybeChanged(a, x, y);
+            }
+        }
+        Map<String, Prd> fromPrds = new TreeMap<>();
+        Map<String, Prd> toPrds = new TreeMap<>();
+        if (pa != null) {
+            for (Prd p : pa.prds) {
+                fromPrds.put(p.name, p);
+            }
+        }
+        if (pb != null) {
+            for (Prd p : pb.prds) {
+                toPrds.put(p.name, p);
+            }
+        }
+        Set<String> names = new TreeSet<>(fromPrds.keySet());
+        names.addAll(toPrds.keySet());
+        for (String n : names) {
+            Prd x = fromPrds.get(n);
+            Prd y = toPrds.get(n);
+            if (x == null) {
+                changes.add(new Change(Kind.PRD_ADDED, b.name, prdPath(b, y), null, "+ added PRD " + prdPath(b, y), null));
+            } else if (y == null) {
+                changes.add(new Change(Kind.PRD_REMOVED, a.name, prdPath(a, x), null, "- removed PRD " + prdPath(a, x), null));
+            } else {
+                prdMaybeChanged(a, x, y);
+            }
+        }
+    }
+
+    /** Forms compare as parsed JSON (the tree is pretty, the vault compact); stamps when the document is the same. */
+    private void formMaybeChanged(Driver d, Form x, Form y) {
+        Object ox;
+        Object oy;
+        try {
+            ox = Json.parse(x.json);
+            oy = Json.parse(y.json);
+        } catch (RuntimeException e) {
+            ox = x.json;
+            oy = y.json;
+        }
+        if (!Objects.equals(ox, oy)) {
+            String oldText = ox instanceof String ? x.json : Json.pretty(ox);
+            String newText = oy instanceof String ? y.json : Json.pretty(oy);
+            changes.add(new Change(Kind.FORM_CHANGED, d.name, formPath(d, y), null,
+                "~ changed form " + formPath(d, y), textDiff(oldText, newText)));
+            return;
+        }
+        List<String> lines = stampLines(x.meta, y.meta);
+        if (!lines.isEmpty()) {
+            changes.add(new Change(Kind.FORM_CHANGED, d.name, formPath(d, y), "package-stamps",
+                "~ package stamps form " + formPath(d, y), String.join("\n", lines)));
+        }
+    }
+
+    /** PRDs compare their three XML parts canonically plus their plain properties; stamps otherwise. */
+    private void prdMaybeChanged(Driver d, Prd x, Prd y) {
+        List<String> lines = new ArrayList<>();
+        String[][] parts = {
+            {"definition", serializeOrNull(x.definition), serializeOrNull(y.definition)},
+            {"request", serializeOrNull(x.request), serializeOrNull(y.request)},
+            {"process", serializeOrNull(x.process), serializeOrNull(y.process)},
+        };
+        for (String[] p : parts) {
+            if (!Objects.equals(p[1], p[2])) {
+                lines.add("## " + p[0]);
+                lines.add(textDiff(p[1] == null ? "" : p[1], p[2] == null ? "" : p[2]));
+            }
+        }
+        Set<String> props = new TreeSet<>(x.properties.keySet());
+        props.addAll(y.properties.keySet());
+        for (String k : props) {
+            List<String> vx = x.properties.get(k);
+            List<String> vy = y.properties.get(k);
+            if (!Objects.equals(vx, vy)) {
+                lines.add("- " + k + ": " + display(vx == null ? null : String.join(" | ", vx)));
+                lines.add("+ " + k + ": " + display(vy == null ? null : String.join(" | ", vy)));
+            }
+        }
+        if (!lines.isEmpty()) {
+            changes.add(new Change(Kind.PRD_CHANGED, d.name, prdPath(d, y), null,
+                "~ changed PRD " + prdPath(d, y), String.join("\n", lines)));
+            return;
+        }
+        List<String> stamps = stampLines(x.meta, y.meta);
+        if (!stamps.isEmpty()) {
+            changes.add(new Change(Kind.PRD_CHANGED, d.name, prdPath(d, y), "package-stamps",
+                "~ package stamps PRD " + prdPath(d, y), String.join("\n", stamps)));
+        }
+    }
+
+    private static List<String> stampLines(Map<String, String> ma, Map<String, String> mb) {
+        List<String> lines = new ArrayList<>();
+        for (String k : com.pointblue.dirxml.dev.deploy.VaultMapping.STAMP_KEYS) {
+            String x = ma.get(k);
+            String y = mb.get(k);
+            if (!Objects.equals(x, y)) {
+                lines.add("- " + k + ": " + display(x));
+                lines.add("+ " + k + ": " + display(y));
+            }
+        }
+        return lines;
     }
 
     private void kindChanged(Artifact a, Artifact b) {

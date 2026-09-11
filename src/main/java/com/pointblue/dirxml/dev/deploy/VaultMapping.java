@@ -284,6 +284,139 @@ public final class VaultMapping {
         return out;
     }
 
+    // ---- provisioning (JSON forms + PRDs under a driver's cn=AppConfig) ----
+
+    public static final String JSON_DATA = "srvprvJSONData";
+    public static final String REQUEST_XML = "srvprvRequestXML";
+    public static final String PROCESS_XML = "srvprvProcessXML";
+    public static final String OC_JSON_FORM = "srvprvJSONForm";
+    public static final String OC_JSON_FORMS = "srvprvJSONForms";
+    public static final String OC_REQUEST = "srvprvRequest";
+    public static final String OC_REQUEST_DEFS = "srvprvRequestDefs";
+
+    /** PRD property key (as the model stores it) → vault attribute. */
+    public static final Map<String, String> PRD_PROPERTY_ATTRS;
+
+    static {
+        Map<String, String> m = new LinkedHashMap<>();
+        m.put("status", "srvprvStatus");
+        m.put("flow-strategy", "srvprvFlowStrategy");
+        m.put("grant", "srvprvGrant");
+        m.put("revoke", "srvprvRevoke");
+        m.put("category-key", "srvprvCategoryKey");
+        m.put("localized-names", "srvprvLocalizedNames");
+        m.put("localized-descrs", "srvprvLocalizedDescrs");
+        m.put("process-type", "srvprvProcessType");
+        m.put("entitlement-ref", "srvprvEntitlementRef");
+        m.put("workflow-data", "srvprvWorkflowData");
+        m.put("description", "description");
+        PRD_PROPERTY_ATTRS = java.util.Collections.unmodifiableMap(m);
+    }
+
+    public static String appConfigDn(String dsDn, String driver) {
+        return "cn=AppConfig," + driverDn(dsDn, driver);
+    }
+
+    public static String workflowFormsDn(String dsDn, String driver) {
+        return "cn=WorkflowForms," + appConfigDn(dsDn, driver);
+    }
+
+    public static String formContainerDn(String dsDn, String driver, com.pointblue.dirxml.dev.model.Form.Kind kind) {
+        return "cn=" + kind.container + "," + workflowFormsDn(dsDn, driver);
+    }
+
+    public static String formDn(String dsDn, String driver, com.pointblue.dirxml.dev.model.Form f) {
+        return "cn=" + escapeRdn(f.name) + "," + formContainerDn(dsDn, driver, f.kind);
+    }
+
+    public static String requestDefsDn(String dsDn, String driver) {
+        return "cn=RequestDefs," + appConfigDn(dsDn, driver);
+    }
+
+    public static String prdDn(String dsDn, String driver, com.pointblue.dirxml.dev.model.Prd p) {
+        return "cn=" + escapeRdn(p.name) + "," + requestDefsDn(dsDn, driver);
+    }
+
+    /** The DN for a provisioning diff path ({@code drivers/<d>/provisioning/forms/<kind>/<name>} or {@code …/prds/<name>}). */
+    public static String provisioningPathDn(String dsDn, String path) {
+        String rest = path.substring("drivers/".length());
+        int i = rest.indexOf("/provisioning/");
+        String driver = rest.substring(0, i);
+        String tail = rest.substring(i + "/provisioning/".length());
+        if (tail.startsWith("forms/")) {
+            String[] parts = tail.substring("forms/".length()).split("/", 2);
+            com.pointblue.dirxml.dev.model.Form.Kind kind = com.pointblue.dirxml.dev.model.Form.Kind.byDir(parts[0]);
+            return "cn=" + escapeRdn(parts[1]) + "," + formContainerDn(dsDn, driver, kind);
+        }
+        if (tail.startsWith("prds/")) {
+            return "cn=" + escapeRdn(tail.substring("prds/".length())) + "," + requestDefsDn(dsDn, driver);
+        }
+        throw new IllegalArgumentException("not a provisioning path: " + path);
+    }
+
+    /** The bytes the vault holds for a form: the document compact, exactly as the vendor builder saves it. */
+    public static byte[] formBytes(com.pointblue.dirxml.dev.model.Form f) {
+        String compact;
+        try {
+            compact = com.pointblue.dirxml.dev.json.Json.compact(com.pointblue.dirxml.dev.json.Json.parse(f.json));
+        } catch (RuntimeException e) {
+            compact = f.json;
+        }
+        return compact.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** Every attribute an add of a form writes. */
+    public static Map<String, List<byte[]>> formAttributes(com.pointblue.dirxml.dev.model.Form f) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        m.put(JSON_DATA, List.of(formBytes(f)));
+        return m;
+    }
+
+    /**
+     * Every attribute an add of a PRD writes: {@code XmlData} (the definition, which carries the process),
+     * {@code srvprvRequestXML}, {@code srvprvProcessXML} (the vault keeps a copy), and the plain properties.
+     */
+    public static Map<String, List<byte[]>> prdAttributes(com.pointblue.dirxml.dev.model.Prd p) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        if (p.definition != null) {
+            m.put(XML_DATA, List.of(xmlBytes(p.definition)));
+        }
+        if (p.request != null) {
+            m.put(REQUEST_XML, List.of(xmlBytes(p.request)));
+        }
+        if (p.process != null) {
+            m.put(PROCESS_XML, List.of(xmlBytes(p.process)));
+        }
+        for (Map.Entry<String, String> e : PRD_PROPERTY_ATTRS.entrySet()) {
+            List<String> vals = p.properties.get(e.getKey());
+            if (vals != null && !vals.isEmpty()) {
+                List<byte[]> bytes = new ArrayList<>();
+                for (String v : vals) {
+                    bytes.add(v.getBytes(StandardCharsets.UTF_8));
+                }
+                m.put(e.getValue(), bytes);
+            }
+        }
+        return m;
+    }
+
+    private static byte[] xmlBytes(org.w3c.dom.Element e) {
+        return CanonicalXml.serialize(e).getBytes(StandardCharsets.UTF_8);   // canonical form carries the declaration
+    }
+
+    /** Package stamps of a form or PRD from its meta (same keys as artifacts) plus an optional baseline as the initial state. */
+    public static Map<String, List<byte[]>> provisioningPackageAttributes(Map<String, String> meta, String baseline) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        put(m, PKG_GUID, meta.get("dirxml-pkgguid"));
+        put(m, PKG_ASSOC, meta.get("dirxml-pkgassociationid"));
+        put(m, PKG_CHECKSUM, meta.get("dirxml-pkgchecksum"));
+        put(m, PKG_LINKAGES, meta.get("dirxml-pkglinkages"));
+        if (!m.isEmpty() && baseline != null) {
+            m.put(PKG_INITIAL_STATE, List.of(baseline.getBytes(StandardCharsets.UTF_8)));
+        }
+        return m;
+    }
+
     /** The DNs of every driver whose linkage references an artifact path. */
     public static List<String> linkingDrivers(DriverSet ds, String path) {
         List<String> out = new ArrayList<>();
