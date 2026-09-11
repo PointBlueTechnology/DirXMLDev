@@ -146,9 +146,24 @@ public final class EcmaScriptCheck implements Check {
             r.add(Finding.warning("ecmascript-empty", path, "ECMAScript resource has no content"));
             return Set.of();
         }
+        String err = compileError(src, res.name);
+        if (err != null) {
+            r.add(Finding.error("ecmascript-syntax", path, err));
+        }
+        return definedFunctions(src);
+    }
+
+    /**
+     * Compiles {@code src} with the engine's own Rhino ({@link Context#compileString}); returns
+     * Rhino's diagnostic (with line/column, when known) or null if it compiles. Shared with
+     * {@link FormCheck} for a form's scripts ({@code inlinescripts}, {@code customConditional},
+     * {@code calculateValue}, …), which are checked the same way.
+     */
+    public static String compileError(String src, String sourceName) {
         Context cx = Context.enter();
         try {
-            cx.compileString(src, res.name, 1, null);
+            cx.compileString(src, sourceName, 1, null);
+            return null;
         } catch (RuntimeException e) {
             String msg = e.getMessage() != null ? e.getMessage() : e.toString();
             if (e instanceof EvaluatorException) {
@@ -157,11 +172,10 @@ public final class EcmaScriptCheck implements Check {
                     msg = msg + " (line " + ee.getLineNumber() + ", column " + ee.getColumnNumber() + ")";
                 }
             }
-            r.add(Finding.error("ecmascript-syntax", path, msg));
+            return msg;
         } finally {
             Context.exit();
         }
-        return definedFunctions(src);
     }
 
     /** Top-level function names an ECMAScript source defines, from Rhino's AST (regex fallback if it won't parse). */
