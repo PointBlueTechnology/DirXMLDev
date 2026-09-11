@@ -1,12 +1,17 @@
 package com.pointblue.dirxml.dev.edit;
 
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
+import com.pointblue.dirxml.dev.json.Json;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Form;
+import com.pointblue.dirxml.dev.model.FormDocument;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
+import com.pointblue.dirxml.dev.model.Prd;
+import com.pointblue.dirxml.dev.model.Provisioning;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
@@ -32,6 +37,10 @@ import java.util.Set;
  *   query <tree> gcvs <driver>                GCVs in the driver's scope, with where each is defined
  *   query <tree> tables <driver>              mapping tables in the driver's reach
  *   package.diff <tree> <path>                a customized packaged artifact vs its baseline
+ *   form.list <tree> [--driver D]             every JSON form (kind, name, title, #fields, packaged mark)
+ *   form.show <tree> <name-or-path> [--driver D] [--json]   a form's outline + which PRDs bind it
+ *   prd.list <tree>                           every PRD (status, category, json-forms/classic, bound forms)
+ *   prd.show <tree> <name> [--driver D] [--json]   a PRD's properties, bindings, activities
  * </pre>
  */
 public final class ReadCli {
@@ -311,5 +320,370 @@ public final class ReadCli {
 
     static boolean isChannel(Scope s) {
         return s == Scope.SUBSCRIBER || s == Scope.PUBLISHER;
+    }
+
+    // ---- provisioning: forms and PRDs ------------------------------------------------
+
+    public static int formList(String[] argv) throws Exception {
+        if (argv.length < 2) {
+            System.err.println("usage: form.list <tree> [--driver D]");
+            return 2;
+        }
+        Path tree = Paths.get(argv[1]);
+        String driverName = flag(argv, "--driver");
+        DriverSet ds = AsCodeReader.read(tree);
+        List<Driver> drivers = driversOf(ds, driverName);
+        if (driverName != null && drivers.isEmpty()) {
+            System.err.println("no driver '" + driverName + "'");
+            return 1;
+        }
+        int n = 0;
+        for (Driver d : drivers) {
+            if (d.provisioning == null) {
+                continue;
+            }
+            for (Form f : d.provisioning.forms) {
+                n++;
+                FormDocument doc = safeDocument(f);
+                int fields = doc == null ? -1 : countInputFields(doc);
+                String title = doc == null ? "(unparsable)" : doc.title();
+                System.out.printf("%-8s %-40s %-30s %3s field(s)%s%n", f.kind.dir, d.name + "/" + f.name,
+                    title == null ? "" : title, fields < 0 ? "?" : String.valueOf(fields), formPkgMark(f.meta));
+            }
+        }
+        System.out.println(n + " form(s)");
+        return 0;
+    }
+
+    public static int formShow(String[] argv) throws Exception {
+        if (argv.length < 3) {
+            System.err.println("usage: form.show <tree> <name-or-path> [--driver D] [--json]");
+            return 2;
+        }
+        Path tree = Paths.get(argv[1]);
+        String ref = argv[2];
+        String driverName = flag(argv, "--driver");
+        boolean json = hasFlag(argv, "--json");
+        DriverSet ds = AsCodeReader.read(tree);
+
+        Found found = findForm(ds, ref, driverName);
+        if (found == null) {
+            System.err.println("no form matching '" + ref + "'" + (driverName == null ? "" : " on driver '" + driverName + "'"));
+            return 1;
+        }
+        Form f = found.form;
+        FormDocument doc = safeDocument(f);
+        if (json) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("driver", found.driver.name);
+            out.put("kind", f.kind.dir);
+            out.put("name", f.name);
+            if (doc != null) {
+                out.put("title", doc.title());
+                out.put("display", doc.display());
+                out.put("languages", doc.languages());
+                out.put("hasInlineScripts", doc.hasInlineScripts());
+                out.put("externalScripts", doc.externalScripts());
+                List<Object> comps = new ArrayList<>();
+                for (FormDocument.Component c : doc.components()) {
+                    Map<String, Object> cm = new LinkedHashMap<>();
+                    cm.put("path", c.path);
+                    cm.put("key", c.key);
+                    cm.put("type", c.type);
+                    cm.put("label", c.label);
+                    cm.put("input", c.input);
+                    cm.put("required", c.required);
+                    cm.put("hidden", c.hidden);
+                    if (c.conditional != null) {
+                        cm.put("conditional", c.conditional);
+                    }
+                    comps.add(cm);
+                }
+                out.put("components", comps);
+            }
+            List<Object> boundBy = new ArrayList<>();
+            for (Bound b : formBindings(ds, found.driver, f.name)) {
+                Map<String, Object> bm = new LinkedHashMap<>();
+                bm.put("prd", b.prd.name);
+                bm.put("activityId", b.binding.activityId);
+                bm.put("fields", fieldNames(b.binding));
+                boundBy.add(bm);
+            }
+            out.put("boundBy", boundBy);
+            System.out.println(Json.pretty(out));
+            return 0;
+        }
+
+        System.out.println(found.driver.name + "/" + f.kind.dir + "/" + f.name + formPkgMark(f.meta));
+        if (doc == null) {
+            System.out.println("  (document did not parse as JSON)");
+        } else {
+            System.out.println("  title:   " + doc.title());
+            System.out.println("  display: " + doc.display());
+            System.out.println("  languages: " + String.join(", ", doc.languages()));
+            System.out.println("  inline scripts: " + (doc.hasInlineScripts() ? "yes" : "no"));
+            System.out.println("  external scripts: " + doc.externalScripts());
+            System.out.println("  fields:");
+            for (FormDocument.Component c : doc.components()) {
+                if (!c.input) {
+                    continue;
+                }
+                System.out.printf("    %-40s %-14s label=%-20s required=%-5s hidden=%-5s%s%n",
+                    c.key, c.type, c.label == null ? "" : c.label, c.required, c.hidden,
+                    c.conditional == null ? "" : "  conditional: " + c.conditional);
+            }
+        }
+        List<Bound> boundBy = formBindings(ds, found.driver, f.name);
+        System.out.println("  bound by " + boundBy.size() + " PRD binding(s):");
+        for (Bound b : boundBy) {
+            System.out.println("    " + b.prd.name + (b.binding.activityId == null ? " (request)" : " (activity " + b.binding.activityId + ")")
+                + "  fields: " + fieldNames(b.binding));
+        }
+        return 0;
+    }
+
+    public static int prdList(String[] argv) throws Exception {
+        if (argv.length < 2) {
+            System.err.println("usage: prd.list <tree> [--driver D]");
+            return 2;
+        }
+        Path tree = Paths.get(argv[1]);
+        String driverName = flag(argv, "--driver");
+        DriverSet ds = AsCodeReader.read(tree);
+        List<Driver> drivers = driversOf(ds, driverName);
+        int n = 0;
+        for (Driver d : drivers) {
+            if (d.provisioning == null) {
+                continue;
+            }
+            for (Prd prd : d.provisioning.prds) {
+                n++;
+                List<String> forms = new ArrayList<>();
+                for (Prd.FormBinding b : prd.bindings()) {
+                    forms.add(b.formId);
+                }
+                System.out.printf("%-40s status=%-10s category=%-14s %-11s bound: %s%n",
+                    d.name + "/" + prd.name, str(prd.property("status")), str(prd.property("category-key")),
+                    prd.isJsonForms() ? "json-forms" : "classic", forms);
+            }
+        }
+        System.out.println(n + " PRD(s)");
+        return 0;
+    }
+
+    public static int prdShow(String[] argv) throws Exception {
+        if (argv.length < 3) {
+            System.err.println("usage: prd.show <tree> <name> [--driver D] [--json]");
+            return 2;
+        }
+        Path tree = Paths.get(argv[1]);
+        String name = argv[2];
+        String driverName = flag(argv, "--driver");
+        boolean json = hasFlag(argv, "--json");
+        DriverSet ds = AsCodeReader.read(tree);
+
+        Driver owner = null;
+        Prd prd = null;
+        for (Driver d : driversOf(ds, driverName)) {
+            if (d.provisioning == null) {
+                continue;
+            }
+            Prd p = d.provisioning.prd(name);
+            if (p != null) {
+                owner = d;
+                prd = p;
+                break;
+            }
+        }
+        if (prd == null) {
+            System.err.println("no PRD '" + name + "'" + (driverName == null ? "" : " on driver '" + driverName + "'"));
+            return 1;
+        }
+        List<String> activities = activityIds(prd.process);
+        if (json) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("driver", owner.name);
+            out.put("name", prd.name);
+            out.put("isJsonForms", prd.isJsonForms());
+            Map<String, Object> props = new LinkedHashMap<>();
+            for (Map.Entry<String, List<String>> e : prd.properties.entrySet()) {
+                props.put(e.getKey(), e.getValue());
+            }
+            out.put("properties", props);
+            List<Object> bindings = new ArrayList<>();
+            for (Prd.FormBinding b : prd.bindings()) {
+                Map<String, Object> bm = new LinkedHashMap<>();
+                bm.put("activityId", b.activityId);
+                bm.put("formId", b.formId);
+                bm.put("fields", fieldNames(b));
+                bindings.add(bm);
+            }
+            out.put("bindings", bindings);
+            out.put("activities", activities);
+            System.out.println(Json.pretty(out));
+            return 0;
+        }
+
+        System.out.println(owner.name + "/" + prd.name + (prd.isJsonForms() ? "  [json-forms]" : "  [classic]"));
+        System.out.println("  properties:");
+        for (Map.Entry<String, List<String>> e : prd.properties.entrySet()) {
+            System.out.println("    " + e.getKey() + " = " + e.getValue());
+        }
+        System.out.println("  bindings:");
+        for (Prd.FormBinding b : prd.bindings()) {
+            System.out.println("    " + (b.activityId == null ? "request" : "activity " + b.activityId)
+                + " -> " + b.formId + "  fields: " + fieldNames(b));
+        }
+        System.out.println("  activities: " + activities);
+        return 0;
+    }
+
+    // ---- provisioning helpers -----------------------------------------------------
+
+    private static final class Found {
+        final Driver driver;
+        final Form form;
+        Found(Driver driver, Form form) {
+            this.driver = driver;
+            this.form = form;
+        }
+    }
+
+    private static final class Bound {
+        final Prd prd;
+        final Prd.FormBinding binding;
+        Bound(Prd prd, Prd.FormBinding binding) {
+            this.prd = prd;
+            this.binding = binding;
+        }
+    }
+
+    /** Accepts a bare name, {@code kind/name}, or {@code driver/kind/name}. */
+    private static Found findForm(DriverSet ds, String ref, String driverFlag) {
+        String[] parts = ref.split("/", -1);
+        String driverName = driverFlag;
+        Form.Kind kind = null;
+        String name;
+        if (parts.length == 3) {
+            driverName = parts[0];
+            kind = Form.Kind.byDir(parts[1]);
+            name = parts[2];
+        } else if (parts.length == 2) {
+            kind = Form.Kind.byDir(parts[0]);
+            name = parts[1];
+        } else {
+            name = ref;
+        }
+        for (Driver d : driversOf(ds, driverName)) {
+            if (d.provisioning == null) {
+                continue;
+            }
+            Form f = kind != null ? d.provisioning.form(kind, name) : d.provisioning.formByName(name);
+            if (f != null) {
+                return new Found(d, f);
+            }
+        }
+        return null;
+    }
+
+    /** Every PRD binding (on any driver in scope) that references {@code formName}. */
+    private static List<Bound> formBindings(DriverSet ds, Driver formDriver, String formName) {
+        List<Bound> out = new ArrayList<>();
+        Provisioning p = formDriver.provisioning;
+        if (p == null) {
+            return out;
+        }
+        for (Prd prd : p.prds) {
+            for (Prd.FormBinding b : prd.bindings()) {
+                if (formName.equals(b.formId)) {
+                    out.add(new Bound(prd, b));
+                }
+            }
+        }
+        return out;
+    }
+
+    private static List<String> fieldNames(Prd.FormBinding b) {
+        List<String> out = new ArrayList<>();
+        for (Prd.Field f : b.fields) {
+            out.add(f.name);
+        }
+        return out;
+    }
+
+    /** Descendant elements under a PRD's {@code <process>} that carry a non-empty {@code id} — its activities. */
+    private static List<String> activityIds(Element process) {
+        List<String> out = new ArrayList<>();
+        if (process == null) {
+            return out;
+        }
+        collectIds(process, out);
+        return out;
+    }
+
+    private static void collectIds(Element el, List<String> out) {
+        // workflow activities carry activity-id (start-activity, user-activity,
+        // finish-activity, …); the process root itself uses plain id — never counted.
+        String id = el.getAttribute("activity-id");
+        String ln = el.getLocalName() != null ? el.getLocalName() : el.getNodeName();
+        if (!id.isEmpty()) {
+            out.add(ln + " id=" + id);
+        }
+        for (Element c : Xds.childElements(el)) {
+            collectIds(c, out);
+        }
+    }
+
+    private static FormDocument safeDocument(Form f) {
+        try {
+            return f.document();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static int countInputFields(FormDocument doc) {
+        int n = 0;
+        for (FormDocument.Component c : doc.components()) {
+            if (c.input) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private static String formPkgMark(Map<String, String> meta) {
+        boolean packaged = meta.containsKey("dirxml-pkgguid") || meta.containsKey("project.package-id");
+        return packaged ? "  [packaged]" : "";
+    }
+
+    private static List<Driver> driversOf(DriverSet ds, String driverName) {
+        if (driverName == null) {
+            return ds.drivers;
+        }
+        Driver d = ds.driver(driverName);
+        return d == null ? List.of() : List.of(d);
+    }
+
+    private static String flag(String[] argv, String name) {
+        for (int i = 0; i < argv.length - 1; i++) {
+            if (argv[i].equals(name)) {
+                return argv[i + 1];
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasFlag(String[] argv, String name) {
+        for (String a : argv) {
+            if (a.equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String str(String s) {
+        return s == null ? "" : s;
     }
 }

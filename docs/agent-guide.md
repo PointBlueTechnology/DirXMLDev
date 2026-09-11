@@ -59,6 +59,27 @@ bin/idm refs tree/ "library/lib-Shared"      # who links / includes / maps it
 doesn't, the errors are real (a dangling reference, a GCV nothing defines) — or
 a validator bug, which is the same as a finding: report it, don't work around it.
 
+## Provisioning: forms and PRDs
+
+A User Application driver's `cn=AppConfig` subtree (JSON/Form.io provisioning
+forms and their request definitions — see [forms.md](forms.md)) reads and
+writes with `import`/`import-project`/`import-ldif`/`import-live` like any
+other driver content, under `drivers/<driver>/provisioning/`. Read-only for
+now (Track P1); editing forms is a later step.
+
+```bash
+bin/idm form.list tree/ --driver "User Application Driver"           # kind, name, title, #fields, packaged mark
+bin/idm form.show tree/ "Help-desk Request Form" --json               # fields, scripts, languages, PRDs that bind it
+bin/idm prd.list  tree/ --driver "User Application Driver"            # status, category, json-forms/classic, bound forms
+bin/idm prd.show  tree/ HelpdeskTicket                                 # properties, bindings, workflow activities
+```
+
+`form.show` accepts a bare name (searched across every driver's provisioning),
+`<kind>/<name>` (`request`/`approval`/`template`), or `<driver>/<kind>/<name>`
+when names collide. A form is referenced *by name* from a PRD's
+`form-binding`; `form.show`/`prd.show` cross-reference the two so you can see
+a field's shape and everywhere it's used in one place.
+
 ## Two kinds of change
 
 **Content** — the rules inside a policy, a stylesheet, a script, a table's rows:
