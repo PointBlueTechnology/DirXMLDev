@@ -98,6 +98,36 @@ Designer writer emit the compact form the vendor tools use. Editing one of the
 pre-edit document is baselined under `.package-baseline/`, exactly like a
 packaged policy.
 
+For a change an agent can make without the GUI, use the typed operations
+(`form.add`, `form.field.add/set/remove/move`, `form.set`, `form.localize`,
+`form.rename`, `form.delete`, `prd.map`, `prd.add`) — same transaction
+machinery (`--dry-run`, `--force`, `--json`, `validate` after every write). A
+common recipe, add a field to a request form and map it to flowdata:
+
+```bash
+bin/idm form.field.add tree/ "Help-desk Request Form" --key priority --type select \
+    --label Priority --required --json '{"data":{"values":[{"label":"High","value":"high"},{"label":"Low","value":"low"}]}}'
+bin/idm prd.map tree/ HelpdeskTicket --field priority          # default target: flowdata.Start/Help-desk_Request_Form/priority
+bin/idm validate tree/                                          # 0 errors expected (FormCheck runs by default)
+```
+
+`form.field.add` places the field at the end of `components` by default, or
+next to another field (`--after`/`--before`/`--first`) or inside a named
+container/columns component (`--in`); it starts from the captured builder
+template for that type when one exists (`resources/forms/components/`) so a
+form we author round-trips through the vendor builder unchanged, or the
+minimal `{label,key,type,input}` shape with `--minimal` (what the IDM 4.10.1
+stock forms actually use). `prd.map` is the one binding-sync never does on its
+own — a new field starts unmapped until the agent explicitly maps it (or maps
+an approval activity's data item with `--activity`); everything else about
+keeping the PRD in step (rebuilding the request field list, pruning a mapping
+whose field disappeared) happens automatically on every form-changing
+operation. `FormCheck` (part of the standard validator) flags a document with
+no components, a duplicate or missing key, an unknown component type, a
+`conditional`/`logic` reference to a key that doesn't exist, a script that
+doesn't compile, a request form with no button, incomplete localization, and a
+PRD binding/mapping that's stale, drifted, or unbound.
+
 ## Two kinds of change
 
 **Content** — the rules inside a policy, a stylesheet, a script, a table's rows:

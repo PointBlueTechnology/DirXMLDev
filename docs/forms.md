@@ -185,14 +185,44 @@ Identity Applications cache" after touching provisioning objects.
 ## 5. Safeguards specific to forms
 
 - Never edit a form in place under a PRD binding without syncing the binding;
-  never delete a bound form without `--force`.
+  **`form.delete` refuses a bound form outright — `--force` never overrides
+  that** (P2b's actual spec, correcting this line's original "never delete a
+  bound form without `--force`": `form.delete` never removes bindings, so
+  deleting a bound form would leave a dangling reference no matter what).
+  `--force` only overrides the *packaged* caution (deleting one of the 11
+  stock forms when it's unbound).
 - Stock forms (the 11 in the base package) are customizable like any packaged
-  artifact — marked, baselined, never refused.
+  artifact — marked, baselined, never refused (except the bound-form case
+  above, which isn't about packaging at all).
 - Scripts inside forms are code: they go through the ECMAScript check and are
   shown in `form.show`; `form.set --inline-script` takes a file so the agent
-  reviews it as a file.
+  reviews it as a file. **Form scripts compile against `Context.VERSION_ES6`
+  (Rhino), not the engine's default language version** — unlike driver policy
+  ECMAScript, a form's `inlinescripts`/`calculateValue`/button `custom`/etc.
+  run in the Identity Applications forms renderer's browser, and the real
+  stock "Help-desk Request Form" submit button's script uses `let`, which the
+  engine's default Rhino version rejects but `VERSION_ES6` accepts (found
+  calibrating `FormCheck` against the test vault, 2026-09-11).
 - Nothing here touches workflow activities beyond the binding/data-item lines
   that reference the form; workflow design stays out of scope.
+- **Designer tolerates a duplicate key across non-bindable (layout) components**
+  (`column`, `columns`, `panel`) — the stock forms have several — and inside
+  `display: "workflowWizard"` forms ("Create Workflow Form"), whose per-activity
+  builder panels intentionally repeat the same field keys; neither is a real
+  ambiguity since layout types are never bound and a workflowWizard form is
+  never referenced by a PRD's `form-binding`. `FormCheck`'s `form-duplicate-key`
+  only fires when a shared key includes a genuinely bindable type.
+- **Classic (non-`formSrc="1"`) PRDs can carry `form-binding`-shaped elements
+  that don't resolve to any real JSON form** (several `_TA`/`_TD` template PRDs
+  on the test vault do) — vestigial, out of scope, and not a `prd-binding-stale`
+  finding; `FormCheck` skips a PRD's bindings entirely when `isJsonForms()` is
+  false.
+- **A handful of stock PRDs' request-binding field order doesn't match what a
+  fresh `form.sync` would produce** — same fields, different order (HelpdeskTicket,
+  Resource Approval, Resource Provisioning, Role Approval, SoD Conflict
+  Approval, Template2SerialApproval_JSONFORMS, Template5ParallelApproval_JSONFORMS
+  on the test vault) — a real, harmless `prd-binding-fields-drift` warning
+  beyond the two originally documented in §2, not a bug in the check.
 
 ## 6. Build order
 
@@ -203,9 +233,14 @@ Identity Applications cache" after touching provisioning objects.
    discovery, checks, fix commands) + `FormBuilderRunner` + `form.edit`,
    `form.set-content`, `form.sync` (`edit.FormOps`) with `forms.BindingSync`;
    verified on this Mac against the real builder and on the stock forms.
-3. **P2b typed ops** — Option B commands + `FormCheck` + PRD binding sync;
-   parity test: a form authored by us re-saved by the vendor builder is
-   semantically identical. (partly delegable once the model exists)
+3. ✅ **P2b typed ops** (2026-09-11) — the 11 Option B commands (`forms.FormEditor`
+   + `edit.FormOps`) and `validate.FormCheck` (12 codes); calibrated to 0
+   FormCheck errors on test11 and both vault dumps (`FormOpsGuardedTest`),
+   with the two known stock exceptions staying `prd-binding-fields-drift`
+   warnings. The vendor-builder round-trip parity test is not done — the
+   builder can't be driven from a test (see `docs/forms.md` §2 Option A); the
+   round-trip guarantee for now is `form.field.add`'s captured templates plus
+   `Json.compact` idempotence (`FormOpsGuardedTest`), not an actual builder run.
 4. **P4 deploy** — object kinds in the mapping/plan/deployer; spike P4a on the
    test vault (needs Tomcat running) for runtime pickup. (me)
 5. **P3 preview** — Option C. (delegable)
