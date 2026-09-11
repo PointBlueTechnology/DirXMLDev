@@ -3,12 +3,16 @@ package com.pointblue.dirxml.dev.ascode;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
+import com.pointblue.dirxml.dev.model.Prd;
+import com.pointblue.dirxml.dev.model.Provisioning;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
+import com.pointblue.dirxml.sim.Xds;
 import org.w3c.dom.Element;
 
 import java.io.IOException;
@@ -17,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +117,88 @@ public final class AsCodeWriter {
             }
         }
         writeText(dir.resolve(DRIVER_MANIFEST), m.toXml());
+
+        if (d.provisioning != null) {
+            writeProvisioning(d.provisioning, dir.resolve("provisioning"));
+        }
+    }
+
+    /**
+     * Writes a driver's provisioning tree (see {@code docs/forms.md} §3): forms
+     * pretty-printed by kind, one directory per PRD with its {@code definition.xml}/
+     * {@code request.xml}/{@code process.xml}, and a {@code provisioning.xml}
+     * manifest. {@code process.xml} is omitted when {@link Prd#process} is null or
+     * is the very node already serialized inside {@link Prd#definition} (true on
+     * the test vault: {@code XmlData} carries {@code <process>} inline) — writing
+     * it twice would make the tree lie about there being two independent copies.
+     */
+    private static void writeProvisioning(Provisioning p, Path dir) throws IOException {
+        Files.createDirectories(dir);
+        Manifest m = new Manifest("provisioning");
+        m.attr("dn", p.dn);
+        m.meta(p.meta);
+
+        Map<Form.Kind, Set<String>> usedByKind = new EnumMap<>(Form.Kind.class);
+        List<Form> forms = new ArrayList<>(p.forms);
+        forms.sort(Comparator.comparing((Form f) -> f.kind.dir).thenComparing(f -> f.name));
+        for (Form f : forms) {
+            Path kindDir = dir.resolve("forms").resolve(f.kind.dir);
+            Files.createDirectories(kindDir);
+            Set<String> used = usedByKind.computeIfAbsent(f.kind, k -> new HashSet<>());
+            String file = uniqueFile(fileSafe(f.name) + ".form.json", used);
+            String rel = "forms/" + f.kind.dir + "/" + file;
+            writeText(dir.resolve(rel), prettyForm(f.json));
+            Manifest fm = m.child("form").attr("kind", f.kind.dir).attr("name", f.name).attr("file", rel);
+            fm.meta(f.meta);
+        }
+
+        Set<String> usedPrdDirs = new HashSet<>();
+        List<Prd> prds = new ArrayList<>(p.prds);
+        prds.sort(Comparator.comparing(pr -> pr.name));
+        for (Prd prd : prds) {
+            String prdDirName = uniqueFile(fileSafe(prd.name), usedPrdDirs);
+            Path prdDir = dir.resolve("prds").resolve(prdDirName);
+            Files.createDirectories(prdDir);
+            if (prd.definition != null) {
+                writeXml(prdDir.resolve("definition.xml"), prd.definition);
+            }
+            if (prd.request != null) {
+                writeXml(prdDir.resolve("request.xml"), prd.request);
+            }
+            if (prd.process != null && !isChildOf(prd.process, prd.definition)) {
+                writeXml(prdDir.resolve("process.xml"), prd.process);
+            }
+            Manifest pm = m.child("prd").attr("name", prd.name).attr("dir", "prds/" + prdDirName);
+            for (Map.Entry<String, List<String>> e : prd.properties.entrySet()) {
+                for (String v : e.getValue()) {
+                    pm.child("property").attr("key", e.getKey()).text(v);
+                }
+            }
+            pm.meta(prd.meta);
+        }
+        writeText(dir.resolve("provisioning.xml"), m.toXml());
+    }
+
+    /** {@code process} is a direct child of {@code definition} (same DOM node) — see {@link Prd} class doc. */
+    private static boolean isChildOf(Element process, Element definition) {
+        if (definition == null) {
+            return false;
+        }
+        for (Element e : Xds.childrenByName(definition, "process")) {
+            if (e == process) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Re-pretty-prints a form document for the tree; falls back to the raw text if it doesn't parse as JSON. */
+    private static String prettyForm(String json) {
+        try {
+            return com.pointblue.dirxml.dev.json.Json.pretty(com.pointblue.dirxml.dev.json.Json.parse(json == null ? "" : json));
+        } catch (RuntimeException e) {
+            return json == null ? "" : json;
+        }
     }
 
     /** Write each artifact's content file and register it in the manifest. */
@@ -219,6 +306,11 @@ public final class AsCodeWriter {
             Manifest c = new Manifest(tag);
             children.add(c);
             return c;
+        }
+
+        Manifest text(String v) {
+            this.text = v;
+            return this;
         }
 
         Manifest meta(Map<String, String> meta) {
