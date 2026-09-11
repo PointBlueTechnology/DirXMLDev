@@ -128,9 +128,25 @@ never touches a file it has no reason to.**
 
 Generating a project from nothing (a vault with no Designer origin → Designer
 imports from the vault instead), packaged-driver creation in a project (the
-package catalog is Designer's), provisioning objects (Track P), the
-workspace's `.metadata`, and `_initial_state.xml` maintenance for objects the
-tree didn't touch.
+package catalog is Designer's), the workspace's `.metadata`, and
+`_initial_state.xml` maintenance for objects the tree didn't touch.
+
+### Provisioning (JSON forms + PRDs — Track P step 6, 2026-09-11)
+
+`ProjectWriter.update` also carries a driver's forms and PRDs into an
+existing project, for the `Model/Provisioning/<AppConfig dir>/` the reader
+already ties to that driver (see `ProjectReader#attachProvisioning`): a form
+is added/removed/changed as its compact document plus a minted digest item;
+a PRD is added/removed/changed as the union `.prd` (`<provision-request>`
+re-inserted before `<process>`) plus a digest with localized display/descr,
+category key and one `digest-dependency` per form binding. This follows the
+same rules as everything above — only the files the diff calls for, an
+unchanged object's bytes untouched — with one addition: creating a whole new
+AppConfig is out of scope, so a driver the project has no AppConfig for
+refuses only its own provisioning changes, not the rest of the update.
+Verified the same way as the artifact writer: round-trip equality on a
+synthetic project skeleton and, guarded, on `test11`
+(`ProvisioningProjectWriterTest`); see `docs/forms.md` §6 for the human spike.
 
 ## 4. Creating drivers in the tree — `driver.add`
 

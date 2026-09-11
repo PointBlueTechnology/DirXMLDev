@@ -251,8 +251,49 @@ Identity Applications cache" after touching provisioning objects.
    self-contained page with the vendored open-source Form.io renderer 4.21.7
    (MIT) and placeholder components for the NetIQ types; live data sources
    neutralized; verified on the stock Help-desk request form.
-6. Designer writer/reader parity (`export-project` adds forms + PRD digests),
-   docs, skill recipes ("add a field to the request form of PRD X").
+6. ✅ **Designer writer/reader parity** (2026-09-11) — `ProjectWriter.update`
+   carries a driver's forms/PRDs into an existing project's
+   `Model/Provisioning/<AppConfig dir>/`: a form is written as the vendor
+   builder's own compact document plus a minted `<name>.digest` item (no
+   `dirguid`/`dirrev`/package elements unless copied from packaged meta); a
+   PRD is the union `.prd` (`<provision-request>` re-inserted right before
+   `<process>`, matching Designer's own layout) plus a `<name>.digest` with
+   localized display/descr, category key and one `digest-dependency` per form
+   binding; container digests (`WorkflowForms.digest`, `RequestDefs.digest`,
+   …) hold only their own description on every project sampled, so adding or
+   removing an item never touches them. Unchanged forms/PRDs are never
+   rewritten (bytes untouched); a driver whose project has no AppConfig
+   refuses only its own provisioning, not the whole update. Verified on a
+   synthetic project skeleton and, guarded, on a copy of `test11`: `form.add`
+   + `prd.add` → `export-project` created exactly the new form + digest and
+   the new PRD + digest (nothing else touched), and `import-project` of the
+   result was byte-for-byte identical to the tree that produced it
+   (`tree.diff`: no differences) — confirmed both via the JUnit suite
+   (`ProvisioningProjectWriterTest`) and by hand with the `idm` CLI end to
+   end. Docs and skill recipes updated (`docs/designer-roundtrip.md`,
+   `.claude/skills/dirxml-dev/reference/commands.md`). **Human spike still
+   open:** Jerry opens the round-tripped copy of `test11` in Designer — see
+   §"human spike" below for what to click.
+
+### Human spike (step 6, pending)
+
+Jerry opens `~/designer_workspace/test11rt-forms` (a copy of `test11` that
+`export-project` updated with the `form.add`/`prd.add` example above) from the
+file system in Designer and checks:
+
+1. The project imports without a "repair" prompt or error.
+2. Under the User Application driver's Provisioning → Workflow Forms →
+   Request Forms, **"DirXMLDev Writer Test"** appears alongside the 11 stock
+   forms and opens in the form builder showing the fields copied from
+   "Request Form".
+3. Under Provisioning → Request Definitions, **"DirXMLDev Writer PRD"**
+   appears, is Active, and its request form binding lists "DirXMLDev Writer
+   Test".
+4. *Deploy* of the User Application driver still offers to deploy normally
+   (no dangling-reference complaint about the new objects).
+
+Findings decide whether this scope ships as-is or narrows, the same way spike
+6a decided the artifact writer's scope.
 
 ## 7. Decisions for Jerry
 
