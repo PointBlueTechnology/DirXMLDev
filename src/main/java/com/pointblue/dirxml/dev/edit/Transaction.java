@@ -93,6 +93,16 @@ public final class Transaction {
         touched.add(a.path());
     }
 
+    /** A non-artifact object this operation changed (a form or PRD), by its tree-relative path. */
+    public void touched(String path) {
+        touched.add(path);
+    }
+
+    /** A packaged non-artifact object this operation marked customized for the first time. */
+    public void customizedNow(String path) {
+        customizedNow.add(path);
+    }
+
     /** An artifact this operation renamed, so its pre-existing findings follow it. */
     public void renamed(String oldPath, String newPath) {
         renamed.put(oldPath, newPath);

@@ -158,6 +158,12 @@ public final class Environments {
             sshUser == null || sshUser.isBlank() ? null : sshUser.trim());
     }
 
+    /** Any other {@code <env>.<key>} value (e.g. {@code formsUrl}, {@code k8sHost}), trimmed; null when absent or blank. */
+    public String property(String name, String key) {
+        String v = props.getProperty(name + "." + key);
+        return v == null || v.isBlank() ? null : v.trim();
+    }
+
     private String req(String name, String key) throws IOException {
         String v = props.getProperty(name + "." + key);
         if (v == null || v.isBlank()) {

@@ -64,8 +64,7 @@ a validator bug, which is the same as a finding: report it, don't work around it
 A User Application driver's `cn=AppConfig` subtree (JSON/Form.io provisioning
 forms and their request definitions — see [forms.md](forms.md)) reads and
 writes with `import`/`import-project`/`import-ldif`/`import-live` like any
-other driver content, under `drivers/<driver>/provisioning/`. Read-only for
-now (Track P1); editing forms is a later step.
+other driver content, under `drivers/<driver>/provisioning/`.
 
 ```bash
 bin/idm form.list tree/ --driver "User Application Driver"           # kind, name, title, #fields, packaged mark
@@ -79,6 +78,25 @@ bin/idm prd.show  tree/ HelpdeskTicket                                 # propert
 when names collide. A form is referenced *by name* from a PRD's
 `form-binding`; `form.show`/`prd.show` cross-reference the two so you can see
 a field's shape and everywhere it's used in one place.
+
+Changing a form is a transaction like any other, and every form transaction
+re-syncs the PRD bindings that reference the form (Designer's own rules — the
+request form's field list is rebuilt from the components; data items are the
+persisted mappings and are kept or pruned, never invented, so a new field needs
+an explicit mapping step):
+
+```bash
+bin/idm form.edit tree/ "Help-desk Request Form" --check                       # which vendor builder would run; one-time fixes if any
+bin/idm form.edit tree/ "Help-desk Request Form"                               # a person: opens the vendor form builder; on save+close → stored + bindings synced
+bin/idm form.set-content tree/ --form "Help-desk Request Form" --content-file new.json   # an agent: same result without a GUI
+bin/idm form.sync tree/ --form "Help-desk Request Form"                         # after a builder saved into the tree with --no-wait
+```
+
+The form is stored pretty-printed (readable diffs); the deployer and the
+Designer writer emit the compact form the vendor tools use. Editing one of the
+11 stock forms or a stock PRD is allowed: it is marked customized and its
+pre-edit document is baselined under `.package-baseline/`, exactly like a
+packaged policy.
 
 ## Two kinds of change
 

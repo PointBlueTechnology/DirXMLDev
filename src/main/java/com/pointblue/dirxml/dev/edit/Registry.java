@@ -133,6 +133,17 @@ public final class Registry {
             a -> new ArtifactOps.Delete(a.get("path"), a.containsKey("unlink")),
             req("path", "artifact path"), opt("unlink", "remove its policy-set links first (flag)"));
 
+        register("form.set-content", "replace a JSON form's document (pretty-printed in the tree) and re-sync every PRD binding that references it",
+            a -> new FormOps.SetContent(a.get("driver"), a.get("form"), contentOf(a)),
+            req("form", "form name, kind/name (request|approval|template) or driver/kind/name"),
+            req("content-file", "file holding the new form JSON (what the vendor builder saved)"),
+            opt("driver", "the User Application driver (needed when several drivers have a form of that name)"));
+
+        register("form.sync", "re-normalize a form already saved into the tree (e.g. by the vendor builder) and re-sync its PRD bindings",
+            a -> new FormOps.SetContent(a.get("driver"), a.get("form"), null),
+            req("form", "form name, kind/name or driver/kind/name"),
+            opt("driver", "the User Application driver"));
+
         register("policy.link", "link an artifact into a driver's policy set",
             a -> new ArtifactOps.Link(a.get("path"), a.get("driver"), setOf(a.get("set")),
                 a.containsKey("at") ? ArtifactOps.Position.parse(a.get("at")) : null),
