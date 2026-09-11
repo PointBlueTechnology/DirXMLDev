@@ -152,8 +152,19 @@ four running drivers: User Application, Role and Resource, MSGW, DCS; User
 Application base package `NOVLUABASE 4.10.1.20250606222933`) with the
 Identity Applications at `https://idm254.pointbluetech.com` (`/IDMProv/` →
 login redirect, `/idmdash/` 200, `/forms/` = IGA Form Renderer 1.2.2.0200,
-IDM 4.10.2 patch; `/workflow/*` answers 500 even for the REST root — to be
-checked from the server log). Same 11 stock forms / 39 PRDs as 4.8.7, but
+IDM 4.10.2 patch). The engine is `engine-container` (identityengine
+4.10.2.0200) on a Docker host (`debian@idm254-engine`, passwordless sudo;
+traces live inside the container). The applications run on k3s
+(`debian@192.168.103.98` = `nam-k3s`, `sudo k3s kubectl -n idm`): pods
+`identityapplications` (IDMProv, idmdash, **workflow** — the workflow engine
+is co-deployed in that pod, there is no separate workflow pod), `osp`,
+`formrenderer`, `sspr`, `identityreporting`, `identityconsole`, `activemq`.
+Ingress routes `/workflow` → identityapplications and `/WFHandler`, `/forms`
+→ formrenderer, so the builder's online `FormsBackendUrl` for this system is
+`https://idm254.pointbluetech.com/WFHandler`. `/workflow/*` answering 500 to
+anonymous calls is the OAuth REST filter logging "An error occurred while
+attempting to authenticate" — not a fault; authenticated calls are needed.
+Same 11 stock forms / 39 PRDs as 4.8.7, but
 **the 4.10.1 stock forms are minimal documents**: components carry only the
 keys that matter (a `textfield` has ~14 keys instead of the 4.8 builder's 47;
 `validate` holds only `{"required":true}`), and they render. So the renderer
