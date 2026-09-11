@@ -1,0 +1,9 @@
+{
+  "input": true,
+  "key": "",
+  "tableView": true,
+  "label": "",
+  "tooltip": "You can modify a data item by specifying a pre-activity expression for the Start or Approval activities.\n\nTo prepend a dollar sign to a price, you might map the following source expression to a target form field called Price: \n'$' + flowdata.get('cost')\n\nIf the value is a string, it should be enclosed within a single quote. If not, it will be treated as a macro. ",
+  "type": "dataItemMappingTextField",
+  "row": "0-0"
+}

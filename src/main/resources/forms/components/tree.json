@@ -1,0 +1,114 @@
+{
+  "label": "",
+  "hideLabel": true,
+  "disabled": true,
+  "tableView": true,
+  "alwaysEnabled": false,
+  "type": "tree",
+  "input": true,
+  "key": "",
+  "defaultValue": "",
+  "validate": {
+    "customMessage": "",
+    "json": "",
+    "required": false,
+    "custom": "",
+    "customPrivate": false,
+    "minLength": "",
+    "maxLength": "",
+    "minWords": "",
+    "maxWords": "",
+    "pattern": ""
+  },
+  "conditional": {
+    "show": "",
+    "when": "",
+    "json": "",
+    "eq": ""
+  },
+  "tag": "div",
+  "refreshOnChange": true,
+  "tab": 2,
+  "dataSrc": "url",
+  "data": {
+    "method": "post",
+    "url": "/rest/access/containers/container",
+    "headers": [
+      {
+        "key": "",
+        "value": ""
+      }
+    ],
+    "json": {
+      "dn": "unique id",
+      "name": "container data",
+      "data": "any meta-data attached with the container",
+      "subContainers": [
+        {
+          "dn": "id1",
+          "name": "container data1",
+          "icon": "glyphicon glyphicon-cloud"
+        },
+        {
+          "dn": "id2",
+          "name": "container data2",
+          "data": "any meta-data attached with the container",
+          "subContainers": [
+            {
+              "dn": "id3",
+              "name": "container data3",
+              "icon": "glyphicon glyphicon-cloud"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mapper": {
+    "dn": "dn",
+    "name": "name",
+    "data": "data",
+    "subContainers": "subContainers"
+  },
+  "encrypted": false,
+  "customConditional": "",
+  "logic": [],
+  "sid": "IDM",
+  "body": {},
+  "lazy_param": "",
+  "reorder": false,
+  "placeholder": "",
+  "prefix": "",
+  "customClass": "",
+  "suffix": "",
+  "multiple": false,
+  "protected": false,
+  "unique": false,
+  "persistent": true,
+  "hidden": false,
+  "clearOnHide": true,
+  "dataGridLabel": false,
+  "labelPosition": "top",
+  "labelWidth": 30,
+  "labelMargin": 3,
+  "description": "",
+  "errorLabel": "",
+  "tooltip": "",
+  "tabindex": "",
+  "autofocus": false,
+  "dbIndex": false,
+  "customDefaultValue": "",
+  "calculateValue": "",
+  "allowCalculateOverride": false,
+  "widget": {
+    "format": "yyyy-MM-dd hh:mm a",
+    "dateFormat": "yyyy-MM-dd hh:mm a",
+    "saveAs": "text"
+  },
+  "refreshOn": "",
+  "clearOnRefresh": false,
+  "validateOn": "change",
+  "mask": false,
+  "inputType": "text",
+  "inputMask": ""
+}
