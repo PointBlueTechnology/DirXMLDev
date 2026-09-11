@@ -2,11 +2,15 @@ package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
+import com.pointblue.dirxml.dev.model.Prd;
+import com.pointblue.dirxml.dev.model.Provisioning;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
+import com.pointblue.dirxml.dev.xml.CanonicalXml;
 import com.pointblue.dirxml.sim.JndiLdapSearch;
 import com.pointblue.dirxml.sim.LdifDriverSource;
 import com.pointblue.dirxml.sim.LdifDriverSource.Entry;
@@ -199,7 +203,115 @@ public final class LdifReader {
                 d.links.add(new PolicyLink(set, ref, order));
             }
         }
+
+        // 5. provisioning: each driver's cn=AppConfig subtree, if it has one
+        for (Driver d : ds.drivers) {
+            if (d.dn == null) {
+                continue;
+            }
+            d.provisioning = readProvisioning(entries, d.dn);
+        }
         return ds;
+    }
+
+    // ---- provisioning (cn=AppConfig subtree: JSON forms + PRDs) ----------------------
+
+    /** Builds this driver's {@link Provisioning} from every entry under {@code cn=AppConfig,<driverDn>}
+     *  (matched by DN suffix, case-insensitive); null if the container entry itself isn't present. */
+    private static Provisioning readProvisioning(Collection<Entry> entries, String driverDn) {
+        String appConfigDn = "cn=AppConfig," + driverDn;
+        String suffix = ("," + appConfigDn).toLowerCase();
+        boolean hasAppConfig = false;
+        List<Entry> subtree = new ArrayList<>();
+        for (Entry e : entries) {
+            boolean isContainer = e.dn.equalsIgnoreCase(appConfigDn);
+            if (isContainer) {
+                hasAppConfig = true;
+            }
+            if (isContainer || e.dn.toLowerCase().endsWith(suffix)) {
+                subtree.add(e);
+            }
+        }
+        if (!hasAppConfig) {
+            return null;
+        }
+        Provisioning p = new Provisioning();
+        p.dn = appConfigDn;
+        int unplaced = 0;
+        int other = 0;
+        for (Entry e : subtree) {
+            if (e.dn.equalsIgnoreCase(appConfigDn)) {
+                copyMeta(e, p.meta, "srvprvAppConfig");
+                continue;
+            }
+            if (e.hasClass("srvprvJSONForm")) {
+                Form.Kind kind = Form.Kind.byContainer(rdn(parentDn(e.dn)));
+                if (kind == null) {
+                    p.meta.put("provisioning.unplaced-form." + (unplaced++), e.dn);
+                    continue;
+                }
+                String data = e.first("srvprvJSONData");
+                Form f = new Form(kind, rdn(e.dn), data == null ? "" : data);
+                f.meta.put("dn", e.dn);
+                copyMeta(e, f.meta, "srvprvJSONForm");
+                p.forms.add(f);
+            } else if (e.hasClass("srvprvRequest")) {
+                p.prds.add(readPrd(e));
+            } else if (!e.hasClass("srvprvJSONForms") && !e.hasClass("srvprvRequestDefs")
+                       && !e.hasClass("srvprvAppConfig")) {
+                other++;
+            }
+        }
+        if (other > 0) {
+            p.meta.put("provisioning.other-objects", String.valueOf(other));
+        }
+        return p;
+    }
+
+    private static Prd readPrd(Entry e) {
+        Prd prd = new Prd(rdn(e.dn));
+        // normalize() re-parses through CanonicalXml (see its javadoc): Xds/XmlDocument
+        // doesn't fold \r\n to \n in text content the way a conformant parser does, and
+        // PRD scripts on the test vault carry CRLF line endings — without this the first
+        // as-code write would differ from every write after a tree round trip.
+        prd.definition = normalizeOrNull(xmlOrNull(e.first("XmlData")));
+        prd.request = normalizeOrNull(xmlOrNull(e.first("srvprvRequestXML")));
+        if (prd.definition != null) {
+            // the vault's XmlData already contains <process> as a child of
+            // <prov-req-defn> (verified on the test vault) — reuse that node
+            // rather than re-parsing the redundant srvprvProcessXML copy.
+            List<Element> procs = com.pointblue.dirxml.sim.Xds.childrenByName(prd.definition, "process");
+            if (!procs.isEmpty()) {
+                prd.process = procs.get(0);
+            }
+        }
+        if (prd.process == null) {
+            prd.process = normalizeOrNull(xmlOrNull(e.first("srvprvProcessXML")));
+        }
+        putProp(prd, "status", e.all("srvprvStatus"));
+        putProp(prd, "flow-strategy", e.all("srvprvFlowStrategy"));
+        putProp(prd, "grant", e.all("srvprvGrant"));
+        putProp(prd, "revoke", e.all("srvprvRevoke"));
+        putProp(prd, "category-key", e.all("srvprvCategoryKey"));
+        putProp(prd, "localized-names", e.all("srvprvLocalizedNames"));
+        putProp(prd, "localized-descrs", e.all("srvprvLocalizedDescrs"));
+        putProp(prd, "process-type", e.all("srvprvProcessType"));
+        putProp(prd, "entitlement-ref", e.all("srvprvEntitlementRef"));
+        putProp(prd, "workflow-data", e.all("srvprvWorkflowData"));
+        putProp(prd, "description", e.all("description"));
+        prd.meta.put("dn", e.dn);
+        copyMeta(e, prd.meta, "srvprvRequest");
+        return prd;
+    }
+
+    private static Element normalizeOrNull(Element e) {
+        return e == null ? null : CanonicalXml.normalize(e);
+    }
+
+    private static void putProp(Prd prd, String key, List<String> values) {
+        if (values != null && !values.isEmpty()) {
+            prd.properties.put(key, new ArrayList<>(values));
+        }
     }
 
     // ---- DN structure → scope/driver ----

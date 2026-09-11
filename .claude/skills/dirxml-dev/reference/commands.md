@@ -17,6 +17,14 @@ Run `bin/idm` for the full usage with every argument. All commands print
 
 `validate tree/` · `query tree/ artifacts|chain|gcvs|tables [driver]` · `show tree/ <path>` · `refs tree/ <path>` · `tree.diff a/ b/` · `package.diff tree/ <path>`
 
+## Provisioning (forms + PRDs; docs/forms.md; read-only in Track P1)
+
+`form.list tree/ [--driver D]` · `form.show tree/ <name>|<kind>/<name>|<driver>/<kind>/<name> [--driver D] [--json]` · `prd.list tree/ [--driver D]` · `prd.show tree/ <name> [--driver D] [--json]`
+
+Lives under `drivers/<driver>/provisioning/` — picked up automatically by
+`import`/`import-project`/`import-ldif`/`import-live` when the driver has a
+`cn=AppConfig` subtree. Form kinds: `request` `approval` `template`.
+
 ## Change (transactions; `--dry-run`, `--force` — don't)
 
 `policy.add` `resource.add` `artifact.set-content` `artifact.rename` `artifact.delete` `policy.link` `policy.unlink` `policy.reorder`

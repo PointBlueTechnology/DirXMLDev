@@ -34,6 +34,8 @@ public final class Driver {
     /** Ordered policy-set linkage (all sets). */
     public final List<PolicyLink> links = new ArrayList<>();
     public final Map<String, String> meta = new LinkedHashMap<>();
+    /** This driver's {@code cn=AppConfig} subtree (forms, PRDs); null if it has none. */
+    public Provisioning provisioning;
 
     public Driver(String name) {
         this.name = Objects.requireNonNull(name, "name");

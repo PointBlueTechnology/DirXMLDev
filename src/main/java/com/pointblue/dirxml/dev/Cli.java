@@ -110,6 +110,18 @@ public final class Cli {
             if (args.length >= 1 && args[0].equals("query")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.query(args));
             }
+            if (args.length >= 1 && args[0].equals("form.list")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.formList(args));
+            }
+            if (args.length >= 1 && args[0].equals("form.show")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.formShow(args));
+            }
+            if (args.length >= 1 && args[0].equals("prd.list")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.prdList(args));
+            }
+            if (args.length >= 1 && args[0].equals("prd.show")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.prdShow(args));
+            }
             if (args.length >= 1 && args[0].equals("package.diff") && !hasCatalogFlag(args)) {
                 // package.diff <tree> <artifactPath>: a customized packaged artifact vs its baseline in a tree.
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.packageDiff(args));
@@ -297,6 +309,11 @@ public final class Cli {
         System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
         System.err.println("  query <asCodeDir> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver]");
         System.err.println("  package.diff <asCodeDir> <artifactPath>  a customized packaged artifact vs its package baseline");
+        System.err.println("provisioning (forms + PRDs; docs/forms.md):");
+        System.err.println("  form.list <asCodeDir> [--driver D]              every JSON form: kind, name, title, #fields, packaged mark");
+        System.err.println("  form.show <asCodeDir> <name-or-path> [--driver D] [--json]  a form's outline + which PRDs bind it");
+        System.err.println("  prd.list  <asCodeDir> [--driver D]              every PRD: status, category, json-forms/classic, bound forms");
+        System.err.println("  prd.show  <asCodeDir> <name> [--driver D] [--json]          a PRD's properties, bindings, activities");
         System.err.println("package catalog (docs/packages.md; a jars+unpacked-form repository kept in git):");
         System.err.println("  package.fetch   --catalog DIR [--site NAME|URL] [--short SHORT[_ver]…] [--all-versions] [--dry-run] [--json]");
         System.err.println("  package.import  --catalog DIR <jar|dir> [--json]");
