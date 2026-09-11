@@ -279,7 +279,11 @@ Identity Applications cache" after touching provisioning objects.
 ### Human spike (step 6, pending)
 
 Jerry opens `~/designer_workspace/test11pf` (a copy of `test11` — `.proj`,
-`.cproj` and `.project` renamed to match the folder — that `export-project`
+`.cproj` and `.project` renamed to match the folder AND their contents
+rewritten: `.proj`'s `cprojectURI`, `name` and `adapterProject href`, the
+`.cproj`'s project name and `.project`'s `<name>`; with only the file names
+changed Designer imports the project but shows no System Model, an empty
+developer view and no provisioning items — that `export-project`
 updated from `~/IdeaProjects/DirXMLDev-e2e/tree-test11pf`: `form.add` of
 "DirXMLDev Writer Test" from "Request Form" + a required textarea
 `justification` + `form.localize --sync`, and `prd.add` of "DirXMLDev Writer
