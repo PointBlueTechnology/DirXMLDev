@@ -65,6 +65,38 @@ pickup check is therefore a UI check (Administration → Workflows / the
 request form under Requests), with and without Administration → Caching →
 flush.
 
+## Runtime pickup: PASS (2026-09-11, Jerry in the Identity Applications + REST)
+
+- **No cache flush needed.** `DirXMLDev Scratch PRD` appeared under Requests
+  right after `vault.deploy`; Jerry submitted it and the workflow engine ran
+  it (pod log: `Workflow_Started … cn=dirxmldev scratch prd`), failing at the
+  provision activity with `{enter Entitlement DN here}` — the NoApproval
+  template's own placeholder, as expected for a template copy.
+- **The form is served like a stock one.** The dashboard asks
+  `POST /IDMProv/rest/access/permissions/item {"id":<PRD DN>,"entityType":"prd"}`
+  and got, for ours exactly as for `HelpdeskTicket`, `isNewForm: true` and
+  `requestFormId: cn=DirXMLDev Scratch,cn=WorkflowForms,cn=appconfig,…`
+  (a flattened DN — the applications resolve the form by name under
+  `WorkflowForms`); `GET /IDMProv/rest/access/forms?id=<that DN>&pid=<PRD DN>
+  &formContainer=RequestForms&recipient=…&locale=en` returns our document
+  (`formJSON`: title `DirXMLDev Scratch`, display `form`, the copied
+  components) with the same shape as the stock one.
+- **Where the form shows.** For `isNewForm` PRDs the dashboard (chunk
+  `showPRDModal`) opens the JSON form renderer in a **new browser window**
+  (`/forms/#/form/details?id=…&pid=…&sid=IDM&uri=/rest/access/forms
+  &formContainer=RequestForms`) when the PRD is picked; the New Request
+  page's own Request button is the classic no-form submit. Jerry's first
+  submission went through that button (no form seen, workflow ran); after
+  `prd.map` added `reason`/`recipient` data items, the same button answered
+  "Internal exception occurred processing REST service" — the no-form path
+  cannot supply mapped fields. A blocked popup looks exactly like "no form".
+- Deploying a PRD change rewrote every PRD attribute (the plan modifies all
+  attributes of a changed object); correct but noisy — a per-attribute diff
+  would trim it (follow-up).
+- `prd.add` copies the template's mappings only where the field names still
+  exist, so a PRD built from `NoApproval` starts with no data items; map the
+  fields explicitly (`prd.map`) — a `--map-all` convenience is a candidate.
+
 ## Still open
 
 - **Runtime pickup**: whether the Identity Applications serve a changed form
