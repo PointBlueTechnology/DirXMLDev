@@ -30,7 +30,7 @@ import java.util.Set;
  */
 public final class Plan {
 
-    public enum Op { ADD, MODIFY, DELETE, SET_SECRET, RESTART, START_OPTION, AUX_CLASS }
+    public enum Op { ADD, MODIFY, DELETE, SET_SECRET, RESTART, START_OPTION, AUX_CLASS, ENSURE_CONTAINER }
 
     /** One operation. {@code values} is what to write (null for DELETE/RESTART; secrets carry only the key). */
     public static final class Step {
@@ -106,9 +106,15 @@ public final class Plan {
         List<Step> driverSet = new ArrayList<>();
         List<Step> deletes = new ArrayList<>();
         List<Step> secretSteps = new ArrayList<>();
+        List<Step> provisioning = new ArrayList<>();
+        Set<String> ensuredContainers = new LinkedHashSet<>();
         Set<String> driversNeedingLinkage = new LinkedHashSet<>();
 
         for (ModelDiff.Change c : diff.changes()) {
+            if (c.kind.isProvisioning()) {
+                provisioningSteps(p, c, to, dsDn, tree, provisioning, deletes, ensuredContainers);
+                continue;
+            }
             switch (c.kind) {
                 case ARTIFACT_ADDED:
                 case ARTIFACT_CHANGED: {
@@ -329,6 +335,7 @@ public final class Plan {
         p.steps.addAll(library);
         p.steps.addAll(driverScope);
         p.steps.addAll(channel);
+        p.steps.addAll(provisioning);
         p.steps.addAll(driverAttrs);
         p.steps.addAll(driverSet);
         p.steps.addAll(deletes);
@@ -358,6 +365,123 @@ public final class Plan {
             }
         }
         return p;
+    }
+
+    /**
+     * Steps for a provisioning change (JSON form or PRD under the driver's {@code cn=AppConfig}):
+     * containers ensured, the object added/modified attribute by attribute, deletes queued last.
+     * Stamps as for artifacts; a customized packaged object gets a content-derived
+     * {@code DirXML-pkgChecksum} so Designer's modified test trips.
+     */
+    private static void provisioningSteps(Plan p, ModelDiff.Change c, DriverSet to, String dsDn, java.nio.file.Path tree,
+                                          List<Step> bucket, List<Step> deletes, Set<String> ensured) {
+        String driver = c.driver;
+        Driver d = to.driver(driver);
+        switch (c.kind) {
+            case FORM_REMOVED:
+            case PRD_REMOVED: {
+                String dn = VaultMapping.provisioningPathDn(dsDn, c.path);
+                p.touchedDns.add(dn);
+                deletes.add(new Step(Op.DELETE, dn, null, null, null, dn, c.path, driver));
+                return;
+            }
+            default:
+                break;
+        }
+        if (d == null || d.provisioning == null) {
+            p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
+            return;
+        }
+        boolean stampsOnly = "package-stamps".equals(c.what);
+        boolean added = c.kind == ModelDiff.Kind.FORM_ADDED || c.kind == ModelDiff.Kind.PRD_ADDED;
+        String dn;
+        String oc;
+        Map<String, List<byte[]>> attrs;
+        Map<String, List<byte[]>> stamps;
+        byte[] content;
+        if (c.kind == ModelDiff.Kind.FORM_ADDED || c.kind == ModelDiff.Kind.FORM_CHANGED) {
+            String tail = c.path.substring(c.path.indexOf("/provisioning/forms/") + "/provisioning/forms/".length());
+            String[] parts = tail.split("/", 2);
+            com.pointblue.dirxml.dev.model.Form f = d.provisioning.form(com.pointblue.dirxml.dev.model.Form.Kind.byDir(parts[0]), parts[1]);
+            if (f == null) {
+                p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
+                return;
+            }
+            dn = VaultMapping.formDn(dsDn, driver, f);
+            oc = VaultMapping.OC_JSON_FORM;
+            content = VaultMapping.formBytes(f);
+            attrs = stampsOnly ? new LinkedHashMap<>() : VaultMapping.formAttributes(f);
+            String baseline = readBaseline(tree, com.pointblue.dirxml.dev.edit.FormOps.path(d, f) + ".form.json");
+            if (baseline != null) {
+                try {
+                    baseline = com.pointblue.dirxml.dev.json.Json.compact(com.pointblue.dirxml.dev.json.Json.parse(baseline));
+                } catch (RuntimeException e) {
+                    // keep as is
+                }
+            }
+            stamps = VaultMapping.provisioningPackageAttributes(f.meta, baseline);
+            if (!stamps.isEmpty() && "true".equals(f.meta.get(Packages.CUSTOMIZED_KEY))) {
+                stamps.put(VaultMapping.PKG_CHECKSUM, Vault.value(VaultMapping.customizedChecksum(content)));
+            }
+            if (added) {
+                ensureContainer(bucket, ensured, VaultMapping.workflowFormsDn(dsDn, driver), VaultMapping.OC_JSON_FORMS, c, driver);
+                ensureContainer(bucket, ensured, VaultMapping.formContainerDn(dsDn, driver, f.kind), VaultMapping.OC_JSON_FORMS, c, driver);
+            }
+        } else {
+            String name = c.path.substring(c.path.indexOf("/provisioning/prds/") + "/provisioning/prds/".length());
+            com.pointblue.dirxml.dev.model.Prd prd = d.provisioning.prd(name);
+            if (prd == null) {
+                p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
+                return;
+            }
+            dn = VaultMapping.prdDn(dsDn, driver, prd);
+            oc = VaultMapping.OC_REQUEST;
+            attrs = stampsOnly ? new LinkedHashMap<>() : VaultMapping.prdAttributes(prd);
+            List<byte[]> xml = attrs.get(VaultMapping.XML_DATA);
+            content = xml == null || xml.isEmpty() ? new byte[0] : xml.get(0);
+            String baseline = readBaseline(tree, com.pointblue.dirxml.dev.edit.FormOps.prdPath(d, prd) + "/definition.xml");
+            stamps = VaultMapping.provisioningPackageAttributes(prd.meta, baseline);
+            if (!stamps.isEmpty() && "true".equals(prd.meta.get(Packages.CUSTOMIZED_KEY))) {
+                stamps.put(VaultMapping.PKG_CHECKSUM, Vault.value(VaultMapping.customizedChecksum(content)));
+            }
+            if (added) {
+                ensureContainer(bucket, ensured, VaultMapping.requestDefsDn(dsDn, driver), VaultMapping.OC_REQUEST_DEFS, c, driver);
+            }
+        }
+        p.touchedDns.add(dn);
+        attrs.putAll(stamps);
+        if (added) {
+            List<String> classes = stamps.isEmpty() ? List.of("Top", oc) : List.of("Top", oc, VaultMapping.PKG_ITEM_AUX);
+            bucket.add(new Step(Op.ADD, dn, null, classes, attrs, dn + "  " + oc + " (" + size(attrs) + ")", c.path, driver));
+        } else {
+            if (!stamps.isEmpty()) {
+                bucket.add(new Step(Op.AUX_CLASS, dn, null, List.of(VaultMapping.PKG_ITEM_AUX), null,
+                    dn + "  objectClass += " + VaultMapping.PKG_ITEM_AUX, c.path, driver));
+            }
+            for (Map.Entry<String, List<byte[]>> e : attrs.entrySet()) {
+                bucket.add(new Step(Op.MODIFY, dn, e.getKey(), null, Map.of(e.getKey(), e.getValue()),
+                    dn + "  " + e.getKey() + " (" + size(Map.of(e.getKey(), e.getValue())) + ")", c.path, driver));
+            }
+        }
+    }
+
+    private static void ensureContainer(List<Step> bucket, Set<String> ensured, String dn, String oc, ModelDiff.Change c, String driver) {
+        if (ensured.add(dn)) {
+            bucket.add(new Step(Op.ENSURE_CONTAINER, dn, null, List.of("Top", oc), Vault.attrs(),
+                dn + "  " + oc + " (created if absent)", c.path, driver));
+        }
+    }
+
+    private static String readBaseline(java.nio.file.Path tree, String relative) {
+        if (tree == null) {
+            return null;
+        }
+        java.nio.file.Path f = tree.resolve(".package-baseline").resolve(relative);
+        try {
+            return java.nio.file.Files.isRegularFile(f) ? java.nio.file.Files.readString(f, StandardCharsets.UTF_8) : null;
+        } catch (java.io.IOException e) {
+            return null;
+        }
     }
 
     /** The distinct changes, in step order (for {@code --step}). */

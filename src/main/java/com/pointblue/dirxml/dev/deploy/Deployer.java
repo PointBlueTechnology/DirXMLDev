@@ -274,6 +274,13 @@ public final class Deployer {
             case AUX_CLASS:
                 vault.addObjectClasses(s.dn, s.objectClasses);
                 break;
+            case ENSURE_CONTAINER:
+                if (!vault.exists(s.dn)) {
+                    vault.add(s.dn, s.objectClasses, s.values);
+                } else {
+                    r.skipped.add(s.description + " — already there");
+                }
+                break;
             case START_OPTION:
                 vault.setDriverStartOption(s.dn, Vault.START_MANUAL);
                 break;
