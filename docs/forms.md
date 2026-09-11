@@ -100,12 +100,21 @@ form.delete    <tree> <form>                 refused while a PRD binds it (--for
 - Components are created with the builder's defaults for that type (captured
   from the stock forms as templates in `resources/forms/components/<type>.json`),
   so a form we author round-trips through the vendor builder unchanged.
-- **PRD binding sync** is part of every form transaction: for each PRD whose
-  `provision-request`/`process` binds the form, rewrite the `<form-binding>`
-  field list (`name`, `data-type`, `control-type`) and the
-  `request-data-items`/activity `data-items` (`flowdata.<activity>/<form>/<key>`)
-  the way Designer does; report the changes as notes. This is the only PRD
-  write in Track P.
+- **PRD binding sync** is part of every form transaction (`forms.BindingSync`,
+  built 2026-09-11 from Designer's decompiled PRD editor and calibrated so that
+  syncing an untouched stock form is a no-op on 4.8.7, 4.10.1 and the test11
+  project — 9 of 11 stock forms exact; the other two are stale stock bindings
+  Designer's own code would rewrite the same way): the request form's
+  `<form-binding><content>` field list is rebuilt from every component that has
+  a `key` and a `type` in Designer's `FormDataConfig.json` map (`data-type`
+  from the map, `control-type` = the type, `apwaComment` skipped, already-bound
+  buttons kept); approval-activity bindings are bare references and are left
+  alone; data items (`request-data-items`, activity `<data-items>`) are the
+  *persisted mappings* — kept while their field exists (`target-type` refreshed
+  from `multiple`), removed when it vanishes, never invented. Mapping a new
+  field to flowdata is an explicit operation (`prd.map`, step P2b). Changes are
+  reported as notes; packaged PRDs touched this way are marked customized and
+  baselined. This is the only PRD write in Track P besides `prd.add`.
 - Validation (a `FormCheck` in the existing validator): JSON well-formed;
   unique keys; every input has a key and a type the renderer knows; buttons
   present (submit/cancel) on request forms; `conditional`/`logic` refer to
@@ -187,10 +196,13 @@ Identity Applications cache" after touching provisioning objects.
 
 ## 6. Build order
 
-1. **P1 read/model** — `Provisioning`/`Form`/`Prd` model; live + LDIF + project
-   readers; as-code writer/reader; `import-live` of the UA driver's AppConfig;
-   round trip byte-exact on test11/XFDEMO1 and the test vault. (delegable)
-2. **P2a form.edit** — the launcher (Option A) + post-edit validate/sync. (me)
+1. ✅ **P1 read/model** (2026-09-11) — `Provisioning`/`Form`/`Prd`/`FormDocument`
+   model; LDIF/live + project readers; as-code writer/reader; `form.list|show`,
+   `prd.list|show`; round trips byte-exact on test11 and the two vault dumps.
+2. ✅ **P2a form.edit** (2026-09-11) — `forms.FormBuilderLocator` (per-OS
+   discovery, checks, fix commands) + `FormBuilderRunner` + `form.edit`,
+   `form.set-content`, `form.sync` (`edit.FormOps`) with `forms.BindingSync`;
+   verified on this Mac against the real builder and on the stock forms.
 3. **P2b typed ops** — Option B commands + `FormCheck` + PRD binding sync;
    parity test: a form authored by us re-saved by the vendor builder is
    semantically identical. (partly delegable once the model exists)

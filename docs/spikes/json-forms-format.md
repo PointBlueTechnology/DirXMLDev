@@ -78,6 +78,33 @@ form therefore requires updating the PRD's binding and data items — Designer
 does this when the form is saved from its own UI. Designer records the
 dependency in the PRD's `.digest` (`digest-dependency object-type="srvprvJSONRequestForm"`).
 
+**How Designer keeps a binding in step with the form** (decompiled
+`com.novell.prov.prd.ui`: `JSONFormControlPage`, `util/json/ParseJSON`,
+`JSONFormDataType` + its `FormDataConfig.json`, `workflow/model/Activity`
+`synchronizeDataItemsWithJSONForm`, `UserActivity.doMapAll`; calibrated on the
+stock PRDs of 4.8.7, 4.10.1 and test11 — 9 of 11 stock forms re-sync as exact
+no-ops, the other two are stale stock bindings):
+- `ParseJSON` collects every JSON object anywhere in the document that has a
+  string `key` and `type` (first wins per key) plus its `multiple` flag —
+  containers, columns and buttons included.
+- The **request form's** `<form-binding><content>` fields are rebuilt on
+  selection/save from those items whose type is in `FormDataConfig.json`
+  (33 distinct types: textfield/textarea/text/select/radio/tree/email/url/
+  phoneNumber/day/htmlelement/title/labelelement/tags/hidden/file/signature/
+  modaledit → string; number/currency → decimal; checkbox → boolean; time →
+  time; datetime → date; dynamic_entity/dnquery/dn_display/permission_requestDN
+  → dn; selectboxes/survey/datagrid/editgrid/container/datamap → jsonobject),
+  skipping the key `apwaComment`; buttons are not in the map (the stock PRDs
+  still carry `button` fields from an older Designer).
+- An **approval activity's** `<form-binding activity-id form-id>` under
+  `<process>` carries no field list — it is a reference.
+- **Data items** (`request-data-items`, `<data-items activity-id>`) are the
+  persisted *mappings*: the in-memory list holds every non-button field, but
+  only mapped items (a `target`/`source`) are written, so stock PRDs bind
+  fields with no data item (e.g. `subHeading`). Map-All builds
+  `flowdata.<activityId>/<form id with spaces → _>/<key>`, skipping
+  `htmlelement`; `target-type` is `multi-value-list` when `multiple` is true.
+
 Schemas exist for validation: `ProvisioningRequestDefn.xsd` (1,233 lines,
 `com.novell.prov.prd.ui/model/`) and `prdef.dtd` (`com.novell.prov.edit`).
 
