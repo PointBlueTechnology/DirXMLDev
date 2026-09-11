@@ -145,6 +145,24 @@ so a live preview through the vendor stack needs Tomcat up. Runtime pickup of
 a deployed form/PRD change (cache flush or not) is untested for the same
 reason.
 
+### 6a. Second test system: idm254 (IDM 4.10.1, 2026-09-11)
+
+`idm254-engine.pointbluetech.com` (eDirectory 9.3.3, `cn=driverset1,o=system`,
+four running drivers: User Application, Role and Resource, MSGW, DCS; User
+Application base package `NOVLUABASE 4.10.1.20250606222933`) with the
+Identity Applications at `https://idm254.pointbluetech.com` (`/IDMProv/` →
+login redirect, `/idmdash/` 200, `/forms/` = IGA Form Renderer 1.2.2.0200,
+IDM 4.10.2 patch; `/workflow/*` answers 500 even for the REST root — to be
+checked from the server log). Same 11 stock forms / 39 PRDs as 4.8.7, but
+**the 4.10.1 stock forms are minimal documents**: components carry only the
+keys that matter (a `textfield` has ~14 keys instead of the 4.8 builder's 47;
+`validate` holds only `{"required":true}`), and they render. So the renderer
+tolerates components without the builder's default keys — typed operations
+may emit minimal components; the 22 captured templates
+(`resources/forms/components/`) remain the reference for what each key means
+and what the builder writes. Environment `idm254` is in the gitignored
+`environments.properties`; `driverset.status --env idm254` works.
+
 ## 7. Real usage
 
 Designer workspaces on this Mac: every project carries the 11 stock forms;
