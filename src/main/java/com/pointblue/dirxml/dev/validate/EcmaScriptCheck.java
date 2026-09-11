@@ -154,14 +154,27 @@ public final class EcmaScriptCheck implements Check {
     }
 
     /**
-     * Compiles {@code src} with the engine's own Rhino ({@link Context#compileString}); returns
-     * Rhino's diagnostic (with line/column, when known) or null if it compiles. Shared with
-     * {@link FormCheck} for a form's scripts ({@code inlinescripts}, {@code customConditional},
-     * {@code calculateValue}, …), which are checked the same way.
+     * Compiles {@code src} with the engine's own Rhino ({@link Context#compileString}) at the
+     * engine's default language version; returns Rhino's diagnostic (with line/column, when
+     * known) or null if it compiles.
      */
     public static String compileError(String src, String sourceName) {
+        return compileError(src, sourceName, Context.VERSION_DEFAULT);
+    }
+
+    /**
+     * As {@link #compileError(String, String)}, at a chosen language version. {@link FormCheck}
+     * uses {@code Context.VERSION_ES6} for a form's scripts ({@code inlinescripts},
+     * {@code customConditional}, {@code calculateValue}, a button's {@code custom}, …): unlike
+     * driver policy ECMAScript, these run in the Identity Applications forms renderer's browser,
+     * not the engine's own Rhino, so the stock forms' real scripts use {@code let}/{@code const}
+     * and other syntax the engine's default Rhino language version rejects but
+     * {@code VERSION_ES6} accepts (confirmed against the test vault's stock button scripts).
+     */
+    public static String compileError(String src, String sourceName, int languageVersion) {
         Context cx = Context.enter();
         try {
+            cx.setLanguageVersion(languageVersion);
             cx.compileString(src, sourceName, 1, null);
             return null;
         } catch (RuntimeException e) {

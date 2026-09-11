@@ -9,6 +9,7 @@ import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Prd;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
 import com.pointblue.dirxml.sim.Xds;
+import com.novell.soa.script.mozilla.javascript.Context;
 import org.w3c.dom.Element;
 
 import java.util.ArrayList;
@@ -89,19 +90,15 @@ public final class FormCheck implements Check {
             r.add(Finding.error("form-no-components", path, "form has no \"components\" array"));
         }
 
-        Map<String, Integer> counts = globalKeyCounts(root);
-        for (Map.Entry<String, Integer> e : counts.entrySet()) {
-            if (e.getValue() > 1) {
-                r.add(Finding.error("form-duplicate-key", path,
-                    "key '" + e.getKey() + "' appears on " + e.getValue() + " components — Designer's keys are global"));
-            }
-        }
+        Set<String> knownKeys = globalKeyCounts(root).keySet();
+        checkDuplicateKeys(root, path, r);
 
         boolean[] hasButton = {false};
-        walk(root, obj -> {
+        for (com.pointblue.dirxml.dev.forms.FormEditor.Located loc : com.pointblue.dirxml.dev.forms.FormEditor.all(root)) {
+            Map<String, Object> obj = loc.component;
             Object type = obj.get("type");
             if (!(type instanceof String) || ((String) type).isEmpty()) {
-                return;
+                continue;
             }
             String t = (String) type;
             Object key = obj.get("key");
@@ -115,12 +112,12 @@ public final class FormCheck implements Check {
             if ("button".equals(t)) {
                 hasButton[0] = true;
             }
-        });
+        }
         if (f.kind == Form.Kind.REQUEST && !hasButton[0]) {
             r.add(Finding.warning("form-request-buttons", path, "request form has no button component"));
         }
 
-        checkConditionalRefs(root, counts.keySet(), path, r);
+        checkConditionalRefs(root, knownKeys, path, r);
         checkScripts(root, path, r);
         checkLocalization(root, path, r);
     }
@@ -184,7 +181,7 @@ public final class FormCheck implements Check {
         if (TEMPLATE_ONLY.matcher(src.strip()).matches()) {
             return;   // a {{ }} template expression, not a script
         }
-        String err = EcmaScriptCheck.compileError(src, where);
+        String err = EcmaScriptCheck.compileError(src, where, Context.VERSION_ES6);
         if (err != null) {
             r.add(Finding.error("form-script-syntax", path, where + ": " + err));
         }
@@ -213,6 +210,53 @@ public final class FormCheck implements Check {
                 r.add(Finding.info("form-localization-missing", path,
                     "language '" + e.getKey() + "' is missing " + missing.size() + " of " + union.size() + " declared entries",
                     String.join(", ", missing)));
+            }
+        }
+    }
+
+    /**
+     * A duplicate key is only worth flagging when at least one of its occurrences is a genuinely
+     * bindable field ({@link BindingSync#DATA_TYPES}) — the stock forms freely repeat a key on
+     * pure layout components ({@code column}, {@code columns}, {@code panel}; Designer's own
+     * {@code ParseJSON}/{@link BindingSync#items} already tolerate this with "first wins", since
+     * layout types are never bound). A {@code workflowWizard} form ("Create Workflow Form") is a
+     * per-activity repeating builder template, not a flat field namespace — no PRD ever binds to
+     * it — so it is excluded outright (confirmed against the test vault: every one of its
+     * "duplicates" is an intentionally repeated field across activity-configuration steps).
+     */
+    private static void checkDuplicateKeys(Map<String, Object> root, String path, Report r) {
+        if ("workflowWizard".equals(root.get("display"))) {
+            return;
+        }
+        Map<String, List<String>> typesByKey = new LinkedHashMap<>();
+        collectKeyTypes(root, typesByKey);
+        for (Map.Entry<String, List<String>> e : typesByKey.entrySet()) {
+            List<String> types = e.getValue();
+            if (types.size() < 2) {
+                continue;
+            }
+            boolean anyBindable = types.stream().anyMatch(t -> BindingSync.DATA_TYPES.containsKey(t.toUpperCase(Locale.ROOT)));
+            if (anyBindable) {
+                r.add(Finding.error("form-duplicate-key", path,
+                    "key '" + e.getKey() + "' appears on " + types.size() + " components " + types + " — Designer's keys are global"));
+            }
+        }
+    }
+
+    private static void collectKeyTypes(Object node, Map<String, List<String>> out) {
+        if (node instanceof Map) {
+            Map<?, ?> m = (Map<?, ?>) node;
+            Object k = m.get("key");
+            Object t = m.get("type");
+            if (k instanceof String && t instanceof String && !((String) k).isEmpty() && !((String) t).isEmpty()) {
+                out.computeIfAbsent((String) k, x -> new ArrayList<>()).add((String) t);
+            }
+            for (Object v : m.values()) {
+                collectKeyTypes(v, out);
+            }
+        } else if (node instanceof List) {
+            for (Object v : (List<?>) node) {
+                collectKeyTypes(v, out);
             }
         }
     }
@@ -264,6 +308,9 @@ public final class FormCheck implements Check {
     // ---- PRDs ---------------------------------------------------------------------------
 
     private static void checkPrd(Driver d, Prd prd, Report r) {
+        if (!prd.isJsonForms()) {
+            return;   // classic (XForms) PRDs are out of scope — see docs/forms.md §2
+        }
         String path = prdPath(d, prd);
         for (Prd.FormBinding b : prd.bindings()) {
             Form form = d.provisioning.formByName(b.formId);
