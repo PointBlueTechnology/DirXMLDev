@@ -430,10 +430,7 @@ public final class Plan {
                     // keep as is
                 }
             }
-            stamps = VaultMapping.provisioningPackageAttributes(f.meta, baseline);
-            if (!stamps.isEmpty() && "true".equals(f.meta.get(Packages.CUSTOMIZED_KEY))) {
-                stamps.put(VaultMapping.PKG_CHECKSUM, Vault.value(VaultMapping.customizedChecksum(content)));
-            }
+            stamps = VaultMapping.provisioningPackageAttributes(f.meta, baseline);   // a customized form's checksum is already content-derived in meta
             if (added) {
                 ensureContainer(bucket, ensured, VaultMapping.workflowFormsDn(dsDn, driver), VaultMapping.OC_JSON_FORMS, c, driver);
                 ensureContainer(bucket, ensured, VaultMapping.formContainerDn(dsDn, driver, f.kind), VaultMapping.OC_JSON_FORMS, c, driver);
@@ -452,9 +449,6 @@ public final class Plan {
             content = xml == null || xml.isEmpty() ? new byte[0] : xml.get(0);
             String baseline = readBaseline(tree, com.pointblue.dirxml.dev.edit.FormOps.prdPath(d, prd) + "/definition.xml");
             stamps = VaultMapping.provisioningPackageAttributes(prd.meta, baseline);
-            if (!stamps.isEmpty() && "true".equals(prd.meta.get(Packages.CUSTOMIZED_KEY))) {
-                stamps.put(VaultMapping.PKG_CHECKSUM, Vault.value(VaultMapping.customizedChecksum(content)));
-            }
             if (added) {
                 ensureContainer(bucket, ensured, VaultMapping.requestDefsDn(dsDn, driver), VaultMapping.OC_REQUEST_DEFS, c, driver);
             }

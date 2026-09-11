@@ -149,6 +149,7 @@ public final class Transaction {
             r.refusal = e.getMessage();
             return r;
         }
+        Packages.refreshChecksums(ds, touched);   // customized packaged objects: checksum follows the content
         r.touched.addAll(touched);
         r.renamed.putAll(renamed);
         r.customized.addAll(customizedNow);
