@@ -304,7 +304,10 @@ vault/jar/site facts in [spikes/package-format.md](spikes/package-format.md).
 The PDT analysis ([spikes/pdt-analysis.md](spikes/pdt-analysis.md)) and the
 headless spike stay as reference; the headless route is not pursued.
 
-**Track P — Provisioning forms (the form builder)**
+**Track P — Provisioning forms (the form builder)** — design note
+[forms.md](forms.md) (2026-09-11; JSON forms only; options A vendor builder
+launcher / B typed operations / C preview; findings in
+[spikes/json-forms-format.md](spikes/json-forms-format.md)).
 Runs alongside Phases 3–4 once the model exists; it is a distinct object model
 (`Model/Provisioning/` in a project; `srvprv*` objects under the User Application
 driver's AppConfig in the vault) so it gets its own reader/writer.
