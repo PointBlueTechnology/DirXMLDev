@@ -304,10 +304,16 @@ vault/jar/site facts in [spikes/package-format.md](spikes/package-format.md).
 The PDT analysis ([spikes/pdt-analysis.md](spikes/pdt-analysis.md)) and the
 headless spike stay as reference; the headless route is not pursued.
 
-**Track P — Provisioning forms (the form builder)** — design note
-[forms.md](forms.md) (2026-09-11; JSON forms only; options A vendor builder
-launcher / B typed operations / C preview; findings in
-[spikes/json-forms-format.md](spikes/json-forms-format.md)).
+**Track P — Provisioning forms (the form builder)** — ✅ **built and proven**
+(2026-09-11): design note [forms.md](forms.md) (JSON forms only; A = vendor
+builder launcher `form.edit`, B = typed operations + `FormCheck` + `prd.map`/
+`prd.add`, C = `form.preview`; deploy through the normal path); findings in
+[spikes/json-forms-format.md](spikes/json-forms-format.md), live proof in
+[spikes/forms-deploy-live.md](spikes/forms-deploy-live.md) (idm254: untouched
+vault diffs empty, scratch form + PRD add/modify/delete verified, PRD picked up
+by the Identity Applications with no cache flush and its form served like a
+stock one). Designer acceptance of the project writer (`test11pf`) is the one
+check still with Jerry.
 Runs alongside Phases 3–4 once the model exists; it is a distinct object model
 (`Model/Provisioning/` in a project; `srvprv*` objects under the User Application
 driver's AppConfig in the vault) so it gets its own reader/writer.

@@ -97,6 +97,20 @@ flush.
   exist, so a PRD built from `NoApproval` starts with no data items; map the
   fields explicitly (`prd.map`) — a `--map-all` convenience is a candidate.
 
+**Environment note (not ours):** with popups allowed, the stock Help-desk
+request behaves exactly like the scratch one on this lab (no form window,
+then "Internal exception occurred processing REST service"), and the form
+renderer pod logged no requests at all during those attempts (its only log
+lines were our own probes: "Auth middleware: no session cookie or header
+present"). The applications are configured with the external host
+(`com.netiq.idm.forms.url.host = https://idm254.pointbluetech.com`,
+`com.netiq.forms.redirect.url = …/forms/oauth.html`) and the ingress routes
+`/forms`, `/WFHandler` and `/oauth` to the `formrenderer` service on 8600, so
+the break is between the dashboard's popup and the renderer on that system
+(Jerry's hunch: an internal URL somewhere) — a lab issue to fix separately.
+The scratch form and PRD were removed again via the tree
+(`vault.deploy`: two deletes, verify OK, `vault.diff` no differences).
+
 ## Still open
 
 - **Runtime pickup**: whether the Identity Applications serve a changed form
