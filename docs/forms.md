@@ -45,6 +45,42 @@ idm form.edit <tree> <form>            launches the builder on the tree's copy; 
 **Verdict: build it — it is a thin launcher (a day) and the answer to "let
 people keep the builder".**
 
+#### What is required to have the builder available (all three platforms)
+
+The builder is OpenText's, shipped only as Designer plugins; we cannot
+redistribute it. Each workstation needs one of:
+
+1. **Designer 4.8.x or later installed** (the plugin is part of every
+   install), or
+2. **a copy of the plugin's `lib` directory** taken from that user's own
+   Designer install (self-contained; ~1 GB), placed anywhere and named by
+   `IDM_FORMBUILDER` or `formbuilder=` in `idm.properties`.
+
+The launch contract is the same everywhere — Designer's own code
+(`FormCreateWizard`) passes `--filepath=<file> --locale=<lang>
+[--service=<ServiceRegistry.json>]` on all platforms; only the executable
+path and one OS quirk each differ:
+
+| OS | Plugin dir under `<Designer>/plugins/` | Executable | Quirk |
+|---|---|---|---|
+| macOS | `com.mf.mac.cocoa.formbuilder_<ver>/lib/` | `FormBuilder.app/Contents/MacOS/FormBuilder` | Unsigned + quarantined by Gatekeeper: once per install `xattr -dr com.apple.quarantine FormBuilder.app` and `chmod -R a+x FormBuilder.app` (Designer sets the execute bits itself but cannot clear quarantine; Jerry hit "cannot be verified"). |
+| Windows | `com.mf.win.win32.formbuilder_<ver>/lib/` | `FormBuilder.exe` | Unsigned: SmartScreen may show "Windows protected your PC" on first run → *More info → Run anyway* (no admin rights needed). |
+| Linux | `com.mf.linux.gtk.formbuilder_<ver>/lib/` | `formbuilder` | Needs execute bits (`chmod -R a+x lib/`) and `--no-sandbox` (Designer adds it; Electron refuses to run as root without it). |
+
+Default Designer locations we search: macOS `/Applications/Designer`,
+Windows `C:\netiq\idm\apps\Designer` (and `%USERPROFILE%\designer`), Linux
+`/opt/netiq/idm/apps/Designer` and `~/designer`; the newest plugin version
+wins. `idm form.edit --check` (also run automatically before a launch)
+reports which executable will be used, whether it is executable/quarantined,
+and prints the one-time fix commands — it never runs them.
+
+Optional, for online features (entity lookups, preview against a live
+workflow engine): a `ServiceRegistry.json` with
+`{"FormsBackendUrl": "https://<identity apps host>:<port>/WFHandler"}`;
+we generate it from `<env>.formsUrl` in `environments.properties` when
+`--env` is given, otherwise the builder runs offline (its toggle shows
+"Offline"). Locale comes from `--locale` or the JVM default (`en_US` → `en`).
+
 ### Option B — typed form operations (agent path, the core)
 
 The agent needs to author and change forms without a screen. A typed model of
@@ -179,3 +215,26 @@ Identity Applications cache" after touching provisioning objects.
    `netiq-tomcat` service) when the spike is due?
 5. Gatekeeper fix for `FormBuilder.app`: run once by hand (the command is in
    the spike note) — the tool prints it, never runs it.
+
+## 8. Decisions (Jerry, 2026-09-11)
+
+1. **A → B → C in that order.** Confirmed.
+2. **PRD scope = binding sync + whole-object deploy, plus `prd.add --from-template`.** Confirmed (in).
+3. **Storage format** — explained, default = pretty in the tree, compact on the wire:
+   - *Byte-preserving* (like policies): the tree holds the vault's exact bytes,
+     one line of 10–200 KB per form. `vault.diff` stays a byte compare and
+     Designer/vault round trips are trivially exact, but `git diff` shows one
+     changed line per edit, code review and merges are hopeless, and the agent
+     reads a 200 KB line to change one label.
+   - *Pretty in the tree, compact on the wire* (recommended): the tree holds
+     2-space JSON with the builder's key order; the deployer and the Designer
+     writer emit exactly what the vendor builder emits (`JSON.stringify(schema)`,
+     compact — verified in the builder's bundle). `vault.diff` compares forms
+     as parsed JSON; an unchanged form is never rewritten, so untouched bytes
+     and package checksums stay untouched. Cost: one JSON-aware diff path.
+   - A third option, *pretty everywhere*, would make every deploy rewrite
+     every form once and change the bytes Designer sees; rejected.
+   Unless overridden, P1 stores pretty.
+4. **Tomcat on `idm-ig4`:** I may start it when the runtime-pickup spike is due.
+5. Gatekeeper: done by hand 2026-09-11; the standalone launch was then verified
+   (builder opened the tree's copy of `Help-desk Request Form`, offline, full palette).
