@@ -58,6 +58,8 @@ Look at a form without the Identity Applications:
 
 Deploy: forms and PRDs ride the normal `vault.diff`/`vault.deploy`/`vault.rollback` (no driver restart; the plan says when the Identity Applications may need a cache flush).
 
+`export-project` (below) also carries a driver's forms/PRDs into an existing Designer project — same command, no new flags.
+
 ## Change (transactions; `--dry-run`, `--force` — don't)
 
 `policy.add` `resource.add` `artifact.set-content` `artifact.rename` `artifact.delete` `policy.link` `policy.unlink` `policy.reorder`
@@ -88,7 +90,7 @@ Gating: reads are free; start/restart/trace/secrets need `--yes` on stg and `--y
 
 ## Designer and documentation
 
-- `export-project <tree> <projectDir> [--dry-run] [--json]` — update an existing Designer project in place from the tree (only the files the diff needs; refuses packaged new drivers and driver deletes)
+- `export-project <tree> <projectDir> [--dry-run] [--json]` — update an existing Designer project in place from the tree (only the files the diff needs; refuses packaged new drivers and driver deletes; also carries a driver's forms/PRDs, refusing only that driver's provisioning when the project has no AppConfig for it)
 - `docs <tree> --out <dir> [--driver D…] [--since <commit>] [--format md|html]` — README, `drivers/<name>.md`, `library.md`, `changes.md`
 
 ## Packages (Phase 7, in progress)
