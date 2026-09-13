@@ -63,7 +63,7 @@ path and one OS quirk each differ:
 
 | OS | Plugin dir under `<Designer>/plugins/` | Executable | Quirk |
 |---|---|---|---|
-| macOS | `com.mf.mac.cocoa.formbuilder_<ver>/lib/` | `FormBuilder.app/Contents/MacOS/FormBuilder` | Unsigned + quarantined by Gatekeeper: once per install `xattr -dr com.apple.quarantine FormBuilder.app` and `chmod -R a+x FormBuilder.app` (Designer sets the execute bits itself but cannot clear quarantine; Jerry hit "cannot be verified"). |
+| macOS | `com.mf.mac.cocoa.formbuilder_<ver>/lib/` | `FormBuilder.app/Contents/MacOS/FormBuilder` | Unsigned + quarantined by Gatekeeper: once per install `xattr -dr com.apple.quarantine FormBuilder.app` and `chmod -R a+x FormBuilder.app` (Designer sets the execute bits itself but cannot clear quarantine; Jerry hit "cannot be verified"). **Intel-only binary**: every Mach-O in the bundle (FormBuilder, Electron Framework 23.0.0 / Chrome 110, the helpers) is `x86_64`, not universal, so on Apple silicon it runs under Rosetta 2 — macOS 27 shows the Rosetta deprecation warning on launch (Designer itself and its bundled JRE are `x86_64` too). The `app.asar` payload is pure JS (no native `.node` modules), so a native-arch Electron 23 runtime could host it if Rosetta goes away (not built; candidate `form.edit --electron <binary>`). |
 | Windows | `com.mf.win.win32.formbuilder_<ver>/lib/` | `FormBuilder.exe` | Unsigned: SmartScreen may show "Windows protected your PC" on first run → *More info → Run anyway* (no admin rights needed). |
 | Linux | `com.mf.linux.gtk.formbuilder_<ver>/lib/` | `formbuilder` | Needs execute bits (`chmod -R a+x lib/`) and `--no-sandbox` (Designer adds it; Electron refuses to run as root without it). |
 
