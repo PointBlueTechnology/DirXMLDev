@@ -243,7 +243,7 @@ public class ProvisioningProjectWriterTest {
 
         run(tree, new FormOps.Add("UA", "request", "New Form", "Stock Form", null));
         run(tree, new FormOps.Delete("UA", "Extra Form"));
-        run(tree, new FormOps.PrdAdd("UA", "New Prd", "Stock Prd", "New Form", null, null, null));
+        run(tree, new FormOps.PrdAdd("UA", "New Prd", "Stock Prd", "New Form", null, null, null, false));
 
         Map<String, String> before = hashAll(project);
         ProjectWriter.Result r = ProjectWriter.update(tree, project, false);
@@ -435,7 +435,7 @@ public class ProvisioningProjectWriterTest {
         Path tree = buildTree(project);
 
         run(tree, new FormOps.Add("User Application Driver", "request", "DirXMLDev Writer Test", "Request Form", null));
-        run(tree, new FormOps.PrdAdd("User Application Driver", "DirXMLDev Writer PRD", "NoApproval", "DirXMLDev Writer Test", null, null, null));
+        run(tree, new FormOps.PrdAdd("User Application Driver", "DirXMLDev Writer PRD", "NoApproval", "DirXMLDev Writer Test", null, null, null, false));
 
         Map<String, String> before = hashAll(project);
         ProjectWriter.Result r = ProjectWriter.update(tree, project, false);
