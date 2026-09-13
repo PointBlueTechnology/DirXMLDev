@@ -449,6 +449,16 @@ public final class Plan {
             content = xml == null || xml.isEmpty() ? new byte[0] : xml.get(0);
             String baseline = readBaseline(tree, com.pointblue.dirxml.dev.edit.FormOps.prdPath(d, prd) + "/definition.xml");
             stamps = VaultMapping.provisioningPackageAttributes(prd.meta, baseline);
+            // trim to what ModelDiff found actually changed (follow-up 1, docs/vault-deploy.md): an added
+            // PRD and a package-stamps-only change have no parts recorded (Change.parts null, or exactly
+            // {"stamps"}) and are unaffected; a content change writes only its changed XML parts and
+            // properties, and carries the stamp attributes only when the stamps themselves changed too.
+            if (c.kind == ModelDiff.Kind.PRD_CHANGED && c.parts != null) {
+                attrs = trimPrdAttrs(attrs, c.parts);
+                if (!c.parts.contains("stamps")) {
+                    stamps = new LinkedHashMap<>();
+                }
+            }
             if (added) {
                 ensureContainer(bucket, ensured, VaultMapping.requestDefsDn(dsDn, driver), VaultMapping.OC_REQUEST_DEFS, c, driver);
             }
@@ -468,6 +478,30 @@ public final class Plan {
                     dn + "  " + e.getKey() + " (" + size(Map.of(e.getKey(), e.getValue())) + ")", c.path, driver));
             }
         }
+    }
+
+    /**
+     * Keeps only the attributes {@code ModelDiff} found changed: {@code XmlData} when "definition" is a
+     * changed part, {@code srvprvRequestXML} for "request", {@code srvprvProcessXML} for "process", and
+     * each {@code VaultMapping.PRD_PROPERTY_ATTRS} attribute whose property key is a changed part.
+     */
+    private static Map<String, List<byte[]>> trimPrdAttrs(Map<String, List<byte[]>> attrs, Set<String> parts) {
+        Map<String, List<byte[]>> out = new LinkedHashMap<>();
+        if (parts.contains("definition") && attrs.containsKey(VaultMapping.XML_DATA)) {
+            out.put(VaultMapping.XML_DATA, attrs.get(VaultMapping.XML_DATA));
+        }
+        if (parts.contains("request") && attrs.containsKey(VaultMapping.REQUEST_XML)) {
+            out.put(VaultMapping.REQUEST_XML, attrs.get(VaultMapping.REQUEST_XML));
+        }
+        if (parts.contains("process") && attrs.containsKey(VaultMapping.PROCESS_XML)) {
+            out.put(VaultMapping.PROCESS_XML, attrs.get(VaultMapping.PROCESS_XML));
+        }
+        for (Map.Entry<String, String> e : VaultMapping.PRD_PROPERTY_ATTRS.entrySet()) {
+            if (parts.contains(e.getKey()) && attrs.containsKey(e.getValue())) {
+                out.put(e.getValue(), attrs.get(e.getValue()));
+            }
+        }
+        return out;
     }
 
     private static void ensureContainer(List<Step> bucket, Set<String> ensured, String dn, String oc, ModelDiff.Change c, String driver) {
