@@ -10,10 +10,12 @@ import com.pointblue.dirxml.dev.edit.Transaction;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.source.ProjectReader;
+import com.pointblue.dirxml.dev.xml.CanonicalXml;
 import org.junit.Assume;
 import org.junit.Test;
 import org.w3c.dom.Element;
@@ -362,9 +364,23 @@ public class PackageLifecycleTest {
         String baseline = Packages.baseline(tree, scoping);
         assertNotNull(baseline);
         assertFalse(baseline.contains("customized scoping"));
-        // its stamp names the new version and was recomputed (differs from the pre-upgrade stamp)
+        // its stamp names the new version
         assertTrue(scoping.meta.get(PackageInstall.META_GUID), scoping.meta.get(PackageInstall.META_GUID).contains("2.1.0.20120831225140"));
-        assertNotEquals(oldChecksum, scoping.meta.get(PackageInstall.META_CHECKSUM));
+        // InstalledChecksum is content-only (name + XML + linked sets — no package guid/version), so a
+        // customization whose content and linkage are unchanged by the upgrade can legitimately recompute to
+        // the same number as before (oldChecksum): that is the recipe hashing the same content the same way
+        // twice, not a bug. What must hold instead: the stamp does NOT equal what a non-customized install of
+        // the NEW baseline content would carry (Designer's "modified" test would otherwise wrongly say
+        // unmodified), and it DOES equal a fresh recompute of the object's actual (customized) current content.
+        Policy scopingPolicy = (Policy) scoping;
+        Element customizedContent = scopingPolicy.content;
+        Element baselineContent = CanonicalXml.parse(baseline).getDocumentElement();
+        scopingPolicy.content = baselineContent;
+        long baselineChecksum = InstalledChecksum.of(after, d, scoping);
+        scopingPolicy.content = customizedContent;
+        assertNotEquals("the customized stamp must not equal the new baseline's own checksum",
+            baselineChecksum, Long.parseLong(scoping.meta.get(PackageInstall.META_CHECKSUM)));
+        assertEquals("" + InstalledChecksum.of(after, d, scoping), scoping.meta.get(PackageInstall.META_CHECKSUM));
 
         // non-customized objects: new content and stamps, checksum recomputed from the new state
         Artifact pubPp = after.resolve("drivers/eDirUpg/publisher/NOVLEDIRDCFG-pub-pp");

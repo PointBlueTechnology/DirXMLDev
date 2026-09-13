@@ -7,6 +7,7 @@ import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
+import com.pointblue.dirxml.dev.packages.InstalledChecksum;
 import com.pointblue.dirxml.dev.validate.ValidatorTest;
 import org.junit.Test;
 
@@ -19,6 +20,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 /** The plan builder: steps, order, grouping, linkage, secrets, restarts — pure, no vault. */
@@ -107,6 +109,39 @@ public class PlanTest {
             }
         }
         assertTrue(p.text("stg", DS), sawChecksum);
+    }
+
+    /**
+     * Follow-up 2 (docs/vault-deploy.md, "Packages" — a customized artifact's checksum): Plan reads the
+     * checksum straight from the artifact's meta ({@code VaultMapping.packageAttributes}); it never recomputes
+     * it. So once {@code Packages.refreshChecksums} has replaced the stale installed stamp with Designer's own
+     * recipe ({@link InstalledChecksum}), as a real transaction does, the step the plan emits must carry that
+     * recomputed value — not the old, now-stale one.
+     */
+    @Test
+    public void customizedStampedArtifactCarriesTheRecomputedChecksumNotTheOldOne() {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        Policy ctp = (Policy) to.resolve("drivers/AD/subscriber/sub-ctp");
+        ctp.content = ValidatorTest.xml("<policy><rule><description>custom</description><conditions/><actions/></rule></policy>");
+        ctp.meta.put("dirxml-pkgguid", "PKGGUID_1;com.example.pkg;1.0.0");
+        ctp.meta.put("dirxml-pkgassociationid", "ASSOC1");
+        ctp.meta.put("package.customized", "true");
+        String staleChecksum = "111111111";   // the pre-edit installed checksum: stale once the content changed
+        ctp.meta.put("dirxml-pkgchecksum", staleChecksum);
+        // what Packages.refreshChecksums does at the end of a real transaction: recompute from the new content
+        long recomputed = InstalledChecksum.of(to, to.driver("AD"), ctp);
+        ctp.meta.put("dirxml-pkgchecksum", Long.toString(recomputed));
+
+        Plan p = plan(from, to, Secrets.none(), "none");
+        String checksum = null;
+        for (Plan.Step s : p.steps) {
+            if (VaultMapping.PKG_CHECKSUM.equals(s.attr)) {
+                checksum = new String(s.values.get(s.attr).get(0), StandardCharsets.UTF_8);
+            }
+        }
+        assertEquals(p.text("stg", DS), Long.toString(recomputed), checksum);
+        assertNotEquals(staleChecksum, checksum);
     }
 
     @Test

@@ -15,6 +15,7 @@ import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicySet;
 import com.pointblue.dirxml.dev.model.Scope;
+import com.pointblue.dirxml.dev.packages.InstalledChecksum;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
 
 import org.junit.Assume;
@@ -326,7 +327,8 @@ public class ProjectWriterTest {
         Artifact a = before.resolve(path);
         assertNotNull(a);
         assertTrue(Packages.isPackaged(a));
-        byte[] originalContentBytes = Packages.currentContent(a).getBytes(StandardCharsets.UTF_8);
+        String originalChecksum = a.meta.get("checksum");
+        assertNotNull(originalChecksum);
 
         String newContent = "<policy><rule><description>customized</description><conditions/><actions/></rule></policy>";
         Result opResult = Transaction.open(tree).run(new ArtifactOps.SetContent(path, newContent), false, false);
@@ -341,10 +343,17 @@ public class ProjectWriterTest {
         Matcher m = Pattern.compile("Idm:ContentChecksum\" value=\"(\\d+)\"").matcher(metaAfter);
         assertTrue(metaAfter, m.find());
         String checksum = m.group(1);
-        String expected = VaultMapping.customizedChecksum(
-            CanonicalXml.serialize(CanonicalXml.parse(newContent).getDocumentElement()).getBytes(StandardCharsets.UTF_8));
+        // follow-up 2 (docs/vault-deploy.md, package stamps of customized objects): the project's stamp is
+        // now Designer's own installed-content recipe (InstalledChecksum) — the same one the vault stamp and
+        // package.status use — not the CRC this writer used to compute; a customized artifact's checksum in
+        // the tree, the vault and the project must all agree.
+        DriverSet treeAfter = AsCodeReader.read(tree);
+        Artifact treeArtifact = treeAfter.resolve(path);
+        assertNotNull(treeArtifact);
+        Driver owner = treeArtifact.driver == null ? null : treeAfter.driver(treeArtifact.driver);
+        String expected = Long.toString(InstalledChecksum.of(treeAfter, owner, treeArtifact));
         assertEquals(expected, checksum);
-        assertNotEquals(VaultMapping.customizedChecksum(originalContentBytes), checksum);
+        assertNotEquals(originalChecksum, checksum);
 
         assertTrue(metaAfter.contains("Idm:PackageGuid"));
         assertTrue(metaAfter.contains("Idm:PackageAssocGuid"));
