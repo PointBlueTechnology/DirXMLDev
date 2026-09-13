@@ -92,7 +92,7 @@ form.show      <tree> <form>                  outline: fields (key, type, label,
 form.field.add <tree> <form> --key k --type textfield|textarea|select|checkbox|radio|datetime|button|dn_display|dynamic_entity|… [--label --required --after <key> --in <panel/column>] [--json '<extra props>']
 form.field.set / .remove / .move            change any property, delete, reorder/reparent
 form.set       <tree> <form> --title|--display|--inline-script <file>|--external-script <url>
-form.localize  <tree> <form> --lang fr --set "Title=Titre" …   (or --sync: add missing keys from labels)
+form.localize  <tree> <form> --lang fr --set "Title=Titre" …   (or --sync: top up every language with everything any language or the components declare)
 form.rename    <tree> <form> --to N          rewrites every PRD binding that references it
 form.delete    <tree> <form>                 refused while a PRD binds it (--force)
 ```
@@ -309,8 +309,11 @@ importing again after the rewrite fixed it.
    is small and immediately useful, B is the substance.)
 2. **PRD scope = binding sync + whole-object deploy only** (no PRD authoring,
    no workflow edits). A `prd.add --from-template NoApproval|SingleStepApproval
-   --request-form X [--approval-form Y]` is the one authoring command worth
-   considering — cheap because the templates are in every vault; in or out?
+   --request-form X [--approval-form Y] [--map-all]` is the one authoring
+   command worth considering — cheap because the templates are in every vault;
+   `--map-all` maps every bindable field of the bound form(s), sparing the
+   per-field `prd.map` calls a template with no mappings (e.g. `NoApproval`)
+   otherwise needs; in or out?
 3. **Pretty-printed forms in the tree, compact on the wire** (semantic diffs)
    — or byte-preserving like policies? (Recommended: pretty.)
 4. **Runtime pickup spike needs the Identity Applications up on `idm-ig4`.**

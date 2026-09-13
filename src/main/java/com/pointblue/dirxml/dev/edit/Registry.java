@@ -217,10 +217,11 @@ public final class Registry {
 
         register("prd.add", "copy a template PRD (status Template) into a new Active PRD bound to the given forms",
             a -> new FormOps.PrdAdd(a.get("driver"), a.get("name"), a.get("from-template"), a.get("request-form"),
-                a.get("approval-form"), a.get("category"), a.get("display-name")),
+                a.get("approval-form"), a.get("category"), a.get("display-name"), a.containsKey("map-all")),
             req("name", "the new PRD's name"), req("from-template", "the template PRD's name (status Template, e.g. NoApproval)"),
             req("request-form", "the request form to bind"), opt("approval-form", "the approval form to bind to the first user-activity, if any"),
             opt("category", "prov-category (default: the template's)"), opt("display-name", "lang~Text override for one language (default: the new PRD's name, every language)"),
+            opt("map-all", "flag: map every bindable field of the bound form(s) to flowdata with the default targets/sources, as prd.map would"),
             driver);
 
         register("policy.link", "link an artifact into a driver's policy set",
