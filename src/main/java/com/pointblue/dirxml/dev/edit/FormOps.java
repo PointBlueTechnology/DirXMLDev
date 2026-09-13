@@ -702,15 +702,24 @@ public final class FormOps {
                 }
             }
             if (sync) {
-                Set<String> texts = new LinkedHashSet<>();
-                collectLocalizableText(root, texts);
+                // top up every declared language with the union of what the components declare and
+                // what any language already carries (e.g. stock forms' extra en-only titles/buttons/
+                // validation messages), so a synced form never trips validate's form-localization-missing
+                Set<String> keys = new LinkedHashSet<>();
+                collectLocalizableText(root, keys);
+                for (Object v : localization.values()) {
+                    keys.addAll(Json.asMap(v).keySet());
+                }
+                Map<String, Object> enMap = Json.asMap(localization.get("en"));
                 for (Map.Entry<String, Object> e : localization.entrySet()) {
                     Map<String, Object> lm = Json.asMap(e.getValue());
                     localization.put(e.getKey(), lm);
                     int added = 0;
-                    for (String t : texts) {
-                        if (!lm.containsKey(t)) {
-                            lm.put(t, t);
+                    for (String k : keys) {
+                        if (!lm.containsKey(k)) {
+                            Object value = langMap.containsKey(k) ? langMap.get(k)
+                                : enMap.containsKey(k) ? enMap.get(k) : k;
+                            lm.put(k, value);
                             added++;
                         }
                     }
@@ -1149,9 +1158,10 @@ public final class FormOps {
         private final String approvalForm;
         private final String category;
         private final String displayName;
+        private final boolean mapAll;
 
         public PrdAdd(String driver, String name, String fromTemplate, String requestForm, String approvalForm,
-                       String category, String displayName) {
+                       String category, String displayName, boolean mapAll) {
             this.driver = driver;
             this.name = name;
             this.fromTemplate = fromTemplate;
@@ -1159,6 +1169,7 @@ public final class FormOps {
             this.approvalForm = (approvalForm == null || approvalForm.isBlank()) ? null : approvalForm;
             this.category = (category == null || category.isBlank()) ? null : category;
             this.displayName = (displayName == null || displayName.isBlank()) ? null : displayName;
+            this.mapAll = mapAll;
         }
 
         @Override
@@ -1233,10 +1244,11 @@ public final class FormOps {
             if (created.request != null) {
                 BindingSync.sync(created, reqFound.form);
             }
+            String activityId = null;
             if (apprFound != null && created.process != null) {
                 List<Element> userActivities = Xds.descendantsByName(created.process, "user-activity");
                 if (!userActivities.isEmpty()) {
-                    String activityId = userActivities.get(0).getAttribute("activity-id");
+                    activityId = userActivities.get(0).getAttribute("activity-id");
                     for (Element fb : Xds.descendantsByName(created.process, "form-binding")) {
                         if (activityId.equals(fb.getAttribute("activity-id"))) {
                             fb.setAttribute("form-id", apprFound.form.name);
@@ -1247,10 +1259,41 @@ public final class FormOps {
                 }
             }
 
+            int mapped = 0;
+            List<String> skippedActivityFields = new ArrayList<>();
+            if (mapAll) {
+                if (created.request != null) {
+                    for (BindingSync.Item item : BindingSync.items(reqFound.form.json)) {
+                        if (item.bindable()) {
+                            mapRequestField(d, created, item.key, null, false);
+                            mapped++;
+                        }
+                    }
+                }
+                if (apprFound != null && activityId != null) {
+                    for (BindingSync.Item item : BindingSync.items(apprFound.form.json)) {
+                        if (!item.bindable()) {
+                            continue;
+                        }
+                        try {
+                            mapActivityField(d, created, item.key, activityId, null, false);
+                            mapped++;
+                        } catch (Operation.Refusal refusal) {
+                            skippedActivityFields.add(item.key);
+                        }
+                    }
+                }
+            }
+
             d.provisioning.prds.add(created);
             tx.touched(prdPath(d, created));
             tx.note("created prd '" + name + "' from template '" + fromTemplate + "' (request form '" + reqFound.form.name + "'"
-                + (apprFound != null ? ", approval form '" + apprFound.form.name + "'" : "") + ")");
+                + (apprFound != null ? ", approval form '" + apprFound.form.name + "'" : "") + ")"
+                + (mapAll ? "; mapped " + mapped + " field" + (mapped == 1 ? "" : "s") : ""));
+            if (!skippedActivityFields.isEmpty()) {
+                tx.note("prd '" + name + "': skipped approval field" + (skippedActivityFields.size() == 1 ? "" : "s")
+                    + " not present on the request form: " + String.join(", ", skippedActivityFields));
+            }
         }
     }
 
