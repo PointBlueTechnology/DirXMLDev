@@ -312,8 +312,9 @@ builder launcher `form.edit`, B = typed operations + `FormCheck` + `prd.map`/
 [spikes/forms-deploy-live.md](spikes/forms-deploy-live.md) (idm254: untouched
 vault diffs empty, scratch form + PRD add/modify/delete verified, PRD picked up
 by the Identity Applications with no cache flush and its form served like a
-stock one). Designer acceptance of the project writer (`test11pf`) is the one
-check still with Jerry.
+stock one); Designer acceptance of the project writer passed 2026-09-13
+(`test11pf` imported, the written form opens in the vendor builder —
+[spikes/designer-writer.md](spikes/designer-writer.md) spike 6b).
 Runs alongside Phases 3–4 once the model exists; it is a distinct object model
 (`Model/Provisioning/` in a project; `srvprv*` objects under the User Application
 driver's AppConfig in the vault) so it gets its own reader/writer.
