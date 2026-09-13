@@ -6,6 +6,8 @@ import com.pointblue.dirxml.dev.edit.ArtifactOps;
 import com.pointblue.dirxml.dev.edit.DriverOps;
 import com.pointblue.dirxml.dev.edit.Result;
 import com.pointblue.dirxml.dev.edit.Transaction;
+import com.pointblue.dirxml.dev.model.Artifact;
+import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.source.ProjectReader;
 import org.junit.Assume;
@@ -19,6 +21,8 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /** package.status and package.adopt over a tree that package.install built (guarded on the Designer catalog + test11). */
@@ -53,12 +57,33 @@ public class PackageStatusTest {
         assertTrue(t.packages.stream().anyMatch(p -> p.shortName.equals("NOVLEDIRDCFG") && p.objects == 4 && p.inManifest));
         assertTrue("fresh install is not customized: " + t.customized, t.customized.isEmpty());
 
-        // customize a packaged policy → status reports it (stamp ≠ recomputed, and the customized mark)
+        String beforeChecksum = AsCodeReader.read(tree).resolve("drivers/eDirS/publisher/NOVLEDIRDCFG-pub-pp")
+            .meta.get(PackageInstall.META_CHECKSUM);
+        assertNotNull(beforeChecksum);
+
+        // customize a packaged policy → status reports it customized
         Result c = Transaction.open(tree).run(new ArtifactOps.SetContent("drivers/eDirS/publisher/NOVLEDIRDCFG-pub-pp",
             "<policy><rule><description>x</description><conditions/><actions/></rule></policy>"), false, false);
         assertTrue(c.text(), c.ok());
         st = PackageStatus.of(tree, "eDirS", null);
         assertEquals(List.of("drivers/eDirS/publisher/NOVLEDIRDCFG-pub-pp"), st.targets.get(0).customized);
+
+        // follow-up 2 (docs/vault-deploy.md, package stamps of customized objects): the transaction already
+        // refreshed the tree's meta checksum from the new content (Packages.refreshChecksums), so the stamp is
+        // now up to date — equal to a fresh recompute of the customized content, not the stale installed value —
+        // and package.status must still report it customized on the `package.customized` mark alone, not on a
+        // checksum mismatch.
+        DriverSet withCustomization = AsCodeReader.read(tree);
+        Driver eDirS = withCustomization.driver("eDirS");
+        Artifact customized = withCustomization.resolve("drivers/eDirS/publisher/NOVLEDIRDCFG-pub-pp");
+        assertTrue(com.pointblue.dirxml.dev.edit.Packages.isCustomized(customized));
+        assertEquals("" + InstalledChecksum.of(withCustomization, eDirS, customized),
+            customized.meta.get(PackageInstall.META_CHECKSUM));
+        assertNotEquals("the recomputed stamp must differ from the pre-customization (installed) value",
+            beforeChecksum, customized.meta.get(PackageInstall.META_CHECKSUM));
+        st = PackageStatus.of(tree, "eDirS", null);
+        assertEquals("still reported customized although its stamp is up to date",
+            List.of("drivers/eDirS/publisher/NOVLEDIRDCFG-pub-pp"), st.targets.get(0).customized);
 
         // strip the manifest records (as a vault import has none) → status notes it, adopt writes them back
         DriverSet ds = AsCodeReader.read(tree);

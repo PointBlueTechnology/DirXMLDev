@@ -96,7 +96,7 @@ changes to the project's files:
 
 | change | what the writer does |
 |---|---|
-| artifact content changed | rewrite `<ID>_contents.xml` (canonical form); for a packaged object the tree marks customized, set `Idm:ContentChecksum` in the CObject meta to a content-derived integer so it differs from `_initial_state.xml`'s baseline — Designer's "modified" test is inequality (spike 2) |
+| artifact content changed | rewrite `<ID>_contents.xml` (canonical form); for a packaged object the tree marks customized, set `Idm:ContentChecksum` in the CObject meta to Designer's own checksum recipe (`packages/InstalledChecksum` — the same one the vault stamp and `package.status` use) so it differs from `_initial_state.xml`'s baseline — Designer's "modified" test is inequality (spike 2) |
 | artifact added | mint an id in Designer's form (8 characters from `[0-9A-Z]`, unique in the project), write `<ID>.<Type>_` (type from the artifact kind: ScriptPolicy / StylesheetPolicy / MappingPolicy / MappingTableResource / ECMAScriptResource / GlobalConfig) with the attributes the reader knows (`name`, and for resources the content type) and `<ID>_contents.xml`; add the `Idm:Policies` / `Idm:Resources` **Child** relation on the owner (driver, channel, Library) |
 | artifact removed | delete both files; remove every relation that references `#<ID>.<Type>_` |
 | artifact renamed | the reader sees remove + add; the writer sees a removed id and an added name with identical content and treats it as a rename — same id, `name` attribute updated |

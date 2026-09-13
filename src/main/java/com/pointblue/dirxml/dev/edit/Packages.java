@@ -46,51 +46,80 @@ public final class Packages {
     }
 
     /**
-     * Give every customized packaged <b>form or PRD</b> touched by a transaction a content-derived
-     * {@code dirxml-pkgchecksum} — the value the vault will hold, so Designer's modified test
-     * (checksum ≠ the package baseline's) trips and the tree, the vault diff and the Designer
-     * writer agree. Artifacts are left alone: their stamp stays the installed checksum and
-     * {@code package.status} detects customization by recomputing Designer's recipe
-     * ({@code InstalledChecksum}); srvprv objects have no such recipe. Paths are the
-     * transaction's touched paths ({@code drivers/<d>/provisioning/forms/<kind>/<name>} /
-     * {@code …/prds/<name>}, file-safe names); anything else is ignored.
+     * Give every customized packaged object touched by a transaction a checksum that
+     * matches what the vault and Designer will recompute, so Designer's modified test
+     * (checksum ≠ the package baseline's) trips and the tree, the vault and the Designer
+     * writer agree.
+     *
+     * <p><b>Forms and PRDs</b> (no Designer recipe of their own): a content-derived
+     * {@code dirxml-pkgchecksum} (CRC32 of the vault content). Paths are the transaction's
+     * touched paths ({@code drivers/<d>/provisioning/forms/<kind>/<name>} /
+     * {@code …/prds/<name>}, file-safe names).
+     *
+     * <p><b>Artifacts</b> (policies, resources, GCV objects…): Designer's own installed-content
+     * recipe ({@link com.pointblue.dirxml.dev.packages.InstalledChecksum}) — the same one
+     * {@code package.status} recomputes to detect customization and the same one
+     * {@code PackageInstall} uses to stamp a freshly installed object — so a customized
+     * artifact's stamp differs from the package baseline the same way Designer's would.
+     * Only an artifact that already carries an installed checksum (stamped by a package)
+     * is touched; an unstamped one is handled by the deployer's fallback
+     * ({@code VaultMapping#customizedChecksum}). Anything not packaged-and-customized, or
+     * not resolvable, is ignored.
      */
     static void refreshChecksums(com.pointblue.dirxml.dev.model.DriverSet ds, java.util.Set<String> touched) {
         for (String path : touched) {
             int i = path.indexOf("/provisioning/");
-            if (!path.startsWith("drivers/") || i < 0) {
+            if (path.startsWith("drivers/") && i >= 0) {
+                refreshProvisioningChecksum(ds, path, i);
+            } else {
+                refreshArtifactChecksum(ds, path);
+            }
+        }
+    }
+
+    private static void refreshProvisioningChecksum(com.pointblue.dirxml.dev.model.DriverSet ds, String path, int i) {
+        String driverSafe = path.substring("drivers/".length(), i);
+        String tail = path.substring(i + "/provisioning/".length());
+        for (com.pointblue.dirxml.dev.model.Driver d : ds.drivers) {
+            if (d.provisioning == null || !AsCodeWriter.fileSafe(d.name).equals(driverSafe)) {
                 continue;
             }
-            String driverSafe = path.substring("drivers/".length(), i);
-            String tail = path.substring(i + "/provisioning/".length());
-            for (com.pointblue.dirxml.dev.model.Driver d : ds.drivers) {
-                if (d.provisioning == null || !AsCodeWriter.fileSafe(d.name).equals(driverSafe)) {
-                    continue;
-                }
-                if (tail.startsWith("forms/")) {
-                    String[] parts = tail.substring("forms/".length()).split("/", 2);
-                    for (com.pointblue.dirxml.dev.model.Form f : d.provisioning.forms) {
-                        if (f.kind.dir.equals(parts[0]) && AsCodeWriter.fileSafe(f.name).equals(parts[1])
-                            && f.meta.get("dirxml-pkgguid") != null && "true".equals(f.meta.get(CUSTOMIZED_KEY))) {
-                            f.meta.put("dirxml-pkgchecksum", com.pointblue.dirxml.dev.deploy.VaultMapping.customizedChecksum(
-                                com.pointblue.dirxml.dev.deploy.VaultMapping.formBytes(f)));
-                        }
+            if (tail.startsWith("forms/")) {
+                String[] parts = tail.substring("forms/".length()).split("/", 2);
+                for (com.pointblue.dirxml.dev.model.Form f : d.provisioning.forms) {
+                    if (f.kind.dir.equals(parts[0]) && AsCodeWriter.fileSafe(f.name).equals(parts[1])
+                        && f.meta.get("dirxml-pkgguid") != null && "true".equals(f.meta.get(CUSTOMIZED_KEY))) {
+                        f.meta.put("dirxml-pkgchecksum", com.pointblue.dirxml.dev.deploy.VaultMapping.customizedChecksum(
+                            com.pointblue.dirxml.dev.deploy.VaultMapping.formBytes(f)));
                     }
-                } else if (tail.startsWith("prds/")) {
-                    String name = tail.substring("prds/".length());
-                    for (com.pointblue.dirxml.dev.model.Prd p : d.provisioning.prds) {
-                        if (AsCodeWriter.fileSafe(p.name).equals(name)
-                            && p.meta.get("dirxml-pkgguid") != null && "true".equals(p.meta.get(CUSTOMIZED_KEY))) {
-                            java.util.List<byte[]> xml = com.pointblue.dirxml.dev.deploy.VaultMapping.prdAttributes(p)
-                                .get(com.pointblue.dirxml.dev.deploy.VaultMapping.XML_DATA);
-                            if (xml != null && !xml.isEmpty()) {
-                                p.meta.put("dirxml-pkgchecksum", com.pointblue.dirxml.dev.deploy.VaultMapping.customizedChecksum(xml.get(0)));
-                            }
+                }
+            } else if (tail.startsWith("prds/")) {
+                String name = tail.substring("prds/".length());
+                for (com.pointblue.dirxml.dev.model.Prd p : d.provisioning.prds) {
+                    if (AsCodeWriter.fileSafe(p.name).equals(name)
+                        && p.meta.get("dirxml-pkgguid") != null && "true".equals(p.meta.get(CUSTOMIZED_KEY))) {
+                        java.util.List<byte[]> xml = com.pointblue.dirxml.dev.deploy.VaultMapping.prdAttributes(p)
+                            .get(com.pointblue.dirxml.dev.deploy.VaultMapping.XML_DATA);
+                        if (xml != null && !xml.isEmpty()) {
+                            p.meta.put("dirxml-pkgchecksum", com.pointblue.dirxml.dev.deploy.VaultMapping.customizedChecksum(xml.get(0)));
                         }
                     }
                 }
             }
         }
+    }
+
+    private static void refreshArtifactChecksum(com.pointblue.dirxml.dev.model.DriverSet ds, String path) {
+        Artifact a = ds.resolve(path);
+        if (a == null || !isPackaged(a) || !isCustomized(a)) {
+            return;
+        }
+        if (a.meta.get("dirxml-pkgchecksum") == null) {
+            return;   // an unstamped packaged artifact: the deployer falls back to a content CRC
+        }
+        com.pointblue.dirxml.dev.model.Driver owner = a.driver == null ? null : ds.driver(a.driver);
+        long recomputed = com.pointblue.dirxml.dev.packages.InstalledChecksum.of(ds, owner, a);
+        a.meta.put("dirxml-pkgchecksum", Long.toString(recomputed));
     }
 
     /** Where the artifact's package baseline lives in a tree. */
