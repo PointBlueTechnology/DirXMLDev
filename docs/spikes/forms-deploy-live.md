@@ -90,9 +90,7 @@ flush.
   `prd.map` added `reason`/`recipient` data items, the same button answered
   "Internal exception occurred processing REST service" — the no-form path
   cannot supply mapped fields. A blocked popup looks exactly like "no form".
-- Deploying a PRD change rewrote every PRD attribute (the plan modifies all
-  attributes of a changed object); correct but noisy — a per-attribute diff
-  would trim it (follow-up).
+- done: a changed PRD deploys only its changed attributes.
 - `prd.add` copies the template's mappings only where the field names still
   exist, so a PRD built from `NoApproval` starts with no data items; map the
   fields explicitly (`prd.map`) — a `--map-all` convenience is a candidate.

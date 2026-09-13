@@ -14,6 +14,8 @@ import com.pointblue.dirxml.dev.forms.BindingSyncTest;
 import com.pointblue.dirxml.dev.json.Json;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Form;
+import com.pointblue.dirxml.dev.model.Prd;
+import com.pointblue.dirxml.dev.xml.CanonicalXml;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -56,10 +58,15 @@ public class ProvisioningDeployTest {
         String formDn = "cn=Req,cn=WorkflowRequestForms,cn=WorkflowForms,cn=AppConfig,cn=UA," + DS;
         String prdDn = "cn=P,cn=RequestDefs,cn=AppConfig,cn=UA," + DS;
         assertTrue(steps.toString(), steps.contains("MODIFY " + formDn + " srvprvJSONData"));
-        assertTrue(steps.toString(), steps.contains("MODIFY " + prdDn + " XmlData"));
-        assertTrue(steps.toString(), steps.contains("MODIFY " + prdDn + " srvprvRequestXML"));
-        assertTrue(steps.toString(), steps.contains("MODIFY " + prdDn + " srvprvProcessXML"));
-        assertTrue(steps.toString(), steps.contains("MODIFY " + prdDn + " srvprvStatus"));
+        // the binding resync changes the PRD's definition, request and process XML (the process element is
+        // a child of the definition, so both list as changed) but no plain property — trimmed to exactly those
+        // three (follow-up 1, docs/vault-deploy.md): no srvprvStatus, no other property, no stamp steps.
+        assertEquals(steps.toString(), List.of(
+            "MODIFY " + formDn + " srvprvJSONData",
+            "MODIFY " + prdDn + " XmlData",
+            "MODIFY " + prdDn + " srvprvRequestXML",
+            "MODIFY " + prdDn + " srvprvProcessXML"), steps);
+        assertFalse(steps.toString(), steps.toString().contains("srvprvStatus"));
         assertFalse(steps.toString(), steps.toString().contains("ENSURE_CONTAINER"));
         assertTrue(plan.touchedDns.contains(formDn) && plan.touchedDns.contains(prdDn));
 
@@ -75,6 +82,56 @@ public class ProvisioningDeployTest {
                 assertTrue(xml, xml.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>") && xml.contains("<prov-req-defn"));
             }
         }
+    }
+
+    /** Follow-up 1 (docs/vault-deploy.md, "The plan and the deploy"): only the changed XML part is written. */
+    @Test
+    public void changedPrdRequestXmlOnlyProducesOneModifyStep() throws Exception {
+        Path t = FormOpsTest.tree(tmp, false);
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        Prd p = to.drivers.get(0).provisioning.prd("P");
+        p.request = CanonicalXml.parse(BindingSyncTest.REQUEST_XML.replace(
+            "name=\"reason\" target=\"flowdata.Start/Req/reason\"", "name=\"reason\" target=\"flowdata.Start/Req/reason2\""))
+            .getDocumentElement();
+
+        ModelDiff diff = ModelDiff.of(from, to);
+        List<ModelDiff.Change> changes = diff.changes();
+        assertEquals(1, changes.size());
+        assertEquals(ModelDiff.Kind.PRD_CHANGED, changes.get(0).kind);
+        assertEquals(java.util.Set.of("request"), changes.get(0).parts);
+
+        Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
+        String prdDn = "cn=P,cn=RequestDefs,cn=AppConfig,cn=UA," + DS;
+        List<String> steps = new ArrayList<>();
+        for (Plan.Step s : plan.steps) {
+            steps.add(s.op + " " + s.dn + (s.attr == null ? "" : " " + s.attr));
+        }
+        assertEquals(List.of("MODIFY " + prdDn + " srvprvRequestXML"), steps);
+    }
+
+    /** Follow-up 1: a changed plain property (status) writes only that attribute. */
+    @Test
+    public void changedPrdPropertyOnlyProducesOneModifyStep() throws Exception {
+        Path t = FormOpsTest.tree(tmp, false);
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        Prd p = to.drivers.get(0).provisioning.prd("P");
+        p.properties.put("status", List.of("Draft"));
+
+        ModelDiff diff = ModelDiff.of(from, to);
+        List<ModelDiff.Change> changes = diff.changes();
+        assertEquals(1, changes.size());
+        assertEquals(ModelDiff.Kind.PRD_CHANGED, changes.get(0).kind);
+        assertEquals(java.util.Set.of("status"), changes.get(0).parts);
+
+        Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
+        String prdDn = "cn=P,cn=RequestDefs,cn=AppConfig,cn=UA," + DS;
+        List<String> steps = new ArrayList<>();
+        for (Plan.Step s : plan.steps) {
+            steps.add(s.op + " " + s.dn + (s.attr == null ? "" : " " + s.attr));
+        }
+        assertEquals(List.of("MODIFY " + prdDn + " srvprvStatus"), steps);
     }
 
     @Test

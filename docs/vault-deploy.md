@@ -142,6 +142,16 @@ then restarts** — so a linkage never points at an object that doesn't exist ye
 and a restarting driver sees the finished state. Deletes go last among the
 writes, after the linkage that referenced them has been replaced.
 
+**Only the changed attribute is written.** An artifact and a form each hold
+their content in one attribute, so a `modify` step is already minimal. A PRD
+splits across three XML attributes (`XmlData`/definition, `srvprvRequestXML`,
+`srvprvProcessXML`) plus a dozen plain properties (status, flow strategy,
+grant/revoke, category, localized names…) — `ModelDiff` records exactly which
+of those changed, and the plan writes only that subset (plus the package
+stamps, only when they themselves changed) instead of re-sending every
+attribute on every edit. An added PRD still writes everything, since there is
+nothing yet to diff against.
+
 `--dry-run` stops after the plan. Otherwise, in order:
 
 1. **Preconditions.** `validate` on the tree = 0 errors (the deployer runs it;
