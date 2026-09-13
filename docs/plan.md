@@ -315,6 +315,14 @@ by the Identity Applications with no cache flush and its form served like a
 stock one); Designer acceptance of the project writer passed 2026-09-13
 (`test11pf` imported, the written form opens in the vendor builder —
 [spikes/designer-writer.md](spikes/designer-writer.md) spike 6b).
+
+**Track W — Workflow design (the PRD's `<process>`)** — ◐ **design note
+written 2026-09-13** ([workflows.md](workflows.md): engine grammar and the
+engine's ten pickup checks recovered from `workflow.jar`, Designer needs no
+layout data, `design-params` is legacy; options A/B/C, recommended B = typed
+flow operations on the vault XML + an engine-faithful `FlowCheck` +
+`prd.flow` view; build order W1–W5; decisions pending). Roles and resources
+are out of scope: they are managed in the Identity Applications.
 Runs alongside Phases 3–4 once the model exists; it is a distinct object model
 (`Model/Provisioning/` in a project; `srvprv*` objects under the User Application
 driver's AppConfig in the vault) so it gets its own reader/writer.
