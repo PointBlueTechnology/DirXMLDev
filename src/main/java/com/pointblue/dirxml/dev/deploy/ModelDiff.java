@@ -59,6 +59,14 @@ public final class ModelDiff {
      * {@code drivers/<D>} for a driver-level change, or {@code driverset}. {@code what}
      * is the setting name, config key, or policy-set key (null when not applicable).
      * {@code detail} is a text diff or a before/after listing; it may be null.
+     *
+     * <p>{@code parts} is non-null only for {@link Kind#PRD_CHANGED}: the names of the parts of the PRD
+     * that actually differ — {@code "definition"}, {@code "request"}, {@code "process"}, a changed
+     * property's key ({@link VaultMapping#PRD_PROPERTY_ATTRS}), and {@code "stamps"} when the package
+     * stamps differ — so {@link Plan} can write only those attributes instead of every one a PRD has.
+     * Null for every other kind (nothing else needs the trim: a form has a single content attribute,
+     * an artifact's content is one attribute, and "package-stamps" changes are already narrow via
+     * {@code what}).
      */
     public static final class Change {
         public final Kind kind;
@@ -67,14 +75,20 @@ public final class ModelDiff {
         public final String what;
         public final String summary;
         public final String detail;
+        public final Set<String> parts;
 
         Change(Kind kind, String driver, String path, String what, String summary, String detail) {
+            this(kind, driver, path, what, summary, detail, null);
+        }
+
+        Change(Kind kind, String driver, String path, String what, String summary, String detail, Set<String> parts) {
             this.kind = Objects.requireNonNull(kind, "kind");
             this.driver = driver;
             this.path = Objects.requireNonNull(path, "path");
             this.what = what;
             this.summary = Objects.requireNonNull(summary, "summary");
             this.detail = detail;
+            this.parts = parts == null ? null : Collections.unmodifiableSet(parts);
         }
 
         @Override
@@ -479,9 +493,15 @@ public final class ModelDiff {
         }
     }
 
-    /** PRDs compare their three XML parts canonically plus their plain properties; stamps otherwise. */
+    /**
+     * PRDs compare their three XML parts canonically plus their plain properties; stamps otherwise.
+     * Records which parts actually differ in {@link Change#parts} so {@link Plan} can write only those
+     * attributes (note: the definition's canonical serialization includes the process element when it is
+     * a child of the definition, so a process-only edit naturally lists both "definition" and "process").
+     */
     private void prdMaybeChanged(Driver d, Prd x, Prd y) {
         List<String> lines = new ArrayList<>();
+        Set<String> changedParts = new LinkedHashSet<>();
         String[][] parts = {
             {"definition", serializeOrNull(x.definition), serializeOrNull(y.definition)},
             {"request", serializeOrNull(x.request), serializeOrNull(y.request)},
@@ -489,6 +509,7 @@ public final class ModelDiff {
         };
         for (String[] p : parts) {
             if (!Objects.equals(p[1], p[2])) {
+                changedParts.add(p[0]);
                 lines.add("## " + p[0]);
                 lines.add(textDiff(p[1] == null ? "" : p[1], p[2] == null ? "" : p[2]));
             }
@@ -499,19 +520,23 @@ public final class ModelDiff {
             List<String> vx = x.properties.get(k);
             List<String> vy = y.properties.get(k);
             if (!Objects.equals(vx, vy)) {
+                changedParts.add(k);
                 lines.add("- " + k + ": " + display(vx == null ? null : String.join(" | ", vx)));
                 lines.add("+ " + k + ": " + display(vy == null ? null : String.join(" | ", vy)));
             }
         }
-        if (!lines.isEmpty()) {
-            changes.add(new Change(Kind.PRD_CHANGED, d.name, prdPath(d, y), null,
-                "~ changed PRD " + prdPath(d, y), String.join("\n", lines)));
-            return;
-        }
         List<String> stamps = stampLines(x.meta, y.meta);
         if (!stamps.isEmpty()) {
+            changedParts.add("stamps");
+        }
+        if (!lines.isEmpty()) {
+            changes.add(new Change(Kind.PRD_CHANGED, d.name, prdPath(d, y), null,
+                "~ changed PRD " + prdPath(d, y), String.join("\n", lines), changedParts));
+            return;
+        }
+        if (!stamps.isEmpty()) {
             changes.add(new Change(Kind.PRD_CHANGED, d.name, prdPath(d, y), "package-stamps",
-                "~ package stamps PRD " + prdPath(d, y), String.join("\n", stamps)));
+                "~ package stamps PRD " + prdPath(d, y), String.join("\n", stamps), changedParts));
         }
     }
 
