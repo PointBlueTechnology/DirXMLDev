@@ -448,6 +448,35 @@ public class FormOpsTest {
         assertTrue(r.refusal, r.refusal.contains("--set or --sync"));
     }
 
+    @Test
+    public void localizeSyncUnionsKeysAcrossLanguagesSoFormCheckIsSatisfied() throws Exception {
+        Path t = tree(tmp, false);
+        // "en" carries entries no other language has ("X" — a stock-form-style title/button/message
+        // that isn't tied to any current component) and "de" is missing both "X" and the labeled
+        // component "B"; --sync must top every language up with the union, not just its own labels.
+        String formJson = "{\"components\":[{\"key\":\"b\",\"type\":\"textfield\",\"label\":\"B\",\"input\":true}],"
+            + "\"title\":\"T\",\"display\":\"form\",\"inlinescripts\":\"\","
+            + "\"localization\":{\"en\":{\"A\":\"a\",\"X\":\"x-only-in-en\"},\"de\":{\"A\":\"a-de\"}},\"externalScripts\":[]}";
+        Transaction.open(t).run(new FormOps.SetContent(null, "Req", formJson), false, false);
+        Result r = Transaction.open(t).run(new FormOps.Localize(null, "Req", "en", null, true), false, false);
+        assertTrue(r.text(), r.ok());
+
+        Map<String, Object> root = Json.asMap(Json.parse(AsCodeReader.read(t).drivers.get(0).provisioning.formByName("Req").json));
+        Map<String, Object> localization = Json.asMap(root.get("localization"));
+        Map<String, Object> en = Json.asMap(localization.get("en"));
+        Map<String, Object> de = Json.asMap(localization.get("de"));
+        assertEquals("a", en.get("A"));
+        assertEquals("x-only-in-en", en.get("X"));
+        assertEquals("B", en.get("B"));
+        assertEquals("a-de", de.get("A"));
+        assertEquals("x-only-in-en", de.get("X"));   // topped up from "en" (the --lang argument)
+        assertEquals("B", de.get("B"));              // topped up from the component's own label
+
+        com.pointblue.dirxml.dev.validate.Report report = new com.pointblue.dirxml.dev.validate.Report();
+        new com.pointblue.dirxml.dev.validate.FormCheck().run(AsCodeReader.read(t), report);
+        assertTrue(report.text(), report.withCode("form-localization-missing").isEmpty());
+    }
+
     // ---- form.rename --------------------------------------------------------------------
 
     @Test
@@ -583,6 +612,14 @@ public class FormOpsTest {
         return null;
     }
 
+    private static Element firstChild(Element parent, String name) {
+        if (parent == null) {
+            return null;
+        }
+        List<Element> c = com.pointblue.dirxml.sim.Xds.childrenByName(parent, name);
+        return c.isEmpty() ? null : c.get(0);
+    }
+
     // ---- prd.add ------------------------------------------------------------------------
 
     /** A driver with a Template PRD ("Tmpl") bound to a request form and one approval activity. */
@@ -642,7 +679,7 @@ public class FormOpsTest {
     public void prdAddCopiesATemplateAndBindsTheGivenForms() throws Exception {
         Path t = templateTree(tmp);
         Result r = Transaction.open(t).run(
-            new FormOps.PrdAdd(null, "NewPrd", "Tmpl", "NewReqForm", "NewApprForm", null, null), false, false);
+            new FormOps.PrdAdd(null, "NewPrd", "Tmpl", "NewReqForm", "NewApprForm", null, null, false), false, false);
         assertTrue(r.text(), r.ok());
 
         DriverSet again = AsCodeReader.read(t);
@@ -667,7 +704,7 @@ public class FormOpsTest {
     public void prdAddCategoryAndDisplayNameOverrides() throws Exception {
         Path t = templateTree(tmp);
         Result r = Transaction.open(t).run(
-            new FormOps.PrdAdd(null, "NewPrd", "Tmpl", "NewReqForm", null, "customCat", "en~Friendly Name"), false, false);
+            new FormOps.PrdAdd(null, "NewPrd", "Tmpl", "NewReqForm", null, "customCat", "en~Friendly Name", false), false, false);
         assertTrue(r.text(), r.ok());
         Prd created = AsCodeReader.read(t).drivers.get(0).provisioning.prd("NewPrd");
         assertEquals("customCat", created.definition.getAttribute("prov-category"));
@@ -681,19 +718,100 @@ public class FormOpsTest {
     @Test
     public void prdAddRefusals() throws Exception {
         Path t = templateTree(tmp);
-        Result dup = Transaction.open(t).run(new FormOps.PrdAdd(null, "Tmpl", "Tmpl", "NewReqForm", null, null, null), false, false);
+        Result dup = Transaction.open(t).run(new FormOps.PrdAdd(null, "Tmpl", "Tmpl", "NewReqForm", null, null, null, false), false, false);
         assertTrue(dup.refusal, dup.refusal.contains("already exists"));
 
-        Result noTmpl = Transaction.open(t).run(new FormOps.PrdAdd(null, "X", "Nope", "NewReqForm", null, null, null), false, false);
+        Result noTmpl = Transaction.open(t).run(new FormOps.PrdAdd(null, "X", "Nope", "NewReqForm", null, null, null, false), false, false);
         assertTrue(noTmpl.refusal, noTmpl.refusal.contains("template prd"));
 
-        Result noReqForm = Transaction.open(t).run(new FormOps.PrdAdd(null, "X", "Tmpl", "Nope", null, null, null), false, false);
+        Result noReqForm = Transaction.open(t).run(new FormOps.PrdAdd(null, "X", "Tmpl", "Nope", null, null, null, false), false, false);
         assertTrue(noReqForm.refusal, noReqForm.refusal.contains("not found"));
 
-        Result noApprForm = Transaction.open(t).run(new FormOps.PrdAdd(null, "X", "Tmpl", "NewReqForm", "Nope", null, null), false, false);
+        Result noApprForm = Transaction.open(t).run(new FormOps.PrdAdd(null, "X", "Tmpl", "NewReqForm", "Nope", null, null, false), false, false);
         assertTrue(noApprForm.refusal, noApprForm.refusal.contains("not found"));
 
-        Result badDisplayName = Transaction.open(t).run(new FormOps.PrdAdd(null, "X", "Tmpl", "NewReqForm", null, null, "noTilde"), false, false);
+        Result badDisplayName = Transaction.open(t).run(new FormOps.PrdAdd(null, "X", "Tmpl", "NewReqForm", null, null, "noTilde", false), false, false);
         assertTrue(badDisplayName.refusal, badDisplayName.refusal.contains("lang~Text"));
+    }
+
+    @Test
+    public void prdAddMapAllMapsEveryBindableRequestField() throws Exception {
+        Path t = templateTree(tmp);
+        Result r = Transaction.open(t).run(
+            new FormOps.PrdAdd(null, "NewPrd", "Tmpl", "NewReqForm", null, null, null, true), false, false);
+        assertTrue(r.text(), r.ok());
+        assertTrue(r.notes.toString(), r.notes.toString().contains("mapped 4 fields"));
+
+        Prd created = AsCodeReader.read(t).drivers.get(0).provisioning.prd("NewPrd");
+        Element holder = firstChild(created.request, "request-data-items");
+        assertNotNull(holder);
+        // NewReqForm is FORM_V2: title, justification, groups, info are bindable (apwaComment/submit are not)
+        assertEquals("[title, justification, groups, info]", dataItemNames(holder));
+
+        assertDataItem(holder, "title", "flowdata.Start/NewReqForm/title", "single-value");
+        assertDataItem(holder, "justification", "flowdata.Start/NewReqForm/justification", "single-value");
+        assertDataItem(holder, "groups", "flowdata.Start/NewReqForm/groups", "multi-value-list");
+        assertDataItem(holder, "info", "flowdata.Start/NewReqForm/info", "single-value");
+    }
+
+    @Test
+    public void prdAddWithoutMapAllOnlyKeepsWhateverBindingSyncWouldAnyway() throws Exception {
+        Path t = templateTree(tmp);
+        Result r = Transaction.open(t).run(
+            new FormOps.PrdAdd(null, "NewPrd", "Tmpl", "NewReqForm", null, null, null, false), false, false);
+        assertTrue(r.text(), r.ok());
+        assertFalse(r.notes.toString(), r.notes.toString().contains("mapped"));
+        Prd created = AsCodeReader.read(t).drivers.get(0).provisioning.prd("NewPrd");
+        Element holder = firstChild(created.request, "request-data-items");
+        // the template's own mapping ("title") survives ordinary BindingSync.sync because NewReqForm
+        // happens to still have a field named "title"; the fields BindingSync never invents
+        // (justification, groups, info — new on NewReqForm) get no data item without --map-all
+        assertEquals("[title]", dataItemNames(holder));
+    }
+
+    @Test
+    public void prdAddMapAllWithApprovalFormSkipsFieldsNotOnTheRequestForm() throws Exception {
+        Path t = templateTree(tmp);
+        // request form = NewReqForm (FORM_V2: title, justification, groups, info); approval form =
+        // TmplApprForm (FORM_V1: title, recipient, reason) — only "title" is a shared field name,
+        // so mapActivityField refuses "recipient" and "reason" (no --source, no same-named request
+        // field) and mapAll must swallow those refusals and note them.
+        Result r = Transaction.open(t).run(
+            new FormOps.PrdAdd(null, "NewPrd", "Tmpl", "NewReqForm", "TmplApprForm", null, null, true), false, false);
+        assertTrue(r.text(), r.ok());
+        assertTrue(r.notes.toString(), r.notes.toString().contains("mapped 5 fields"));
+        assertTrue(r.notes.toString(), r.notes.toString().contains("skipped approval fields not present on the request form: recipient, reason"));
+
+        Prd created = AsCodeReader.read(t).drivers.get(0).provisioning.prd("NewPrd");
+        Element holder = firstChild(created.request, "request-data-items");
+        assertNotNull(holder);
+        assertEquals("[title, justification, groups, info]", dataItemNames(holder));
+
+        Element actHolder = null;
+        for (Element di : com.pointblue.dirxml.sim.Xds.childrenByName(created.process, "data-items")) {
+            if ("Activity".equals(di.getAttribute("activity-id"))) {
+                actHolder = di;
+            }
+        }
+        assertNotNull(actHolder);
+        assertEquals("[title]", dataItemNames(actHolder));
+        Element actTitle = findDataItem(actHolder, "title");
+        assertEquals("flowdata.get('Start/NewReqForm/title')", actTitle.getAttribute("source"));
+        assertEquals("single-value", actTitle.getAttribute("target-type"));
+    }
+
+    private static String dataItemNames(Element holder) {
+        List<String> names = new java.util.ArrayList<>();
+        for (Element di : com.pointblue.dirxml.sim.Xds.childrenByName(holder, "data-item")) {
+            names.add(di.getAttribute("name"));
+        }
+        return names.toString();
+    }
+
+    private static void assertDataItem(Element holder, String name, String target, String targetType) {
+        Element item = findDataItem(holder, name);
+        assertNotNull(item);
+        assertEquals(target, item.getAttribute("target"));
+        assertEquals(targetType, item.getAttribute("target-type"));
     }
 }

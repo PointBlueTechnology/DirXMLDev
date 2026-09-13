@@ -95,7 +95,7 @@ flush.
   would trim it (follow-up).
 - `prd.add` copies the template's mappings only where the field names still
   exist, so a PRD built from `NoApproval` starts with no data items; map the
-  fields explicitly (`prd.map`) — a `--map-all` convenience is a candidate.
+  fields explicitly (`prd.map`) — done: `prd.add --map-all`.
 
 **Environment note (not ours):** with popups allowed, the stock Help-desk
 request behaves exactly like the scratch one on this lab (no form window,
