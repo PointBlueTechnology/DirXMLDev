@@ -272,37 +272,36 @@ Identity Applications cache" after touching provisioning objects.
    (`tree.diff`: no differences) — confirmed both via the JUnit suite
    (`ProvisioningProjectWriterTest`) and by hand with the `idm` CLI end to
    end. Docs and skill recipes updated (`docs/designer-roundtrip.md`,
-   `.claude/skills/dirxml-dev/reference/commands.md`). **Human spike still
-   open:** Jerry opens the round-tripped copy of `test11` in Designer — see
-   §"human spike" below for what to click.
+   `.claude/skills/dirxml-dev/reference/commands.md`). **Human spike passed
+   (2026-09-13):** Designer imported the round-tripped copy of `test11` and
+   opened the written form in its builder — see §"human spike" below.
 
-### Human spike (step 6, pending)
+### Human spike (step 6) — PASSED 2026-09-13
 
-Jerry opens `~/designer_workspace/test11pf` (a copy of `test11` — `.proj`,
-`.cproj` and `.project` renamed to match the folder AND their contents
-rewritten: `.proj`'s `cprojectURI`, `name` and `adapterProject href`, the
-`.cproj`'s project name and `.project`'s `<name>`; with only the file names
-changed Designer imports the project but shows no System Model, an empty
-developer view and no provisioning items — that `export-project`
-updated from `~/IdeaProjects/DirXMLDev-e2e/tree-test11pf`: `form.add` of
-"DirXMLDev Writer Test" from "Request Form" + a required textarea
-`justification` + `form.localize --sync`, and `prd.add` of "DirXMLDev Writer
-PRD" from `NoApproval` with `justification` mapped; exactly four files differ
-from `test11`) from the file system in Designer and checks:
+Setup: `~/designer_workspace/test11pf`, a copy of `test11` that
+`export-project` updated from `~/IdeaProjects/DirXMLDev-e2e/tree-test11pf`
+(`form.add` of "DirXMLDev Writer Test" from "Request Form" + a required
+textarea `justification` + `form.localize --sync`; `prd.add` of "DirXMLDev
+Writer PRD" from `NoApproval` with `justification` mapped). Exactly four files
+differ from `test11`: the form, the PRD and their two digests.
 
-1. The project imports without a "repair" prompt or error.
-2. Under the User Application driver's Provisioning → Workflow Forms →
-   Request Forms, **"DirXMLDev Writer Test"** appears alongside the 11 stock
-   forms and opens in the form builder showing the fields copied from
-   "Request Form".
-3. Under Provisioning → Request Definitions, **"DirXMLDev Writer PRD"**
-   appears, is Active, and its request form binding lists "DirXMLDev Writer
-   Test".
-4. *Deploy* of the User Application driver still offers to deploy normally
-   (no dangling-reference complaint about the new objects).
+Result (Jerry, Designer on the Mac): the project imported from the
+file system, every view is populated, the new request form appears under the
+User Application driver's Provisioning → Workflow Forms → Request Forms and
+**opens in the vendor form builder**. The writer's provisioning output is
+therefore Designer-valid as designed; nothing in the writer needed changing.
+Not separately reported: the PRD's Active/binding view and the Deploy offer
+(the import itself and the form opening were the checks that could fail on
+the writer's output; the PRD file is the vendor union layout byte-for-byte).
+Details in [spikes/designer-writer.md](spikes/designer-writer.md) (spike 6b).
 
-Findings decide whether this scope ships as-is or narrows, the same way spike
-6a decided the artifact writer's scope.
+Lesson (not about the writer): the first import showed no System Model, a
+blank developer view and no provisioning items because the copy had only its
+`.proj`/`.cproj`/`.project` **file names** changed. Their **contents** must
+carry the folder name too — `.proj`'s `cprojectURI`, `name` and
+`adapterProject href`, the `.cproj`'s project name and `.project`'s `<name>`.
+Deleting the broken import from the workspace (keeping the contents) and
+importing again after the rewrite fixed it.
 
 ## 7. Decisions for Jerry
 
