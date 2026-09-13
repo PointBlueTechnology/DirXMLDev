@@ -91,11 +91,19 @@ package meta is not a vault attribute). **Measured
 ([spikes/vault-objects-and-secrets.md](spikes/vault-objects-and-secrets.md)):
 the server does not update `DirXML-pkgChecksum` when content changes**, so a
 deployed override would look unmodified to Designer and to package upgrade.
-Therefore, when the deployer writes a packaged artifact the tree marks
-`package.customized`, it also sets `DirXML-pkgChecksum` to a content-derived
-integer (CRC32 of the canonical content) so the vault's checksum pair differs
-from the baseline — Designer's "modified" test is plain inequality (spike 2).
-The tree keeps the truth (`.package-baseline/`, `package.customized`).
+Therefore, the moment a packaged object is customized (`package.customized`),
+the tree recomputes its checksum from the *new* content and carries that
+forward into every deploy, so the vault's checksum pair differs from the
+baseline the same way Designer's own copy would — Designer's "modified" test
+is plain inequality (spike 2). **Artifacts** (policies, resources, GCV
+objects — anything with a Designer catalog recipe) get Designer's own
+installed-content checksum (`packages/InstalledChecksum`, the same recipe
+`package.status` and `PackageInstall` use: content + name + the policy sets
+it's linked into); **forms and PRDs**, which have no such recipe, keep a
+content-derived CRC32 (`VaultMapping#customizedChecksum`). Either way the
+recompute happens once, in the tree (`edit/Packages#refreshChecksums`), so the
+tree, the vault and a round-tripped Designer project all carry the same
+number. The tree keeps the truth (`.package-baseline/`, `package.customized`).
 
 ## The diff
 

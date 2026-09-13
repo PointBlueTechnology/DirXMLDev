@@ -14,6 +14,7 @@ import com.pointblue.dirxml.dev.model.PolicySet;
 import com.pointblue.dirxml.dev.model.Prd;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
+import com.pointblue.dirxml.dev.packages.InstalledChecksum;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
 
 import org.w3c.dom.Document;
@@ -1108,11 +1109,11 @@ public final class ProjectWriter {
                 }
             }
             if (Packages.isPackaged(newA) && Packages.isCustomized(newA)) {
-                String content = Packages.currentContent(newA);
-                if (content != null) {
-                    String checksum = VaultMapping.customizedChecksum(content.getBytes(StandardCharsets.UTF_8));
-                    setStringAttribute(id, "Idm:ContentChecksum", checksum, "CLong");
-                }
+                // Designer's own installed-content recipe (the same one the vault stamp and
+                // package.status use), so the project and the vault carry the same number.
+                Driver owner = newA.driver == null ? null : treeDs.driver(newA.driver);
+                String checksum = Long.toString(InstalledChecksum.of(treeDs, owner, newA));
+                setStringAttribute(id, "Idm:ContentChecksum", checksum, "CLong");
             }
         }
 
