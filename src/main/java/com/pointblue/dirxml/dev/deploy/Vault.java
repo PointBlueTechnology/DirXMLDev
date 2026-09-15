@@ -303,6 +303,11 @@ public final class Vault implements AutoCloseable {
             ModificationItem[] mods = {new ModificationItem(
                 values.isEmpty() ? DirContext.REMOVE_ATTRIBUTE : DirContext.REPLACE_ATTRIBUTE, b)};
             ldap.modifyAttributes(dn, mods);
+        } catch (javax.naming.directory.NoSuchAttributeException e) {
+            if (!values.isEmpty()) {
+                throw new VaultException("modify " + dn + " " + attr + ": " + e.getMessage(), e);
+            }
+            // removing an attribute the object never had (a new driver's empty DirXML-Policies) is a no-op
         } catch (Exception e) {
             throw new VaultException("modify " + dn + " " + attr + ": " + e.getMessage(), e);
         }

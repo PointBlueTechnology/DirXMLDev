@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
@@ -205,5 +206,34 @@ public class PlanTest {
         assertEquals("cn=SetGCVs,cn=Library,cn=dvs,o=system", p.steps.get(0).dn);
         assertEquals(List.of("AD"), List.copyOf(p.restart));
         assertTrue(p.json().contains("\"op\":\"modify\""));
+    }
+
+    @Test
+    public void newDriverBringsItsEntitlements() throws IOException {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        Driver n = new Driver("New");
+        n.shimClass = "com.example.Shim";
+        n.config.put(Driver.DRIVER_FILTER, ValidatorTest.xml("<filter/>"));
+        com.pointblue.dirxml.dev.model.Entitlement e = new com.pointblue.dirxml.dev.model.Entitlement("Access", ValidatorTest.xml("<entitlement conflict-resolution=\"union\" display-name=\"Access\"><values multi-valued=\"true\"><value>a</value></values></entitlement>"));
+        n.entitlements.add(e);
+        to.drivers.add(n);
+        Plan p = plan(from, to, Secrets.none(), "none");
+        Plan.Step ent = p.steps.stream().filter(s -> s.dn.equals("cn=Access,cn=New,cn=dvs,o=system")).findFirst().orElse(null);
+        assertNotNull(p.text("stg", DS), ent);
+        assertEquals(Plan.Op.ADD, ent.op);
+        assertEquals(List.of("Top", VaultMapping.OC_ENTITLEMENT), ent.objectClasses);
+        assertTrue(ent.values.containsKey(VaultMapping.XML_DATA));
+    }
+
+    @Test
+    public void engineControlValuesAbsentFromTreeAreNotRemoved() throws IOException {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        Driver live = from.drivers.get(0);
+        live.config.put(Driver.ENGINE_CONTROL_VALUES, ValidatorTest.xml("<engine-control-values><engine-control name=\"x\">1</engine-control></engine-control-values>"));
+        Plan p = plan(from, to, Secrets.none(), "none");
+        assertTrue(p.text("stg", DS), p.steps.stream().noneMatch(s -> VaultMapping.ENGINE_CONTROL_VALUES.equals(s.attr)));
+        assertTrue(p.notes.toString(), p.notes.stream().anyMatch(n -> n.contains("engine control values")));
     }
 }

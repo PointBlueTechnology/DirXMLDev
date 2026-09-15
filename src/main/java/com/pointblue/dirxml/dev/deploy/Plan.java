@@ -199,6 +199,12 @@ public final class Plan {
                     p.touchedDns.add(dn);
                     String attr = VaultMapping.driverConfigAttribute(c.what);
                     org.w3c.dom.Element e = d.config.get(c.what);
+                    if (e == null && Driver.ENGINE_CONTROL_VALUES.equals(c.what)) {
+                        // the engine writes its default control values when a driver first starts; a tree
+                        // that never had them is not asking for their removal — adopt them with import-live
+                        p.notes.add("driver '" + c.driver + "': the vault has engine control values the tree lacks (written by the engine at first start) — left in place; import-live to adopt them");
+                        break;
+                    }
                     List<byte[]> values = e == null ? Collections.emptyList()
                         : List.of(com.pointblue.dirxml.dev.xml.CanonicalXml.serialize(e).getBytes(StandardCharsets.UTF_8));
                     driverAttrs.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, values),
@@ -250,6 +256,16 @@ public final class Plan {
                         (a.scope == Scope.DRIVER ? driverScope : channel).add(new Step(Op.ADD, adn, null,
                             astamps.isEmpty() ? List.of("Top", VaultMapping.objectClass(a)) : List.of("Top", VaultMapping.objectClass(a), VaultMapping.PKG_ITEM_AUX), aa,
                             adn + "  " + VaultMapping.objectClass(a) + " (" + size(aa) + ")", c.path, c.driver));
+                    }
+                    for (com.pointblue.dirxml.dev.model.Entitlement e : d.entitlements) {
+                        String edn = VaultMapping.entitlementDn(dsDn, c.driver, e);
+                        p.touchedDns.add(edn);
+                        Map<String, List<byte[]>> ea = VaultMapping.entitlementAttributes(e);
+                        Map<String, List<byte[]>> estamps = VaultMapping.provisioningPackageAttributes(e.meta, null);
+                        ea.putAll(estamps);
+                        driverScope.add(new Step(Op.ADD, edn, null,
+                            estamps.isEmpty() ? List.of("Top", VaultMapping.OC_ENTITLEMENT) : List.of("Top", VaultMapping.OC_ENTITLEMENT, VaultMapping.PKG_ITEM_AUX),
+                            ea, edn + "  " + VaultMapping.OC_ENTITLEMENT + " (" + size(ea) + ")", c.path, c.driver));
                     }
                     driversNeedingLinkage.add(c.driver);
                     driverAttrs.add(new Step(Op.START_OPTION, dn, null, null, null, dn + "  start option = manual", c.path, c.driver));
