@@ -164,9 +164,10 @@ and expensive to discover live:
   harmless on a `Template`-status PRD (nobody can request it) but a request
   against an `Active` PRD that still carries one fails at the provisioning
   activity — confirmed against idm254 (&sect;2). `flow-placeholder` reports it
-  as an error on an `Active` PRD, informational otherwise, so `prd.add
-  --from-template` followed by forgetting to fill in the entitlement is
-  caught before deploy rather than on the requester's first attempt.
+  as a warning on an `Active` PRD (not an error: `prd.add --from-template`
+  must still go through, filling the placeholder in is the next operation),
+  informational on a `Template`, so forgetting the entitlement is visible
+  before deploy rather than on the requester's first attempt.
 - **Missing display names.** The engine runs an activity with no
   `display-name` just fine — the Identity Applications UI just shows nothing
   where the activity's name belongs. `flow-display-name-missing` (warning)

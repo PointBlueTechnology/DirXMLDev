@@ -443,7 +443,7 @@ public class FlowCheckTest {
     }
 
     @Test
-    public void flowPlaceholderIsErrorWhenActive() {
+    public void flowPlaceholderIsWarningWhenActive() {
         Report r = run("<process version=\"4.5.0\">"
             + "<data-items activity-id=\"prov\"><data-item data-type=\"string\" name=\"x\" source=\"'{enter Entitlement DN here}'\"/></data-items>"
             + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
@@ -453,7 +453,7 @@ public class FlowCheckTest {
             + "<link source=\"prov\" target=\"finish\" type=\"forward\"/>"
             + "</process>", "Active");
         assertEquals(1, r.withCode("flow-placeholder").size());
-        assertEquals(Finding.Severity.ERROR, r.withCode("flow-placeholder").get(0).severity);
+        assertEquals(Finding.Severity.WARNING, r.withCode("flow-placeholder").get(0).severity);
     }
 
     @Test

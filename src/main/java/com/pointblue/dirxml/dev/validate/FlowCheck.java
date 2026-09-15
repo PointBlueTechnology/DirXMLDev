@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
  * {@code flow-flowdata-expression} (E), {@code flow-approver-type-invalid} (E),
  * {@code flow-approver-condition-both} (E), {@code flow-approver-target-items} (E),
  * {@code flow-email-template-missing} (E), {@code flow-attribute-enum} (E),
- * {@code flow-expression-syntax} (E), {@code flow-placeholder} (E on an {@code Active}
+ * {@code flow-expression-syntax} (E), {@code flow-placeholder} (W on an {@code Active}
  * PRD, I otherwise), {@code flow-display-name-missing} (W).
  *
  * <p>Never throws for a malformed process: every check reads defensively and turns a
@@ -579,7 +579,7 @@ public final class FlowCheck implements Check {
         collectPlaceholders(flow.process, hits);
         for (String hit : hits) {
             if (active) {
-                r.add(Finding.error("flow-placeholder", path, "unresolved template placeholder: " + hit));
+                r.add(Finding.warning("flow-placeholder", path, "unresolved template placeholder (the request will fail at runtime until it is replaced): " + hit));
             } else {
                 r.add(Finding.info("flow-placeholder", path, "template placeholder (not yet Active): " + hit));
             }
