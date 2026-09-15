@@ -89,6 +89,19 @@ Deploy: forms and PRDs ride the normal `vault.diff`/`vault.deploy`/`vault.rollba
 
 `export-project` (below) also carries a driver's forms/PRDs into an existing Designer project — same command, no new flags.
 
+## Entitlements (`docs/entitlements.md`)
+
+A `DirXML-Entitlement` hangs directly off a driver (`cn=<name>,cn=<driver>,<driver set>`), not under `AppConfig` — the Identity Applications read it from the vault at grant time, so no driver restart. Tree layout: `drivers/<driver>/entitlements/<name>.xml` (the whole `<entitlement>` document), listed in the driver's own `driver.xml` manifest with its package stamps, the way policies/resources are.
+
+- `entitlement.add <tree> --driver D --name N [--display-name T] [--description S] [--multi-valued] [--conflict union|priority] [--values v1,v2,…] [--definition-file f.xml]` — `--values` builds `<values multi-valued=…><value>v</value>…</values>`; `--definition-file` takes a whole `<entitlement>` document instead of the other content flags; `--conflict` defaults to `priority`.
+- `entitlement.set <tree> --name N [--driver D] [same content flags] [--definition-file f.xml]` — changes only what is given, or replaces the whole document; a packaged entitlement is baselined and marked customized on its first edit (same convention as a packaged form/PRD).
+- `entitlement.remove <tree> --name N [--driver D]` — refuses while any PRD's provision activity's `DirXML-Entitlement-DN` data item names it by name inside a DN literal; `--force` never overrides this.
+- `entitlement.list <tree> [--driver D]` / `entitlement.show <tree> --driver D --name N [--json]` — the latter also lists which PRDs reference it.
+
+`EntitlementCheck` (on by default in `validate`): `entitlement-name-blank` `entitlement-no-document` `entitlement-wrong-root` `entitlement-conflict-invalid` `entitlement-multi-valued-invalid`. `FlowCheck` also resolves a provision activity's `DirXML-Entitlement-DN` literal against the tree: `flow-entitlement-unknown` (warning — the named driver is in this tree but has no such entitlement) `flow-entitlement-external` (info — the DN names a driver not in this tree).
+
+Deploy: entitlements ride the normal `vault.diff`/`vault.deploy`/`vault.rollback`, no driver restart (like forms/PRDs).
+
 ## Change (transactions; `--dry-run`, `--force` — don't)
 
 `policy.add` `resource.add` `artifact.set-content` `artifact.rename` `artifact.delete` `policy.link` `policy.unlink` `policy.reorder`

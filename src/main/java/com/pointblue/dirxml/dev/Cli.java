@@ -122,6 +122,12 @@ public final class Cli {
             if (args.length >= 1 && args[0].equals("prd.show")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.prdShow(args));
             }
+            if (args.length >= 1 && args[0].equals("entitlement.list")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.entitlementList(args));
+            }
+            if (args.length >= 1 && args[0].equals("entitlement.show")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.entitlementShow(args));
+            }
             if (args.length >= 1 && args[0].equals("prd.flow")) {
                 System.exit(com.pointblue.dirxml.dev.flow.FlowView.run(args));
             }
@@ -328,6 +334,9 @@ public final class Cli {
         System.err.println("                                          open the form in the vendor form builder; on save, store it and re-sync its PRD bindings");
         System.err.println("  form.preview <asCodeDir> <form> [--driver D] [--out page.html] [--lang en]");
         System.err.println("                                          self-contained HTML preview (open-source Form.io renderer + placeholders for NetIQ components)");
+        System.err.println("entitlements (docs/entitlements.md; DirXML-Entitlement objects hanging off a driver):");
+        System.err.println("  entitlement.list <asCodeDir> [--driver D]                    every entitlement: conflict, multi-valued, display-name, packaged mark");
+        System.err.println("  entitlement.show <asCodeDir> --driver D --name N [--json]    an entitlement's document + which PRDs reference it");
         System.err.println("package catalog (docs/packages.md; a jars+unpacked-form repository kept in git):");
         System.err.println("  package.fetch   --catalog DIR [--site NAME|URL] [--short SHORT[_ver]…] [--all-versions] [--dry-run] [--json]");
         System.err.println("  package.import  --catalog DIR <jar|dir> [--json]");

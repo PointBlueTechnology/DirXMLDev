@@ -319,7 +319,13 @@ stock one); Designer acceptance of the project writer passed 2026-09-13
 **Track W — Workflow design (the PRD's `<process>`)** — ✅ **W1, W2, W4, W5 shipped
 2026-09-15** (flow model, engine-faithful `FlowCheck`, `prd.flow`, twelve
 `flow.*` operations, live proof on idm254 in [spikes/workflow-live.md](spikes/workflow-live.md);
-Designer accepted the authored PRD; W3 integration activities and W4b entitlements on a Loopback driver remain); design note
+Designer accepted the authored PRD); **W4b model shipped 2026-09-15**
+(entitlements as-code — model, live/LDIF/project readers, as-code + project
+writers, diff/deploy, `entitlement.*` operations, `EntitlementCheck` +
+`FlowCheck`'s two new codes; 505 tests green, 11 skipped — see
+[entitlements.md](entitlements.md) §2); the Loopback driver + live grant
+proof on idm254 (§3) and the Designer acceptance check (§4) are pending. W3
+integration activities remain. Design note
 written 2026-09-13 ([workflows.md](workflows.md): engine grammar and the
 engine's ten pickup checks recovered from `workflow.jar`, Designer needs no
 layout data, `design-params` is legacy; options A/B/C, recommended B = typed

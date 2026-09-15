@@ -1,7 +1,9 @@
 # Track W step W4b — entitlements as-code and a Loopback driver that carries them — design note
 
-Status: **facts gathered 2026-09-15; proceeding on the recommendations below
-(Jerry: "do it" on the Track W follow-ups). Nothing built yet.**
+Status: **facts gathered 2026-09-15; §2's model/readers/writers/diff/deploy/
+operations/checks shipped the same day (agent, on the `w4b-entitlements`
+branch) — 505 tests green (473 prior + 32 new), 11 skipped. Live proof (§3)
+and the Designer acceptance check (§4) still pending.**
 
 Why: the workflow live proof (W4) could not grant anything — idm254 has no
 entitlement and the tool has no entitlement model. Jerry's instruction:
@@ -56,31 +58,73 @@ fixes a template's placeholder.
 
 ## 2. Design
 
+**Built** (2026-09-15, agent, `w4b-entitlements`):
+
 - **Model**: `Entitlement { name, Element definition, meta (stamps,
   customized) }` on `Driver.entitlements`; tree file
-  `drivers/<d>/entitlements/<name>.xml` (canonical XML, like a PRD part) with
-  the manifest carrying the stamps like forms/PRDs do.
-- **Readers**: live/LDIF (`DirXML-Entitlement` children of the driver),
-  project (`*.Entitlement_` + `_contents.xml`), export (`<entitlement>` in a
-  driver export, if present). **Writer**: as-code and `export-project`
-  (CObject + contents + `Idm:Entitlements` relation).
-- **Diff/deploy**: kinds `ENTITLEMENT_ADDED/REMOVED/CHANGED`; driver-scoped
-  (an entitlement change does not need a restart — the engine reads
-  entitlements from the vault when granting; note it in the plan as no
-  restart). `VaultMapping.entitlementAttributes` = `XmlData` + stamps.
-- **Operations**: `entitlement.add <tree> --driver D --name N [--display-name
-  T] [--description …] [--multi-valued] [--conflict union|priority]
-  [--values v1,v2…]` (static values; `--query-file` for a query-app
-  definition), `entitlement.set`, `entitlement.remove` (refuses while a PRD's
-  provision activity names it); `entitlement.list/show`.
-- **Checks**: `EntitlementCheck` — document well-formed, `conflict-resolution`
-  enum, `multi-valued` boolean; and in `FlowCheck`, a provision activity's
-  `DirXML-Entitlement-DN` literal that names an entitlement in the tree is
-  resolved (info when it points outside the tree, warning when the driver
-  exists but the entitlement does not).
-- **Loopback driver**: `driver.add --name Loopback --shim-class
-  com.novell.nds.dirxml.driver.loopback.LoopbackDriverShim` + `filter.set`
-  for `User` (`DirXML-EntitlementRef` sync/notify) — existing operations.
+  `drivers/<d>/entitlements/<name>.xml` (canonical XML, like a PRD part).
+  Deviation: the stamps are listed in the driver's own manifest
+  (`driver.xml`, an `<entitlement name=… file=…>` element per entitlement),
+  not a separate `entitlements.xml` — an entitlement has no scope of its own
+  and `driver.xml` already lists driver-scope artifacts/config/linkage the
+  same way, so this keeps one manifest per driver instead of two.
+- **Readers**: live/LDIF (`DirXML-Entitlement` children of the driver, same
+  `dirxml-pkg*` meta convention as forms/PRDs), project (`*.Entitlement_` +
+  `_contents.xml`, counted via `Idm:Entitlements` the reader already parsed
+  for `entitlements.count`). **Export**: *not implemented* — neither the
+  export-format doc (`ProjectReader`'s class doc, `ExportReader`'s class doc)
+  nor any test fixture shows an `<entitlement>` element under
+  `<driver-configuration>`; a Designer "Export to Configuration File" does
+  not appear to carry entitlements at all (they are vault/project-only
+  objects). If that turns out to be wrong, `ExportReader`/`ExportWriter` are
+  the place to add it, mirroring `readPolicy`/`writeArtifact`. **Writer**:
+  as-code (`AsCodeWriter`/`AsCodeReader`) and `export-project`
+  (`*.Entitlement_` CObject + `_contents.xml`, `Idm:Entitlements` relation
+  kept in step — mirrors a driver-scope policy's `Idm:Policies` handling).
+- **Diff/deploy**: `ModelDiff.Kind.ENTITLEMENT_ADDED/REMOVED/CHANGED`,
+  `Kind.isEntitlement()`/`noRestart()` (folds with `isProvisioning()` for the
+  restart-exclusion and `affectedDrivers()` logic — an entitlement change
+  never needs a restart, same reasoning as forms/PRDs: the Identity
+  Applications read it from the vault at grant time). `VaultMapping.
+  entitlementDn`/`entitlementAttributes` (`XmlData` = canonical XML bytes),
+  stamps via the existing `provisioningPackageAttributes`. `Plan.
+  entitlementSteps`: ADD (`Top, DirXML-Entitlement` [+ `DirXML-PkgItemAux`
+  when stamped]) / MODIFY `XmlData` only when changed / DELETE — no
+  Deployer change needed (existing ADD/MODIFY/DELETE/AUX_CLASS ops).
+- **Operations** (`edit/EntitlementOps.java`): `entitlement.add <tree>
+  --driver D --name N [--display-name T] [--description S] [--multi-valued]
+  [--conflict union|priority] [--values v1,v2…] [--definition-file f.xml]`
+  (`--conflict` defaults to `priority`; `--definition-file` takes a whole
+  `<entitlement>` document instead of the content flags — this supersedes
+  the design's `--query-file`, since a query-app-based entitlement is just
+  another whole document), `entitlement.set` (same flags on an existing one;
+  a packaged entitlement is baselined + marked customized on its first
+  edit, same convention as `FormOps.customizeForm`), `entitlement.remove`
+  (refuses while any PRD's provision activity's `DirXML-Entitlement-DN`
+  literal names it by name inside the DN — `--force` never overrides this);
+  `entitlement.list`/`entitlement.show` (the latter lists referencing PRDs).
+- **Checks**: `EntitlementCheck` (registered after `FlowCheck`) —
+  `entitlement-name-blank`, `entitlement-no-document`,
+  `entitlement-wrong-root`, `entitlement-conflict-invalid`,
+  `entitlement-multi-valued-invalid`. `FlowCheck` gained
+  `flow-entitlement-unknown` (warning — a provision activity's
+  `DirXML-Entitlement-DN` names a driver in the tree with no such
+  entitlement) and `flow-entitlement-external` (info — it names a driver not
+  in the tree).
+- **Tests**: 32 new (505 total, 11 skipped) — model round trip, LDIF reader
+  (packaged + unpackaged), project reader/writer (synthetic skeleton: add,
+  change, remove), diff/plan (added/changed/removed + a customized packaged
+  entitlement's content-derived checksum), operations (add with values, set,
+  definition-file replace, remove refused/unrefused, list/show), the five
+  `EntitlementCheck` codes, the two new `FlowCheck` codes.
+- **Docs**: this file, `docs/agent-guide.md` (a "Entitlements" subsection
+  under Provisioning), `.claude/skills/dirxml-dev/reference/commands.md` (an
+  "Entitlements" section), `docs/plan.md` (Track W paragraph).
+
+**Not built** (§3/§4 below): the Loopback driver
+(`driver.add --shim-class com.novell.nds.dirxml.driver.loopback.
+LoopbackDriverShim` + `filter.set`) and the live proof on idm254 are
+existing operations needing no new code — Jerry's to run.
 
 ## 3. Proof (W4b live, idm254)
 
