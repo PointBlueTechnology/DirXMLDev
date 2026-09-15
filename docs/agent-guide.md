@@ -214,6 +214,30 @@ come from the same idm254 templates `prd.add --from-template` copies from
 (`TemplateSingleApproval_TD`, `NoApproval`) — see `commands.md`. Once the
 flow reads right, deploy it the normal way: `vault.diff` → `vault.deploy`.
 
+### Entitlements (Track W step W4b)
+
+A provision activity's `DirXML-Entitlement-DN` (above) has to name something
+real for a grant to do anything — `docs/entitlements.md` covers the model.
+An entitlement is a `DirXML-Entitlement` object hanging directly off the
+driver (`cn=<name>,cn=<driver>,<driver set>`), not under `AppConfig`, so it
+lives at `drivers/<driver>/entitlements/<name>.xml` in the tree and rides the
+normal `vault.diff`/`vault.deploy` (no driver restart — the Identity
+Applications read it from the vault at grant time):
+
+```bash
+bin/idm entitlement.add tree/ --driver Loopback --name TestAccess --display-name Group --multi-valued --values a,b
+bin/idm flow.activity.add tree/ --prd "Widget Access" --kind provision --id prov --after approval_2 --via approved \
+    --entitlement-dn "cn=TestAccess,cn=Loopback,cn=driverset1,o=system"
+bin/idm validate tree/                                                       # flow-entitlement-unknown/-external if the DN doesn't resolve
+```
+
+`entitlement.remove` refuses while any PRD's provision activity still names
+it (`--force` never overrides that — repoint or remove the activity first).
+`entitlement.list`/`entitlement.show` orient; `EntitlementCheck` validates
+the document itself (root element, `conflict-resolution`, `multi-valued`);
+`FlowCheck` cross-checks a provision activity's DN against the tree's
+drivers. See `commands.md` for the full flag list.
+
 ## Two kinds of change
 
 **Content** — the rules inside a policy, a stylesheet, a script, a table's rows:
