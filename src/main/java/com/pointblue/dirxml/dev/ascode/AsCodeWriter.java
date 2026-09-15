@@ -3,6 +3,7 @@ package com.pointblue.dirxml.dev.ascode;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
@@ -114,6 +115,24 @@ public final class AsCodeWriter {
             Manifest s = linkage.child("set").attr("key", set.key);
             for (PolicyLink l : links) {
                 s.child("link").attr("ref", l.ref).attr("order", Integer.toString(l.order));
+            }
+        }
+        // entitlements: DirXML-Entitlement objects hanging directly off the driver (docs/entitlements.md
+        // §2) — listed in the driver's own manifest, the way policies/resources are (a dedicated
+        // entitlements.xml would just duplicate the driver manifest's job for one more object kind).
+        if (!d.entitlements.isEmpty()) {
+            Path entDir = dir.resolve("entitlements");
+            Files.createDirectories(entDir);
+            Set<String> usedEnt = new HashSet<>();
+            List<Entitlement> ents = new ArrayList<>(d.entitlements);
+            ents.sort(Comparator.comparing(e -> e.name));
+            for (Entitlement e : ents) {
+                String file = uniqueFile(fileSafe(e.name) + ".xml", usedEnt);
+                if (e.definition != null) {
+                    writeXml(entDir.resolve(file), e.definition);
+                }
+                Manifest em = m.child("entitlement").attr("name", e.name).attr("file", "entitlements/" + file);
+                em.meta(e.meta);
             }
         }
         writeText(dir.resolve(DRIVER_MANIFEST), m.toXml());
