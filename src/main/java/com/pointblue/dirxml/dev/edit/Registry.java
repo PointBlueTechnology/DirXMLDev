@@ -224,6 +224,96 @@ public final class Registry {
             opt("map-all", "flag: map every bindable field of the bound form(s) to flowdata with the default targets/sources, as prd.map would"),
             driver);
 
+        // workflow (flow.*): typed operations on a PRD's <process> (Track W step W2)
+        Arg flowPrd = req("prd", "PRD name");
+        register("flow.activity.add", "insert a workflow activity after another, wiring its default outgoing link(s)",
+            a -> new FlowOps.ActivityAdd(a.get("driver"), a.get("prd"), a.get("kind"), a.get("id"), a.get("after"),
+                a.get("via"), a.get("to"), a.get("on-denied"), a.get("on-false"), a.get("name"), a.get("addressee"),
+                a.get("timeout"), a.get("ontimeout"), a.get("expression"), a.get("message"), a.get("template"),
+                a.get("entitlement-dn"), a.get("entitlement-param")),
+            flowPrd, req("kind", "approval|condition|branch|log|notification|mapping|provision"),
+            req("id", "the new activity's id ([A-Za-z_][A-Za-z0-9_-]*)"), req("after", "insert after this activity"),
+            opt("via", "the outgoing link type of --after to consume (when it has more than one)"),
+            opt("to", "required when --after is a branch: the leg's target (the branch's merge, or reachable from it)"),
+            opt("on-denied", "an approval's 'denied' link target (default: the finish activity)"),
+            opt("on-false", "a condition's 'false' link target (default: the finish activity)"),
+            opt("name", "display name: lang~Text or plain text (= en); default a sensible label"),
+            opt("addressee", "an approval's addressee expression (default: the stock manager lookup)"),
+            opt("timeout", "an approval's timeout in milliseconds (default: the stock 8-day timeout)"),
+            opt("ontimeout", "an approval's ontimeout (default: denied)"),
+            opt("expression", "a condition's boolean ECMAScript expression"),
+            opt("message", "a log activity's message expression (default: a quoted 'Activity <id>' literal)"),
+            opt("template", "a notification activity's notify template DN"),
+            opt("entitlement-dn", "a provision activity's entitlement DN (quoted as a literal)"),
+            opt("entitlement-param", "a provision activity's entitlement parameter (default '')"), driver);
+
+        register("flow.activity.set", "change an existing workflow activity's attributes/addressee/expression/message/template/entitlement",
+            a -> new FlowOps.ActivitySet(a.get("driver"), a.get("prd"), a.get("id"), a.get("name"), repeatable(a.get("attr")),
+                a.get("addressee"), a.get("timeout"), a.get("ontimeout"), a.get("expression"), a.get("message"),
+                a.get("template"), a.get("entitlement-dn"), a.get("entitlement-param"), a.get("approver-type")),
+            flowPrd, req("id", "the activity's id"), opt("name", "display name: lang~Text or plain text (= en)"),
+            opt("attr", "name=value, repeatable (validated against known enums; activity-id is refused — use flow.activity.rename)"),
+            opt("addressee", "replaces every addressee (repeat --addressee for more than one)"),
+            opt("timeout", "milliseconds"), opt("ontimeout", "approved|denied|refused|timedout|error"),
+            opt("expression", "a condition's expression"), opt("message", "a log activity's message expression"),
+            opt("template", "a notify template DN"), opt("entitlement-dn", "provision only: entitlement DN (quoted as a literal)"),
+            opt("entitlement-param", "provision only: entitlement parameter (quoted as a literal)"),
+            opt("approver-type", "org-approver|group-approver|multiple-approver|quorum-approver"), driver);
+
+        register("flow.activity.rename", "rename an activity id everywhere it is referenced (links, data-items, form-binding, expressions)",
+            a -> new FlowOps.ActivityRename(a.get("driver"), a.get("prd"), a.get("id"), a.get("to")),
+            flowPrd, req("id", "the activity's current id"), req("to", "the new id"), driver);
+
+        register("flow.activity.remove", "remove an activity, reconnecting its incoming links to its primary successor",
+            a -> new FlowOps.ActivityRemove(a.get("driver"), a.get("prd"), a.get("id")),
+            flowPrd, req("id", "the activity's id (not start/finish/branch/merge)"), driver);
+
+        register("flow.branch.add", "insert a branch/merge pair (add legs afterwards with flow.activity.add --after <branch> --to <merge>)",
+            a -> new FlowOps.BranchAdd(a.get("driver"), a.get("prd"), a.get("id"), a.get("merge"), a.get("after"), a.get("via")),
+            flowPrd, req("id", "the new branch activity's id"), req("merge", "the new merge activity's id"),
+            req("after", "insert after this activity"), opt("via", "the outgoing link type of --after to consume"), driver);
+
+        register("flow.branch.remove", "remove a branch/merge pair with a single leg (or none), reconnecting around them",
+            a -> new FlowOps.BranchRemove(a.get("driver"), a.get("prd"), a.get("id")),
+            flowPrd, req("id", "the branch activity's id"), driver);
+
+        register("flow.link.add", "add a link between two activities",
+            a -> new FlowOps.LinkAdd(a.get("driver"), a.get("prd"), a.get("from"), a.get("to"), a.get("type")),
+            flowPrd, req("from", "source activity id"), req("to", "target activity id"),
+            req("type", "forward|approved|denied|refused|timedout|success|fault|true|false|error"), driver);
+
+        register("flow.link.remove", "remove a link between two activities",
+            a -> new FlowOps.LinkRemove(a.get("driver"), a.get("prd"), a.get("from"), a.get("to"), a.get("type")),
+            flowPrd, req("from", "source activity id"), req("to", "target activity id"),
+            opt("type", "only remove a link of this type (default: any type between --from and --to)"), driver);
+
+        register("flow.link.retype", "change a link's type",
+            a -> new FlowOps.LinkRetype(a.get("driver"), a.get("prd"), a.get("from"), a.get("to"), a.get("type"), a.get("to-type")),
+            flowPrd, req("from", "source activity id"), req("to", "target activity id"), req("type", "the link's current type"),
+            req("to-type", "the new type"), driver);
+
+        register("flow.data.set", "add or replace a raw data item on any activity's data-items block",
+            a -> new FlowOps.DataSet(a.get("driver"), a.get("prd"), a.get("activity"), a.get("name"), a.get("source"),
+                a.get("target"), a.get("type"), a.get("target-type")),
+            flowPrd, req("activity", "the activity's id"), req("name", "the data item's name"),
+            opt("source", "an ECMAScript source expression"), opt("target", "a flowdata target path"),
+            opt("type", "string|boolean|integer|decimal|date|dn|binary|element (default: string)"),
+            opt("target-type", "single-value|multi-value-list|multi-value-list-item"), driver);
+
+        register("flow.data.remove", "remove a raw data item from an activity's data-items block",
+            a -> new FlowOps.DataRemove(a.get("driver"), a.get("prd"), a.get("activity"), a.get("name")),
+            flowPrd, req("activity", "the activity's id"), req("name", "the data item's name"), driver);
+
+        register("flow.set", "change process-level attributes (version, process-type, flow-strategy, …)",
+            a -> new FlowOps.SetProcess(a.get("driver"), a.get("prd"), a.get("version"), a.get("process-type"),
+                a.get("flow-strategy"), a.get("default-completed-approval-status"), a.get("setnotify"),
+                a.get("restrict-view"), a.get("generate-comments")),
+            flowPrd, opt("version", "one of the engine's supported process versions"),
+            opt("process-type", "Normal|RBAC|RBACSOD|Resource|Attestation|ResourceProvisioning|RoleProvisioning"),
+            opt("flow-strategy", "SingleFlow|FlowPerMember|SingleFlowProvisionMembers"),
+            opt("default-completed-approval-status", "approved|denied"),
+            opt("setnotify", "true|false"), opt("restrict-view", "true|false"), opt("generate-comments", "true|false"), driver);
+
         register("policy.link", "link an artifact into a driver's policy set",
             a -> new ArtifactOps.Link(a.get("path"), a.get("driver"), setOf(a.get("set")),
                 a.containsKey("at") ? ArtifactOps.Position.parse(a.get("at")) : null),

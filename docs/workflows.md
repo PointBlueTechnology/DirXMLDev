@@ -2,7 +2,8 @@
 
 Status: **P0 findings done (2026-09-13); decisions taken 2026-09-15 (§7);
 W1 shipped (2026-09-15, §4) — `Flow` model, engine-faithful `FlowCheck`,
-`prd.flow` view. W2 next.**
+`prd.flow` view. W2 shipped (2026-09-15, §4) — `FlowOps`, the twelve
+`flow.*` typed operations. W4 next.**
 
 Roles and resources are *not* in scope: they are managed in the Identity
 Applications, not in Designer or the vault's AppConfig (Jerry, 2026-09-13).
@@ -239,10 +240,35 @@ Recommendation: **B, with A's parameters as the first operations**
   still carry the `{enter Entitlement DN here}`/`{enter Entitlement param
   here}` placeholders (correctly informational, not errors, since a
   Template PRD can never be requested — see §1.4 and §2).
-- **W2 Typed operations** (option B) on the common set — approval,
-  condition, branch/merge, log, notification, mapping, provision — plus
-  `flow.set`; each is a transaction like Track P's (load → apply → validate
-  → write); `Transaction.touched` + package/customization stamps as today.
+- **W2 Typed operations — ✅ shipped 2026-09-15.** `com.pointblue.dirxml.dev.
+  edit.FlowOps`, twelve operations registered in `Registry` and reached
+  through the generic `bin/idm <op> <tree> …` path, each a `Transaction` like
+  Track P's (load → apply → validate → write; a change `FlowCheck` would
+  newly flag is refused unless `--force`): `flow.activity.add/set/rename/
+  remove`, `flow.branch.add/remove`, `flow.link.add/remove/retype`,
+  `flow.data.set/remove`, `flow.set`. Element order follows §1.1
+  (`FlowOps.insertActivity`/`addLink`/`insertBeforeStart` helpers); a PRD
+  whose `process` is a separate DOM node from `definition`'s embedded copy
+  (class doc, `model.Prd`) is kept in sync by a new `FlowOps.syncDefinition`
+  called at the end of every op. Stock shapes (an approval's `timeout`/
+  `ontimeout`/default `addressee`/`notify`+`retry`, a log's `author`, a
+  provision activity's five entitlement data items) are copied from
+  `TemplateSingleApproval_TD` and `NoApproval` (`commands.md` names the
+  source template on each constant). 466 tests (was 449): 17 new in
+  `FlowOpsTest`, one per op plus the ambiguous-outgoing-link refusal, a
+  branch with two legs, rename's textual rewrite, and an end-to-end
+  condition + two-approval + log flow with zero `flow-*` findings.
+
+  Two deviations from §3's sketch, both because nothing in the 39 stock
+  PRDs or the engine grammar gave a shape to copy: a `notification-activity`'s
+  `notify` carries four of the approval's five stock maps (dropping the one
+  that calls `<id>.getAddressee()` — a method only a `user-activity`'s info
+  object has); and `flow.branch.remove` (no test in the required list
+  exercises it, so it is lightly used) accepts a branch with either no
+  activities between it and its merge, or a single simple chain of
+  activities each with exactly one outgoing link — anything more (multiple
+  legs, an activity with its own branching) is refused rather than guessed
+  at, since §3 does not say how to collapse those shapes.
 - **W3 Integration activities**: rest, role-request, resource-request,
   start-correlated-flow (schema known, no stock examples — needs one real
   case to calibrate against).
