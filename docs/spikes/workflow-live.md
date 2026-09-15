@@ -114,6 +114,6 @@ mapping. No layout data was needed (§1.3 of the design note).
 ## Cleanup
 
 The PRD was removed from the tree by hand (its `prds/DirXMLDev W4/`
-directory and the manifest's `<prd>` entry — there is no `prd.delete`
-operation yet, a follow-up), then `form.delete` (which refuses while a PRD
-binds the form), `vault.deploy` (two deletes), `vault.diff` empty.
+directory and the manifest's `<prd>` entry — (`prd.delete` exists now)),
+then `form.delete` (which refuses while a PRD binds the form),
+`vault.deploy` (two deletes), `vault.diff` empty.

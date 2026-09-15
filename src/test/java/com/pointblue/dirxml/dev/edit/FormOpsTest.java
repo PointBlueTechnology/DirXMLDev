@@ -821,4 +821,154 @@ public class FormOpsTest {
         assertEquals(target, item.getAttribute("target"));
         assertEquals(targetType, item.getAttribute("target-type"));
     }
+
+    // ---- prd.delete -----------------------------------------------------------------------
+
+    private static Element minimalProcess(String prdName) {
+        return el("<process id=\"cn=" + prdName + ",cn=RequestDefs,cn=AppConfig,cn=UA,cn=driverset1,o=system\""
+            + " version=\"4.5.0\" formSrc=\"1\">"
+            + "<display-name xml:lang=\"en\">" + prdName + "</display-name>"
+            + "<start-activity activity-id=\"Start\"><display-name xml:lang=\"en\">Start</display-name></start-activity>"
+            + "<finish-activity activity-id=\"Finish\"><display-name xml:lang=\"en\">Finish</display-name></finish-activity>"
+            + "<link source=\"Start\" target=\"Finish\" type=\"forward\"/>"
+            + "</process>");
+    }
+
+    private static Element el(String xml) {
+        return BindingSyncTest.el(xml);
+    }
+
+    /** Adds a bare PRD "<name>" (no forms) with the given process to the provisioning. */
+    private static Prd addBarePrd(Provisioning p, String name, Element process) {
+        Prd prd = new Prd(name);
+        prd.definition = BindingSyncTest.el("<prov-req-defn status=\"Active\" prov-id=\"" + name + "\"/>");
+        prd.definition.appendChild(prd.definition.getOwnerDocument().importNode(process, true));
+        prd.process = com.pointblue.dirxml.sim.Xds.childrenByName(prd.definition, "process").get(0);
+        prd.properties.put("status", List.of("Active"));
+        p.prds.add(prd);
+        return prd;
+    }
+
+    /**
+     * The {@code tree(tmp, false)} driver plus two more bare PRDs, "P2" and "Referencer", the
+     * latter's process holding a {@code start-correlated-flow-activity} whose {@code processId}
+     * names {@code target} (bare name or, with {@code byDn}, {@code target}'s DN).
+     */
+    private static Path referencedTree(TemporaryFolder tmp, String target, boolean byDn) throws Exception {
+        DriverSet ds = new DriverSet("driverset1");
+        ds.dn = "cn=driverset1,o=system";
+        Driver ua = new Driver("UA");
+        ua.dn = "cn=UA,cn=driverset1,o=system";
+        Provisioning p = new Provisioning();
+        p.dn = "cn=AppConfig," + ua.dn;
+        addBarePrd(p, "P", minimalProcess("P"));
+        addBarePrd(p, "P2", minimalProcess("P2"));
+        String processId = byDn
+            ? "cn=" + target + ",cn=RequestDefs,cn=AppConfig,cn=UA,cn=driverset1,o=system"
+            : target;
+        Element referencerProcess = el("<process id=\"cn=Referencer,cn=RequestDefs,cn=AppConfig,cn=UA,cn=driverset1,o=system\""
+            + " version=\"4.5.0\" formSrc=\"1\">"
+            + "<display-name xml:lang=\"en\">Referencer</display-name>"
+            + "<start-activity activity-id=\"Start\"><display-name xml:lang=\"en\">Start</display-name></start-activity>"
+            + "<start-correlated-flow-activity activity-id=\"StartFlow\" processId=\"" + processId + "\">"
+            + "<display-name xml:lang=\"en\">StartFlow</display-name></start-correlated-flow-activity>"
+            + "<finish-activity activity-id=\"Finish\"><display-name xml:lang=\"en\">Finish</display-name></finish-activity>"
+            + "<link source=\"Start\" target=\"StartFlow\" type=\"forward\"/>"
+            + "<link source=\"StartFlow\" target=\"Finish\" type=\"forward\"/>"
+            + "</process>");
+        addBarePrd(p, "Referencer", referencerProcess);
+        ua.provisioning = p;
+        ds.drivers.add(ua);
+        Path t = tmp.newFolder("referenced-tree-" + target + "-" + byDn).toPath();
+        AsCodeWriter.write(ds, t);
+        return t;
+    }
+
+    @Test
+    public void prdDeleteRemovesTheDirectoryAndManifestEntryButLeavesBoundFormsAndOtherPrds() throws Exception {
+        Path t = tree(tmp, false);
+        Result r = Transaction.open(t).run(new FormOps.PrdDelete(null, "P"), false, false);
+        assertTrue(r.text(), r.ok());
+        assertTrue(r.written);
+        assertTrue(r.touched.toString(), r.touched.contains("drivers/UA/provisioning/prds/P"));
+        assertTrue(r.notes.toString(), r.notes.toString().contains("deleted prd 'P'"));
+        assertTrue(r.notes.toString(), r.notes.toString().contains("forms it bound remain:"));
+        assertTrue(r.notes.toString(), r.notes.toString().contains("Req"));
+
+        assertFalse(Files.exists(t.resolve("drivers/UA/provisioning/prds/P")));
+        String manifest = Files.readString(t.resolve("drivers/UA/provisioning/provisioning.xml"));
+        assertFalse(manifest, manifest.contains("name=\"P\""));
+
+        DriverSet again = AsCodeReader.read(t);
+        assertNull(again.drivers.get(0).provisioning.prd("P"));
+        assertNotNull(again.drivers.get(0).provisioning.formByName("Req"));   // the bound form is not deleted
+
+        // the form's only binding is gone, so form.delete now succeeds
+        Result formDeleted = Transaction.open(t).run(new FormOps.Delete(null, "Req"), false, false);
+        assertTrue(formDeleted.text(), formDeleted.ok());
+        assertNull(AsCodeReader.read(t).drivers.get(0).provisioning.formByName("Req"));
+    }
+
+    @Test
+    public void prdDeleteOtherPrdsAreUntouched() throws Exception {
+        Path t = referencedTree(tmp, "Q-not-referenced", false);
+        Result r = Transaction.open(t).run(new FormOps.PrdDelete(null, "P2"), false, false);
+        assertTrue(r.text(), r.ok());
+        DriverSet again = AsCodeReader.read(t);
+        assertNull(again.drivers.get(0).provisioning.prd("P2"));
+        assertNotNull(again.drivers.get(0).provisioning.prd("P"));
+        assertNotNull(again.drivers.get(0).provisioning.prd("Referencer"));
+    }
+
+    @Test
+    public void prdDeletePackagedNeedsForce() throws Exception {
+        Path t = tree(tmp, true);
+        Result refused = Transaction.open(t).run(new FormOps.PrdDelete(null, "P"), false, false);
+        assertTrue(refused.refusal, refused.refusal.contains("packaged (stock) prd"));
+        assertTrue(refused.refusal, refused.refusal.contains("--force"));
+
+        Result forced = Transaction.open(t).run(new FormOps.PrdDelete(null, "P"), false, true);
+        assertTrue(forced.text(), forced.ok());
+        assertTrue(forced.written);
+        assertFalse(Files.exists(t.resolve("drivers/UA/provisioning/prds/P")));
+        assertNull(AsCodeReader.read(t).drivers.get(0).provisioning.prd("P"));
+    }
+
+    @Test
+    public void prdDeleteRefusedByBareNameReferenceEvenWithForce() throws Exception {
+        Path t = referencedTree(tmp, "P", false);
+        Result refused = Transaction.open(t).run(new FormOps.PrdDelete(null, "P"), false, false);
+        assertTrue(refused.refusal, refused.refusal.contains("is referenced by prd 'Referencer'"));
+        assertTrue(refused.refusal, refused.refusal.contains("'StartFlow'"));
+        Result stillRefused = Transaction.open(t).run(new FormOps.PrdDelete(null, "P"), false, true);
+        assertTrue(stillRefused.refusal, stillRefused.refusal.contains("is referenced by prd 'Referencer'"));
+        assertNotNull(AsCodeReader.read(t).drivers.get(0).provisioning.prd("P"));
+    }
+
+    @Test
+    public void prdDeleteRefusedByDnReferenceEvenWithForce() throws Exception {
+        Path t = referencedTree(tmp, "P2", true);
+        Result refused = Transaction.open(t).run(new FormOps.PrdDelete(null, "P2"), false, false);
+        assertTrue(refused.refusal, refused.refusal.contains("is referenced by prd 'Referencer'"));
+        Result stillRefused = Transaction.open(t).run(new FormOps.PrdDelete(null, "P2"), false, true);
+        assertTrue(stillRefused.refusal, stillRefused.refusal.contains("is referenced by prd 'Referencer'"));
+        assertNotNull(AsCodeReader.read(t).drivers.get(0).provisioning.prd("P2"));
+    }
+
+    @Test
+    public void prdDeleteDryRunWritesNothing() throws Exception {
+        Path t = tree(tmp, false);
+        Result r = Transaction.open(t).run(new FormOps.PrdDelete(null, "P"), true, false);
+        assertTrue(r.text(), r.ok());
+        assertFalse(r.written);
+        assertTrue(Files.exists(t.resolve("drivers/UA/provisioning/prds/P")));
+        assertNotNull(AsCodeReader.read(t).drivers.get(0).provisioning.prd("P"));
+    }
+
+    @Test
+    public void prdDeleteRefusesUnknownPrd() throws Exception {
+        Path t = tree(tmp, false);
+        Result r = Transaction.open(t).run(new FormOps.PrdDelete(null, "Nope"), false, false);
+        assertTrue(r.refusal, r.refusal.contains("not found"));
+    }
 }
