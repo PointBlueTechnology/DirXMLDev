@@ -280,6 +280,12 @@ the engine and Designer sources in the session scratchpad (`wf/`,
 
 ## 6a. W4 plan (live proof on idm254, scripted 2026-09-15)
 
+Visibility rule (Jerry): a PRD appears under Access → Request only when its
+status is `Active` **and** the requesting user has directory rights to the
+PRD object (uaadmin has all rights; anyone else needs trustee assignments —
+the 18 stock PRDs with a `<trustees>` element show how Designer records
+them). `prd.add` sets `Active`; trustees are not managed yet (candidate op).
+
 Lab facts: the only user is `cn=uaadmin,ou=sa,o=data` (`ou=users,o=data` is
 empty), so recipient, initiator and approver are all uaadmin; the stock
 notify template `cn=Provisioning Notification,cn=Default Notification
