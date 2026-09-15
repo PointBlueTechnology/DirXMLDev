@@ -75,7 +75,13 @@ mapping activity ("Workflow Status Denied"). **Fixed the same day:**
 `flow.activity.add --kind approval` defaults `--on-denied` to the process's
 denied status mapping, creating `status_denied` (→ finish) when absent, and
 `flow.activity.add --kind mapping --status approved|denied` creates one
-explicitly. Re-verified live below.
+explicitly. **Re-verified live** (2026-09-15): the W4 PRD got
+`status_denied` (`flow.activity.add --kind mapping --status denied --after
+approval_1 --via denied`, `flow.link.remove`/`flow.link.add` for
+`approval_2`), redeployed (2 modify steps); a new request (`20260915-6`)
+denied at First approval went Start → Workflow Status → Reason given? →
+approval_1 → **Workflow Status Denied** → Finish and Request History shows
+it as **Denied** (the two earlier runs still read Approved).
 
 ## Other facts
 
