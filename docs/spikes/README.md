@@ -1,4 +1,10 @@
-# Phase 0 spikes
+# Spikes
+
+**Rule:** when a spike closes, its facts go into the skill's
+[`reference/facts.md`](../../.claude/skills/dirxml-dev/reference/facts.md)
+(one line each, pointing back here) so nobody derives them twice.
+
+## Phase 0 spikes
 
 De-risking the two real unknowns before any foundation code (see
 [../plan.md](../plan.md), Phase 0). Each spike is read-only or scratch-only; none

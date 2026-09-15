@@ -113,3 +113,70 @@ before it reaches AD"*.
   then filter, policies, GCVs through the operations.
 - A Designer user gets a tool-created driver via Designer's *Import from the
   Identity Vault* after the deploy.
+
+## Change a provisioning form
+
+*"Add a required Priority field to the Help-desk request and pass it to the workflow."*
+
+1. **Orient.** `idm form.list tree/ --driver "User Application Driver"`,
+   `idm form.show tree/ "Help-desk Request Form"` (fields, scripts, languages,
+   the PRDs that bind it), `idm prd.show tree/ HelpdeskTicket` (bindings).
+2. **Add the field.** `idm form.field.add tree/ "Help-desk Request Form" --key priority --type select --label Priority --required --json '{"data":{"values":[{"label":"High","value":"high"},{"label":"Low","value":"low"}]}}'`
+   — the request binding's field list is rebuilt automatically; a stock form
+   is marked customized with its baseline kept.
+3. **Map it.** `idm prd.map tree/ HelpdeskTicket --field priority` — mappings
+   are never invented by the sync, so this step is always explicit (`--activity`
+   maps an approval activity's data item instead).
+4. **Localize.** `idm form.localize tree/ "Help-desk Request Form" --lang en --set "Priority=Priority"`
+   then `--sync` for every declared language.
+5. **Check and look.** `idm validate tree/` (FormCheck: 0 errors); `idm form.preview
+   tree/ "Help-desk Request Form" --out preview.html` for the layout; a person
+   can instead open it in the vendor builder with `idm form.edit`.
+6. **Deploy** the normal way (`vault.diff` → `vault.deploy --dry-run` → `--yes`
+   → verify); no driver restart, no cache flush needed. Then prove it (below).
+
+## Author a workflow
+
+*"A request that needs the manager's approval, then a second approver, and
+grants nothing yet."* Every step is a transaction; `validate` runs after each
+and refuses a change the engine would reject.
+
+1. **Start from a template.** `idm prd.add tree/ --name "Widget Access" --from-template NoApproval --request-form "Widget Request Form" --category accounts --display-name "en~Widget access" --map-all`
+   (`--map-all` maps every request field; the PRD is Active; `NoApproval`'s
+   entitlement step still carries `{enter Entitlement DN here}` — a warning
+   until it is set or removed).
+2. **Shape the flow.** `idm flow.activity.remove tree/ --prd "Widget Access" --id prov`
+   (or `flow.activity.set --id prov --entitlement-dn "cn=…"` to keep it);
+   `idm flow.activity.add … --kind condition --id has_reason --after Activity --expression "flowdata.get('Start/Widget_Request_Form/reason') != null"`;
+   `idm flow.activity.add … --kind approval --id approval_1 --after has_reason --via true --addressee "IDVault.get(recipient,'user','manager')"`;
+   `idm flow.activity.add … --kind approval --id approval_2 --after approval_1 --via approved --addressee "'cn=…'"`;
+   `idm flow.activity.add … --kind log --id log_done --after approval_2 --via approved`.
+   Each approval binds the stock Approval Form and routes `denied` to the
+   `status_denied` mapping (created once) — both required by the dashboard.
+3. **Read it back.** `idm prd.flow tree/ "Widget Access"` (text) or
+   `--format mermaid --out flow.mmd`; `idm validate tree/` = 0 errors and no
+   `flow-placeholder` for this PRD.
+4. **Deploy** (`vault.diff` → `vault.deploy`): a new PRD is an add; a changed
+   process writes only `XmlData` + `srvprvProcessXML`. Then prove it (below).
+5. **Designer** sees it via *Import from the Identity Vault* (or
+   `export-project`); the diagram lays itself out.
+
+## Prove it in the Identity Applications
+
+1. **Visibility.** Sign in as a user with rights to the PRD (an admin on a lab);
+   Access → Request → New Request → search the display name. Missing means:
+   not Active, no directory rights, or the display name differs.
+2. **Request.** Picking the PRD opens the JSON request form in a new window;
+   fill it and Submit. **Do not try REST for this** — `/requests/permissions/item`
+   cannot submit a JSON-form PRD (proven, `workflow-live.md`).
+3. **Approve.** Tasks → select the task → Approve/Deny with a comment (the
+   bulk buttons; opening the task itself needs the approval form bound).
+   Over REST: `GET /IDMProv/rest/access/tasks/list?fromIndex=0&size=20`, then
+   `POST /IDMProv/rest/access/tasks {"tasks":[{"taskId":…}],"action":"approve","comment":"…"}`
+   with an OSP password-grant token (`client_id=rbpm`).
+4. **Verify.** Request History (or `GET …/requests/historylist`) shows the
+   request Approved or Denied; the applications' log shows
+   `[Workflow_Started] … [Workflow_Ended]` with every activity in between
+   (`kubectl logs` on the identityapplications pod, or the Tomcat log).
+5. **Clean up** scratch forms and PRDs by deleting them from the tree and
+   deploying; `vault.diff` must come back empty.
