@@ -4,7 +4,7 @@ Status: **W1, W2, W4 and W5 shipped (2026-09-15, §4)** — `Flow` model,
 engine-faithful `FlowCheck`, `prd.flow`, the twelve `flow.*` operations, the
 live proof on idm254 and Designer's acceptance of the authored PRD. **Open:
 W3 (integration activities), W4b (a Loopback driver with entitlements, needs
-entitlements modeled), `prd.delete` (a PRD is still removed by hand).**
+entitlements modeled).**
 
 Roles and resources are *not* in scope: they are managed in the Identity
 Applications, not in Designer or the vault's AppConfig (Jerry, 2026-09-13).
