@@ -104,9 +104,16 @@ it as **Denied** (the two earlier runs still read Approved).
   (`idm254tun` environment, `ldaps://127.0.0.1:6636`, JNDI endpoint
   identification off). Environment-only, nothing in the tool.
 
-## Objects left on idm254 (for W5)
+## W5 — Designer acceptance: PASS (Jerry, 2026-09-15)
 
-`cn=DirXMLDev W4 Form` (WorkflowRequestForms) and `cn=DirXMLDev W4`
-(RequestDefs) stay until the Designer acceptance (W5: import from the vault
-in `Designer-modernized`, open the workflow, validate). Remove afterwards by
-deleting the two entries from `tree-idm254` and `vault.deploy`.
+`Designer-modernized` imported the User Application driver's provisioning
+objects from the Identity Vault and "DirXMLDev W4" opened fine — the
+auto-laid-out diagram, both approvals with the Approval Form, the status
+mapping. No layout data was needed (§1.3 of the design note).
+
+## Cleanup
+
+The PRD was removed from the tree by hand (its `prds/DirXMLDev W4/`
+directory and the manifest's `<prd>` entry — there is no `prd.delete`
+operation yet, a follow-up), then `form.delete` (which refuses while a PRD
+binds the form), `vault.deploy` (two deletes), `vault.diff` empty.

@@ -1,9 +1,10 @@
 # Track W — Workflow design (the PRD's `<process>`) — design note
 
-Status: **P0 findings done (2026-09-13); decisions taken 2026-09-15 (§7);
-W1 shipped (2026-09-15, §4) — `Flow` model, engine-faithful `FlowCheck`,
-`prd.flow` view. W2 shipped (2026-09-15, §4) — `FlowOps`, the twelve
-`flow.*` typed operations. W4 next.**
+Status: **W1, W2, W4 and W5 shipped (2026-09-15, §4)** — `Flow` model,
+engine-faithful `FlowCheck`, `prd.flow`, the twelve `flow.*` operations, the
+live proof on idm254 and Designer's acceptance of the authored PRD. **Open:
+W3 (integration activities), W4b (a Loopback driver with entitlements, needs
+entitlements modeled), `prd.delete` (a PRD is still removed by hand).**
 
 Roles and resources are *not* in scope: they are managed in the Identity
 Applications, not in Designer or the vault's AppConfig (Jerry, 2026-09-13).
@@ -287,7 +288,11 @@ Recommendation: **B, with A's parameters as the first operations**
   entitlement (needs a scratch entitlement on the lab's UA driver or an
   existing one), deploy, request it in the Identity Applications, approve
   as the addressee, see the entitlement granted, then remove everything.
-- **W5 Designer acceptance** (human): open the authored PRD in
+- **W5 Designer acceptance — ✅ PASSED 2026-09-15 (Jerry):** the authored
+  "DirXMLDev W4" PRD imported from the Identity Vault into
+  `Designer-modernized` and opened fine (auto-laid-out diagram, two
+  approvals bound to the Approval Form, the status mapping). Original plan:
+  open the authored PRD in
   `Designer-modernized`, diagram renders (auto-layout), validation clean,
   deploy offered. Designer round trip via `export-project` already writes
   PRDs (Track P step 6).
