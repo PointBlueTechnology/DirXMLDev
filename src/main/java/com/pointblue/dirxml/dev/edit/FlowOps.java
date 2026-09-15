@@ -1,7 +1,9 @@
 package com.pointblue.dirxml.dev.edit;
 
 import com.pointblue.dirxml.dev.flow.Flow;
+import com.pointblue.dirxml.dev.forms.BindingSync;
 import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Prd;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
@@ -197,6 +199,133 @@ public final class FlowOps {
         }
     }
 
+    /** Inserts {@code element} before the first child named one of {@code names} (document order), else appends. */
+    public static void insertBeforeFirst(Element process, Element element, String... names) {
+        Set<String> wanted = new HashSet<>(List.of(names));
+        for (Node n = process.getFirstChild(); n != null; n = n.getNextSibling()) {
+            if (n instanceof Element && wanted.contains(n.getNodeName())) {
+                process.insertBefore(element, n);
+                return;
+            }
+        }
+        process.appendChild(element);
+    }
+
+    /** The stock "Approval Form" every template binds to its user-activities; bound by default when the driver has it. */
+    public static final String DEFAULT_APPROVAL_FORM = "Approval Form";
+
+    /**
+     * Bind an approval form to a {@code user-activity} the way the stock JSON-forms PRDs do
+     * ({@code HelpdeskTicket}): a {@code <form form-id>} declaration, a {@code <form-binding>},
+     * and one data item per bindable field of the form with the stock default source —
+     * the request form's flowdata path when the request form has a same-named field
+     * ({@code flowdata.get('<start>/<Request_Form>/<field>')}), else by name:
+     * {@code title} → {@code <id>.getName(locale)}, {@code recipient}, {@code initiator}/{@code createdBy}
+     * → {@code initiator}, {@code requestDate}/{@code initiatedTime}/{@code createdDate} →
+     * {@code process.getTimestamp()}; {@code apwaComment} (the comment field) is never a data item on a JSON form. Anything
+     * else is left for {@code prd.map --activity}. Existing data items are kept. Without a bound
+     * form the Identity Applications cannot open the task (the task-details call fails in
+     * {@code AFFormGenerator}, docs/workflows.md §5). Returns a one-line summary for the note.
+     */
+    public static String bindApprovalForm(Driver d, Prd prd, String activityId, Form form) {
+        Document doc = prd.process.getOwnerDocument();
+        boolean declared = false;
+        for (Element f : Xds.childrenByName(prd.process, "form")) {
+            if (form.name.equals(f.getAttribute("form-id"))) {
+                declared = true;
+            }
+        }
+        if (!declared) {
+            Element f = doc.createElementNS(null, "form");
+            f.setAttribute("form-id", form.name);
+            insertBeforeFirst(prd.process, f, "form-binding", "data-items", "start-activity");
+        }
+        for (Element fb : new ArrayList<>(Xds.childrenByName(prd.process, "form-binding"))) {
+            if (activityId.equals(fb.getAttribute("activity-id"))) {
+                prd.process.removeChild(fb);
+            }
+        }
+        Element fb = doc.createElementNS(null, "form-binding");
+        fb.setAttribute("activity-id", activityId);
+        fb.setAttribute("form-id", form.name);
+        insertBeforeFirst(prd.process, fb, "data-items", "start-activity");
+
+        Element holder = findDataItems(prd.process, activityId);
+        if (holder == null) {
+            holder = doc.createElementNS(null, "data-items");
+            holder.setAttribute("activity-id", activityId);
+            insertBeforeStart(prd.process, holder);
+        }
+        String start = BindingSync.startActivityId(prd);
+        String reqFormId = null;
+        Set<String> reqFields = new HashSet<>();
+        if (prd.request != null) {
+            List<Element> rfb = Xds.childrenByName(prd.request, "form-binding");
+            if (!rfb.isEmpty()) {
+                reqFormId = rfb.get(0).getAttribute("form-id");
+                Form rf = d.provisioning == null ? null : d.provisioning.formByName(reqFormId);
+                if (rf != null) {
+                    for (BindingSync.Item it : BindingSync.items(rf.json)) {
+                        if (it.bindable()) {
+                            reqFields.add(it.key);
+                        }
+                    }
+                }
+            }
+        }
+        Set<String> existing = new HashSet<>();
+        for (Element di : Xds.childrenByName(holder, "data-item")) {
+            existing.add(di.getAttribute("name"));
+        }
+        List<String> mapped = new ArrayList<>();
+        List<String> unmapped = new ArrayList<>();
+        for (BindingSync.Item it : BindingSync.items(form.json)) {
+            if (existing.contains(it.key)) {
+                continue;
+            }
+            if (!it.bindable() || "button".equals(it.type)) {
+                continue;
+            }
+            String src;
+            if (reqFormId != null && reqFields.contains(it.key)) {
+                src = "flowdata.get('" + start + "/" + reqFormId.replace(' ', '_') + "/" + it.key + "')";
+            } else {
+                switch (it.key) {
+                    case "title": src = activityId + ".getName(locale)"; break;
+                    case "recipient": src = "recipient"; break;
+                    case "initiator": case "createdBy": src = "initiator"; break;
+                    case "requestDate": case "initiatedTime": case "createdDate": src = "process.getTimestamp()"; break;
+                    default: unmapped.add(it.key); continue;
+                }
+            }
+            holder.appendChild(createDataItem(doc, it.key, it.dataType(), src, null, null));
+            mapped.add(it.key);
+        }
+        BindingSync.sync(prd, form);
+        return "bound approval form '" + form.name + "' (mapped " + mapped
+            + (unmapped.isEmpty() ? "" : "; unmapped " + unmapped + " — prd.map --activity") + ")";
+    }
+
+    /** Resolve an approval form by name; a null name means the stock default if the driver has it (else null). */
+    static Form resolveApprovalForm(Driver d, String name) throws Operation.Refusal {
+        if (d.provisioning == null) {
+            if (name != null) {
+                throw new Operation.Refusal("driver '" + d.name + "' has no provisioning objects; approval form '" + name + "' not found");
+            }
+            return null;
+        }
+        if (name == null) {
+            return d.provisioning.form(Form.Kind.APPROVAL, DEFAULT_APPROVAL_FORM);
+        }
+        Form f = d.provisioning.form(Form.Kind.APPROVAL, name);
+        if (f == null) {
+            Form other = d.provisioning.formByName(name);
+            throw new Operation.Refusal("approval form '" + name + "' not found on driver '" + d.name + "'"
+                + (other != null ? " (a " + other.kind.dir + " form of that name exists; an approval activity needs an approval form)" : ""));
+        }
+        return f;
+    }
+
     public static Element createLink(Document doc, String source, String target, String type) {
         Element e = doc.createElementNS(null, "link");
         e.setAttribute("source", source);
@@ -377,11 +506,21 @@ public final class FlowOps {
         private final String template;
         private final String entitlementDn;
         private final String entitlementParam;
+        private final String form;
 
         public ActivityAdd(String driver, String prdRef, String kind, String id, String after, String via, String to,
                             String onDenied, String onFalse, String nameArg, String addressee, String timeout,
                             String ontimeout, String expression, String message, String template,
                             String entitlementDn, String entitlementParam) {
+            this(driver, prdRef, kind, id, after, via, to, onDenied, onFalse, nameArg, addressee, timeout, ontimeout,
+                expression, message, template, entitlementDn, entitlementParam, null);
+        }
+
+        public ActivityAdd(String driver, String prdRef, String kind, String id, String after, String via, String to,
+                            String onDenied, String onFalse, String nameArg, String addressee, String timeout,
+                            String ontimeout, String expression, String message, String template,
+                            String entitlementDn, String entitlementParam, String form) {
+            this.form = isBlankNull(form);
             this.driver = driver;
             this.prdRef = prdRef;
             this.kind = kind;
@@ -460,6 +599,11 @@ public final class FlowOps {
                 }
             }
 
+            if (form != null && !k.equals("approval")) {
+                throw new Operation.Refusal("--form only applies to an approval activity");
+            }
+            Form approvalForm = k.equals("approval") ? resolveApprovalForm(found.driver, form) : null;
+
             String before = FormOps.prdFingerprint(prd);
             Document doc = prd.process.getOwnerDocument();
             Element newEl = createActivityElement(doc, k, id);
@@ -477,11 +621,17 @@ public final class FlowOps {
             }
             addDefaultOutgoing(doc, prd.process, k, id, primaryTarget, denyTarget, falseTarget);
             addDataItemsForKind(doc, prd.process, k, id, entitlementDn, entitlementParam);
+            String formNote = "";
+            if (k.equals("approval")) {
+                formNote = approvalForm != null
+                    ? "; " + bindApprovalForm(found.driver, prd, id, approvalForm)
+                    : "; no approval form bound (none named '" + DEFAULT_APPROVAL_FORM + "' on the driver) — the dashboard cannot open the task until flow.activity.set --form binds one";
+            }
 
             FormOps.customizePrd(tx, found.driver, prd, before);
             syncDefinition(prd);
             tx.touched(FormOps.prdPath(found.driver, prd));
-            tx.note("prd '" + prdRef + "': added " + k + " activity '" + id + "' after '" + after + "'");
+            tx.note("prd '" + prdRef + "': added " + k + " activity '" + id + "' after '" + after + "'" + formNote);
         }
 
         private void validateKindArgs(String k) throws Operation.Refusal {
@@ -715,10 +865,20 @@ public final class FlowOps {
         private final String entitlementDn;
         private final String entitlementParam;
         private final String approverType;
+        private final String form;
 
         public ActivitySet(String driver, String prdRef, String id, String nameArg, List<String> attrs,
                             String addressee, String timeout, String ontimeout, String expression, String message,
                             String template, String entitlementDn, String entitlementParam, String approverType) {
+            this(driver, prdRef, id, nameArg, attrs, addressee, timeout, ontimeout, expression, message, template,
+                entitlementDn, entitlementParam, approverType, null);
+        }
+
+        public ActivitySet(String driver, String prdRef, String id, String nameArg, List<String> attrs,
+                            String addressee, String timeout, String ontimeout, String expression, String message,
+                            String template, String entitlementDn, String entitlementParam, String approverType,
+                            String form) {
+            this.form = isBlankNull(form);
             this.driver = driver;
             this.prdRef = prdRef;
             this.id = id;
@@ -749,11 +909,16 @@ public final class FlowOps {
 
             boolean any = nameArg != null || (attrs != null && !attrs.isEmpty()) || addressee != null
                 || timeout != null || ontimeout != null || expression != null || message != null
-                || template != null || entitlementDn != null || entitlementParam != null || approverType != null;
+                || template != null || entitlementDn != null || entitlementParam != null || approverType != null
+                || form != null;
             if (!any) {
                 throw new Operation.Refusal("give at least one of --name, --attr, --addressee, --timeout, --ontimeout, "
-                    + "--expression, --message, --template, --entitlement-dn, --entitlement-param, --approver-type");
+                    + "--expression, --message, --template, --entitlement-dn, --entitlement-param, --approver-type, --form");
             }
+            if (form != null && act.kind != Flow.Kind.USER) {
+                throw new Operation.Refusal("--form only applies to an approval (user-activity); '" + id + "' is a " + elementName(act));
+            }
+            Form approvalForm = form != null ? resolveApprovalForm(found.driver, form) : null;
             if ((entitlementDn != null || entitlementParam != null) && act.kind != Flow.Kind.PROVISION) {
                 throw new Operation.Refusal("--entitlement-dn/--entitlement-param only apply to a provision activity ('" + id + "' is a " + elementName(act) + ")");
             }
@@ -854,12 +1019,17 @@ public final class FlowOps {
                 setDataItemSource(el, "DirXML-Entitlement-Parameter", quoteLiteral(entitlementParam));
                 changed = true;
             }
+            String formNote = "";
+            if (approvalForm != null) {
+                formNote = "; " + bindApprovalForm(found.driver, prd, id, approvalForm);
+                changed = true;
+            }
 
             if (changed) {
                 FormOps.customizePrd(tx, found.driver, prd, before);
                 syncDefinition(prd);
                 tx.touched(FormOps.prdPath(found.driver, prd));
-                tx.note("prd '" + prdRef + "': updated activity '" + id + "'");
+                tx.note("prd '" + prdRef + "': updated activity '" + id + "'" + formNote);
             } else {
                 tx.note("prd '" + prdRef + "': activity '" + id + "': no change");
             }

@@ -284,6 +284,14 @@ Recommendation: **B, with A's parameters as the first operations**
 
 ## 5. Facts that shape the design
 
+- **An approval activity must bind an approval form.** The engine runs a
+  `user-activity` without one, but the Identity Applications' task-details
+  call (`WfRestController.getTaskDetails` → `AFFormGenerator.generateFormXML`)
+  fails, so the dashboard silently does nothing when the task is clicked
+  (found live in W4, 2026-09-15). Every stock template binds the stock
+  `Approval Form`; `flow.activity.add --kind approval` now binds it by default
+  (`--form` to choose another) with the stock data items, and
+  `flow.activity.set --form` fixes an existing activity.
 - The vault XML is the only faithful store; Designer keeps nothing else
   (no layout). Editing the DOM is safe as long as element order follows
   §1.1 (JAXB is order-tolerant on read, the XSD is not — keep the schema
