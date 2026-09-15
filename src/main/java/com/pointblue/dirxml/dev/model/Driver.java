@@ -36,6 +36,8 @@ public final class Driver {
     public final Map<String, String> meta = new LinkedHashMap<>();
     /** This driver's {@code cn=AppConfig} subtree (forms, PRDs); null if it has none. */
     public Provisioning provisioning;
+    /** {@code DirXML-Entitlement} objects hanging directly off this driver, in read order. */
+    public final List<Entitlement> entitlements = new ArrayList<>();
 
     public Driver(String name) {
         this.name = Objects.requireNonNull(name, "name");
@@ -51,6 +53,16 @@ public final class Driver {
         }
         out.sort((a, b) -> Integer.compare(a.order, b.order));
         return out;
+    }
+
+    /** The entitlement of this name, or null. */
+    public Entitlement entitlement(String name) {
+        for (Entitlement e : entitlements) {
+            if (e.name.equals(name)) {
+                return e;
+            }
+        }
+        return null;
     }
 
     /** Every artifact this driver owns (driver scope + both channels). */
