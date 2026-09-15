@@ -277,7 +277,10 @@ Recommendation: **B, with A's parameters as the first operations**
   under Access → Request, ran through the engine and completed after two
   dashboard approvals; the denied path ended the flow. Found and fixed: the
   dashboard needs an approval form bound to each approval activity
-  (§5); REST cannot submit a JSON-form PRD (form renderer only).
+  (§5); REST cannot submit a JSON-form PRD (form renderer only). Open
+  follow-up: a denied path must set `IDM_COMPLETED_APPROVAL_STATUS` to
+  `denied` (a status mapping activity), else the request history reads
+  "Approved" — the operations should do that by default.
   Original plan: author a PRD from NoApproval → add a
   condition + a two-step serial approval + a log + provision of a *real*
   entitlement (needs a scratch entitlement on the lab's UA driver or an
