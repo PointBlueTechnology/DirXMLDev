@@ -173,6 +173,47 @@ template placeholder (error on an `Active` PRD, informational on a template),
 and an activity with no display name. `docs/workflows.md` §1.4 has the full
 rationale; `commands.md` lists every `flow-*` code.
 
+### Author a workflow (Track W step W2)
+
+Changing the flow itself — not just a form's fields — is the `flow.*` typed
+operations (`commands.md` has the full list): one op per concept
+(`flow.activity.add/set/rename/remove`, `flow.branch.add/remove`,
+`flow.link.add/remove/retype`, `flow.data.set/remove`, `flow.set`), each a
+transaction like every other edit here (`--dry-run`, `--force`, `--json`,
+`validate` after every write — a change `FlowCheck` would newly flag is
+refused before it is written, same as `prd.map`/`form.field.add`). A common
+recipe — start from `NoApproval` (the simplest stock template: start → grant
+an entitlement → finish), replace its provisioning step with a condition and
+a two-step approval, then look at the result:
+
+```bash
+bin/idm prd.add tree/ --name "Widget Access" --from-template NoApproval --request-form "Widget Request Form"
+bin/idm flow.activity.remove tree/ --prd "Widget Access" --id prov          # drop the stock grant step
+bin/idm flow.activity.add tree/ --prd "Widget Access" --kind condition --id needs_reason \
+    --after Start --expression "flowdata.get('reason') != null"
+bin/idm flow.activity.add tree/ --prd "Widget Access" --kind approval --id approval_1 --after needs_reason --via true \
+    --addressee "IDVault.get(recipient,'user','manager')"
+bin/idm flow.activity.add tree/ --prd "Widget Access" --kind approval --id approval_2 --after approval_1 --via approved \
+    --addressee "'cn=uaadmin,ou=sa,o=data'"
+bin/idm prd.map tree/ "Widget Access" --field reason                        # bind the request form's field to flowdata
+bin/idm validate tree/                                                       # 0 errors, 0 flow-placeholder expected
+bin/idm prd.flow tree/ "Widget Access" --format mermaid --out flow.mmd       # review the shape before deploying
+```
+
+`flow.activity.add --after Y` inserts the new activity into `Y`'s single
+outgoing link (or the one named by `--via`, when `Y` has more than one — the
+op refuses and names the choices otherwise) and wires the new activity's own
+default outgoing link(s) for its kind (an approval's `approved`/`denied`, a
+condition's `true`/`false`, everything else's `forward`) — so the graph is
+always dangling-free and validates clean right after the op, without a
+separate `flow.link.add`. Parallel work is `flow.branch.add` (a branch/merge
+pair) followed by `flow.activity.add --after <branch> --to <merge>` for each
+leg. An approval's stock shape (timeout, default addressee, notify
+template+maps, retry) and a provision activity's five entitlement data items
+come from the same idm254 templates `prd.add --from-template` copies from
+(`TemplateSingleApproval_TD`, `NoApproval`) — see `commands.md`. Once the
+flow reads right, deploy it the normal way: `vault.diff` → `vault.deploy`.
+
 ## Two kinds of change
 
 **Content** — the rules inside a policy, a stylesheet, a script, a table's rows:
