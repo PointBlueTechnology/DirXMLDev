@@ -69,10 +69,34 @@ public final class Packages {
     static void refreshChecksums(com.pointblue.dirxml.dev.model.DriverSet ds, java.util.Set<String> touched) {
         for (String path : touched) {
             int i = path.indexOf("/provisioning/");
+            int j = path.indexOf("/entitlements/");
             if (path.startsWith("drivers/") && i >= 0) {
                 refreshProvisioningChecksum(ds, path, i);
+            } else if (path.startsWith("drivers/") && j >= 0) {
+                refreshEntitlementChecksum(ds, path, j);
             } else {
                 refreshArtifactChecksum(ds, path);
+            }
+        }
+    }
+
+    /** Same recipe as a form/PRD (no Designer checksum recipe of its own): content-derived CRC32. */
+    private static void refreshEntitlementChecksum(com.pointblue.dirxml.dev.model.DriverSet ds, String path, int j) {
+        String driverSafe = path.substring("drivers/".length(), j);
+        String name = path.substring(j + "/entitlements/".length());
+        for (com.pointblue.dirxml.dev.model.Driver d : ds.drivers) {
+            if (!AsCodeWriter.fileSafe(d.name).equals(driverSafe)) {
+                continue;
+            }
+            for (com.pointblue.dirxml.dev.model.Entitlement e : d.entitlements) {
+                if (AsCodeWriter.fileSafe(e.name).equals(name)
+                    && e.meta.get("dirxml-pkgguid") != null && "true".equals(e.meta.get(CUSTOMIZED_KEY))) {
+                    java.util.List<byte[]> xml = com.pointblue.dirxml.dev.deploy.VaultMapping.entitlementAttributes(e)
+                        .get(com.pointblue.dirxml.dev.deploy.VaultMapping.XML_DATA);
+                    if (xml != null && !xml.isEmpty()) {
+                        e.meta.put("dirxml-pkgchecksum", com.pointblue.dirxml.dev.deploy.VaultMapping.customizedChecksum(xml.get(0)));
+                    }
+                }
             }
         }
     }

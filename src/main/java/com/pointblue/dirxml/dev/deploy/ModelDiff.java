@@ -4,6 +4,7 @@ import com.pointblue.dirxml.dev.json.Json;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Prd;
 import com.pointblue.dirxml.dev.model.Provisioning;
@@ -44,12 +45,23 @@ public final class ModelDiff {
         ARTIFACT_ADDED, ARTIFACT_REMOVED, ARTIFACT_CHANGED, ARTIFACT_KIND_CHANGED,
         DRIVER_ADDED, DRIVER_REMOVED, DRIVER_SETTING, DRIVER_CONFIG, DRIVER_LINKAGE, DRIVER_STAMPS,
         DRIVERSET_GCVS, DRIVERSET_LINKAGE,
-        FORM_ADDED, FORM_REMOVED, FORM_CHANGED, PRD_ADDED, PRD_REMOVED, PRD_CHANGED;
+        FORM_ADDED, FORM_REMOVED, FORM_CHANGED, PRD_ADDED, PRD_REMOVED, PRD_CHANGED,
+        ENTITLEMENT_ADDED, ENTITLEMENT_REMOVED, ENTITLEMENT_CHANGED;
 
         /** Provisioning objects (JSON forms, PRDs) are read by the Identity Applications, not the engine: no driver restart. */
         public boolean isProvisioning() {
             return this == FORM_ADDED || this == FORM_REMOVED || this == FORM_CHANGED
                 || this == PRD_ADDED || this == PRD_REMOVED || this == PRD_CHANGED;
+        }
+
+        /** An entitlement is read from the vault by the Identity Applications at grant time, not by the engine: no driver restart either. */
+        public boolean isEntitlement() {
+            return this == ENTITLEMENT_ADDED || this == ENTITLEMENT_REMOVED || this == ENTITLEMENT_CHANGED;
+        }
+
+        /** Neither kind needs the owning driver restarted. */
+        public boolean noRestart() {
+            return isProvisioning() || isEntitlement();
         }
     }
 
@@ -146,7 +158,7 @@ public final class ModelDiff {
             return new ArrayList<>(affected);
         }
         for (Change c : changes) {
-            if (c.driver != null && c.kind != Kind.DRIVER_ADDED && c.kind != Kind.DRIVER_REMOVED && !c.kind.isProvisioning()) {
+            if (c.driver != null && c.kind != Kind.DRIVER_ADDED && c.kind != Kind.DRIVER_REMOVED && !c.kind.noRestart()) {
                 affected.add(c.driver);
             }
         }
@@ -294,6 +306,7 @@ public final class ModelDiff {
             diffDriverConfig(a, b);
             diffDriverLinkage(a, b);
             diffProvisioning(a, b);
+            diffEntitlements(a, b);
         }
 
         diffDriverSetGcvs();
@@ -551,6 +564,55 @@ public final class ModelDiff {
             }
         }
         return lines;
+    }
+
+    // ---- entitlements (DirXML-Entitlement objects hanging directly off a driver) ----
+
+    /** Path: {@code drivers/<d>/entitlements/<name>}. */
+    public static String entitlementPath(Driver d, Entitlement e) {
+        return "drivers/" + d.name + "/entitlements/" + e.name;
+    }
+
+    private void diffEntitlements(Driver a, Driver b) {
+        Map<String, Entitlement> fromEnts = new TreeMap<>();
+        Map<String, Entitlement> toEnts = new TreeMap<>();
+        for (Entitlement e : a.entitlements) {
+            fromEnts.put(e.name, e);
+        }
+        for (Entitlement e : b.entitlements) {
+            toEnts.put(e.name, e);
+        }
+        Set<String> names = new TreeSet<>(fromEnts.keySet());
+        names.addAll(toEnts.keySet());
+        for (String n : names) {
+            Entitlement x = fromEnts.get(n);
+            Entitlement y = toEnts.get(n);
+            if (x == null) {
+                changes.add(new Change(Kind.ENTITLEMENT_ADDED, b.name, entitlementPath(b, y), null,
+                    "+ added entitlement " + entitlementPath(b, y), null));
+            } else if (y == null) {
+                changes.add(new Change(Kind.ENTITLEMENT_REMOVED, a.name, entitlementPath(a, x), null,
+                    "- removed entitlement " + entitlementPath(a, x), null));
+            } else {
+                entitlementMaybeChanged(a, x, y);
+            }
+        }
+    }
+
+    /** Entitlements compare their whole document canonically; stamps otherwise (as PRDs do). */
+    private void entitlementMaybeChanged(Driver d, Entitlement x, Entitlement y) {
+        String oldXml = serializeOrNull(x.definition);
+        String newXml = serializeOrNull(y.definition);
+        if (!Objects.equals(oldXml, newXml)) {
+            changes.add(new Change(Kind.ENTITLEMENT_CHANGED, d.name, entitlementPath(d, y), null,
+                "~ changed entitlement " + entitlementPath(d, y), textDiff(oldXml, newXml)));
+            return;
+        }
+        List<String> lines = stampLines(x.meta, y.meta);
+        if (!lines.isEmpty()) {
+            changes.add(new Change(Kind.ENTITLEMENT_CHANGED, d.name, entitlementPath(d, y), "package-stamps",
+                "~ package stamps entitlement " + entitlementPath(d, y), String.join("\n", lines)));
+        }
     }
 
     private void kindChanged(Artifact a, Artifact b) {
