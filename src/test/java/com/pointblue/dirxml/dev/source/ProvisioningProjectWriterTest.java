@@ -441,13 +441,13 @@ public class ProvisioningProjectWriterTest {
         Path tree = buildTree(project);
 
         run(tree, new FormOps.Add("User Application Driver", "request", "DirXMLDev Writer Test", "Request Form", null));
-        // --force: NoApproval (like every stock template) still carries the unresolved
-        // "{enter Entitlement DN here}" placeholder FlowCheck now flags on an Active PRD
-        // (docs/workflows.md &sect;2 — filling it in is Track W's W2, not built yet).
-        Result forced = Transaction.open(tree).run(
+        // NoApproval (like every stock template) still carries the "{enter Entitlement DN here}"
+        // placeholder; FlowCheck reports it as a warning on the new Active PRD (filling it in is
+        // Track W's W2), so the transaction goes through without --force.
+        Result added = Transaction.open(tree).run(
             new FormOps.PrdAdd("User Application Driver", "DirXMLDev Writer PRD", "NoApproval", "DirXMLDev Writer Test", null, null, null, false),
-            false, true);
-        assertTrue(forced.text(), forced.ok() && forced.written);
+            false, false);
+        assertTrue(added.text(), added.ok() && added.written);
 
         Map<String, String> before = hashAll(project);
         ProjectWriter.Result r = ProjectWriter.update(tree, project, false);
