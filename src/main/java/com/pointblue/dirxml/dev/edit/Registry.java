@@ -224,6 +224,10 @@ public final class Registry {
             opt("map-all", "flag: map every bindable field of the bound form(s) to flowdata with the default targets/sources, as prd.map would"),
             driver);
 
+        register("prd.delete", "delete a PRD; refuses while another PRD's start-correlated-flow-activity references it (never overridden by --force); a packaged PRD needs --force",
+            a -> new FormOps.PrdDelete(a.get("driver"), a.get("prd")),
+            req("prd", "PRD name"), driver);
+
         // workflow (flow.*): typed operations on a PRD's <process> (Track W step W2)
         Arg flowPrd = req("prd", "PRD name");
         register("flow.activity.add", "insert a workflow activity after another, wiring its default outgoing link(s)",

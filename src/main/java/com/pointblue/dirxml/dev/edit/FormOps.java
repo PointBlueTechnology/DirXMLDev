@@ -1297,6 +1297,85 @@ public final class FormOps {
         }
     }
 
+    // ---- prd.delete ---------------------------------------------------------------------------
+
+    /**
+     * Delete a PRD (the mirror of {@link Delete form.delete}); refuses while another PRD's process
+     * still starts it via a {@code start-correlated-flow-activity} (never overridden by
+     * {@code --force}); a packaged (stock) PRD needs {@code --force}. The forms it bound are not
+     * touched — a following {@code form.delete} on one of them now succeeds.
+     */
+    public static final class PrdDelete implements Operation {
+        private final String driver;
+        private final String prdRef;
+
+        public PrdDelete(String driver, String prdRef) {
+            this.driver = driver;
+            this.prdRef = prdRef;
+        }
+
+        @Override
+        public String name() {
+            return "prd.delete";
+        }
+
+        @Override
+        public void apply(DriverSet ds, Transaction tx) throws Operation.Refusal, IOException {
+            FoundPrd found = findPrd(ds, prdRef, driver);
+            if (found == null) {
+                throw new Operation.Refusal(prdNotFoundMessage(prdRef, driver));
+            }
+            Driver d = found.driver;
+            Prd prd = found.prd;
+            for (Prd referencer : d.provisioning.prds) {
+                if (referencer == prd) {
+                    continue;
+                }
+                String activityId = correlatedFlowReference(referencer, prd.name);
+                if (activityId != null) {
+                    throw new Operation.Refusal("prd '" + prd.name + "' is referenced by prd '" + referencer.name
+                        + "'s start-correlated-flow-activity '" + activityId
+                        + "'; prd.delete never removes references (--force does not override this)");
+                }
+            }
+            if (isPackaged(prd.meta) && !tx.force()) {
+                throw new Operation.Refusal("prd '" + prd.name + "' is a packaged (stock) prd; pass --force to delete it anyway");
+            }
+            List<String> boundForms = new ArrayList<>();
+            for (Prd.FormBinding b : prd.bindings()) {
+                if (b.formId != null && !boundForms.contains(b.formId)) {
+                    boundForms.add(b.formId);
+                }
+            }
+            String path = prdPath(d, prd);
+            d.provisioning.prds.remove(prd);
+            tx.touched(path);
+            tx.note("deleted prd '" + prd.name + "'");
+            if (!boundForms.isEmpty()) {
+                tx.note("forms it bound remain: " + boundForms);
+            }
+        }
+    }
+
+    /**
+     * The {@code activity-id} of {@code referencer}'s {@code start-correlated-flow-activity} whose
+     * {@code processId} names {@code targetName} — by bare name or by a DN whose first RDN is
+     * {@code cn=<targetName>} — or null if none does.
+     */
+    private static String correlatedFlowReference(Prd referencer, String targetName) {
+        if (referencer.process == null) {
+            return null;
+        }
+        String dnPrefix = "cn=" + targetName + ",";
+        for (Element sc : com.pointblue.dirxml.sim.Xds.descendantsByName(referencer.process, "start-correlated-flow-activity")) {
+            String pid = sc.getAttribute("processId");
+            if (targetName.equals(pid) || pid.startsWith(dnPrefix)) {
+                return sc.getAttribute("activity-id");
+            }
+        }
+        return null;
+    }
+
     private static Prd clonePrd(Prd src, String newName) {
         Prd out = new Prd(newName);
         Element defClone = src.definition == null ? null : cloneElement(src.definition);

@@ -100,8 +100,9 @@ packaged policy.
 
 For a change an agent can make without the GUI, use the typed operations
 (`form.add`, `form.field.add/set/remove/move`, `form.set`, `form.localize`,
-`form.rename`, `form.delete`, `prd.map`, `prd.add`) — same transaction
-machinery (`--dry-run`, `--force`, `--json`, `validate` after every write). A
+`form.rename`, `form.delete`, `prd.map`, `prd.add`, `prd.delete`) — same
+transaction machinery (`--dry-run`, `--force`, `--json`, `validate` after
+every write). A
 common recipe, add a field to a request form and map it to flowdata:
 
 ```bash
