@@ -1150,18 +1150,21 @@ public final class FlowOps {
             }
         }
 
-        private void setDataItemSource(Element activity, String dataItemName, String source) {
+        /** Sets a data item's source on the activity's {@code <data-items>} block (a child of the {@code <process>},
+         *  which may itself sit inside a {@code <prov-req-defn>}); refuses when the item does not exist. */
+        private void setDataItemSource(Element activity, String dataItemName, String source) throws Operation.Refusal {
             String id = activity.getAttribute("activity-id");
-            Element holder = findDataItems(activity.getOwnerDocument().getDocumentElement(), id);
-            if (holder == null) {
-                return;
-            }
-            for (Element di : Xds.childrenByName(holder, "data-item")) {
-                if (dataItemName.equals(di.getAttribute("name"))) {
-                    di.setAttribute("source", source);
-                    return;
+            Element process = activity.getParentNode() instanceof Element ? (Element) activity.getParentNode() : null;
+            Element holder = process == null ? null : findDataItems(process, id);
+            if (holder != null) {
+                for (Element di : Xds.childrenByName(holder, "data-item")) {
+                    if (dataItemName.equals(di.getAttribute("name"))) {
+                        di.setAttribute("source", source);
+                        return;
+                    }
                 }
             }
+            throw new Operation.Refusal("activity '" + id + "' has no data item '" + dataItemName + "' (a provision activity created by prd.add or flow.activity.add --kind provision has it)");
         }
     }
 

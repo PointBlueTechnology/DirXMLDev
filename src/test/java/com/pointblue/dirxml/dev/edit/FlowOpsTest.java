@@ -611,4 +611,20 @@ public class FlowOpsTest {
         assertNoFlowErrors(r.report);
         assertEquals("[start --forward--> prov]", flow.outgoing("start").toString());
     }
+
+    // ---- provision activity's entitlement items live on the process, not the definition root --------
+
+    @Test
+    public void setEntitlementDnUpdatesTheProvisionDataItem() throws Exception {
+        Path t = tree(tmp);   // the fixture's process is a child of <prov-req-defn>, as in every real PRD
+        Result r = Transaction.open(t).run(new FlowOps.ActivitySet(null, "P", "prov", null, null, null, null, null,
+            null, null, null, "cn=Access,cn=Loop,cn=driverset1,o=system", "alpha", null), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        Flow flow = flowOf(t);
+        assertEquals("'cn=Access,cn=Loop,cn=driverset1,o=system'", sourceOf(flow, "prov", "DirXML-Entitlement-DN"));
+        assertEquals("'alpha'", sourceOf(flow, "prov", "DirXML-Entitlement-Parameter"));
+        Result bad = Transaction.open(t).run(new FlowOps.ActivitySet(null, "P", "start", null, null, null, null, null,
+            null, null, null, "cn=x", null, null), false, false);
+        assertFalse(bad.text(), bad.ok());
+    }
 }
