@@ -167,8 +167,10 @@ and refuses a change the engine would reject.
    Access → Request → New Request → search the display name. Missing means:
    not Active, no directory rights, or the display name differs.
 2. **Request.** Picking the PRD opens the JSON request form in a new window;
-   fill it and Submit. **Do not try REST for this** — `/requests/permissions/item`
-   cannot submit a JSON-form PRD (proven, `workflow-live.md`).
+   fill it and Submit. Over REST, `/requests/permissions/item` failed for a
+   JSON-form PRD in our attempts (`workflow-live.md`); the right REST call is
+   an open task (`docs/plan.md` follow-ups) — until it is found, submit from
+   the browser.
 3. **Approve.** Tasks → select the task → Approve/Deny with a comment (the
    bulk buttons; opening the task itself needs the approval form bound).
    Over REST: `GET /IDMProv/rest/access/tasks/list?fromIndex=0&size=20`, then

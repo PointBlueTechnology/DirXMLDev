@@ -368,6 +368,10 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 
 ## Follow-ups (small, not scheduled)
 
+- **Start a PRD over REST** (Jerry, 2026-09-15: it should be possible). Our
+  `POST /requests/permissions/item` attempts failed for a JSON-form PRD; find
+  the call the dashboard's form renderer makes (`/WFHandler`) or the
+  workflow REST API, and script it so the live proofs need no browser.
 - `vault.deploy --delete-driver <name>` is accepted but prints "not
   implemented yet": deleting a driver means deleting its subtree
   (channels, policies, resources, entitlements, jobs) leaves-first, then the

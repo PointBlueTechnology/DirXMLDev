@@ -107,9 +107,13 @@ version it was proven on unless stated.
   directory rights** to it → `docs/workflows.md` §6a.
 - A template's `{enter Entitlement DN here}` placeholder makes the request
   fail at the provision step → `forms-deploy-live.md`.
-- **REST cannot submit a JSON-form PRD** (`/requests/permissions/item` fails
-  with or without parameters); only the form renderer's submit works.
-  Approve/deny/claim over `POST /rest/access/tasks` works → `workflow-live.md`.
+- Submitting a JSON-form PRD over REST: `POST /IDMProv/rest/access/requests/permissions/item`
+  answered "Internal exception" with and without `permReqParams` (2026-09-15);
+  the form renderer's own submit works. **Jerry: it should be possible over
+  REST — an open task to find the right call/payload** (candidates: the
+  renderer's `/WFHandler` route with a session, or the workflow REST
+  `/workflow/rest/v1` endpoints). Approve/deny/claim over
+  `POST /rest/access/tasks` works → `workflow-live.md`.
 - The vendor REST API is documented in the form builder's own
   `Contents/commons/swagger.json` (181 paths, base `/IDMProv/rest/access`).
 - An authored workflow (condition, two approvals, log) deploys, is picked up
