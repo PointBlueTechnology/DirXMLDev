@@ -35,7 +35,8 @@ public final class Validator {
             new MappingTableCheck(),
             new EcmaScriptCheck(),
             new FilterCheck(),
-            new FormCheck()));
+            new FormCheck(),
+            new FlowCheck()));
     }
 
     public Report validate(DriverSet ds) {

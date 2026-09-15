@@ -139,6 +139,40 @@ It is a layout and conditional-logic check (live data sources are shown as
 normal `vault.diff` → `vault.deploy` → verify path; no driver restarts, and
 the plan says when the Identity Applications may need a cache flush.
 
+### Reading a workflow (Track W step W1)
+
+A PRD's `<process>` — the workflow the Identity Applications actually runs —
+reads as a typed view without hand-parsing XML:
+
+```bash
+bin/idm prd.flow tree/ HelpdeskTicket                                  # header + a walk of the graph from start, activity by activity
+bin/idm prd.flow tree/ HelpdeskTicket --format mermaid --out flow.mmd  # a flowchart another tool (or a person) can render
+```
+
+The text form walks the activity graph breadth-first from `start-activity`
+following links (an activity no link ever reaches — a broken process — is
+still listed, tagged `(unreachable)`), printing each activity's kind, display
+name, the attributes that matter for its kind (timeout/approver-type/addressee
+for an approval, the expression for a condition, category/operation for a
+provisioning step, …) and its outgoing links, then every activity's data
+items. `--format mermaid` emits a `flowchart TD` instead. Neither needs the
+Identity Applications, Designer, or a live vault.
+
+`validate` (on by default, `FlowCheck`) mirrors the workflow engine's own ten
+load-time checks (`ModelFactory.loadProcessFlow` / `ProcessFlowModel.validate()`
+— see `docs/workflows.md` §1.2) against every PRD's `<process>`: known process
+version, exactly one start/finish, every link's endpoints and type valid for
+its source activity's kind, a condition has both a `true` and `false` link, no
+dangling activity, a branch has its merge, RBAC/RBACSOD/Resource processes
+bind both outcomes, every `flowdata.` reference is `.get(`/`.getObject(`,
+every approval has an addressee, `notify`/`confirm`/`reminder` have a
+template — plus checks the engine doesn't run at all but that catch a broken
+workflow before deploy: attribute enums, an addressee/expression/data-item
+source that doesn't compile as ECMAScript, a leftover `{enter … here}`
+template placeholder (error on an `Active` PRD, informational on a template),
+and an activity with no display name. `docs/workflows.md` §1.4 has the full
+rationale; `commands.md` lists every `flow-*` code.
+
 ## Two kinds of change
 
 **Content** — the rules inside a policy, a stylesheet, a script, a table's rows:

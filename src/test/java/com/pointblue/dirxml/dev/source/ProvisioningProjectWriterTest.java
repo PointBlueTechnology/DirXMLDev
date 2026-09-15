@@ -96,8 +96,14 @@ public class ProvisioningProjectWriterTest {
         + "<request-data-items>"
         + "<data-item data-type=\"string\" name=\"reason\" target=\"flowdata.Start/Stock Form/reason\" target-type=\"single-value\"/>"
         + "</request-data-items></provision-request>"
-        + "<process formSrc=\"1\" id=\"cn=Stock Prd,cn=RequestDefs,cn=AppConfig,cn=UA,cn=driverset1,o=system\">"
-        + "<start-activity activity-id=\"Start\"/><user-activity activity-id=\"Activity\"/>"
+        + "<process formSrc=\"1\" id=\"cn=Stock Prd,cn=RequestDefs,cn=AppConfig,cn=UA,cn=driverset1,o=system\" version=\"4.5.0\">"
+        + "<start-activity activity-id=\"Start\"><display-name xml:lang=\"en\">Start</display-name></start-activity>"
+        + "<user-activity activity-id=\"Activity\" approver-type=\"group-approver\">"
+        + "<display-name xml:lang=\"en\">Activity</display-name><addressee>recipient</addressee></user-activity>"
+        + "<finish-activity activity-id=\"Finish\"><display-name xml:lang=\"en\">Finish</display-name></finish-activity>"
+        + "<link source=\"Start\" target=\"Activity\" type=\"forward\"/>"
+        + "<link source=\"Activity\" target=\"Finish\" type=\"approved\"/>"
+        + "<link source=\"Activity\" target=\"Finish\" type=\"denied\"/>"
         + "</process></prov-req-defn>";
 
     private static void write(Path file, String content) throws IOException {
@@ -435,7 +441,13 @@ public class ProvisioningProjectWriterTest {
         Path tree = buildTree(project);
 
         run(tree, new FormOps.Add("User Application Driver", "request", "DirXMLDev Writer Test", "Request Form", null));
-        run(tree, new FormOps.PrdAdd("User Application Driver", "DirXMLDev Writer PRD", "NoApproval", "DirXMLDev Writer Test", null, null, null, false));
+        // --force: NoApproval (like every stock template) still carries the unresolved
+        // "{enter Entitlement DN here}" placeholder FlowCheck now flags on an Active PRD
+        // (docs/workflows.md &sect;2 — filling it in is Track W's W2, not built yet).
+        Result forced = Transaction.open(tree).run(
+            new FormOps.PrdAdd("User Application Driver", "DirXMLDev Writer PRD", "NoApproval", "DirXMLDev Writer Test", null, null, null, false),
+            false, true);
+        assertTrue(forced.text(), forced.ok() && forced.written);
 
         Map<String, String> before = hashAll(project);
         ProjectWriter.Result r = ProjectWriter.update(tree, project, false);
