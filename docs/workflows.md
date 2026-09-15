@@ -278,6 +278,45 @@ Recommendation: **B, with A's parameters as the first operations**
 the engine and Designer sources in the session scratchpad (`wf/`,
 `wf/dsn/`), never committed; the 3.5.1 XSD summary is in this note.
 
+## 6a. W4 plan (live proof on idm254, scripted 2026-09-15)
+
+Lab facts: the only user is `cn=uaadmin,ou=sa,o=data` (`ou=users,o=data` is
+empty), so recipient, initiator and approver are all uaadmin; the stock
+notify template `cn=Provisioning Notification,cn=Default Notification
+Collection,cn=Security` exists (mail is not configured, so notifications
+will log and move on); no entitlements (decision 3).
+
+Steps (all through the tree `~/IdeaProjects/DirXMLDev-e2e/tree-idm254`,
+scratch objects removed afterwards):
+
+1. `form.add --kind request --name "DirXMLDev W4 Form" --from "Request Form"`
+   + `prd.add --name "DirXMLDev W4" --from-template NoApproval --request-form
+   "DirXMLDev W4 Form" --category accounts --map-all` (Track P).
+2. `flow.activity.remove --id prov` (no entitlement), then
+   `flow.activity.add --kind condition --id check --after Activity
+   --expression "flowdata.get('reason') != null"`, two approvals
+   `approval_1`, `approval_2` after `check` with `--addressee
+   "'cn=uaadmin,ou=sa,o=data'"` and `--on-denied finish`, a `log-activity`
+   after `approval_2`; `validate` = 0 errors, 0 `flow-placeholder`;
+   `prd.flow` reviewed.
+3. `vault.diff` / `vault.deploy --env idm254 --yes` (Track P path; the PRD
+   is picked up without a cache flush).
+4. Request it over REST (OSP password grant as uaadmin, `client_id=rbpm`):
+   `POST /IDMProv/rest/access/requests/permissions/item` with
+   `{"id": <PRD DN>, "entityType": "prd", "reason": "W4", "recipients":
+   [{"dn": "cn=uaadmin,ou=sa,o=data", "type": "user"}]}` — or through the
+   dashboard (the JSON form opens in a popup; on this lab the renderer route
+   is broken, see forms-deploy-live.md, so REST is the reliable path).
+5. `GET /IDMProv/rest/access/tasks/list?fromIndex=0&size=20` → the
+   `approval_1` task for uaadmin; `POST /IDMProv/rest/access/tasks` with
+   `{"tasks": [{"taskId": …}], "action": "approve", "comment": "W4"}`;
+   repeat for `approval_2`; then `GET /IDMProv/rest/access/requests/history`
+   shows the request completed, and the workflow pod log shows the
+   `Workflow_Started`/`_Completed` lines and the log activity's message.
+6. Negative path: request again, `deny` at `approval_1` → history shows
+   denied, `approval_2` never appears.
+7. Remove the form + PRD from the tree, `vault.deploy`, `vault.diff` empty.
+
 ## 7. Decisions (Jerry, 2026-09-15)
 
 1. **Option B as the core, template parameters first, C deferred** — confirmed ("continue").
