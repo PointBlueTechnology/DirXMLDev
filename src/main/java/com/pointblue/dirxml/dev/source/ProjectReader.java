@@ -3,6 +3,7 @@ package com.pointblue.dirxml.dev.source;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
@@ -607,6 +608,12 @@ public final class ProjectReader {
         if (!ents.isEmpty()) {
             d.meta.put("entitlements.count", String.valueOf(ents.size()));
         }
+        for (String key : ents) {
+            Entitlement e = readEntitlement(idx, idOf(key));
+            if (e != null) {
+                d.entitlements.add(e);
+            }
+        }
 
         // driver-scope policies: every owned policy, whether or not linked below
         for (String key : relationKeys(m, "Idm:Policies")) {
@@ -745,6 +752,37 @@ public final class ProjectReader {
         copyPackageMeta(m, p.meta);
         idx.register(id, scope, driverName, name);
         return p;
+    }
+
+    /**
+     * A {@code .Entitlement_} CObject: {@code name="<cn>" type="Entitlement"}, content
+     * the sibling {@code _contents.xml}'s whole {@code <entitlement>} document
+     * (docs/entitlements.md §1.2). Not registered in the artifact registry — nothing
+     * else references an entitlement by Designer id.
+     */
+    private static Entitlement readEntitlement(Index idx, String id) {
+        Element m = idx.parseMeta(id);
+        if (m == null || isRefStub(m)) {
+            return null;
+        }
+        String name = attr(m, "name", null);
+        if (name == null) {
+            return null;
+        }
+        Element content = null;
+        Path c = idx.contentsById.get(id);
+        if (c != null) {
+            try {
+                content = Xds.parseFile(c).getDocumentElement();
+            } catch (Exception e) {
+                // leave content null
+            }
+        }
+        Entitlement ent = new Entitlement(name, content);
+        ent.meta.put("designer.id", id);
+        ent.meta.put("designer.type", idx.typeById.getOrDefault(id, "Entitlement"));
+        copyPackageMeta(m, ent.meta);
+        return ent;
     }
 
     private static Resource readResource(Index idx, String id, Scope scope, String driverName) {

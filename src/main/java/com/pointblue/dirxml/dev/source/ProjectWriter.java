@@ -7,6 +7,7 @@ import com.pointblue.dirxml.dev.edit.Packages;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
@@ -232,6 +233,29 @@ public final class ProjectWriter {
                     }
                     break;
                 }
+                case ENTITLEMENT_ADDED: {
+                    Entitlement e = resolveEntitlementFromPath(treeDs, c.path);
+                    Driver td = treeDs.driver(c.driver);
+                    if (e != null && td != null) {
+                        ctx.applyEntitlementAdded(td, e);
+                    }
+                    break;
+                }
+                case ENTITLEMENT_REMOVED: {
+                    Entitlement e = resolveEntitlementFromPath(project, c.path);
+                    if (e != null) {
+                        ctx.applyEntitlementRemoved(c.driver, e);
+                    }
+                    break;
+                }
+                case ENTITLEMENT_CHANGED: {
+                    Entitlement e = resolveEntitlementFromPath(treeDs, c.path);
+                    Driver td = treeDs.driver(c.driver);
+                    if (e != null && td != null) {
+                        ctx.applyEntitlementChanged(td, e, c.what);
+                    }
+                    break;
+                }
                 default:
                     break;
             }
@@ -447,6 +471,20 @@ public final class ProjectWriter {
         return (d == null || d.provisioning == null) ? null : d.provisioning.prd(pp.name);
     }
 
+    /** {@code drivers/<d>/entitlements/<name>} -&gt; (d, name). */
+    private static ProvPath parseEntitlementPath(String path) {
+        String rest = path.substring("drivers/".length());
+        int i = rest.indexOf("/entitlements/");
+        String driver = rest.substring(0, i);
+        return new ProvPath(driver, null, rest.substring(i + "/entitlements/".length()));
+    }
+
+    private static Entitlement resolveEntitlementFromPath(DriverSet ds, String path) {
+        ProvPath pp = parseEntitlementPath(path);
+        Driver d = ds.driver(pp.driver);
+        return d == null ? null : d.entitlement(pp.name);
+    }
+
     private static String formExt(Form.Kind kind) {
         switch (kind) {
             case REQUEST: return "formRequest";
@@ -581,6 +619,8 @@ public final class ProjectWriter {
 
         final Map<String, String> idByPath = new LinkedHashMap<>();
         final Map<String, String> typeByPath = new LinkedHashMap<>();
+        /** Entitlements aren't {@link Artifact}s, so they get their own id-by-path map. */
+        final Map<String, String> entitlementIdByPath = new LinkedHashMap<>();
 
         final Map<String, Document> allDocs = new LinkedHashMap<>();
         final Set<String> dirtyIds = new LinkedHashSet<>();
@@ -613,6 +653,14 @@ public final class ProjectWriter {
                 if (id != null) {
                     idByPath.put(e.getKey(), id);
                     typeByPath.put(e.getKey(), type);
+                }
+            }
+            for (Driver d : project.drivers) {
+                for (Entitlement ent : d.entitlements) {
+                    String id = ent.meta.get("designer.id");
+                    if (id != null) {
+                        entitlementIdByPath.put(ModelDiff.entitlementPath(d, ent), id);
+                    }
                 }
             }
         }
@@ -1115,6 +1163,74 @@ public final class ProjectWriter {
                 String checksum = Long.toString(InstalledChecksum.of(treeDs, owner, newA));
                 setStringAttribute(id, "Idm:ContentChecksum", checksum, "CLong");
             }
+        }
+
+        // ---- entitlements (Idm:Entitlements; docs/entitlements.md) ----
+        // Same CObject + contents shape as a driver-scope artifact (applyArtifactAdded/Removed/Changed
+        // above), owned by the driver's own CObject directly (ownerDir/ownerContainerId with Scope.DRIVER)
+        // rather than a Policy/Resource bucket — an entitlement has no scope of its own and keeps the
+        // driver's Idm:Entitlements relation in step the same way Idm:Policies/Idm:Resources are kept.
+
+        void applyEntitlementAdded(Driver treeDriver, Entitlement e) throws IOException {
+            String newId = mintId();
+            Path dir = ownerDir(Scope.DRIVER, treeDriver.name);
+            Path metaFile = dir.resolve(newId + ".Entitlement_");
+            metaFileById.put(newId, metaFile);
+            typeById.put(newId, "Entitlement");
+            String path = ModelDiff.entitlementPath(treeDriver, e);
+            entitlementIdByPath.put(path, newId);
+            result.mintedIds.put(path, newId);
+
+            String attrsXml = "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"contents\"/>";
+            String metaXml = CObjectXml.cobject(e.name, "Entitlement", attrsXml, "");
+            writeFile(metaFile, metaXml, true);
+            Path contentsFile = dir.resolve(newId + "_contents.xml");
+            String content = e.definition == null ? "" : CanonicalXml.serialize(e.definition);
+            writeFile(contentsFile, content, true);
+
+            String ownerId = ownerContainerId(Scope.DRIVER, treeDriver.name);
+            Document ownerDoc = docFor(ownerId);
+            appendRelation(ownerDoc, "Idm:Entitlements", "Child", newId, "Entitlement");
+        }
+
+        void applyEntitlementRemoved(String driverName, Entitlement e) throws IOException {
+            String id = e.meta.get("designer.id");
+            if (id == null) {
+                result.notes.add("cannot remove entitlement '" + driverName + "/" + e.name + "': no designer id on record");
+                return;
+            }
+            deleteFile(metaFileById.get(id));
+            deleteFile(contentsFileById.get(id));
+            deleteFile(initialStateFileById.get(id));
+
+            String ownerId = ownerContainerId(Scope.DRIVER, driverName);
+            String key = "#" + id + ".Entitlement_";
+            if (ownerId != null && metaFileById.containsKey(ownerId)) {
+                Document ownerDoc = docFor(ownerId);
+                removeRelationsWithKey(ownerDoc.getDocumentElement(), key);
+            }
+            entitlementIdByPath.remove("drivers/" + driverName + "/entitlements/" + e.name);
+        }
+
+        void applyEntitlementChanged(Driver treeDriver, Entitlement newE, String what) throws IOException {
+            String path = ModelDiff.entitlementPath(treeDriver, newE);
+            String id = entitlementIdByPath.get(path);
+            if (id == null) {
+                result.notes.add("cannot update entitlement '" + path + "': no designer id on record");
+                return;
+            }
+            if ("package-stamps".equals(what)) {
+                result.notes.add("entitlement '" + newE.name + "' package stamps changed but its content did not; "
+                    + "not rewritten (see ProjectWriter's class doc)");
+                return;
+            }
+            String content = newE.definition == null ? "" : CanonicalXml.serialize(newE.definition);
+            Path contentsFile = contentsFileById.get(id);
+            boolean created = contentsFile == null;
+            if (contentsFile == null) {
+                contentsFile = metaFileById.get(id).getParent().resolve(id + "_contents.xml");
+            }
+            writeFile(contentsFile, content, created);
         }
 
         // ---- provisioning: forms ----
