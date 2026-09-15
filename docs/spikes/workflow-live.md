@@ -71,10 +71,11 @@ Request History shows **both** runs as "Approved" — the denied one too.
 `'approved'` in its "Workflow Status" mapping activity before anything else
 runs, and our `denied` links go straight to Finish, so nothing ever sets
 `denied`. The stock approval templates route `denied` through a second
-mapping activity ("Workflow Status Denied"). Follow-up for W2:
-`flow.activity.add --kind approval` should default `--on-denied` to such a
-mapping (created on demand) instead of Finish, or `flow.activity.add --kind
-mapping --status denied` should exist and the recipe should say to use it.
+mapping activity ("Workflow Status Denied"). **Fixed the same day:**
+`flow.activity.add --kind approval` defaults `--on-denied` to the process's
+denied status mapping, creating `status_denied` (→ finish) when absent, and
+`flow.activity.add --kind mapping --status approved|denied` creates one
+explicitly. Re-verified live below.
 
 ## Other facts
 
