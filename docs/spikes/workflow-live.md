@@ -64,6 +64,18 @@ flowdata paths, `initiator`, `requestDate` = `process.getTimestamp()`);
 task details returned 200 with the five data items, and both approvals
 went through the dashboard (select → Approve → comment → Approve).
 
+## Request status on the denied path (follow-up)
+
+Request History shows **both** runs as "Approved" — the denied one too.
+`NoApproval`'s process sets `flowdata.IDM_COMPLETED_APPROVAL_STATUS` to
+`'approved'` in its "Workflow Status" mapping activity before anything else
+runs, and our `denied` links go straight to Finish, so nothing ever sets
+`denied`. The stock approval templates route `denied` through a second
+mapping activity ("Workflow Status Denied"). Follow-up for W2:
+`flow.activity.add --kind approval` should default `--on-denied` to such a
+mapping (created on demand) instead of Finish, or `flow.activity.add --kind
+mapping --status denied` should exist and the recipe should say to use it.
+
 ## Other facts
 
 - **REST cannot submit a JSON-form PRD.** `POST /requests/permissions/item`
