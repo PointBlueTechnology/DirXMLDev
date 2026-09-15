@@ -1,7 +1,8 @@
 # Track W — Workflow design (the PRD's `<process>`) — design note
 
 Status: **P0 findings done (2026-09-13); decisions taken 2026-09-15 (§7);
-W1 in progress.**
+W1 shipped (2026-09-15, §4) — `Flow` model, engine-faithful `FlowCheck`,
+`prd.flow` view. W2 next.**
 
 Roles and resources are *not* in scope: they are managed in the Identity
 Applications, not in Designer or the vault's AppConfig (Jerry, 2026-09-13).
@@ -129,6 +130,52 @@ That is the whole runtime contract. Our checker can be engine-faithful.
   `XmlData` — exactly what `VaultMapping.prdAttributes` writes (Track P,
   proven live).
 
+### 1.4 What our check adds beyond the engine
+
+`FlowCheck` (`com.pointblue.dirxml.dev.validate.FlowCheck`) mirrors the ten
+checks in &sect;1.2 exactly — same codes, same conditions — but the engine's
+own contract stops at "does it load and pass `validate()`"; it says nothing
+about whether the workflow actually *does* anything sane once running. Four
+things W1 checks that the engine does not, each because it is cheap offline
+and expensive to discover live:
+
+- **Attribute enums.** The engine's JAXB binding rejects a value outside an
+  attribute's enum at *unmarshal* time with its own diagnostic (not one of
+  our findings) for most of them, but a few — `process-type`,
+  `flow-strategy`, `default-completed-approval-status`,
+  `digital-signature-type`, `category`, `operation`, `ontimeout`, a bind
+  activity's `action` — are plain `String`/`xs:token` fields in the schema
+  that JAXB accepts unchecked and the *workflow runtime* rejects only when it
+  reaches that branch of a running request (`flow-attribute-enum`). Checking
+  every enum from the 3.5.1 XSD up front means a typo in a rarely-taken
+  branch (the `denied` path of a two-year-old approval, say) is caught before
+  deploy, not the first time someone actually gets denied.
+- **Expression syntax.** `addressee`, a condition's `expression`, a
+  data-item's `source`, a `map`'s `source`, and a log's `message` are
+  ECMAScript the engine only ever *evaluates*, never parses ahead of time; a
+  syntax error surfaces as a request failing at that activity, in production,
+  for whoever hit it first. `flow-expression-syntax` compiles each one with
+  the same Rhino path `FormCheck` already uses for form scripts
+  (`EcmaScriptCheck.compileError(src, where, Context.VERSION_ES6)`) — blank
+  values and plain quoted string literals are skipped, since the engine is
+  the only thing that can judge them meaningfully at this level.
+- **Leftover template placeholders.** Every stock template PRD ships
+  `{enter Entitlement DN here}`-style text in a data-item source; it is
+  harmless on a `Template`-status PRD (nobody can request it) but a request
+  against an `Active` PRD that still carries one fails at the provisioning
+  activity — confirmed against idm254 (&sect;2). `flow-placeholder` reports it
+  as an error on an `Active` PRD, informational otherwise, so `prd.add
+  --from-template` followed by forgetting to fill in the entitlement is
+  caught before deploy rather than on the requester's first attempt.
+- **Missing display names.** The engine runs an activity with no
+  `display-name` just fine — the Identity Applications UI just shows nothing
+  where the activity's name belongs. `flow-display-name-missing` (warning)
+  catches a copy/paste that dropped the one piece of a workflow a human ever
+  actually reads.
+
+None of the four block calibration (&sect;4): the 39 stock PRDs give zero
+errors and only the expected `flow-placeholder` infos.
+
 ## 2. What exists today (Track P)
 
 `prd.add --from-template` copies a stock template PRD (NoApproval,
@@ -174,13 +221,23 @@ Recommendation: **B, with A's parameters as the first operations**
 
 ## 4. Build order (proposed)
 
-- **W1 Model + check + view**: `Flow` model over the process DOM
-  (activities, links, data items, bindings as typed views; DOM stays the
-  store), `FlowCheck` (§1.2 engine checks + enum/attribute checks + "all
-  ids unique", "expression references a known activity id / bound field",
-  "entitlement DN placeholder left"), wired into `validate`; `prd.flow`
-  text/Mermaid rendering. Calibrated on the 39 stock PRDs (0 errors) and
-  on deliberately broken copies.
+- **W1 Model + check + view — ✅ shipped 2026-09-15.** `Flow` model over the
+  process DOM (`com.pointblue.dirxml.dev.flow`: activities, links, data
+  items, form bindings, process attributes as typed views; DOM stays the
+  store), `FlowCheck` (33 codes: §1.2's ten engine checks one-for-one, plus
+  the four kinds of check in §1.4 — attribute enums, expression syntax,
+  template placeholders, missing display names), registered in `Validator`
+  after `FormCheck`; `prd.flow <tree> <prd> [--format text|mermaid]` (text
+  walk from start, or a `flowchart TD`), wired into `Cli`. 399 pre-existing
+  tests plus 50 new (`FlowTest`, `FlowCheckTest` — one clean process, one
+  mutation per code, one whole-`Validator` check — `FlowViewTest`), all
+  green, no `--force`-graded shortcuts. Calibrated on the 39 stock PRDs
+  (`tree-idm254`) and on the larger `test11` Designer workspace import: in
+  both, **zero `flow-*` errors**; the only `flow-*` findings at all are 24
+  `flow-placeholder` infos on the twelve `Template`-status stock PRDs that
+  still carry the `{enter Entitlement DN here}`/`{enter Entitlement param
+  here}` placeholders (correctly informational, not errors, since a
+  Template PRD can never be requested — see §1.4 and §2).
 - **W2 Typed operations** (option B) on the common set — approval,
   condition, branch/merge, log, notification, mapping, provision — plus
   `flow.set`; each is a transaction like Track P's (load → apply → validate
