@@ -272,7 +272,13 @@ Recommendation: **B, with A's parameters as the first operations**
 - **W3 Integration activities**: rest, role-request, resource-request,
   start-correlated-flow (schema known, no stock examples — needs one real
   case to calibrate against).
-- **W4 Live proof on idm254**: author a PRD from NoApproval → add a
+- **W4 Live proof on idm254 — ✅ PASSED 2026-09-15** ([spikes/workflow-live.md](spikes/workflow-live.md)):
+  an authored condition + two-approval + log workflow deployed, appeared
+  under Access → Request, ran through the engine and completed after two
+  dashboard approvals; the denied path ended the flow. Found and fixed: the
+  dashboard needs an approval form bound to each approval activity
+  (§5); REST cannot submit a JSON-form PRD (form renderer only).
+  Original plan: author a PRD from NoApproval → add a
   condition + a two-step serial approval + a log + provision of a *real*
   entitlement (needs a scratch entitlement on the lab's UA driver or an
   existing one), deploy, request it in the Identity Applications, approve
