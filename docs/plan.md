@@ -366,6 +366,15 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 4. **Package overrides are the supported customization method** — make them easy
    and always set the modified/customized flag correctly; never refuse by default.
 
+## Follow-ups (small, not scheduled)
+
+- `vault.deploy --delete-driver <name>` is accepted but prints "not
+  implemented yet": deleting a driver means deleting its subtree
+  (channels, policies, resources, entitlements, jobs) leaves-first, then the
+  driver object, with a snapshot of the subtree first. Until then a scratch
+  driver is removed with `ldapdelete -r` (done for `PkgTest7` on ig4,
+  2026-09-15).
+
 ## Non-goals (for now)
 
 - Reusing Designer's Java code or UI.
