@@ -316,8 +316,11 @@ stock one); Designer acceptance of the project writer passed 2026-09-13
 (`test11pf` imported, the written form opens in the vendor builder —
 [spikes/designer-writer.md](spikes/designer-writer.md) spike 6b).
 
-**Track W — Workflow design (the PRD's `<process>`)** — ◐ **design note
-written 2026-09-13** ([workflows.md](workflows.md): engine grammar and the
+**Track W — Workflow design (the PRD's `<process>`)** — ◐ **W1, W2, W4 shipped
+2026-09-15** (flow model, engine-faithful `FlowCheck`, `prd.flow`, twelve
+`flow.*` operations, live proof on idm254 in [spikes/workflow-live.md](spikes/workflow-live.md);
+W5 Designer acceptance pending, W3 integration activities after); design note
+written 2026-09-13 ([workflows.md](workflows.md): engine grammar and the
 engine's ten pickup checks recovered from `workflow.jar`, Designer needs no
 layout data, `design-params` is legacy; options A/B/C, recommended B = typed
 flow operations on the vault XML + an engine-faithful `FlowCheck` +
