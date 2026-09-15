@@ -38,7 +38,10 @@ import java.util.regex.Pattern;
  * {@code flow-approver-condition-both} (E), {@code flow-approver-target-items} (E),
  * {@code flow-email-template-missing} (E), {@code flow-attribute-enum} (E),
  * {@code flow-expression-syntax} (E), {@code flow-placeholder} (W on an {@code Active}
- * PRD, I otherwise), {@code flow-display-name-missing} (W).
+ * PRD, I otherwise), {@code flow-display-name-missing} (W), {@code flow-entitlement-unknown}
+ * (W — a provision activity's {@code DirXML-Entitlement-DN} names a driver in this tree that
+ * has no such entitlement), {@code flow-entitlement-external} (I — it names a driver not in
+ * this tree; see {@code docs/entitlements.md}).
  *
  * <p>Never throws for a malformed process: every check reads defensively and turns a
  * problem into a {@link Finding} rather than an exception (see {@link Check}).
@@ -67,12 +70,12 @@ public final class FlowCheck implements Check {
                 }
                 String path = prdPath(d, prd);
                 boolean active = "Active".equals(prd.property("status"));
-                checkFlow(flow, path, active, r);
+                checkFlow(ds, flow, path, active, r);
             }
         }
     }
 
-    private static void checkFlow(Flow flow, String path, boolean active, Report r) {
+    private static void checkFlow(DriverSet ds, Flow flow, String path, boolean active, Report r) {
         checkVersion(flow, path, r);
         checkStartFinishCounts(flow, path, r);
         checkActivityIds(flow, path, r);
@@ -91,6 +94,7 @@ public final class FlowCheck implements Check {
         checkExpressionSyntax(flow, path, r);
         checkPlaceholders(flow, path, active, r);
         checkDisplayNames(flow, path, r);
+        checkEntitlementDns(ds, flow, path, r);
     }
 
     // ---- 1: version -----------------------------------------------------------------------
@@ -622,6 +626,90 @@ public final class FlowCheck implements Check {
                 r.add(Finding.warning("flow-display-name-missing", path, "activity '" + a.id + "' has no display-name"));
             }
         }
+    }
+
+    // ---- entitlements (docs/entitlements.md) -------------------------------------------------
+
+    /**
+     * A provision activity's {@code DirXML-Entitlement-DN} literal names {@code cn=<entitlement>,cn=<driver>,…}:
+     * warn when the named driver is in this tree but has no such entitlement, or note it (info) when the DN's
+     * driver isn't in this tree at all (a live/foreign entitlement this tree can't see).
+     */
+    private static void checkEntitlementDns(DriverSet ds, Flow flow, String path, Report r) {
+        for (Flow.Activity a : flow.activities) {
+            if (a.kind != Flow.Kind.PROVISION) {
+                continue;
+            }
+            for (Flow.DataItem di : flow.dataItemsByActivity.getOrDefault(a.id, java.util.List.of())) {
+                if (!"DirXML-Entitlement-DN".equals(di.name)) {
+                    continue;
+                }
+                String dn = unquoteLiteral(di.source);
+                if (dn == null || dn.isBlank()) {
+                    continue;
+                }
+                String[] rdns = firstTwoRdnValues(dn);
+                if (rdns == null) {
+                    continue;
+                }
+                String entName = rdns[0];
+                String driverName = rdns[1];
+                Driver d = ds.driver(driverName);
+                if (d == null) {
+                    r.add(Finding.info("flow-entitlement-external", path, "activity '" + a.id
+                        + "' DirXML-Entitlement-DN names a driver ('" + driverName + "') not in this tree: " + dn));
+                    continue;
+                }
+                if (d.entitlement(entName) == null) {
+                    r.add(Finding.warning("flow-entitlement-unknown", path, "activity '" + a.id
+                        + "' DirXML-Entitlement-DN names entitlement '" + entName + "' on driver '" + driverName
+                        + "', which has no such entitlement"));
+                }
+            }
+        }
+    }
+
+    /** Reverses {@code FlowOps.quoteLiteral}: a single-quoted literal -&gt; its value; null otherwise. */
+    private static String unquoteLiteral(String source) {
+        if (source == null) {
+            return null;
+        }
+        String s = source.strip();
+        if (s.length() < 2 || s.charAt(0) != '\'' || s.charAt(s.length() - 1) != '\'') {
+            return null;
+        }
+        String inner = s.substring(1, s.length() - 1);
+        return inner.replace("\\'", "'").replace("\\\\", "\\");
+    }
+
+    /** The first two RDN values of a DN ({@code [leaf, parent]}), naively split on unescaped commas; null if fewer than two components. */
+    private static String[] firstTwoRdnValues(String dn) {
+        List<String> comps = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        for (int i = 0; i < dn.length(); i++) {
+            char c = dn.charAt(i);
+            if (c == '\\' && i + 1 < dn.length()) {
+                cur.append(c).append(dn.charAt(++i));
+            } else if (c == ',') {
+                comps.add(cur.toString().trim());
+                cur.setLength(0);
+            } else {
+                cur.append(c);
+            }
+        }
+        if (cur.length() > 0) {
+            comps.add(cur.toString().trim());
+        }
+        if (comps.size() < 2) {
+            return null;
+        }
+        return new String[] {rdnValue(comps.get(0)), rdnValue(comps.get(1))};
+    }
+
+    private static String rdnValue(String comp) {
+        int eq = comp.indexOf('=');
+        String v = eq >= 0 ? comp.substring(eq + 1) : comp;
+        return v.replace("\\,", ",").replace("\\\\", "\\").trim();
     }
 
     // ---- helpers ------------------------------------------------------------------------------

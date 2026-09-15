@@ -36,7 +36,8 @@ public final class Validator {
             new EcmaScriptCheck(),
             new FilterCheck(),
             new FormCheck(),
-            new FlowCheck()));
+            new FlowCheck(),
+            new EntitlementCheck()));
     }
 
     public Report validate(DriverSet ds) {

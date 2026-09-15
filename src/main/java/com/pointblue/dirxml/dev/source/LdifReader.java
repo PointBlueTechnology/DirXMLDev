@@ -2,6 +2,7 @@ package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
@@ -171,6 +172,22 @@ public final class LdifReader {
                     d.resources.add(r);
                 }
             }
+        }
+
+        // 3b. entitlements: DirXML-Entitlement objects hanging directly off a driver (docs/entitlements.md)
+        for (Entry e : entries) {
+            if (!e.hasClass("DirXML-Entitlement")) {
+                continue;
+            }
+            Placement p = place(e.dn, dsDn);
+            Driver d = p.driver == null ? null : driversByLowerName.get(p.driver.toLowerCase());
+            if (d == null) {
+                continue;   // an entitlement under an unknown driver: dropped (unlike artifacts, it has nowhere else to live)
+            }
+            Entitlement ent = new Entitlement(rdn(e.dn), xmlOrNull(e.first("XmlData")));
+            ent.meta.put("dn", e.dn);
+            copyMeta(e, ent.meta, "DirXML-Entitlement");
+            d.entitlements.add(ent);
         }
 
         // 4. linkage: DirXML-Policies = "<policyDN>#<order>#<setId>"

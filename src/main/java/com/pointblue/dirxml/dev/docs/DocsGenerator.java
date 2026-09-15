@@ -268,6 +268,7 @@ public final class DocsGenerator {
         sb.append("## GCVs in scope\n\n").append(renderDriverGcvs(ds, d));
         sb.append("## Subscriber chain\n\n").append(renderChain(ds, d, true));
         sb.append("## Publisher chain\n\n").append(renderChain(ds, d, false));
+        sb.append("## Entitlements\n\n").append(renderEntitlements(d));
         sb.append("## Library policies linked\n\n").append(renderLibraryLinks(ds, d));
         sb.append("## Mapping tables used\n\n").append(renderTablesUsed(ds, d));
         sb.append("## Named passwords\n\n").append(renderNamedPasswords(ds, d));
@@ -276,6 +277,18 @@ public final class DocsGenerator {
         sb.append("## Engine control values\n\n").append(renderDefinitions(d.config.get(Driver.ENGINE_CONTROL_VALUES)));
 
         return sb.toString();
+    }
+
+    /** One line per {@code DirXML-Entitlement} hanging off the driver (docs/entitlements.md): name, display name, multi-valued, conflict. */
+    private static String renderEntitlements(Driver d) {
+        if (d.entitlements.isEmpty()) {
+            return "(none)\n\n";
+        }
+        List<List<String>> rows = new ArrayList<>();
+        for (com.pointblue.dirxml.dev.model.Entitlement e : d.entitlements) {
+            rows.add(List.of(e.name, nvl(e.displayName()), nvl(e.multiValued()), nvl(e.conflictResolution())));
+        }
+        return table(List.of("Name", "Display name", "Multi-valued", "Conflict resolution"), rows) + "\n";
     }
 
     private static String renderFilter(Element filter) {

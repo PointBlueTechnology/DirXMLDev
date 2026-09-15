@@ -2,6 +2,7 @@ package com.pointblue.dirxml.dev.ascode;
 
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
@@ -84,6 +85,12 @@ public final class AsCodeReader {
             for (Element l : children(set, "link")) {
                 d.links.add(new PolicyLink(ps, attr(l, "ref"), Integer.parseInt(attr(l, "order"))));
             }
+        }
+        for (Element ee : children(m, "entitlement")) {
+            Path file = dir.resolve(attr(ee, "file"));
+            Entitlement e = new Entitlement(attr(ee, "name"), Files.exists(file) ? xml(file) : null);
+            readMeta(ee, e.meta);
+            d.entitlements.add(e);
         }
         Path provManifest = dir.resolve("provisioning").resolve("provisioning.xml");
         if (Files.exists(provManifest)) {
