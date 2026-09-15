@@ -348,6 +348,27 @@ public final class Registry {
         register("rule.enable", "clear a rule's disabled flag",
             a -> new RuleOps.SetDisabled(a.get("path"), a.get("rule"), false), rulePath, ruleId);
 
+        // entitlements (Track W step W4b; docs/entitlements.md)
+        Arg entName = req("name", "the entitlement's name (cn)");
+        Arg entDriver = opt("driver", "driver name (required for entitlement.add; needed for entitlement.set/remove when several drivers have one of that name)");
+        Arg entDisplayName = opt("display-name", "display-name attribute");
+        Arg entDescription = opt("description", "description attribute");
+        Arg entMultiValued = opt("multi-valued", "flag: values/@multi-valued = true");
+        Arg entConflict = opt("conflict", "union|priority (default: priority on entitlement.add)");
+        Arg entValues = opt("values", "comma-separated static values -> <values><value>v</value>...</values>");
+        Arg entDefFile = opt("definition-file", "a file holding a whole <entitlement> document, used verbatim instead of the other content flags");
+        register("entitlement.add", "create a DirXML-Entitlement definition on a driver",
+            a -> new EntitlementOps.Add(a.get("driver"), a.get("name"), a.get("display-name"), a.get("description"),
+                a.containsKey("multi-valued"), a.get("conflict"), a.get("values"), a.get("definition-file")),
+            entName, req("driver", "driver name"), entDisplayName, entDescription, entMultiValued, entConflict, entValues, entDefFile);
+        register("entitlement.set", "change an existing entitlement's attributes/values, or replace its whole document with --definition-file",
+            a -> new EntitlementOps.Set(a.get("driver"), a.get("name"), a.get("display-name"), a.get("description"),
+                boolOrNull(a.get("multi-valued")), a.get("conflict"), a.get("values"), a.get("definition-file")),
+            entName, entDriver, entDisplayName, entDescription, opt("multi-valued", "true|false"), entConflict, entValues, entDefFile);
+        register("entitlement.remove", "delete an entitlement; refuses while any PRD's provision activity names it (--force does not override this)",
+            a -> new EntitlementOps.Remove(a.get("driver"), a.get("name")),
+            entName, entDriver);
+
         // GCVs
         register("gcv.set", "set a GCV's value where the driver's scope defines it (or create it with --define)",
             a -> new GcvOps.Set(a.get("driver"), a.get("name"), a.getOrDefault("value", ""),
