@@ -169,7 +169,7 @@ every approval has an addressee, `notify`/`confirm`/`reminder` have a
 template — plus checks the engine doesn't run at all but that catch a broken
 workflow before deploy: attribute enums, an addressee/expression/data-item
 source that doesn't compile as ECMAScript, a leftover `{enter … here}`
-template placeholder (error on an `Active` PRD, informational on a template),
+template placeholder (warning on an `Active` PRD, informational on a template),
 and an activity with no display name. `docs/workflows.md` §1.4 has the full
 rationale; `commands.md` lists every `flow-*` code.
 

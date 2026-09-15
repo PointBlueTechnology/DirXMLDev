@@ -7,7 +7,9 @@ description: >-
   to add or clone a driver; to review what a driver does; to deploy a change to an
   Identity Vault (staging or production); to check, start, stop or restart a
   driver, read its trace or its cache, or find out why it is misbehaving; or to
-  bring a client's vault or Designer project under version control as IDM-as-code.
+  bring a client's vault or Designer project under version control as IDM-as-code;
+  to add or change a JSON provisioning form, a provisioning request definition
+  (PRD) or the workflow it runs, and to prove it in the Identity Applications.
   Every change is validated by the engine's own compilers, proven against a
   regression corpus, diffed against the vault, snapshotted before deploy, and
   audited. For testing policies against sample events, the dirxml-policy-testing
@@ -20,7 +22,10 @@ The tree is the source of truth, the CLI keeps it consistent, the validator is
 the engine's verdict, the vault is a deploy target, and git is the history.
 `bin/idm` with no arguments lists every command; [reference/commands.md](reference/commands.md)
 groups them; [`docs/agent-guide.md`](../../../docs/agent-guide.md) explains each
-step in depth. This skill is about *the loop* and *the rules*.
+step in depth. **Before deriving how the engine, Designer, the Identity
+Applications or packages behave, read [reference/facts.md](reference/facts.md)** —
+every fact we have measured, with the spike that proves it; a question
+answered there is never re-spiked. This skill is about *the loop* and *the rules*.
 
 ## Where to run
 
@@ -81,6 +86,14 @@ Two kinds of change (the agent guide, "Two kinds of change"):
 7. **Packaged content is customized, not avoided.** Editing a packaged policy
    is the supported method; the tool keeps the baseline (`.package-baseline/`)
    and marks it — mention it in the commit.
+8. **A workflow is engine-valid and dashboard-usable, or it is not done.**
+   `validate` (FlowCheck) is the engine's verdict; the dashboard adds three
+   rules the engine does not enforce — every approval binds an approval form,
+   every denied path sets the completed status through a status mapping, and
+   the PRD is Active with directory rights for its requesters. The `flow.*`
+   operations do the first two by default; never remove them to "simplify".
+9. **A closed spike adds its facts to `reference/facts.md`.** Findings that
+   stay only in a spike note get re-derived.
 
 ## Recipes
 
@@ -89,6 +102,9 @@ Two kinds of change (the agent guide, "Two kinds of change"):
 - **Why is driver D misbehaving?** — [reference/recipes.md#investigate](reference/recipes.md#investigate-a-misbehaving-driver)
 - **Onboard a client vault** — [reference/recipes.md#onboard](reference/recipes.md#onboard-a-client-vault)
 - **Add a driver** — [reference/recipes.md#add-driver](reference/recipes.md#add-a-driver)
+- **Change a provisioning form** — [reference/recipes.md#form](reference/recipes.md#change-a-provisioning-form)
+- **Author a workflow (PRD)** — [reference/recipes.md#workflow](reference/recipes.md#author-a-workflow)
+- **Prove a form or workflow in the Identity Applications** — [reference/recipes.md#prove-idapps](reference/recipes.md#prove-it-in-the-identity-applications)
 - **Hand the work to a Designer user** — `idm export tree/ set.xml` (Designer
   imports a driver-set configuration), or let Designer *Import from the
   Identity Vault* after a deploy; `idm export-project` (updating an existing
@@ -105,3 +121,5 @@ Two kinds of change (the agent guide, "Two kinds of change"):
 | a GCV / Library policy / mapping table a policy references | `validate` reports `gcv-undefined`, `link-unresolved`, `mapping-table-missing` on a tree from an export | a full driver-set source (live vault, LDIF, project) or the missing objects — a single-driver export may omit them |
 | the driver's package origin | `package.diff` says not package-managed for something the client calls packaged | a Designer project or the vault (exports and LDIFs carry package meta; hand-made objects don't) |
 | a Designer project on disk | asked to update the project rather than the vault | the project directory (`.project`, `Model/`) |
+| the Identity Applications | a form or workflow must be proven at runtime | the dashboard URL (`https://host/idmdash`), a user with rights to the PRD (an admin for a lab), and — for the engine log — `kubectl`/SSH to the applications host; the JSON request form only submits from a browser, so a person or the app's browser pane submits it |
+| a vendor form builder | `form.edit --check` says none found | a Designer 4.8+ install (`IDM_FORMBUILDER` for another location); one-time quarantine/exec-bit fixes are printed, never run |
