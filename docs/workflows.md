@@ -220,7 +220,15 @@ Recommendation: **B, with A's parameters as the first operations**
 the engine and Designer sources in the session scratchpad (`wf/`,
 `wf/dsn/`), never committed; the 3.5.1 XSD summary is in this note.
 
-## 7. Decisions for Jerry
+## 7. Decisions (Jerry, 2026-09-15)
+
+1. **Option B as the core, template parameters first, C deferred** — confirmed ("continue").
+2. **W2 activity kinds**: approval, condition, branch/merge, log, notification, mapping, provision — confirmed.
+3. **No entitlement in the first live proof.** idm254 has only the four base drivers and no entitlement objects (and entitlements are not yet a modeled object in this repo). W4 runs the authored workflow without a provision step. **Later (W4b): install a driver with entitlements on idm254 — a Loopback driver with entitlements added to it** — which means modeling `DirXML-Entitlement` objects as-code (reader/writer/deploy) first.
+4. **Approval routed to uaadmin** for the live proof — confirmed.
+5. **Order W1 → W2 → W4 → W5, W3 (integration activities) after** — confirmed.
+
+### The questions as asked
 
 1. **Option B (typed flow operations on the vault XML) as the core, with
    A's template parameters as the first operations; C deferred?**
