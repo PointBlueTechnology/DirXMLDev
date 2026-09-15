@@ -1,7 +1,7 @@
 # Track W — Workflow design (the PRD's `<process>`) — design note
 
-Status: **P0 findings done (2026-09-13), design proposed, awaiting Jerry's
-decisions (§7).** Nothing built yet.
+Status: **P0 findings done (2026-09-13); decisions taken 2026-09-15 (§7);
+W1 in progress.**
 
 Roles and resources are *not* in scope: they are managed in the Identity
 Applications, not in Designer or the vault's AppConfig (Jerry, 2026-09-13).
