@@ -372,8 +372,9 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   implemented yet": deleting a driver means deleting its subtree
   (channels, policies, resources, entitlements, jobs) leaves-first, then the
   driver object, with a snapshot of the subtree first. Until then a scratch
-  driver is removed with `ldapdelete -r` (done for `PkgTest7` on ig4,
-  2026-09-15).
+  driver can only be removed by hand (`PkgTest7`, the Phase 7 scratch driver,
+  is still on ig4 as of 2026-09-15 — stopped, empty cache — waiting for this
+  feature so its removal is snapshotted and audited like every other change).
 
 ## Non-goals (for now)
 
