@@ -102,7 +102,7 @@ public class FlowOpsTest {
         Path t = tree(tmp);
         Result r = Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "approval", "appr", "start", null, null,
             null, null, null, null, null, null, null, null, null, null, null), false, false);
-        assertTrue(r.text(), r.ok());
+        assertTrue(r.text() + "\n" + r.report.text(), r.ok());
         assertNoFlowErrors(r.report);
 
         Flow flow = flowOf(t);
@@ -111,7 +111,15 @@ public class FlowOpsTest {
         assertEquals(Flow.Kind.USER, appr.kind);
         assertEquals("[start --forward--> appr]", flow.outgoing("start").toString());
         assertEquals("[appr --approved--> prov]", linksOfType(flow, "appr", "approved"));
-        assertEquals("[appr --denied--> finish]", linksOfType(flow, "appr", "denied"));
+        assertEquals("[appr --denied--> status_denied]", linksOfType(flow, "appr", "denied"));
+        assertEquals("[status_denied --forward--> finish]", flow.outgoing("status_denied").toString());
+        assertEquals(Flow.Kind.MAPPING, flow.byId("status_denied").kind);
+        assertEquals("Workflow Status Denied", flow.byId("status_denied").displayName("en"));
+        Flow.DataItem status = flow.dataItemsByActivity.get("status_denied").get(0);
+        assertEquals("approvalstatus", status.name);
+        assertEquals("'denied'", status.source);
+        assertEquals(FlowOps.STATUS_TARGET, status.target);
+        assertTrue(r.text(), r.text().contains("new status mapping 'status_denied'"));
         assertEquals(FlowOps.APPROVAL_DEFAULT_ADDRESSEE, appr.element.getElementsByTagName("addressee").item(0).getTextContent());
         assertEquals(String.valueOf(FlowOps.APPROVAL_DEFAULT_TIMEOUT_MS), appr.attr("timeout"));
         assertEquals("denied", appr.attr("ontimeout"));
@@ -542,5 +550,65 @@ public class FlowOpsTest {
             null, null, null, null, null, null, "Approval Form"), false, false);
         assertFalse(wrongKind.text(), wrongKind.ok());
         assertTrue(wrongKind.text(), wrongKind.text().contains("--form only applies to an approval"));
+    }
+
+    // ---- denied path status (spike W4 follow-up) ---------------------------------------------
+
+    @Test
+    public void secondApprovalReusesTheDeniedStatusMapping() throws Exception {
+        Path t = tree(tmp);
+        Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "approval", "a1", "start", null, null,
+            null, null, null, "recipient", null, null, null, null, null, null, null), false, false);
+        Result r = Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "approval", "a2", "a1", "approved", null,
+            null, null, null, "recipient", null, null, null, null, null, null, null), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        Flow flow = flowOf(t);
+        assertEquals("[a2 --denied--> status_denied]", linksOfType(flow, "a2", "denied"));
+        assertEquals(1, flow.activities.stream().filter(a -> a.kind == Flow.Kind.MAPPING).count());
+        assertTrue(r.text(), r.text().contains("denied → 'status_denied'"));
+        assertNoFlowErrors(r.report);
+    }
+
+    @Test
+    public void explicitOnDeniedSkipsTheStatusMapping() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "approval", "appr", "start", null, null,
+            "finish", null, null, "recipient", null, null, null, null, null, null, null), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        Flow flow = flowOf(t);
+        assertEquals("[appr --denied--> finish]", linksOfType(flow, "appr", "denied"));
+        assertNull(flow.byId("status_denied"));
+    }
+
+    @Test
+    public void mappingWithStatusSetsTheCompletedStatus() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "mapping", "ok", "start", null, null,
+            null, null, null, null, null, null, null, null, null, null, null, null, "approved"), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        Flow flow = flowOf(t);
+        assertEquals("Workflow Status Approved", flow.byId("ok").displayName("en"));
+        Flow.DataItem d = flow.dataItemsByActivity.get("ok").get(0);
+        assertEquals("'approved'", d.source);
+        assertEquals(FlowOps.STATUS_TARGET, d.target);
+        assertEquals("ok", FlowOps.findStatusMapping(flow, "approved"));
+        Result bad = Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "log", "l", "ok", null, null,
+            null, null, null, null, null, null, null, null, null, null, null, null, "denied"), false, false);
+        assertFalse(bad.text(), bad.ok());
+        assertTrue(bad.text(), bad.text().contains("--status only applies to a mapping"));
+    }
+
+    @Test
+    public void removingTheLastApprovalDropsTheOrphanedStatusMapping() throws Exception {
+        Path t = tree(tmp);
+        Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "approval", "appr", "start", null, null,
+            null, null, null, "recipient", null, null, null, null, null, null, null), false, false);
+        Result r = Transaction.open(t).run(new FlowOps.ActivityRemove(null, "P", "appr"), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        Flow flow = flowOf(t);
+        assertNull(flow.byId("status_denied"));
+        assertTrue(r.text(), r.text().contains("[status_denied]"));
+        assertNoFlowErrors(r.report);
+        assertEquals("[start --forward--> prov]", flow.outgoing("start").toString());
     }
 }

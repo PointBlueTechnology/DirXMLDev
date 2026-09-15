@@ -214,6 +214,52 @@ public final class FlowOps {
     /** The stock "Approval Form" every template binds to its user-activities; bound by default when the driver has it. */
     public static final String DEFAULT_APPROVAL_FORM = "Approval Form";
 
+    /** The flowdata key the applications read as the request's completed approval status (stock "Workflow Status" mappings). */
+    public static final String STATUS_TARGET = "flowdata.IDM_COMPLETED_APPROVAL_STATUS";
+    /** The data-item name the stock status mappings use. */
+    public static final String STATUS_ITEM = "approvalstatus";
+    /** The id of the "Workflow Status Denied" mapping an approval's denied path is routed through by default. */
+    public static final String STATUS_DENIED_ID = "status_denied";
+
+    /** The id of a mapping activity that sets {@link #STATUS_TARGET} to {@code 'status'}, or null. */
+    public static String findStatusMapping(Flow flow, String status) {
+        String literal = "'" + status + "'";
+        for (Flow.Activity a : flow.activities) {
+            if (a.kind != Flow.Kind.MAPPING) {
+                continue;
+            }
+            for (Flow.DataItem d : flow.dataItemsByActivity.getOrDefault(a.id, List.of())) {
+                if (STATUS_TARGET.equals(d.target) && literal.equals(d.source)) {
+                    return a.id;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A "Workflow Status <Status>" mapping activity (as the stock templates carry): a
+     * {@code mapping-activity}, its {@code approvalstatus} data item ({@code '<status>'} →
+     * {@link #STATUS_TARGET}) and a {@code forward} link to {@code next}. The request history
+     * shows the request as approved/denied from this value — a denied path that goes straight
+     * to finish reads "Approved" (spike W4).
+     */
+    public static Element createStatusMapping(Document doc, Element process, String id, String status, String next) {
+        Element e = doc.createElementNS(null, "mapping-activity");
+        e.setAttribute("activity-id", id);
+        String label = "Workflow Status " + Character.toUpperCase(status.charAt(0)) + status.substring(1);
+        addDisplayName(doc, e, null, label);
+        insertActivity(process, e);
+        Element holder = doc.createElementNS(null, "data-items");
+        holder.setAttribute("activity-id", id);
+        holder.appendChild(createDataItem(doc, STATUS_ITEM, "string", "'" + status + "'", STATUS_TARGET, null));
+        insertBeforeStart(process, holder);
+        if (next != null) {
+            addLink(process, createLink(doc, id, next, "forward"));
+        }
+        return e;
+    }
+
     /**
      * Bind an approval form to a {@code user-activity} the way the stock JSON-forms PRDs do
      * ({@code HelpdeskTicket}): a {@code <form form-id>} declaration, a {@code <form-binding>},
@@ -507,19 +553,29 @@ public final class FlowOps {
         private final String entitlementDn;
         private final String entitlementParam;
         private final String form;
+        private final String status;
 
         public ActivityAdd(String driver, String prdRef, String kind, String id, String after, String via, String to,
                             String onDenied, String onFalse, String nameArg, String addressee, String timeout,
                             String ontimeout, String expression, String message, String template,
                             String entitlementDn, String entitlementParam) {
             this(driver, prdRef, kind, id, after, via, to, onDenied, onFalse, nameArg, addressee, timeout, ontimeout,
-                expression, message, template, entitlementDn, entitlementParam, null);
+                expression, message, template, entitlementDn, entitlementParam, null, null);
         }
 
         public ActivityAdd(String driver, String prdRef, String kind, String id, String after, String via, String to,
                             String onDenied, String onFalse, String nameArg, String addressee, String timeout,
                             String ontimeout, String expression, String message, String template,
                             String entitlementDn, String entitlementParam, String form) {
+            this(driver, prdRef, kind, id, after, via, to, onDenied, onFalse, nameArg, addressee, timeout, ontimeout,
+                expression, message, template, entitlementDn, entitlementParam, form, null);
+        }
+
+        public ActivityAdd(String driver, String prdRef, String kind, String id, String after, String via, String to,
+                            String onDenied, String onFalse, String nameArg, String addressee, String timeout,
+                            String ontimeout, String expression, String message, String template,
+                            String entitlementDn, String entitlementParam, String form, String status) {
+            this.status = isBlankNull(status);
             this.form = isBlankNull(form);
             this.driver = driver;
             this.prdRef = prdRef;
@@ -580,16 +636,29 @@ public final class FlowOps {
                 Flow.Link consumed = pickOutgoingLink(flow, afterAct, via);
                 primaryTarget = consumed.target;
             }
-            String denyTarget = k.equals("approval") ? firstNonNull(onDenied, finishId) : null;
-            String falseTarget = k.equals("condition") ? firstNonNull(onFalse, finishId) : null;
+            String denyTarget = null;
+            boolean createDeniedMapping = false;
             if (k.equals("approval")) {
-                if (denyTarget == null) {
-                    throw new Operation.Refusal("no finish activity to default --on-denied to; give --on-denied");
+                if (onDenied != null) {
+                    denyTarget = onDenied;
+                } else {
+                    denyTarget = findStatusMapping(flow, "denied");
+                    if (denyTarget == null) {
+                        if (finishId == null) {
+                            throw new Operation.Refusal("no finish activity to route the denied path to; give --on-denied");
+                        }
+                        if (flow.byId(STATUS_DENIED_ID) != null) {
+                            throw new Operation.Refusal("activity '" + STATUS_DENIED_ID + "' exists but is not a 'denied' status mapping; give --on-denied");
+                        }
+                        denyTarget = STATUS_DENIED_ID;
+                        createDeniedMapping = true;
+                    }
                 }
-                if (flow.byId(denyTarget) == null) {
+                if (!createDeniedMapping && flow.byId(denyTarget) == null) {
                     throw new Operation.Refusal("--on-denied activity '" + denyTarget + "' not found");
                 }
             }
+            String falseTarget = k.equals("condition") ? firstNonNull(onFalse, finishId) : null;
             if (k.equals("condition")) {
                 if (falseTarget == null) {
                     throw new Operation.Refusal("no finish activity to default --on-false to; give --on-false");
@@ -607,7 +676,8 @@ public final class FlowOps {
             String before = FormOps.prdFingerprint(prd);
             Document doc = prd.process.getOwnerDocument();
             Element newEl = createActivityElement(doc, k, id);
-            addDisplayName(doc, newEl, nameArg, defaultLabel(k, id));
+            addDisplayName(doc, newEl, nameArg, k.equals("mapping") && status != null
+                ? "Workflow Status " + Character.toUpperCase(status.charAt(0)) + status.substring(1) : defaultLabel(k, id));
             insertActivity(prd.process, newEl);
 
             if (branchCase) {
@@ -619,11 +689,23 @@ public final class FlowOps {
                     linkEl.setAttribute("target", id);
                 }
             }
+            if (createDeniedMapping) {
+                createStatusMapping(doc, prd.process, STATUS_DENIED_ID, "denied", finishId);
+            }
             addDefaultOutgoing(doc, prd.process, k, id, primaryTarget, denyTarget, falseTarget);
             addDataItemsForKind(doc, prd.process, k, id, entitlementDn, entitlementParam);
+            if (k.equals("mapping") && status != null) {
+                Element holder = findDataItems(prd.process, id);
+                holder.appendChild(createDataItem(doc, STATUS_ITEM, "string", "'" + status + "'", STATUS_TARGET, null));
+            }
             String formNote = "";
             if (k.equals("approval")) {
-                formNote = approvalForm != null
+                formNote = createDeniedMapping
+                    ? "; denied → new status mapping '" + STATUS_DENIED_ID + "' (sets " + STATUS_TARGET + " = 'denied', then finish)"
+                    : "; denied → '" + denyTarget + "'";
+            }
+            if (k.equals("approval")) {
+                formNote += approvalForm != null
                     ? "; " + bindApprovalForm(found.driver, prd, id, approvalForm)
                     : "; no approval form bound (none named '" + DEFAULT_APPROVAL_FORM + "' on the driver) — the dashboard cannot open the task until flow.activity.set --form binds one";
             }
@@ -635,6 +717,14 @@ public final class FlowOps {
         }
 
         private void validateKindArgs(String k) throws Operation.Refusal {
+            if (status != null) {
+                if (!k.equals("mapping")) {
+                    throw new Operation.Refusal("--status only applies to a mapping activity");
+                }
+                if (!status.equals("approved") && !status.equals("denied")) {
+                    throw new Operation.Refusal("--status must be approved or denied");
+                }
+            }
             switch (k) {
                 case "condition":
                     if (isBlankNull(expression) == null) {
@@ -1324,11 +1414,31 @@ public final class FlowOps {
                 }
             }
             prd.process.removeChild(act.element);
+            List<String> orphans = new ArrayList<>();
+            Flow after = Flow.of(prd);
+            for (String st : new String[] {"denied", "approved"}) {
+                String mid = findStatusMapping(after, st);
+                if (mid != null && after.incoming(mid).isEmpty()) {
+                    Flow.Activity m = after.byId(mid);
+                    for (Element l : new ArrayList<>(Xds.childrenByName(prd.process, "link"))) {
+                        if (mid.equals(l.getAttribute("source"))) {
+                            prd.process.removeChild(l);
+                        }
+                    }
+                    Element mdi = findDataItems(prd.process, mid);
+                    if (mdi != null) {
+                        prd.process.removeChild(mdi);
+                    }
+                    prd.process.removeChild(m.element);
+                    orphans.add(mid);
+                }
+            }
 
             FormOps.customizePrd(tx, found.driver, prd, before);
             syncDefinition(prd);
             tx.touched(FormOps.prdPath(found.driver, prd));
-            tx.note("prd '" + prdRef + "': removed activity '" + id + "'; reconnected " + reconnected
+            tx.note("prd '" + prdRef + "': removed activity '" + id + "'"
+                + (orphans.isEmpty() ? "" : " and the now-unreachable status mapping(s) " + orphans) + "; reconnected " + reconnected
                 + " incoming link(s) to '" + successor + "'; dropped " + dropped + " outgoing link(s)"
                 + (droppedDataItems ? ", its data-items block" : "") + (droppedBindings > 0 ? ", " + droppedBindings + " form-binding(s)" : ""));
         }
