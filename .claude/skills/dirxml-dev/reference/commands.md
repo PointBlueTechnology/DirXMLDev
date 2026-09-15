@@ -19,11 +19,18 @@ Run `bin/idm` for the full usage with every argument. All commands print
 
 ## Provisioning (forms + PRDs; docs/forms.md)
 
-`form.list tree/ [--driver D]` · `form.show tree/ <name>|<kind>/<name>|<driver>/<kind>/<name> [--driver D] [--json]` · `prd.list tree/ [--driver D]` · `prd.show tree/ <name> [--driver D] [--json]`
+`form.list tree/ [--driver D]` · `form.show tree/ <name>|<kind>/<name>|<driver>/<kind>/<name> [--driver D] [--json]` · `prd.list tree/ [--driver D]` · `prd.show tree/ <name> [--driver D] [--json]` · `prd.flow tree/ <name> [--driver D] [--format text|mermaid] [--lang en] [--out FILE]`
 
 Lives under `drivers/<driver>/provisioning/` — picked up automatically by
 `import`/`import-project`/`import-ldif`/`import-live` when the driver has a
 `cn=AppConfig` subtree. Form kinds: `request` `approval` `template`.
+
+`prd.flow` renders a PRD's workflow (its `<process>`) without the Identity
+Applications or Designer: `text` (default) walks the activity graph
+breadth-first from `start-activity`, one line per activity (kind, display
+name, key attributes, outgoing links), then a "Data items" section; an
+activity no link reaches is listed last, tagged `(unreachable)`. `mermaid`
+emits a `flowchart TD`.
 
 Edit a form (transactions; each re-syncs the PRD bindings that reference it):
 - `form.edit tree/ <form> [--driver D] [--env E] [--locale L] [--no-wait] [--check] [--dry-run] [--json]`
@@ -55,6 +62,11 @@ Typed operations (P2b — no GUI; every one re-syncs bindings the same way):
 
 Look at a form without the Identity Applications:
 - `form.preview tree/ <form> [--driver D] [--out page.html] [--lang en]` — a self-contained HTML page (open-source Form.io renderer + placeholders for the NetIQ component types; live data sources are not fetched). Open it in a browser; it is a layout/conditional check, not the vendor renderer.
+
+Look at a PRD's workflow (Track W step W1; `docs/workflows.md`):
+- `prd.flow tree/ <prd> [--driver D] [--format text|mermaid] [--lang en] [--out FILE]` — a text walk of the activity graph from `start-activity` (kind, display name, key attributes, outgoing links, then data items; an unreached activity is tagged `(unreachable)`), or a `flowchart TD` Mermaid diagram.
+
+Flow checks (`FlowCheck`, on by default in `validate`, mirroring the engine's own `ProcessFlowModel.validate()` plus attribute/expression/placeholder checks it doesn't run — `docs/workflows.md` §1.2/§1.4): `flow-version-unsupported` `flow-start-missing` `flow-finish-missing` `flow-start-multiple` `flow-finish-multiple` `flow-activity-id-missing` `flow-activity-id-duplicate` `flow-activity-kind-unknown` `flow-link-source-unknown` `flow-link-target-unknown` `flow-link-type-invalid` `flow-link-type-not-allowed` `flow-condition-links` `flow-start-incoming` `flow-finish-outgoing` `flow-activity-dangling` `flow-branch-merge` `flow-ontimeout-link` `flow-form-binding-start` `flow-data-items-activity-unknown` `flow-data-items-on-start` `flow-role-binding` `flow-resource-binding` `flow-addressee-missing` `flow-flowdata-expression` `flow-approver-type-invalid` `flow-approver-condition-both` `flow-approver-target-items` `flow-email-template-missing` `flow-attribute-enum` `flow-expression-syntax` `flow-placeholder` `flow-display-name-missing`.
 
 Deploy: forms and PRDs ride the normal `vault.diff`/`vault.deploy`/`vault.rollback` (no driver restart; the plan says when the Identity Applications may need a cache flush).
 
