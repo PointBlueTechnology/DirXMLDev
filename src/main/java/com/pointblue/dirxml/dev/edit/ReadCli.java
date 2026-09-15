@@ -538,6 +538,89 @@ public final class ReadCli {
         return 0;
     }
 
+    // ---- entitlements (docs/entitlements.md) ---------------------------------------
+
+    public static int entitlementList(String[] argv) throws Exception {
+        if (argv.length < 2) {
+            System.err.println("usage: entitlement.list <tree> [--driver D]");
+            return 2;
+        }
+        Path tree = Paths.get(argv[1]);
+        String driverName = flag(argv, "--driver");
+        DriverSet ds = AsCodeReader.read(tree);
+        List<Driver> drivers = driversOf(ds, driverName);
+        if (driverName != null && drivers.isEmpty()) {
+            System.err.println("no driver '" + driverName + "'");
+            return 1;
+        }
+        int n = 0;
+        for (Driver d : drivers) {
+            for (com.pointblue.dirxml.dev.model.Entitlement e : d.entitlements) {
+                n++;
+                System.out.printf("%-40s conflict=%-9s multi-valued=%-5s display-name=%-20s%s%n",
+                    d.name + "/" + e.name, str(e.conflictResolution()), str(e.multiValued()),
+                    str(e.displayName()), pkgMark(e.meta));
+            }
+        }
+        System.out.println(n + " entitlement(s)");
+        return 0;
+    }
+
+    public static int entitlementShow(String[] argv) throws Exception {
+        if (argv.length < 3) {
+            System.err.println("usage: entitlement.show <tree> --driver D --name N [--json]");
+            return 2;
+        }
+        Path tree = Paths.get(argv[1]);
+        String driverName = flag(argv, "--driver");
+        String name = flag(argv, "--name");
+        boolean json = hasFlag(argv, "--json");
+        if (name == null || name.isBlank()) {
+            System.err.println("usage: entitlement.show <tree> --driver D --name N [--json]");
+            return 2;
+        }
+        DriverSet ds = AsCodeReader.read(tree);
+        com.pointblue.dirxml.dev.edit.EntitlementOps.Found found = com.pointblue.dirxml.dev.edit.EntitlementOps.find(ds, name, driverName);
+        if (found == null) {
+            System.err.println("no entitlement '" + name + "'" + (driverName == null ? "" : " on driver '" + driverName + "'"));
+            return 1;
+        }
+        com.pointblue.dirxml.dev.model.Entitlement e = found.entitlement;
+        List<String> refs = com.pointblue.dirxml.dev.edit.EntitlementOps.referencingPrds(ds, found.driver, e);
+        if (json) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("driver", found.driver.name);
+            out.put("name", e.name);
+            out.put("displayName", e.displayName());
+            out.put("description", e.description());
+            out.put("conflictResolution", e.conflictResolution());
+            out.put("multiValued", e.multiValued());
+            out.put("document", e.definition == null ? null : serialize(e.definition));
+            out.put("packaged", e.meta.containsKey("dirxml-pkgguid"));
+            out.put("customized", "true".equals(e.meta.get(Packages.CUSTOMIZED_KEY)));
+            out.put("referencedByPrds", refs);
+            System.out.println(Json.pretty(out));
+            return 0;
+        }
+        System.out.println(found.driver.name + "/" + e.name + pkgMark(e.meta));
+        System.out.println("  display-name:       " + str(e.displayName()));
+        System.out.println("  description:        " + str(e.description()));
+        System.out.println("  conflict-resolution: " + str(e.conflictResolution()));
+        System.out.println("  multi-valued:       " + str(e.multiValued()));
+        System.out.println("  referenced by " + refs.size() + " PRD provision activity(ies): " + refs);
+        if (e.definition != null) {
+            System.out.println("  document:");
+            System.out.println("    " + serialize(e.definition).replace("\n", "\n    "));
+        }
+        return 0;
+    }
+
+    private static String pkgMark(Map<String, String> meta) {
+        boolean packaged = meta.containsKey("dirxml-pkgguid");
+        boolean customized = "true".equals(meta.get(Packages.CUSTOMIZED_KEY));
+        return packaged ? (customized ? "  [packaged, customized]" : "  [packaged]") : "";
+    }
+
     // ---- provisioning helpers -----------------------------------------------------
 
     private static final class Found {
