@@ -10,6 +10,7 @@ import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.flow.Flow;
 import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Prd;
 import com.pointblue.dirxml.dev.model.Provisioning;
@@ -436,5 +437,110 @@ public class FlowOpsTest {
         assertNotNull(flow.byId("approval_2"));
         assertNotNull(flow.byId("log1"));
         assertEquals("[log1 --forward--> finish]", linksOfType(flow, "log1", "forward"));
+    }
+
+    // ---- approval form binding (dashboard needs one to open the task) --------------------------
+
+    private static final String APPROVAL_FORM_JSON = "{\"components\":["
+        + "{\"key\":\"title\",\"type\":\"title\",\"label\":\"Title\"},"
+        + "{\"key\":\"initiator\",\"type\":\"dn_display\",\"label\":\"Initiator\"},"
+        + "{\"key\":\"recipient\",\"type\":\"dn_display\",\"label\":\"Recipient\"},"
+        + "{\"key\":\"reason\",\"type\":\"labelelement\",\"label\":\"Reason\"},"
+        + "{\"key\":\"requestDate\",\"type\":\"datetime\",\"label\":\"Date\"},"
+        + "{\"key\":\"extra\",\"type\":\"textfield\",\"label\":\"Extra\"},"
+        + "{\"key\":\"apwaComment\",\"type\":\"textarea\",\"label\":\"Comment\"},"
+        + "{\"key\":\"approve\",\"type\":\"button\",\"label\":\"Approve\"}"
+        + "],\"title\":\"Approval Form\",\"display\":\"form\",\"inlinescripts\":\"\",\"localization\":{},\"externalScripts\":[]}";
+
+    private static final String REQUEST_FORM_JSON = "{\"components\":["
+        + "{\"key\":\"reason\",\"type\":\"textfield\",\"label\":\"Reason\"},"
+        + "{\"key\":\"submit\",\"type\":\"button\",\"label\":\"Submit\"}"
+        + "],\"title\":\"Req\",\"display\":\"form\",\"inlinescripts\":\"\",\"localization\":{},\"externalScripts\":[]}";
+
+    /** {@link #tree} plus the stock "Approval Form" and a request form "Req" (field reason) bound to the PRD. */
+    private static Path treeWithForms(TemporaryFolder tmp) throws Exception {
+        Path t = tree(tmp);
+        DriverSet ds = AsCodeReader.read(t);
+        Provisioning p = ds.drivers.get(0).provisioning;
+        p.forms.add(new Form(Form.Kind.APPROVAL, "Approval Form", APPROVAL_FORM_JSON));
+        p.forms.add(new Form(Form.Kind.REQUEST, "Req", REQUEST_FORM_JSON));
+        Prd prd = p.prd("P");
+        prd.request = el("<provision-request formSrc=\"1\"><form-binding form-id=\"Req\"><content>"
+            + "<field data-type=\"string\" name=\"reason\"><control control-type=\"textfield\"/></field></content></form-binding>"
+            + "<request-data-items><data-item data-type=\"string\" name=\"reason\" target=\"flowdata.start/Req/reason\" target-type=\"single-value\"/></request-data-items>"
+            + "</provision-request>");
+        Path t2 = tmp.newFolder("treeforms" + (treeCounter++)).toPath();
+        AsCodeWriter.write(ds, t2);
+        return t2;
+    }
+
+    private static Prd prdOf(Path t) throws Exception {
+        return AsCodeReader.read(t).drivers.get(0).provisioning.prd("P");
+    }
+
+    private static String sourceOf(Flow flow, String activity, String name) {
+        for (Flow.DataItem d : flow.dataItemsByActivity.getOrDefault(activity, List.of())) {
+            if (d.name.equals(name)) {
+                return d.source == null ? "<none>" : d.source;
+            }
+        }
+        return null;
+    }
+
+    @Test
+    public void addApprovalBindsStockApprovalFormByDefault() throws Exception {
+        Path t = treeWithForms(tmp);
+        Result r = Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "approval", "appr", "start", null, null,
+            null, null, null, "recipient", null, null, null, null, null, null, null), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        assertTrue(r.text(), r.text().contains("bound approval form 'Approval Form'"));
+        Prd prd = prdOf(t);
+        Flow flow = Flow.of(prd);
+        assertEquals(1, com.pointblue.dirxml.sim.Xds.childrenByName(prd.process, "form").size());
+        assertEquals("Approval Form", com.pointblue.dirxml.sim.Xds.childrenByName(prd.process, "form").get(0).getAttribute("form-id"));
+        assertEquals(1, flow.formBindings.size());
+        assertEquals("appr", flow.formBindings.get(0).activityId);
+        assertEquals("Approval Form", flow.formBindings.get(0).formId);
+        assertEquals("appr.getName(locale)", sourceOf(flow, "appr", "title"));
+        assertEquals("recipient", sourceOf(flow, "appr", "recipient"));
+        assertEquals("initiator", sourceOf(flow, "appr", "initiator"));
+        assertEquals("process.getTimestamp()", sourceOf(flow, "appr", "requestDate"));
+        assertEquals("flowdata.get('start/Req/reason')", sourceOf(flow, "appr", "reason"));
+        assertNull(sourceOf(flow, "appr", "apwaComment"));   // the comment field is never a JSON-form data item
+        assertNull(sourceOf(flow, "appr", "extra"));
+        assertTrue(r.text(), r.text().contains("unmapped [extra]"));
+        assertNull(sourceOf(flow, "appr", "approve"));
+        assertNoFlowErrors(r.report);
+    }
+
+    @Test
+    public void addApprovalWithoutAnApprovalFormNotes() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "approval", "appr", "start", null, null,
+            null, null, null, "recipient", null, null, null, null, null, null, null), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        assertTrue(r.text(), r.text().contains("no approval form bound"));
+        assertTrue(Flow.of(prdOf(t)).formBindings.isEmpty());
+    }
+
+    @Test
+    public void setFormRebindsAndRefusesUnknownOrWrongKind() throws Exception {
+        Path t = treeWithForms(tmp);
+        Transaction.open(t).run(new FlowOps.ActivityAdd(null, "P", "approval", "appr", "start", null, null,
+            null, null, null, "recipient", null, null, null, null, null, null, null), false, false);
+        Result again = Transaction.open(t).run(new FlowOps.ActivitySet(null, "P", "appr", null, null, null, null, null,
+            null, null, null, null, null, null, "Approval Form"), false, false);
+        assertTrue(again.text(), again.ok() && again.written);
+        Prd prd = prdOf(t);
+        assertEquals(1, com.pointblue.dirxml.sim.Xds.childrenByName(prd.process, "form").size());
+        assertEquals(1, Flow.of(prd).formBindings.size());
+        Result unknown = Transaction.open(t).run(new FlowOps.ActivitySet(null, "P", "appr", null, null, null, null, null,
+            null, null, null, null, null, null, "Nope"), false, false);
+        assertFalse(unknown.text(), unknown.ok());
+        assertTrue(unknown.text(), unknown.text().contains("approval form 'Nope' not found"));
+        Result wrongKind = Transaction.open(t).run(new FlowOps.ActivitySet(null, "P", "prov", null, null, null, null, null,
+            null, null, null, null, null, null, "Approval Form"), false, false);
+        assertFalse(wrongKind.text(), wrongKind.ok());
+        assertTrue(wrongKind.text(), wrongKind.text().contains("--form only applies to an approval"));
     }
 }
