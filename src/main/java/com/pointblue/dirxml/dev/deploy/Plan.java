@@ -115,6 +115,10 @@ public final class Plan {
                 provisioningSteps(p, c, to, dsDn, tree, provisioning, deletes, ensuredContainers);
                 continue;
             }
+            if (c.kind.isEntitlement()) {
+                entitlementSteps(p, c, to, dsDn, tree, provisioning, deletes);
+                continue;
+            }
             switch (c.kind) {
                 case ARTIFACT_ADDED:
                 case ARTIFACT_CHANGED: {
@@ -502,6 +506,56 @@ public final class Plan {
             }
         }
         return out;
+    }
+
+    /**
+     * Steps for an entitlement change (a {@code DirXML-Entitlement} object hanging directly off the driver,
+     * no container to ensure): add/modify/delete, stamped like a provisioning object — a customized packaged
+     * entitlement gets a content-derived {@code DirXML-pkgChecksum} the same way.
+     */
+    private static void entitlementSteps(Plan p, ModelDiff.Change c, DriverSet to, String dsDn, java.nio.file.Path tree,
+                                         List<Step> bucket, List<Step> deletes) {
+        String driver = c.driver;
+        if (c.kind == ModelDiff.Kind.ENTITLEMENT_REMOVED) {
+            String dn = VaultMapping.entitlementPathDn(dsDn, c.path);
+            p.touchedDns.add(dn);
+            deletes.add(new Step(Op.DELETE, dn, null, null, null, dn, c.path, driver));
+            return;
+        }
+        Driver d = to.driver(driver);
+        if (d == null) {
+            p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
+            return;
+        }
+        String name = c.path.substring(c.path.indexOf("/entitlements/") + "/entitlements/".length());
+        com.pointblue.dirxml.dev.model.Entitlement e = d.entitlement(name);
+        if (e == null) {
+            p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
+            return;
+        }
+        boolean stampsOnly = "package-stamps".equals(c.what);
+        boolean added = c.kind == ModelDiff.Kind.ENTITLEMENT_ADDED;
+        String dn = VaultMapping.entitlementDn(dsDn, driver, e);
+        Map<String, List<byte[]>> attrs = stampsOnly ? new LinkedHashMap<>() : VaultMapping.entitlementAttributes(e);
+        String baseline = readBaseline(tree, "drivers/" + com.pointblue.dirxml.dev.ascode.AsCodeWriter.fileSafe(d.name)
+            + "/entitlements/" + com.pointblue.dirxml.dev.ascode.AsCodeWriter.fileSafe(e.name) + ".xml");
+        Map<String, List<byte[]>> stamps = VaultMapping.provisioningPackageAttributes(e.meta, baseline);
+        p.touchedDns.add(dn);
+        attrs.putAll(stamps);
+        if (added) {
+            List<String> classes = stamps.isEmpty() ? List.of("Top", VaultMapping.OC_ENTITLEMENT)
+                : List.of("Top", VaultMapping.OC_ENTITLEMENT, VaultMapping.PKG_ITEM_AUX);
+            bucket.add(new Step(Op.ADD, dn, null, classes, attrs, dn + "  " + VaultMapping.OC_ENTITLEMENT + " (" + size(attrs) + ")", c.path, driver));
+        } else {
+            if (!stamps.isEmpty()) {
+                bucket.add(new Step(Op.AUX_CLASS, dn, null, List.of(VaultMapping.PKG_ITEM_AUX), null,
+                    dn + "  objectClass += " + VaultMapping.PKG_ITEM_AUX, c.path, driver));
+            }
+            for (Map.Entry<String, List<byte[]>> en : attrs.entrySet()) {
+                bucket.add(new Step(Op.MODIFY, dn, en.getKey(), null, Map.of(en.getKey(), en.getValue()),
+                    dn + "  " + en.getKey() + " (" + size(Map.of(en.getKey(), en.getValue())) + ")", c.path, driver));
+            }
+        }
     }
 
     private static void ensureContainer(List<Step> bucket, Set<String> ensured, String dn, String oc, ModelDiff.Change c, String driver) {

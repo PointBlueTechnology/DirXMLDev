@@ -417,6 +417,33 @@ public final class VaultMapping {
         return m;
     }
 
+    // ---- entitlements (DirXML-Entitlement objects hanging directly off a driver) ----
+
+    public static final String OC_ENTITLEMENT = "DirXML-Entitlement";
+
+    /** {@code cn=<name>,cn=<driver>,<driver set>} — a plain child of the driver object. */
+    public static String entitlementDn(String dsDn, String driver, com.pointblue.dirxml.dev.model.Entitlement e) {
+        return "cn=" + escapeRdn(e.name) + "," + driverDn(dsDn, driver);
+    }
+
+    /** The DN for an entitlement diff path ({@code drivers/<d>/entitlements/<name>}). */
+    public static String entitlementPathDn(String dsDn, String path) {
+        String rest = path.substring("drivers/".length());
+        int i = rest.indexOf("/entitlements/");
+        String driver = rest.substring(0, i);
+        String name = rest.substring(i + "/entitlements/".length());
+        return "cn=" + escapeRdn(name) + "," + driverDn(dsDn, driver);
+    }
+
+    /** Every attribute an add of an entitlement writes: {@code XmlData} (the whole {@code <entitlement>} document). */
+    public static Map<String, List<byte[]>> entitlementAttributes(com.pointblue.dirxml.dev.model.Entitlement e) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        if (e.definition != null) {
+            m.put(XML_DATA, List.of(xmlBytes(e.definition)));
+        }
+        return m;
+    }
+
     /** The DNs of every driver whose linkage references an artifact path. */
     public static List<String> linkingDrivers(DriverSet ds, String path) {
         List<String> out = new ArrayList<>();
