@@ -30,7 +30,7 @@ import java.util.Set;
  */
 public final class Plan {
 
-    public enum Op { ADD, MODIFY, DELETE, SET_SECRET, RESTART, START_OPTION, AUX_CLASS, ENSURE_CONTAINER }
+    public enum Op { ADD, MODIFY, DELETE, DELETE_SUBTREE, SET_SECRET, RESTART, START_OPTION, AUX_CLASS, ENSURE_CONTAINER }
 
     /** One operation. {@code values} is what to write (null for DELETE/RESTART; secrets carry only the key). */
     public static final class Step {
@@ -42,9 +42,16 @@ public final class Plan {
         public final String description;
         public final String change;           // the change this step belongs to (group key)
         public final String driver;           // affected driver name, or null
+        /** DELETE_SUBTREE only: every DN of the driver's subtree (itself included), deepest first. */
+        public final List<String> subtreeDns;
 
         Step(Op op, String dn, String attr, List<String> objectClasses, Map<String, List<byte[]>> values,
              String description, String change, String driver) {
+            this(op, dn, attr, objectClasses, values, description, change, driver, null);
+        }
+
+        Step(Op op, String dn, String attr, List<String> objectClasses, Map<String, List<byte[]>> values,
+             String description, String change, String driver, List<String> subtreeDns) {
             this.op = op;
             this.dn = dn;
             this.attr = attr;
@@ -53,6 +60,7 @@ public final class Plan {
             this.description = description;
             this.change = change;
             this.driver = driver;
+            this.subtreeDns = subtreeDns;
         }
 
         @Override
@@ -67,6 +75,12 @@ public final class Plan {
     public final Set<String> restart = new LinkedHashSet<>();       // driver names that will be restarted
     public final Set<String> touchedDns = new LinkedHashSet<>();    // for the snapshot
     public final Set<String> newDrivers = new LinkedHashSet<>();
+    /** {@code --delete-driver} names that got a DELETE_SUBTREE step. */
+    public final Set<String> driversDeleted = new LinkedHashSet<>();
+    /** {@code --delete-driver} name -> the object count reported in its DELETE_SUBTREE step. */
+    public final Map<String, Integer> deletedObjectCounts = new LinkedHashMap<>();
+    /** {@code --delete-driver} names that were refused (in the tree, unknown, or running), with why. */
+    public final List<String> deleteDriverRefusals = new ArrayList<>();
 
     /** Top, DirXML-Driver, plus the package aux classes the stamps need (as Designer's drivers carry them). */
     static List<String> driverClasses(Map<String, List<byte[]>> stamps) {
@@ -97,7 +111,23 @@ public final class Plan {
     /** @param tree the tree (for package baselines → {@code DirXML-pkgInitialState}); null when not available */
     public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
                           Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree) {
+        return of(diff, to, dsDn, secrets, secretsMode, liveNamedPasswords, restartRunning, tree, List.of(), null);
+    }
+
+    /**
+     * @param deleteDrivers {@code --delete-driver} names (repeatable); each must be reported as
+     *                      {@code DRIVER_REMOVED} by {@code diff} (in the vault, absent from the tree)
+     *                      and stopped, or it is refused ({@link #deleteDriverRefusals})
+     * @param vault         required (non-null) whenever {@code deleteDrivers} is non-empty: used to
+     *                      check the driver's run state and to search its subtree at plan time
+     */
+    public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
+                          Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree,
+                          List<String> deleteDrivers, VaultAccess vault) {
         Plan p = new Plan();
+        Set<String> toDelete = new LinkedHashSet<>(deleteDrivers);
+        Set<String> deleteHandled = new LinkedHashSet<>();
+        List<Step> deleteDriverSteps = new ArrayList<>();
         List<Step> containers = new ArrayList<>();
         List<Step> library = new ArrayList<>();
         List<Step> driverScope = new ArrayList<>();
@@ -281,8 +311,13 @@ public final class Plan {
                     break;
                 }
                 case DRIVER_REMOVED:
-                    p.notes.add("driver '" + c.driver + "' exists in the vault but not in the tree — never deleted by deploy "
-                        + "(use --delete-driver to remove it explicitly)");
+                    if (toDelete.contains(c.driver)) {
+                        deleteHandled.add(c.driver);
+                        buildDeleteDriverStep(p, c.driver, dsDn, vault, deleteDriverSteps);
+                    } else {
+                        p.notes.add("driver '" + c.driver + "' exists in the vault but not in the tree — never deleted by deploy "
+                            + "(use --delete-driver to remove it explicitly)");
+                    }
                     break;
                 case DRIVERSET_GCVS: {
                     p.touchedDns.add(dsDn);
@@ -304,6 +339,19 @@ public final class Plan {
                 }
                 default:
                     break;
+            }
+        }
+
+        // --delete-driver names that never matched a DRIVER_REMOVED change: in the tree (refuse —
+        // remove it from the tree first) or not in the vault at all (refuse — unknown driver)
+        for (String name : toDelete) {
+            if (deleteHandled.contains(name)) {
+                continue;
+            }
+            if (to.driver(name) != null) {
+                p.deleteDriverRefusals.add("--delete-driver " + name + ": it is in the tree — remove it from the tree first");
+            } else {
+                p.deleteDriverRefusals.add("--delete-driver " + name + ": not found in the vault");
             }
         }
 
@@ -371,6 +419,7 @@ public final class Plan {
         p.steps.addAll(driverSet);
         p.steps.addAll(deletes);
         p.steps.addAll(secretSteps);
+        p.steps.addAll(deleteDriverSteps);   // --delete-driver: after every other step
         if (restartRunning) {
             Set<String> affected = new LinkedHashSet<>(diff.affectedDrivers());
             // a driver-set GCV object (linked from the driver set, not from drivers) is in
@@ -396,6 +445,46 @@ public final class Plan {
             }
         }
         return p;
+    }
+
+    /**
+     * {@code --delete-driver}: the driver must be stopped (never stopped implicitly); when it is,
+     * the whole subtree is found with a subtree search (scope subtree, {@code (objectClass=*)}) —
+     * that count is what the step's description reports — and a single {@code DELETE_SUBTREE}
+     * step is queued carrying every DN, deepest first (most RDNs first; the driver object,
+     * having the fewest, last), so execution just walks the list. Refuses (records why in
+     * {@link #deleteDriverRefusals}, adds no step) when the driver isn't stopped.
+     */
+    private static void buildDeleteDriverStep(Plan p, String driver, String dsDn, VaultAccess vault, List<Step> bucket) {
+        String dn = VaultMapping.driverDn(dsDn, driver);
+        if (vault == null) {
+            p.deleteDriverRefusals.add("--delete-driver " + driver + ": no vault connection to check its state");
+            return;
+        }
+        int state = vault.driverState(dn);
+        if (state != Vault.STATE_STOPPED) {
+            p.deleteDriverRefusals.add("--delete-driver " + driver + ": driver is " + Vault.stateName(state)
+                + " — stop it first (driver.stop)");
+            return;
+        }
+        List<String> dns = new ArrayList<>();
+        boolean sawSelf = false;
+        for (Vault.Entry e : vault.search(dn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
+            dns.add(e.dn);
+            if (e.dn.equalsIgnoreCase(dn)) {
+                sawSelf = true;
+            }
+        }
+        if (!sawSelf) {
+            dns.add(dn);
+        }
+        dns.sort((a, b) -> Integer.compare(Snapshot.componentCount(b), Snapshot.componentCount(a)));   // deepest first
+        p.touchedDns.addAll(dns);
+        p.driversDeleted.add(driver);
+        p.deletedObjectCounts.put(driver, dns.size());
+        bucket.add(new Step(Op.DELETE_SUBTREE, dn, null, null, null,
+            "delete driver subtree " + dn + " (" + dns.size() + " object" + (dns.size() == 1 ? "" : "s") + ")",
+            "drivers/" + driver + "#delete", driver, dns));
     }
 
     /**
@@ -635,6 +724,9 @@ public final class Plan {
         for (String m : missingSecrets) {
             sb.append("  MISSING SECRET: ").append(m).append('\n');
         }
+        for (String m : deleteDriverRefusals) {
+            sb.append("  REFUSED: ").append(m).append('\n');
+        }
         for (String note : notes) {
             sb.append("  note: ").append(note).append('\n');
         }
@@ -668,6 +760,12 @@ public final class Plan {
         sb.append("],\"missingSecrets\":[");
         first = true;
         for (String m : missingSecrets) {
+            sb.append(first ? "" : ",").append(DeployLog.q(m));
+            first = false;
+        }
+        sb.append("],\"deleteDriverRefusals\":[");
+        first = true;
+        for (String m : deleteDriverRefusals) {
             sb.append(first ? "" : ",").append(DeployLog.q(m));
             first = false;
         }

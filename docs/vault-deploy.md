@@ -79,7 +79,8 @@ A driver in the tree that does not exist in the vault is created
 linkage), **stopped**, with start option *manual* — starting it is a separate,
 explicit act (Phase 5), because it is the first moment real events flow. A
 driver in the vault that the tree lacks is **never deleted** by deploy; the diff
-reports it and `vault.deploy --delete-driver D` is the explicit path.
+reports it and `vault.deploy --delete-driver D` is the explicit path — see
+"`--delete-driver`" below.
 
 ## Packages
 
@@ -186,6 +187,42 @@ nothing yet to diff against.
 `--driver D` (repeatable) limits the deploy to those drivers (plus the Library
 objects they reference); `--no-restart` writes without restarting (the result
 says the drivers are running stale configuration until restarted).
+
+### `--delete-driver`
+
+`--delete-driver D` (repeatable) names a driver the diff reports as
+**removed** (in the vault, absent from the tree) and asks deploy to delete it,
+instead of leaving it alone:
+
+- **Preconditions**, checked at plan time and refused (nothing written) if
+  either fails: the driver must be **in the vault and absent from the tree**
+  (in the tree → "remove it from the tree first"; in neither → "not found in
+  the vault"), and it must be **stopped**, read the same way `driver.status`
+  reads it — a running (or starting/stopping) driver is refused with "stop it
+  first (`driver.stop`)"; deploy never stops it implicitly.
+- **Plan.** A single `DELETE_SUBTREE` step for the driver DN, listed after
+  every other step (before restarts): `delete driver subtree cn=D,… (N
+  objects)`, where `N` and the exact DN list come from a subtree search
+  (scope subtree, `(objectClass=*)`) done once, at plan time. `--dry-run`
+  shows this step like any other.
+- **Snapshot.** The driver DN and every DN under it are added to the plan's
+  touched objects, so the snapshot LDIF captures the whole subtree — every
+  attribute of every object — before anything is deleted. `vault.rollback`
+  restores it: an object present in the snapshot but absent from the vault is
+  re-added, parents before children (the driver object, then its Subscriber /
+  Publisher containers, then what's inside them).
+- **Execution.** The subtree is deleted deepest first — sorted by number of
+  RDNs, descending, so the driver object (fewest) goes last — from the list
+  fixed at plan time. A failure partway through is reported like any failed
+  step: which objects were deleted, which remain (the snapshot is the way
+  back).
+- **Verify.** The driver DN must no longer exist (checked in addition to the
+  usual re-read-and-diff, since a deleted driver is never in `affectedDrivers()`).
+- **Audit.** The `deploy-log` line names the deleted driver(s) and the object
+  count deleted for each.
+- **Production.** `--delete-driver` on a `prd` tier needs the same `--confirm
+  <name>` as any other production change, and the `DELETE_SUBTREE` step shows
+  in the plan text printed before that confirmation, same as every other step.
 
 ### Two ways to walk the plan
 
@@ -351,10 +388,17 @@ client's job; the tool never writes outside `driverSet`.
    linkage; verify) → `vault.diff` shows the tree's policy as not deployed, and
    against the pre-edit commit is empty.
 
-Not done, deliberately deferred: `--delete-driver` (reported, not acted on);
-Remote Loader password (no RL driver on the test vault to learn from);
-`idm vault.secrets` as a standalone command (use `vault.deploy --secrets all`);
-`simulate` as part of the production gate (run it before deploying).
+8. ✅ **`--delete-driver`** (2026-09-16): the `DELETE_SUBTREE` plan step
+   (subtree search at plan time, deepest-first deletion, refused on a driver
+   that's in the tree, unknown, or not stopped), the snapshot capturing the
+   whole subtree so `vault.rollback` re-adds it parents first, the extra
+   driver-gone verify check, and the audit line naming the driver and object
+   count — see "`--delete-driver`" above.
+
+Not done, deliberately deferred: Remote Loader password (no RL driver on the
+test vault to learn from); `idm vault.secrets` as a standalone command (use
+`vault.deploy --secrets all`); `simulate` as part of the production gate (run
+it before deploying).
 
 Delegation: 1 and 4 are well-specified subagent work; 2 (live vault, scratch
 discipline), 5 and 7 are not.
