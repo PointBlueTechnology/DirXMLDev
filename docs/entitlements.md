@@ -2,8 +2,9 @@
 
 Status: **facts gathered 2026-09-15; §2's model/readers/writers/diff/deploy/
 operations/checks shipped the same day (agent, on the `w4b-entitlements`
-branch) — 505 tests green (473 prior + 32 new), 11 skipped. Live proof (§3)
-and the Designer acceptance check (§4) still pending.**
+branch) — 505 tests green (473 prior + 32 new), 11 skipped. **Live proof
+(§3) PASSED 2026-09-16** ([spikes/entitlements-live.md](spikes/entitlements-live.md));
+the Designer acceptance check (§4) is with Jerry.**
 
 Why: the workflow live proof (W4) could not grant anything — idm254 has no
 entitlement and the tool has no entitlement model. Jerry's instruction:
