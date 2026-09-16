@@ -30,7 +30,7 @@ the update site; `package.install` / `driver.add --packages` reproduce Designer'
 install (18/18 installed checksums identical to Designer's), the deployer writes
 the package stamps to the vault, `package.upgrade|uninstall|status|adopt`, and
 `package.build` turns a tree's hand-made content into a Designer-valid package
-served by `package.site`. CLI only by decision. See [docs/plan.md](docs/plan.md),
+served by `package.site`. CLI only by decision. **Start with [docs/getting-started.md](docs/getting-started.md) (install and configure) and [docs/walkthrough.md](docs/walkthrough.md) (the process end to end).** See [docs/plan.md](docs/plan.md),
 [docs/vault-deploy.md](docs/vault-deploy.md), [docs/operate.md](docs/operate.md)
 and [docs/agent-guide.md](docs/agent-guide.md).
 
