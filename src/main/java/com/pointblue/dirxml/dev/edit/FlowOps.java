@@ -21,6 +21,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -61,7 +62,51 @@ public final class FlowOps {
     public static final Pattern ID_PATTERN = Pattern.compile("[A-Za-z_][A-Za-z0-9_-]*");
 
     private static final Set<String> ADD_KINDS = Set.of(
-        "approval", "condition", "log", "notification", "mapping", "provision");
+        "approval", "condition", "log", "notification", "mapping", "provision",
+        "rest", "role-request", "resource-request", "start-flow");
+
+    /** {@code flow.activity.add}/{@code .set} kinds whose data is a bag of single/repeatable values too
+     *  varied to give each its own constructor parameter (Track W step W3, docs/workflows.md &sect;4 W3) —
+     *  see {@link ActivityAdd#extra}/{@link ActivitySet#extra}. Key is the CLI flag name (no leading
+     *  {@code --}); value is every value given for that flag, in order (a single-valued flag has at
+     *  most one entry). A flag never given, or given with only blank values, has no entry at all — that
+     *  is how {@link ActivitySet} tells "not given" (no change) from "given" (replace).
+     *
+     * <p>Keys used, by kind: <b>rest</b> {@code protocol host port path method content-type accept
+     * authorization status-to content-to content-type-to header(repeatable "Key=Value")}; <b>role-request</b>
+     * {@code role(repeatable) target(repeatable) target-type action description effective-date
+     * expiration-date correlation-id}; <b>resource-request</b> {@code resource target(repeatable) action
+     * description correlation-id param(repeatable "source=target")}; <b>start-flow</b> {@code process
+     * recipient(repeatable) correlation-id}. {@code timeout} for rest reuses {@link ActivityAdd}'s existing
+     * {@code timeout} field (an approval's timeout is likewise milliseconds), not this map.
+     */
+    private static Map<String, List<String>> cleanExtra(Map<String, List<String>> raw) {
+        Map<String, List<String>> out = new java.util.LinkedHashMap<>();
+        if (raw == null) {
+            return out;
+        }
+        for (Map.Entry<String, List<String>> e : raw.entrySet()) {
+            List<String> vals = new ArrayList<>();
+            for (String v : e.getValue()) {
+                if (v != null && !v.isBlank()) {
+                    vals.add(v);
+                }
+            }
+            if (!vals.isEmpty()) {
+                out.put(e.getKey(), vals);
+            }
+        }
+        return out;
+    }
+
+    private static String oneOf(Map<String, List<String>> extra, String key) {
+        List<String> v = extra.get(key);
+        return (v == null || v.isEmpty()) ? null : v.get(0);
+    }
+
+    private static List<String> manyOf(Map<String, List<String>> extra, String key) {
+        return extra.getOrDefault(key, List.of());
+    }
 
     // ---- stock defaults (see class doc for source templates) ----------------------------------
 
@@ -441,6 +486,10 @@ public final class FlowOps {
             case "provision" -> "Provision";
             case "branch" -> "Branch";
             case "merge" -> "Merge";
+            case "rest" -> "REST Call";
+            case "role-request" -> "Role Request";
+            case "resource-request" -> "Resource Request";
+            case "start-flow" -> "Start Flow";
             default -> kind;
         };
         return noun + " " + id;
@@ -519,6 +568,32 @@ public final class FlowOps {
         return di;
     }
 
+    /** Appends a new element named {@code name} holding {@code text} (may be null for an empty element) to {@code parent}, JAXB-default-name style (rest/role-request/resource-request/start-flow's expression children). */
+    static Element appendTextChild(Document doc, Element parent, String name, String text) {
+        Element e = doc.createElementNS(null, name);
+        if (text != null) {
+            e.appendChild(doc.createTextNode(text));
+        }
+        parent.appendChild(e);
+        return e;
+    }
+
+    /** Removes every existing child named {@code name}, then appends one per {@code values} (repeatable-field replace semantics, {@code flow.activity.set}). */
+    static void replaceChildren(Document doc, Element parent, String name, List<String> values) {
+        for (Element c : new ArrayList<>(Xds.childrenByName(parent, name))) {
+            parent.removeChild(c);
+        }
+        for (String v : values) {
+            appendTextChild(doc, parent, name, v);
+        }
+    }
+
+    private static void checkEnumCaseInsensitive(String value, Set<String> allowedUpper, String label) throws Operation.Refusal {
+        if (value != null && !allowedUpper.contains(value.toUpperCase(Locale.ROOT))) {
+            throw new Operation.Refusal("--" + label + " '" + value + "' is not one of " + allowedUpper + " (case-insensitive)");
+        }
+    }
+
     /** The {@code <data-items activity-id>} block for this activity (first match), or null. */
     static Element findDataItems(Element process, String activityId) {
         for (Element e : Xds.childrenByName(process, "data-items")) {
@@ -554,6 +629,8 @@ public final class FlowOps {
         private final String entitlementParam;
         private final String form;
         private final String status;
+        /** rest/role-request/resource-request/start-flow's flags (Track W step W3); see the {@link #cleanExtra} javadoc for the key list. */
+        private final Map<String, List<String>> extra;
 
         public ActivityAdd(String driver, String prdRef, String kind, String id, String after, String via, String to,
                             String onDenied, String onFalse, String nameArg, String addressee, String timeout,
@@ -575,6 +652,15 @@ public final class FlowOps {
                             String onDenied, String onFalse, String nameArg, String addressee, String timeout,
                             String ontimeout, String expression, String message, String template,
                             String entitlementDn, String entitlementParam, String form, String status) {
+            this(driver, prdRef, kind, id, after, via, to, onDenied, onFalse, nameArg, addressee, timeout, ontimeout,
+                expression, message, template, entitlementDn, entitlementParam, form, status, null);
+        }
+
+        public ActivityAdd(String driver, String prdRef, String kind, String id, String after, String via, String to,
+                            String onDenied, String onFalse, String nameArg, String addressee, String timeout,
+                            String ontimeout, String expression, String message, String template,
+                            String entitlementDn, String entitlementParam, String form, String status,
+                            Map<String, List<String>> extra) {
             this.status = isBlankNull(status);
             this.form = isBlankNull(form);
             this.driver = driver;
@@ -595,6 +681,15 @@ public final class FlowOps {
             this.template = isBlankNull(template);
             this.entitlementDn = isBlankNull(entitlementDn);
             this.entitlementParam = entitlementParam;
+            this.extra = cleanExtra(extra);
+        }
+
+        private String one(String key) {
+            return oneOf(extra, key);
+        }
+
+        private List<String> many(String key) {
+            return manyOf(extra, key);
         }
 
         @Override
@@ -741,6 +836,50 @@ public final class FlowOps {
                         throw new Operation.Refusal("--entitlement-dn is required for a provision activity");
                     }
                     break;
+                case "rest":
+                    requireOne("protocol", "a rest activity");
+                    requireOne("host", "a rest activity");
+                    requireOne("port", "a rest activity");
+                    requireOne("path", "a rest activity");
+                    requireOne("method", "a rest activity");
+                    checkEnum(one("protocol"), Flow.REST_PROTOCOLS, "protocol");
+                    checkEnumCaseInsensitive(one("method"), Flow.REST_METHODS, "method");
+                    for (String header : many("header")) {
+                        if (header.indexOf('=') < 0) {
+                            throw new Operation.Refusal("--header must be Key=Value: '" + header + "'");
+                        }
+                    }
+                    break;
+                case "role-request":
+                    if (many("role").isEmpty()) {
+                        throw new Operation.Refusal("--role is required (at least one) for a role-request activity");
+                    }
+                    if (many("target").isEmpty()) {
+                        throw new Operation.Refusal("--target is required (at least one) for a role-request activity");
+                    }
+                    requireOne("description", "a role-request activity");
+                    checkEnum(one("target-type"), Flow.ROLE_TARGET_TYPES, "target-type");
+                    checkEnum(one("action"), Flow.ROLE_REQUEST_ACTIONS, "action");
+                    break;
+                case "resource-request":
+                    requireOne("resource", "a resource-request activity");
+                    if (many("target").isEmpty()) {
+                        throw new Operation.Refusal("--target is required (at least one) for a resource-request activity");
+                    }
+                    requireOne("description", "a resource-request activity");
+                    checkEnum(one("action"), Flow.RESOURCE_REQUEST_ACTIONS, "action");
+                    for (String param : many("param")) {
+                        if (param.indexOf('=') < 0) {
+                            throw new Operation.Refusal("--param must be source=target: '" + param + "'");
+                        }
+                    }
+                    break;
+                case "start-flow":
+                    requireOne("process", "a start-flow activity");
+                    if (many("recipient").isEmpty()) {
+                        throw new Operation.Refusal("--recipient is required (at least one) for a start-flow activity");
+                    }
+                    break;
                 default:
                     break;
             }
@@ -753,6 +892,12 @@ public final class FlowOps {
                 } catch (NumberFormatException e) {
                     throw new Operation.Refusal("--timeout must be a number of milliseconds");
                 }
+            }
+        }
+
+        private void requireOne(String key, String what) throws Operation.Refusal {
+            if (one(key) == null) {
+                throw new Operation.Refusal("--" + key + " is required for " + what);
             }
         }
 
@@ -809,8 +954,107 @@ public final class FlowOps {
                     e.setAttribute("operation", "grant");
                     return e;
                 }
+                case "rest": {
+                    Element e = doc.createElementNS(null, "rest-activity");
+                    e.setAttribute("activity-id", activityId);
+                    e.setAttribute("protocol", one("protocol"));
+                    e.setAttribute("host", one("host"));
+                    e.setAttribute("port", one("port"));
+                    e.setAttribute("path", one("path"));
+                    e.setAttribute("method", one("method"));
+                    if (timeout != null) {
+                        e.setAttribute("timeout", timeout);
+                    }
+                    setAttrIfPresent(e, "contentTypeHeader", one("content-type"));
+                    setAttrIfPresent(e, "acceptHeader", one("accept"));
+                    setAttrIfPresent(e, "authorizationHeader", one("authorization"));
+                    String content = one("content");
+                    if (content != null) {
+                        appendTextChild(doc, e, "content", content);
+                    }
+                    String statusTo = one("status-to");
+                    if (statusTo != null) {
+                        appendTextChild(doc, e, "returnStatusCodeOutputMap", statusTo);
+                    }
+                    String contentTypeTo = one("content-type-to");
+                    if (contentTypeTo != null) {
+                        appendTextChild(doc, e, "returnContentTypeOutputMap", contentTypeTo);
+                    }
+                    String contentTo = one("content-to");
+                    if (contentTo != null) {
+                        appendTextChild(doc, e, "returnContentOutputMap", contentTo);
+                    }
+                    // each header element is itself named "http-headers" (JAXB @XmlElement(name="http-headers")
+                    // List<THttpHeader>, @XmlAttribute key, @XmlValue) — this is not a typo, see docs/workflows.md §4 W3.
+                    for (String header : many("header")) {
+                        int eq = header.indexOf('=');
+                        Element h = doc.createElementNS(null, "http-headers");
+                        h.setAttribute("key", header.substring(0, eq));
+                        h.appendChild(doc.createTextNode(header.substring(eq + 1)));
+                        e.appendChild(h);
+                    }
+                    return e;
+                }
+                case "role-request": {
+                    Element e = doc.createElementNS(null, "role-request-activity");
+                    e.setAttribute("activity-id", activityId);
+                    for (String role : many("role")) {
+                        appendTextChild(doc, e, "roles", role);
+                    }
+                    for (String target : many("target")) {
+                        appendTextChild(doc, e, "targets", target);
+                    }
+                    appendTextChild(doc, e, "targetType", firstNonNull(one("target-type"), "USER"));
+                    appendTextChild(doc, e, "action", firstNonNull(one("action"), "GRANT"));
+                    setChildIfPresent(doc, e, "effective-date", one("effective-date"));
+                    setChildIfPresent(doc, e, "expiration-date", one("expiration-date"));
+                    appendTextChild(doc, e, "request-description", one("description"));
+                    setChildIfPresent(doc, e, "correlation-id", one("correlation-id"));
+                    return e;
+                }
+                case "resource-request": {
+                    Element e = doc.createElementNS(null, "resource-request-activity");
+                    e.setAttribute("activity-id", activityId);
+                    appendTextChild(doc, e, "target-resource", one("resource"));
+                    for (String target : many("target")) {
+                        appendTextChild(doc, e, "target-user", target);
+                    }
+                    appendTextChild(doc, e, "action", firstNonNull(one("action"), "GRANT"));
+                    appendTextChild(doc, e, "request-description", one("description"));
+                    setChildIfPresent(doc, e, "correlation-id", one("correlation-id"));
+                    for (String param : many("param")) {
+                        int eq = param.indexOf('=');
+                        Element p = doc.createElementNS(null, "target-param");
+                        p.setAttribute("source", param.substring(0, eq));
+                        p.setAttribute("target", param.substring(eq + 1));
+                        e.appendChild(p);
+                    }
+                    return e;
+                }
+                case "start-flow": {
+                    Element e = doc.createElementNS(null, "start-correlated-flow-activity");
+                    e.setAttribute("activity-id", activityId);
+                    appendTextChild(doc, e, "processId", one("process"));
+                    for (String recipient : many("recipient")) {
+                        appendTextChild(doc, e, "recipient", recipient);
+                    }
+                    setChildIfPresent(doc, e, "correlationId", one("correlation-id"));
+                    return e;
+                }
                 default:
                     throw new IllegalStateException("unreachable kind " + k);
+            }
+        }
+
+        private static void setAttrIfPresent(Element e, String attr, String value) {
+            if (value != null) {
+                e.setAttribute(attr, value);
+            }
+        }
+
+        private static void setChildIfPresent(Document doc, Element parent, String name, String value) {
+            if (value != null) {
+                appendTextChild(doc, parent, name, value);
             }
         }
     }
@@ -902,6 +1146,10 @@ public final class FlowOps {
             case "provision":
             case "notification":
             case "merge":
+            case "rest":
+            case "role-request":
+            case "resource-request":
+            case "start-flow":
                 addLink(process, createLink(doc, id, primaryTarget, "forward"));
                 break;
             default:
@@ -913,7 +1161,11 @@ public final class FlowOps {
     private static void addDataItemsForKind(Document doc, Element process, String k, String id, String entitlementDn, String entitlementParam) {
         switch (k) {
             case "approval":
-            case "mapping": {
+            case "mapping":
+            case "rest":
+            case "role-request":
+            case "resource-request":
+            case "start-flow": {
                 Element holder = doc.createElementNS(null, "data-items");
                 holder.setAttribute("activity-id", id);
                 insertBeforeStart(process, holder);
@@ -940,6 +1192,15 @@ public final class FlowOps {
     // flow.activity.set
     // =============================================================================================
 
+    /** {@code flow.activity.set}'s valid {@code extra} keys per kind (Track W step W3) — anything else is refused naming the offending flag. */
+    private static final Map<Flow.Kind, Set<String>> EXTRA_KEYS_BY_KIND = Map.of(
+        Flow.Kind.REST, Set.of("protocol", "host", "port", "path", "method", "content", "content-type", "accept",
+            "authorization", "status-to", "content-to", "content-type-to", "header"),
+        Flow.Kind.ROLE_REQUEST, Set.of("role", "target", "target-type", "action", "description", "effective-date",
+            "expiration-date", "correlation-id"),
+        Flow.Kind.RESOURCE_REQUEST, Set.of("resource", "target", "action", "description", "correlation-id", "param"),
+        Flow.Kind.START_CORRELATED_FLOW, Set.of("process", "recipient", "correlation-id"));
+
     public static final class ActivitySet implements Operation {
         private final String driver;
         private final String prdRef;
@@ -956,6 +1217,8 @@ public final class FlowOps {
         private final String entitlementParam;
         private final String approverType;
         private final String form;
+        /** rest/role-request/resource-request/start-flow's flags (Track W step W3); see {@link FlowOps#cleanExtra}. */
+        private final Map<String, List<String>> extra;
 
         public ActivitySet(String driver, String prdRef, String id, String nameArg, List<String> attrs,
                             String addressee, String timeout, String ontimeout, String expression, String message,
@@ -968,6 +1231,14 @@ public final class FlowOps {
                             String addressee, String timeout, String ontimeout, String expression, String message,
                             String template, String entitlementDn, String entitlementParam, String approverType,
                             String form) {
+            this(driver, prdRef, id, nameArg, attrs, addressee, timeout, ontimeout, expression, message, template,
+                entitlementDn, entitlementParam, approverType, form, null);
+        }
+
+        public ActivitySet(String driver, String prdRef, String id, String nameArg, List<String> attrs,
+                            String addressee, String timeout, String ontimeout, String expression, String message,
+                            String template, String entitlementDn, String entitlementParam, String approverType,
+                            String form, Map<String, List<String>> extra) {
             this.form = isBlankNull(form);
             this.driver = driver;
             this.prdRef = prdRef;
@@ -983,6 +1254,15 @@ public final class FlowOps {
             this.entitlementDn = isBlankNull(entitlementDn);
             this.entitlementParam = entitlementParam;
             this.approverType = isBlankNull(approverType);
+            this.extra = cleanExtra(extra);
+        }
+
+        private String one(String key) {
+            return oneOf(extra, key);
+        }
+
+        private List<String> many(String key) {
+            return manyOf(extra, key);
         }
 
         @Override
@@ -1000,10 +1280,11 @@ public final class FlowOps {
             boolean any = nameArg != null || (attrs != null && !attrs.isEmpty()) || addressee != null
                 || timeout != null || ontimeout != null || expression != null || message != null
                 || template != null || entitlementDn != null || entitlementParam != null || approverType != null
-                || form != null;
+                || form != null || !extra.isEmpty();
             if (!any) {
                 throw new Operation.Refusal("give at least one of --name, --attr, --addressee, --timeout, --ontimeout, "
-                    + "--expression, --message, --template, --entitlement-dn, --entitlement-param, --approver-type, --form");
+                    + "--expression, --message, --template, --entitlement-dn, --entitlement-param, --approver-type, --form, "
+                    + "or a rest/role-request/resource-request/start-flow flag");
             }
             if (form != null && act.kind != Flow.Kind.USER) {
                 throw new Operation.Refusal("--form only applies to an approval (user-activity); '" + id + "' is a " + elementName(act));
@@ -1017,6 +1298,38 @@ public final class FlowOps {
             }
             if (approverType != null) {
                 checkEnum(approverType, Flow.APPROVER_TYPES, "approver-type");
+            }
+            if (!extra.isEmpty()) {
+                Set<String> allowed = EXTRA_KEYS_BY_KIND.get(act.kind);
+                if (allowed == null) {
+                    throw new Operation.Refusal("'" + id + "' is a " + elementName(act) + "; none of --" + String.join(", --", extra.keySet()) + " apply to it");
+                }
+                for (String key : extra.keySet()) {
+                    if (!allowed.contains(key)) {
+                        throw new Operation.Refusal("--" + key + " does not apply to a " + elementName(act));
+                    }
+                }
+                if (act.kind == Flow.Kind.REST) {
+                    checkEnum(one("protocol"), Flow.REST_PROTOCOLS, "protocol");
+                    checkEnumCaseInsensitive(one("method"), Flow.REST_METHODS, "method");
+                    for (String header : many("header")) {
+                        if (header.indexOf('=') < 0) {
+                            throw new Operation.Refusal("--header must be Key=Value: '" + header + "'");
+                        }
+                    }
+                }
+                if (act.kind == Flow.Kind.ROLE_REQUEST) {
+                    checkEnum(one("target-type"), Flow.ROLE_TARGET_TYPES, "target-type");
+                    checkEnum(one("action"), Flow.ROLE_REQUEST_ACTIONS, "action");
+                }
+                if (act.kind == Flow.Kind.RESOURCE_REQUEST) {
+                    checkEnum(one("action"), Flow.RESOURCE_REQUEST_ACTIONS, "action");
+                    for (String param : many("param")) {
+                        if (param.indexOf('=') < 0) {
+                            throw new Operation.Refusal("--param must be source=target: '" + param + "'");
+                        }
+                    }
+                }
             }
             if (attrs != null) {
                 for (String pair : attrs) {
@@ -1109,6 +1422,152 @@ public final class FlowOps {
                 setDataItemSource(el, "DirXML-Entitlement-Parameter", quoteLiteral(entitlementParam));
                 changed = true;
             }
+            if (act.kind == Flow.Kind.REST) {
+                if (one("protocol") != null) {
+                    el.setAttribute("protocol", one("protocol"));
+                    changed = true;
+                }
+                if (one("host") != null) {
+                    el.setAttribute("host", one("host"));
+                    changed = true;
+                }
+                if (one("port") != null) {
+                    el.setAttribute("port", one("port"));
+                    changed = true;
+                }
+                if (one("path") != null) {
+                    el.setAttribute("path", one("path"));
+                    changed = true;
+                }
+                if (one("method") != null) {
+                    el.setAttribute("method", one("method"));
+                    changed = true;
+                }
+                if (one("content-type") != null) {
+                    el.setAttribute("contentTypeHeader", one("content-type"));
+                    changed = true;
+                }
+                if (one("accept") != null) {
+                    el.setAttribute("acceptHeader", one("accept"));
+                    changed = true;
+                }
+                if (one("authorization") != null) {
+                    el.setAttribute("authorizationHeader", one("authorization"));
+                    changed = true;
+                }
+                if (one("content") != null) {
+                    setOrCreateTextChild(doc, el, "content", one("content"));
+                    changed = true;
+                }
+                if (one("status-to") != null) {
+                    setOrCreateTextChild(doc, el, "returnStatusCodeOutputMap", one("status-to"));
+                    changed = true;
+                }
+                if (one("content-type-to") != null) {
+                    setOrCreateTextChild(doc, el, "returnContentTypeOutputMap", one("content-type-to"));
+                    changed = true;
+                }
+                if (one("content-to") != null) {
+                    setOrCreateTextChild(doc, el, "returnContentOutputMap", one("content-to"));
+                    changed = true;
+                }
+                if (extra.containsKey("header")) {
+                    for (Element h : new ArrayList<>(Xds.childrenByName(el, "http-headers"))) {
+                        el.removeChild(h);
+                    }
+                    for (String header : many("header")) {
+                        int eq = header.indexOf('=');
+                        Element h = doc.createElementNS(null, "http-headers");
+                        h.setAttribute("key", header.substring(0, eq));
+                        h.appendChild(doc.createTextNode(header.substring(eq + 1)));
+                        el.appendChild(h);
+                    }
+                    changed = true;
+                }
+            }
+            if (act.kind == Flow.Kind.ROLE_REQUEST) {
+                if (extra.containsKey("role")) {
+                    replaceChildren(doc, el, "roles", many("role"));
+                    changed = true;
+                }
+                if (extra.containsKey("target")) {
+                    replaceChildren(doc, el, "targets", many("target"));
+                    changed = true;
+                }
+                if (one("target-type") != null) {
+                    setOrCreateTextChild(doc, el, "targetType", one("target-type"));
+                    changed = true;
+                }
+                if (one("action") != null) {
+                    setOrCreateTextChild(doc, el, "action", one("action"));
+                    changed = true;
+                }
+                if (one("description") != null) {
+                    setOrCreateTextChild(doc, el, "request-description", one("description"));
+                    changed = true;
+                }
+                if (one("effective-date") != null) {
+                    setOrCreateTextChild(doc, el, "effective-date", one("effective-date"));
+                    changed = true;
+                }
+                if (one("expiration-date") != null) {
+                    setOrCreateTextChild(doc, el, "expiration-date", one("expiration-date"));
+                    changed = true;
+                }
+                if (one("correlation-id") != null) {
+                    setOrCreateTextChild(doc, el, "correlation-id", one("correlation-id"));
+                    changed = true;
+                }
+            }
+            if (act.kind == Flow.Kind.RESOURCE_REQUEST) {
+                if (one("resource") != null) {
+                    setOrCreateTextChild(doc, el, "target-resource", one("resource"));
+                    changed = true;
+                }
+                if (extra.containsKey("target")) {
+                    replaceChildren(doc, el, "target-user", many("target"));
+                    changed = true;
+                }
+                if (one("action") != null) {
+                    setOrCreateTextChild(doc, el, "action", one("action"));
+                    changed = true;
+                }
+                if (one("description") != null) {
+                    setOrCreateTextChild(doc, el, "request-description", one("description"));
+                    changed = true;
+                }
+                if (one("correlation-id") != null) {
+                    setOrCreateTextChild(doc, el, "correlation-id", one("correlation-id"));
+                    changed = true;
+                }
+                if (extra.containsKey("param")) {
+                    for (Element p : new ArrayList<>(Xds.childrenByName(el, "target-param"))) {
+                        el.removeChild(p);
+                    }
+                    for (String param : many("param")) {
+                        int eq = param.indexOf('=');
+                        Element p = doc.createElementNS(null, "target-param");
+                        p.setAttribute("source", param.substring(0, eq));
+                        p.setAttribute("target", param.substring(eq + 1));
+                        el.appendChild(p);
+                    }
+                    changed = true;
+                }
+            }
+            if (act.kind == Flow.Kind.START_CORRELATED_FLOW) {
+                if (one("process") != null) {
+                    setOrCreateTextChild(doc, el, "processId", one("process"));
+                    changed = true;
+                }
+                if (extra.containsKey("recipient")) {
+                    replaceChildren(doc, el, "recipient", many("recipient"));
+                    changed = true;
+                }
+                if (one("correlation-id") != null) {
+                    setOrCreateTextChild(doc, el, "correlationId", one("correlation-id"));
+                    changed = true;
+                }
+            }
             String formNote = "";
             if (approvalForm != null) {
                 formNote = "; " + bindApprovalForm(found.driver, prd, id, approvalForm);
@@ -1198,6 +1657,10 @@ public final class FlowOps {
             case PROVISION: return "provision";
             case BRANCH: return "branch";
             case MERGE: return "merge";
+            case REST: return "rest";
+            case ROLE_REQUEST: return "role-request";
+            case RESOURCE_REQUEST: return "resource-request";
+            case START_CORRELATED_FLOW: return "start-flow";
             default: return a.id;
         }
     }

@@ -41,7 +41,11 @@ import java.util.regex.Pattern;
  * PRD, I otherwise), {@code flow-display-name-missing} (W), {@code flow-entitlement-unknown}
  * (W — a provision activity's {@code DirXML-Entitlement-DN} names a driver in this tree that
  * has no such entitlement), {@code flow-entitlement-external} (I — it names a driver not in
- * this tree; see {@code docs/entitlements.md}).
+ * this tree; see {@code docs/entitlements.md}), {@code flow-activity-incomplete} (E — a
+ * rest/role-request/resource-request/start-flow activity, Track W step W3, is missing a
+ * required attribute or child), {@code flow-start-flow-unknown} (W — a
+ * start-correlated-flow-activity's {@code processId} is a quoted literal naming a PRD not
+ * found in this tree by name or DN).
  *
  * <p>Never throws for a malformed process: every check reads defensively and turns a
  * problem into a {@link Finding} rather than an exception (see {@link Check}).
@@ -95,6 +99,8 @@ public final class FlowCheck implements Check {
         checkPlaceholders(flow, path, active, r);
         checkDisplayNames(flow, path, r);
         checkEntitlementDns(ds, flow, path, r);
+        checkActivityIncomplete(flow, path, r);
+        checkStartFlowTargets(ds, flow, path, r);
     }
 
     // ---- 1: version -----------------------------------------------------------------------
@@ -515,6 +521,32 @@ public final class FlowCheck implements Check {
             if ((a.kind == Flow.Kind.BIND_ROLE || a.kind == Flow.Kind.BIND_RESOURCE_STATUS) && a.attr("action") != null) {
                 checkEnum(a.attr("action"), Flow.BIND_ACTIONS, "activity '" + a.id + "' action", path, r);
             }
+            if (a.kind == Flow.Kind.REST) {
+                String protocol = a.attr("protocol");
+                if (protocol != null) {
+                    checkEnum(protocol, Flow.REST_PROTOCOLS, "activity '" + a.id + "' protocol", path, r);
+                }
+                String method = a.attr("method");
+                if (method != null) {
+                    checkEnumCaseInsensitive(method, Flow.REST_METHODS, "activity '" + a.id + "' method", path, r);
+                }
+            }
+            if (a.kind == Flow.Kind.ROLE_REQUEST) {
+                String targetType = textOfFirstChild(a.element, "targetType");
+                if (targetType != null) {
+                    checkEnum(targetType, Flow.ROLE_TARGET_TYPES, "activity '" + a.id + "' targetType", path, r);
+                }
+                String roleAction = textOfFirstChild(a.element, "action");
+                if (roleAction != null) {
+                    checkEnum(roleAction, Flow.ROLE_REQUEST_ACTIONS, "activity '" + a.id + "' action", path, r);
+                }
+            }
+            if (a.kind == Flow.Kind.RESOURCE_REQUEST) {
+                String resourceAction = textOfFirstChild(a.element, "action");
+                if (resourceAction != null) {
+                    checkEnum(resourceAction, Flow.RESOURCE_REQUEST_ACTIONS, "activity '" + a.id + "' action", path, r);
+                }
+            }
         }
         for (Map.Entry<String, List<Flow.DataItem>> e : flow.dataItemsByActivity.entrySet()) {
             for (Flow.DataItem di : e.getValue()) {
@@ -531,6 +563,13 @@ public final class FlowCheck implements Check {
     private static void checkEnum(String value, Set<String> allowed, String where, String path, Report r) {
         if (!allowed.contains(value)) {
             r.add(Finding.error("flow-attribute-enum", path, where + " has value '" + value + "', not one of " + allowed));
+        }
+    }
+
+    /** Like {@link #checkEnum} but case-insensitive against an all-uppercase {@code allowedUpper} (rest-activity's {@code method}, docs/workflows.md &sect;4 W3). */
+    private static void checkEnumCaseInsensitive(String value, Set<String> allowedUpper, String where, String path, Report r) {
+        if (!allowedUpper.contains(value.toUpperCase(java.util.Locale.ROOT))) {
+            r.add(Finding.error("flow-attribute-enum", path, where + " has value '" + value + "', not one of " + allowedUpper + " (case-insensitive)"));
         }
     }
 
@@ -558,12 +597,42 @@ public final class FlowCheck implements Check {
                     checkScript(Xds.text(msg), "log activity '" + a.id + "' message", path, r);
                 }
             }
+            if (a.kind == Flow.Kind.REST) {
+                checkScript(textOfFirstChild(a.element, "content"), "activity '" + a.id + "' content", path, r);
+            }
+            if (a.kind == Flow.Kind.ROLE_REQUEST) {
+                for (Element role : Xds.childrenByName(a.element, "roles")) {
+                    checkScript(Xds.text(role), "activity '" + a.id + "' roles", path, r);
+                }
+                for (Element target : Xds.childrenByName(a.element, "targets")) {
+                    checkScript(Xds.text(target), "activity '" + a.id + "' targets", path, r);
+                }
+                checkScript(textOfFirstChild(a.element, "request-description"), "activity '" + a.id + "' request-description", path, r);
+            }
+            if (a.kind == Flow.Kind.RESOURCE_REQUEST) {
+                checkScript(textOfFirstChild(a.element, "target-resource"), "activity '" + a.id + "' target-resource", path, r);
+                for (Element user : Xds.childrenByName(a.element, "target-user")) {
+                    checkScript(Xds.text(user), "activity '" + a.id + "' target-user", path, r);
+                }
+                checkScript(textOfFirstChild(a.element, "request-description"), "activity '" + a.id + "' request-description", path, r);
+            }
+            if (a.kind == Flow.Kind.START_CORRELATED_FLOW) {
+                checkScript(textOfFirstChild(a.element, "processId"), "activity '" + a.id + "' processId", path, r);
+                for (Element recipient : Xds.childrenByName(a.element, "recipient")) {
+                    checkScript(Xds.text(recipient), "activity '" + a.id + "' recipient", path, r);
+                }
+            }
         }
         for (Map.Entry<String, List<Flow.DataItem>> e : flow.dataItemsByActivity.entrySet()) {
             for (Flow.DataItem di : e.getValue()) {
                 checkScript(di.source, "data-item '" + di.name + "' (activity '" + e.getKey() + "') source", path, r);
             }
         }
+    }
+
+    private static String textOfFirstChild(Element parent, String childName) {
+        List<Element> kids = Xds.childrenByName(parent, childName);
+        return kids.isEmpty() ? null : Xds.text(kids.get(0));
     }
 
     private static void checkScript(String src, String where, String path, Report r) {
@@ -710,6 +779,110 @@ public final class FlowCheck implements Check {
         int eq = comp.indexOf('=');
         String v = eq >= 0 ? comp.substring(eq + 1) : comp;
         return v.replace("\\,", ",").replace("\\\\", "\\").trim();
+    }
+
+    // ---- integration activities: required attributes/children present (Track W step W3) --------
+
+    /**
+     * Per-kind required-field check for the four integration activity kinds
+     * (docs/workflows.md &sect;4 W3 grammar table); the engine's JAXB binding does not
+     * enforce these (a missing attribute/element just unmarshals to null and fails, if
+     * at all, deep inside the runtime the first time a request reaches that activity),
+     * so catching it offline is cheap insurance in the same spirit as &sect;1.4.
+     */
+    private static void checkActivityIncomplete(Flow flow, String path, Report r) {
+        for (Flow.Activity a : flow.activities) {
+            switch (a.kind) {
+                case REST:
+                    requireAttr(a, "protocol", path, r);
+                    requireAttr(a, "host", path, r);
+                    requireAttr(a, "port", path, r);
+                    requireAttr(a, "path", path, r);
+                    requireAttr(a, "method", path, r);
+                    break;
+                case ROLE_REQUEST:
+                    requireChildNonEmpty(a, "roles", path, r, "at least one role");
+                    requireChildNonEmpty(a, "targets", path, r, "at least one target");
+                    requireChildText(a, "request-description", path, r);
+                    break;
+                case RESOURCE_REQUEST:
+                    requireChildText(a, "target-resource", path, r);
+                    requireChildNonEmpty(a, "target-user", path, r, "at least one target-user");
+                    requireChildText(a, "request-description", path, r);
+                    break;
+                case START_CORRELATED_FLOW:
+                    requireChildText(a, "processId", path, r);
+                    requireChildNonEmpty(a, "recipient", path, r, "at least one recipient");
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    private static void requireAttr(Flow.Activity a, String attrName, String path, Report r) {
+        if (!nonBlank(a.attr(attrName))) {
+            r.add(Finding.error("flow-activity-incomplete", path,
+                elementName(a) + " '" + a.id + "' is missing required attribute '" + attrName + "'"));
+        }
+    }
+
+    private static void requireChildText(Flow.Activity a, String childName, String path, Report r) {
+        if (!nonBlank(textOfFirstChild(a.element, childName))) {
+            r.add(Finding.error("flow-activity-incomplete", path,
+                elementName(a) + " '" + a.id + "' is missing required '" + childName + "'"));
+        }
+    }
+
+    private static void requireChildNonEmpty(Flow.Activity a, String childName, String path, Report r, String what) {
+        boolean any = false;
+        for (Element k : Xds.childrenByName(a.element, childName)) {
+            if (nonBlank(Xds.text(k))) {
+                any = true;
+                break;
+            }
+        }
+        if (!any) {
+            r.add(Finding.error("flow-activity-incomplete", path, elementName(a) + " '" + a.id + "' needs " + what));
+        }
+    }
+
+    // ---- start-correlated-flow-activity's processId names a PRD in this tree (Track W step W3) ---
+
+    private static void checkStartFlowTargets(DriverSet ds, Flow flow, String path, Report r) {
+        for (Flow.Activity a : flow.activities) {
+            if (a.kind != Flow.Kind.START_CORRELATED_FLOW) {
+                continue;
+            }
+            String literal = unquoteLiteral(textOfFirstChild(a.element, "processId"));
+            if (literal == null || literal.isBlank()) {
+                continue;
+            }
+            if (!prdExistsByNameOrDn(ds, literal)) {
+                r.add(Finding.warning("flow-start-flow-unknown", path,
+                    "activity '" + a.id + "' processId names a PRD ('" + literal + "') not found in this tree by name or DN"));
+            }
+        }
+    }
+
+    private static boolean prdExistsByNameOrDn(DriverSet ds, String value) {
+        for (Driver d : ds.drivers) {
+            if (d.provisioning == null) {
+                continue;
+            }
+            for (Prd p : d.provisioning.prds) {
+                if (value.equals(p.name)) {
+                    return true;
+                }
+                if (p.process != null) {
+                    String dn = p.process.getAttribute("id");
+                    if (dn != null && !dn.isEmpty() && dn.equalsIgnoreCase(value)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     // ---- helpers ------------------------------------------------------------------------------
