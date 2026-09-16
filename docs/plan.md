@@ -390,6 +390,9 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   [spikes/prd-rest-live.md](spikes/prd-rest-live.md). Open check: whether
   `POST /index/permissions ADD_OR_MODIFY` makes a just-deployed PRD
   requestable before the index's 10-minute interval.
+- **`bin/idm` usage omits `vault.*`, `driver.submit` and `driver.trace tail`**
+  (they run, and each prints its own usage when called wrong); add them to
+  the top-level listing. Found 2026-09-16 while writing the walkthrough.
 - **`form.field.add --json '{…}'`** is swallowed by the global `--json`
   output flag ("unexpected argument"); rename the field's extra-properties
   flag (e.g. `--props`) and keep `--json` for output. Found 2026-09-16.
