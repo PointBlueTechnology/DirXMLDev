@@ -67,8 +67,9 @@ loopback).
   describes its entitlements to the Resource/Role catalog; a hand-built
   driver has none. `entitlement.add` should be able to create and maintain
   it (follow-up, needed before roles/resources map to such an entitlement).
-- Designer acceptance (§4 of the design note): import the Loopback driver
-  with its entitlement from the vault in `Designer-modernized` — Jerry.
+- Designer acceptance (§4 of the design note): **PASSED 2026-09-16** — Jerry
+  imported the Loopback driver with its entitlement from the vault into
+  `Designer-modernized`; both look right.
 - Objects left on idm254 for that check: driver `Loopback` (running) with
   `TestAccess`, form "DirXMLDev W4b Form", PRD "DirXMLDev W4b", and the
   grant on uaadmin. Removal afterwards: `prd.delete`, `form.delete`,
