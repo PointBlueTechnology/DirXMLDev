@@ -317,8 +317,7 @@ stock one); Designer acceptance of the project writer passed 2026-09-13
 (`test11pf` imported, the written form opens in the vendor builder —
 [spikes/designer-writer.md](spikes/designer-writer.md) spike 6b).
 
-**Track W — Workflow design (the PRD's `<process>`)** — ✅ **W1, W2, W4, W5 shipped
-2026-09-15** (flow model, engine-faithful `FlowCheck`, `prd.flow`, twelve
+**Track W — Workflow design (the PRD's `<process>`)** — ✅ **COMPLETE 2026-09-16: W1–W5 and W4b shipped** (flow model, engine-faithful `FlowCheck`, `prd.flow`, twelve
 `flow.*` operations, live proof on idm254 in [spikes/workflow-live.md](spikes/workflow-live.md);
 Designer accepted the authored PRD); **W4b model shipped 2026-09-15**
 (entitlements as-code — model, live/LDIF/project readers, as-code + project

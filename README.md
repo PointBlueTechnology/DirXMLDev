@@ -6,7 +6,7 @@ and vault **deploy / operate** with safeguards — with the
 [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
 as its test engine.
 
-Status: **Phases 0–7 and Track P (JSON provisioning forms) built and proven on the test vaults, in Designer and in the Identity Applications; Track W (workflow design) W1/W2/W4 shipped — typed `flow.*` operations, an engine-faithful flow check, and a workflow authored without Designer ran end to end on the idm254 lab (2026-09-15).**
+Status: **Phases 0–7 and Track P (JSON provisioning forms) built and proven on the test vaults, in Designer and in the Identity Applications; Track W (workflow design) complete — typed `flow.*` operations for every activity kind, an engine-faithful flow check, entitlements as-code, and workflows authored without Designer that ran end to end on the idm254 lab, granting an entitlement (2026-09-16).**
 Phases 0–3: typed model, IDM-as-code with readers for export / Designer project
 / LDIF / live vault (byte-idempotent); `validate` — every policy through the
 engine's own compilers in the driver's context plus linkage, GCV,
