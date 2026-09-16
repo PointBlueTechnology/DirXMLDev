@@ -106,7 +106,10 @@ you type after `--env` and, for production, after `--confirm`.
 # --- staging -------------------------------------------------------------
 stg.url=ldaps://idm-stg.example.com:636        # LDAPS to the vault (required)
 stg.bindDn=cn=idm-deploy,ou=sa,o=system        # a deploy identity with rights on the driver set (required)
-stg.password=…                                 # or stg.passwordEnv=IDM_STG_PASSWORD
+stg.passwordKeychain=idm-stg/cn=idm-deploy     # the bind password from the macOS Keychain (§4.2), or
+                                               #   stg.passwordCommand=op read "op://idm/stg-deploy/password"
+                                               #   stg.passwordEnv=IDM_STG_PASSWORD
+                                               #   stg.password=…   (a literal — dev labs only)
 stg.driverSet=cn=driverset1,o=system           # the driver set this environment means (required)
 stg.tier=stg                                   # dev | stg | prd — decides the gate (required)
 stg.secrets=secrets-stg.properties             # the secrets file for this environment (§4.1)
@@ -114,9 +117,9 @@ stg.sshHost=idm-stg.example.com                # engine host, for driver.trace t
 stg.sshUser=idm                                # ssh user; key-based login is assumed (optional)
 stg.formsUrl=https://idm-stg-apps.example.com  # the Identity Applications base URL (optional; forms + bin/apps)
 stg.appsUser=uaadmin                           # bin/apps: the user that requests and approves (optional)
-stg.appsPassword=…                             # bin/apps: that user's password (optional)
+stg.appsPasswordKeychain=idm-stg-apps/uaadmin  # bin/apps: that user's password — same four forms as above (optional)
 stg.appsClient=rbpmrest                        # bin/apps: OSP client id (optional, default rbpmrest)
-stg.appsSecret=…                               # bin/apps: OSP client secret when it differs from the password
+stg.appsSecretKeychain=idm-stg-apps/rbpmrest   # bin/apps: OSP client secret when it differs from the password (any form)
 stg.k8sHost=k3s.example.com                    # containerised applications: host, user, namespace and the
 stg.k8sUser=debian                             #   kubectl command to run there — only for reading the
 stg.k8sNamespace=idm                           #   applications' log during a live proof (optional)
@@ -137,6 +140,19 @@ rights only on its driver set (and the User Application driver's `AppConfig`
 subtree when forms/PRDs are deployed). The tool writes nowhere else; `admin`
 works on a lab but should not be the identity in `prd`.
 
+**Every credential takes four forms.** For any key `k` that holds a
+password (`password`, `appsPassword`, `appsSecret`, and every key of the
+secrets file below) the file may carry `k=` (a literal), `kEnv=VAR` (an
+environment variable), `kCommand=…` (a shell command whose output is the
+value, e.g. a password-manager CLI) or `kKeychain=service[/account]` (the
+macOS Keychain, §4.2). Use an indirect form for anything but a throwaway lab:
+the file then holds names, not secrets. The tool warns once per run when
+either file is readable by other users; keep them at mode 600:
+
+```bash
+chmod 600 environments.properties secrets-*.properties
+```
+
 **Tiers and the gate.** `dev`: `--yes` or `--step`. `stg`: the same, and the
 tree must validate clean. `prd`: `--confirm prd` typed on the command line,
 a committed tree, a vault that matches the last recorded deploy (or
@@ -155,16 +171,46 @@ AD Driver.shim-auth-password=…                 # DirXML-ShimAuthPassword
 AD Driver.remote-loader-password=…
 AD Driver.named.exchange-service=…             # a named password the policies read
 driverset.named.smtp-relay=…                   # a named password on the driver set
-# any key can be indirect instead of literal:
+# any key can be indirect instead of literal (preferred):
 AD Driver.shim-auth-passwordEnv=AD_SHIM_PW                       # from an environment variable
 AD Driver.named.exchange-serviceCommand=op read "op://idm/exchange/password"   # from a command's output
+AD Driver.remote-loader-passwordKeychain=idm-stg/ad-remote-loader             # from the macOS Keychain (§4.2)
 ```
 
 A new driver's deploy refuses until every secret the driver needs is present
 (`MISSING SECRET: <driver>.<key>` in the plan). An existing driver's secrets
 are not touched unless you pass `--secrets all|missing`.
 
-### 4.2 TLS, and when Java cannot reach the vault
+### 4.2 macOS Keychain
+
+On a Mac the Keychain is the simplest place for these passwords: nothing is
+on disk in clear, and the login keychain unlocks with the session. Add one
+item per credential (the `-w` without a value prompts, so the password never
+enters shell history), then reference it by service and account:
+
+```bash
+security add-generic-password -s idm-stg -a cn=idm-deploy -w          # the stg bind password
+security add-generic-password -s idm-stg-apps -a uaadmin -w           # the applications user
+security add-generic-password -s idm-stg -a ad-remote-loader -w       # a driver secret
+```
+
+```properties
+stg.passwordKeychain=idm-stg/cn=idm-deploy
+stg.appsPasswordKeychain=idm-stg-apps/uaadmin
+# secrets-stg.properties
+AD Driver.remote-loader-passwordKeychain=idm-stg/ad-remote-loader
+```
+
+The tool reads it with `security find-generic-password -s <service> -a
+<account> -w`; `service` alone (no `/account`) takes the first item with that
+service name. An item added with `security` is readable by `security` without
+a prompt; one created in Keychain Access asks once for permission — answer
+*Always Allow*. When the item is missing, the error names the exact
+`add-generic-password` command to run. Linux and Windows have no equivalent
+built in; use `kCommand` with your password manager's CLI (`op read`,
+`pass show`, `secret-tool lookup`, …).
+
+### 4.3 TLS, and when Java cannot reach the vault
 
 The JDK must trust the vault's LDAPS certificate: import the CA into the JDK's
 `cacerts` (`keytool -importcert -cacerts -alias idm-ca -file ca.pem`) or into a
@@ -267,3 +313,5 @@ anything.
   deploys; keep it out of git and out of chat.
 - Never paste a password, a bind DN's secret or a snapshot into a
   conversation; the tool prints names, never values.
+- Prefer the Keychain or a password-manager command over literals in the two
+  credential files, and keep both files at mode 600.

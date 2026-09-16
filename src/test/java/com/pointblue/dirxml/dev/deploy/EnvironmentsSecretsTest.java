@@ -95,4 +95,69 @@ public class EnvironmentsSecretsTest {
         assertFalse(Secrets.none().has("x"));
         assertArrayEquals("v w".toCharArray(), s.get(Secrets.named("with space", "x")));
     }
+
+    @Test
+    public void passwordCommandAndKeychainForms() throws IOException {
+        Path dir = Files.createTempDirectory("idm-env2");
+        Path fake = dir.resolve("fake-security");
+        // a stand-in for macOS `security find-generic-password -s S [-a A] -w`
+        Files.writeString(fake, "#!/bin/sh\n"
+            + "[ \"$1\" = find-generic-password ] || exit 2\n"
+            + "[ \"$3\" = idm-stg ] || exit 44\n"
+            + "if [ \"$4\" = -a ]; then echo \"kc-$5\"; else echo kc-default; fi\n", StandardCharsets.UTF_8);
+        fake.toFile().setExecutable(true);
+        Path f = dir.resolve("environments.properties");
+        Files.writeString(f, String.join("\n",
+            "cmd.url=ldaps://a:636", "cmd.bindDn=cn=d,o=system", "cmd.driverSet=cn=ds,o=system", "cmd.tier=dev",
+            "cmd.passwordCommand=printf 'from-command\\n'",
+            "cmd.appsPasswordKeychain=idm-stg/uaadmin",
+            "kc.url=ldaps://a:636", "kc.bindDn=cn=d,o=system", "kc.driverSet=cn=ds,o=system", "kc.tier=dev",
+            "kc.passwordKeychain=idm-stg",
+            "missing.url=ldaps://a:636", "missing.bindDn=cn=d,o=system", "missing.driverSet=cn=ds,o=system", "missing.tier=dev",
+            "missing.passwordKeychain=no-such-service"), StandardCharsets.UTF_8);
+        String prev = System.getProperty("idm.keychain.command");
+        System.setProperty("idm.keychain.command", fake.toString());
+        try {
+            Environments envs = Environments.load(f);
+            assertEquals("from-command", envs.get("cmd").password);
+            assertArrayEquals("kc-uaadmin".toCharArray(), envs.secret("cmd", "appsPassword"));
+            assertNull(envs.secret("cmd", "appsSecret"));
+            assertEquals("kc-default", envs.get("kc").password);
+            try {
+                envs.get("missing");
+                fail("a missing keychain item must fail with the add command");
+            } catch (IOException e) {
+                assertTrue(e.getMessage(), e.getMessage().contains("security add-generic-password -s 'no-such-service'"));
+            }
+            // the secrets file takes the same forms
+            Path sf = dir.resolve("secrets.properties");
+            Files.writeString(sf, "AD Driver.shim-auth-passwordKeychain=idm-stg/ad-shim\nAD Driver.named.xCommand=printf x\n", StandardCharsets.UTF_8);
+            Secrets sec = Secrets.load(sf);
+            assertTrue(sec.has("AD Driver.shim-auth-password"));
+            assertEquals(List.of("AD Driver.named.x", "AD Driver.shim-auth-password"), sec.keys());
+            assertArrayEquals("kc-ad-shim".toCharArray(), sec.get("AD Driver.shim-auth-password"));
+            assertArrayEquals("x".toCharArray(), sec.get("AD Driver.named.x"));
+        } finally {
+            if (prev == null) {
+                System.clearProperty("idm.keychain.command");
+            } else {
+                System.setProperty("idm.keychain.command", prev);
+            }
+        }
+    }
+
+    @Test
+    public void sharedPermissionsAreDetected() throws IOException {
+        Path dir = Files.createTempDirectory("idm-perm");
+        Path f = dir.resolve("environments.properties");
+        Files.writeString(f, "x=y\n", StandardCharsets.UTF_8);
+        try {
+            Files.setPosixFilePermissions(f, java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"));
+            assertTrue(SecretSource.isShared(f));
+            Files.setPosixFilePermissions(f, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            assertFalse(SecretSource.isShared(f));
+        } catch (UnsupportedOperationException e) {
+            assertFalse(SecretSource.isShared(f)); // non-POSIX: never shared, never warns
+        }
+    }
 }

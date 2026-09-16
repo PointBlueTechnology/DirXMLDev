@@ -17,7 +17,8 @@ import java.util.TreeSet;
  * <pre>
  *   stg.url=ldaps://idm-stg:636
  *   stg.bindDn=cn=idm-deploy,ou=sa,o=system
- *   stg.password=…              # or stg.passwordEnv=IDM_STG_PASSWORD
+ *   stg.password=…              # or stg.passwordEnv=VAR | stg.passwordCommand=cmd | stg.passwordKeychain=service[/account]
+ *                               # (see SecretSource; prefer an indirect form for stg/prd)
  *   stg.driverSet=cn=driverset1,o=system
  *   stg.tier=stg                # dev | stg | prd
  *   stg.secrets=secrets-stg.properties   # optional; see Secrets
@@ -105,6 +106,7 @@ public final class Environments {
 
     public static Environments load(Path file) throws IOException {
         // the same unescaped key=value format as the secrets file (DNs and passwords keep their backslashes)
+        SecretSource.warnIfShared(file);
         return new Environments(Secrets.parse(Files.readString(file, StandardCharsets.UTF_8)), file);
     }
 
@@ -126,17 +128,11 @@ public final class Environments {
     public Environment get(String name) throws IOException {
         String url = req(name, "url");
         String bindDn = req(name, "bindDn");
-        String password = props.getProperty(name + ".password");
-        String passwordEnv = props.getProperty(name + ".passwordEnv");
-        if ((password == null || password.isBlank()) && passwordEnv != null && !passwordEnv.isBlank()) {
-            password = System.getenv(passwordEnv);
-            if (password == null) {
-                throw new IOException("environment '" + name + "': " + name + ".passwordEnv names " + passwordEnv + ", which is not set");
-            }
+        char[] pw = SecretSource.resolve(props, name + ".password", "environment '" + name + "'");
+        if (pw == null || pw.length == 0) {
+            throw new IOException("environment '" + name + "': set " + name + ".password, .passwordEnv, .passwordCommand or .passwordKeychain");
         }
-        if (password == null || password.isBlank()) {
-            throw new IOException("environment '" + name + "': set " + name + ".password or " + name + ".passwordEnv");
-        }
+        String password = new String(pw);
         String driverSet = req(name, "driverSet");
         String tierS = props.getProperty(name + ".tier", "dev").trim().toUpperCase();
         Tier tier;
@@ -156,6 +152,14 @@ public final class Environments {
             requires == null || requires.isBlank() ? null : requires.trim(), secretsFile, trustAll,
             sshHost == null || sshHost.isBlank() ? null : sshHost.trim(),
             sshUser == null || sshUser.isBlank() ? null : sshUser.trim());
+    }
+
+    /**
+     * A credential other than the bind password ({@code <env>.<key>}, e.g. {@code appsPassword}),
+     * in any of the {@link SecretSource} forms; null when not configured.
+     */
+    public char[] secret(String name, String key) throws IOException {
+        return SecretSource.resolve(props, name + "." + key, "environment '" + name + "'");
     }
 
     /** Any other {@code <env>.<key>} value (e.g. {@code formsUrl}, {@code k8sHost}), trimmed; null when absent or blank. */
