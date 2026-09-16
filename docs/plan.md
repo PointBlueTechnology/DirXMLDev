@@ -380,7 +380,9 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   and some drivers ship startup policies that create or update it. So the
   tool needs both: `entitlement.add`/`set` maintain the resource for a
   hand-built driver, and a packaged driver's startup policy is left to do
-  its own (never overwritten by ours).
+  its own (never overwritten by ours). Priority: low — the applications read
+  it only when entitlement binding (roles/resources) is configured, which
+  is outside the tool's scope today; a workflow's grant works without it.
 - **Start a PRD over REST** (Jerry, 2026-09-15: it should be possible). Our
   `POST /requests/permissions/item` attempts failed for a JSON-form PRD; find
   the call the dashboard's form renderer makes (`/WFHandler`) or the
