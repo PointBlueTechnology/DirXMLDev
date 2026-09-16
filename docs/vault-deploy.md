@@ -425,3 +425,17 @@ discipline), 5 and 7 are not.
    never touched on updates unless **forced** (`--secrets all|missing`,
    `vault.secrets --set`), verified by name where the vault allows, never
    printed, snapshotted or logged.
+
+## Incident 2026-09-16 — a stale tree emptied a kind (recovered from the snapshot)
+
+`tree-ig4` had been imported before the entitlement model existed. A deploy
+run for `--delete-driver PkgTest7` also carried 19 `ENTITLEMENT_REMOVED`
+changes (the vault had them, the tree had none) and, run with `--yes` after
+only a glance at the dry-run, deleted every entitlement of five drivers.
+The deploy snapshot held all 26 entries in full; `vault.rollback` recreated
+the 19 entitlements with their `XmlData` and package stamps (the PkgTest7
+subtree's re-add failed on a syntax violation and was left deleted, which
+was the intent). A fresh `import-live` then matched the vault. Two lessons
+became rules: read the whole dry-run before `--yes`, and the plan now
+refuses to empty a kind for a driver unless `--delete-all <kind>` says so
+(safeguard added the same day).
