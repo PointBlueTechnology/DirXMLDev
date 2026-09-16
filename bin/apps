@@ -7,9 +7,11 @@ request history — without a browser. Python 3 standard library only.
 The environment's keys (same file as vault.deploy; never committed):
     <env>.formsUrl      https://<identity applications host>
     <env>.appsUser      user to act as (an admin on a lab)
-    <env>.appsPassword  that user's password (never printed)
+    <env>.appsPassword  that user's password (never printed) — or, preferred, one of
+        <env>.appsPasswordEnv=VAR | <env>.appsPasswordCommand=cmd | <env>.appsPasswordKeychain=service[/account]
+        (environment variable / a command's stdout / macOS Keychain, same forms as bin/idm's files)
     <env>.appsClient    OSP client id, default rbpmrest (the dashboard's own is rbpm)
-    <env>.appsSecret    OSP client secret, default = appsPassword (labs) — set it when it differs
+    <env>.appsSecret    OSP client secret, default = appsPassword (labs) — set it (any form) when it differs
 
 Commands (see docs/idapps-rest.md for the bodies and accepted values):
     token                          print token length + expiry (never the token)
@@ -36,6 +38,7 @@ PRD_SUFFIX = ",cn=RequestDefs,cn=AppConfig,cn=User Application Driver,cn=drivers
 
 def read_props(path, env):
     props = {}
+    warn_if_shared(path)
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -44,19 +47,73 @@ def read_props(path, env):
             k, v = line.split("=", 1)
             if k.startswith(env + "."):
                 props[k[len(env) + 1:]] = v.strip()
-    missing = [k for k in ("formsUrl", "appsUser", "appsPassword") if k not in props]
+    missing = [k for k in ("formsUrl", "appsUser") if k not in props]
     if missing:
         sys.exit("environment '%s' lacks %s in %s" % (env, ", ".join(env + "." + m for m in missing), path))
+    if resolve_secret(props, "appsPassword", env) is None:
+        sys.exit("environment '%s': set %s.appsPassword, .appsPasswordEnv, .appsPasswordCommand or .appsPasswordKeychain in %s" % (env, env, path))
     return props
+
+
+def warn_if_shared(path):
+    """One warning when the credentials file is readable by anyone but its owner (POSIX only)."""
+    try:
+        if os.name == "posix" and (os.stat(path).st_mode & 0o077):
+            print("WARNING: %s is readable by other users — run: chmod 600 '%s'" % (path, path), file=sys.stderr)
+    except OSError:
+        pass
+
+
+def _run(cmd, what, shell=False):
+    import subprocess
+    try:
+        out = subprocess.run(cmd, shell=shell, check=True, capture_output=True, text=True).stdout
+    except (OSError, subprocess.CalledProcessError) as e:
+        code = getattr(e, "returncode", None)
+        raise SystemExit("%s: %s" % (what, ("command exited %s" % code) if code is not None else e))
+    out = out.rstrip("\r\n")
+    if not out:
+        raise SystemExit("%s: command printed nothing" % what)
+    return out
+
+
+def resolve_secret(props, key, env):
+    """A credential in the same four forms bin/idm accepts: literal, <key>Env, <key>Command, <key>Keychain
+    (macOS: security find-generic-password -s service [-a account] -w). None when not configured."""
+    v = props.get(key)
+    if v:
+        return v
+    var = props.get(key + "Env")
+    if var:
+        val = os.environ.get(var)
+        if val is None:
+            raise SystemExit("environment '%s': %s.%sEnv names %s, which is not set" % (env, env, key, var))
+        return val
+    cmd = props.get(key + "Command")
+    if cmd:
+        return _run(cmd, "environment '%s' (%sCommand)" % (env, key), shell=True)
+    spec = props.get(key + "Keychain")
+    if spec:
+        service, _, account = spec.partition("/")
+        argv = [os.environ.get("IDM_KEYCHAIN_COMMAND", "security"), "find-generic-password", "-s", service.strip()]
+        if account.strip():
+            argv += ["-a", account.strip()]
+        argv.append("-w")
+        try:
+            return _run(argv, "environment '%s' (%sKeychain)" % (env, key))
+        except SystemExit:
+            raise SystemExit("environment '%s': no keychain item for service '%s'%s — add one with: security add-generic-password -s '%s' -a '%s' -w"
+                             % (env, service.strip(), (" account '%s'" % account.strip()) if account.strip() else "", service.strip(), account.strip() or os.environ.get("USER", "")))
+    return None
 
 
 class Apps:
     def __init__(self, props, insecure=False):
         self.base = props["formsUrl"].rstrip("/")
         self.user = props["appsUser"]
-        self.password = props["appsPassword"]
+        self.password = resolve_secret(props, "appsPassword", "?")
         self.client = props.get("appsClient", "rbpmrest")
-        self.secret = props.get("appsSecret", self.password)
+        self.secret = resolve_secret(props, "appsSecret", "?") or self.password
         self.driver_suffix = props.get("appsPrdSuffix", PRD_SUFFIX)
         self.ctx = ssl.create_default_context()
         if insecure:

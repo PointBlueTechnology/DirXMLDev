@@ -1,7 +1,6 @@
 package com.pointblue.dirxml.dev.deploy;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,11 +20,13 @@ import java.util.TreeSet;
  *   # per key, instead of a literal:
  *   AD Driver.shim-auth-passwordEnv=AD_SHIM_PW
  *   AD Driver.named.exchange-serviceCommand=op read "op://vault/item/field"
+ *   AD Driver.remote-loader-passwordKeychain=idm-stg/ad-remote-loader     # macOS Keychain (service/account)
  * </pre>
  * Keys: {@code <driver>.shim-auth-password}, {@code <driver>.remote-loader-password},
  * {@code <driver>.named.<name>}, {@code driverset.named.<name>}. A value is a
- * literal, or resolved from an environment variable ({@code …Env}) or a
- * command's stdout ({@code …Command}, trailing newline stripped). Values are
+ * literal, or resolved from an environment variable ({@code …Env}), a
+ * command's stdout ({@code …Command}, trailing newline stripped) or the macOS
+ * Keychain ({@code …Keychain}) — see {@link SecretSource}. Values are
  * returned as {@code char[]} and never printed by anything in this package.
  */
 public final class Secrets {
@@ -47,6 +48,7 @@ public final class Secrets {
     public static Secrets load(Path file) throws IOException {
         Properties p = new Properties();
         if (file != null && Files.isRegularFile(file)) {
+            SecretSource.warnIfShared(file);
             p = parse(Files.readString(file, StandardCharsets.UTF_8));
         }
         return new Secrets(p);
@@ -74,66 +76,23 @@ public final class Secrets {
         return p;
     }
 
-    /** True if a value (literal, Env or Command) is configured for the key. */
+    /** True if a value (literal, Env, Command or Keychain) is configured for the key. */
     public boolean has(String key) {
-        return props.containsKey(key) || props.containsKey(key + "Env") || props.containsKey(key + "Command");
+        return SecretSource.has(props, key);
     }
 
     /** The keys with a value configured (for the plan: names only). */
     public List<String> keys() {
         TreeSet<String> out = new TreeSet<>();
         for (String k : props.stringPropertyNames()) {
-            if (k.endsWith("Env")) {
-                out.add(k.substring(0, k.length() - 3));
-            } else if (k.endsWith("Command")) {
-                out.add(k.substring(0, k.length() - 7));
-            } else {
-                out.add(k);
-            }
+            out.add(SecretSource.baseKey(k));
         }
         return new ArrayList<>(out);
     }
 
     /** Resolve a secret; null when not configured. The caller zeroes the array when done. */
     public char[] get(String key) throws IOException {
-        String literal = props.getProperty(key);
-        if (literal != null) {
-            return literal.toCharArray();
-        }
-        String env = props.getProperty(key + "Env");
-        if (env != null) {
-            String v = System.getenv(env.trim());
-            if (v == null) {
-                throw new IOException("secret '" + key + "': environment variable " + env.trim() + " is not set");
-            }
-            return v.toCharArray();
-        }
-        String cmd = props.getProperty(key + "Command");
-        if (cmd != null) {
-            return run(key, cmd.trim());
-        }
-        return null;
-    }
-
-    private static char[] run(String key, String cmd) throws IOException {
-        Process p = new ProcessBuilder("/bin/sh", "-c", cmd).redirectErrorStream(false).start();
-        try (InputStream in = p.getInputStream()) {
-            String out = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            int code;
-            try {
-                code = p.waitFor();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException("secret '" + key + "': interrupted");
-            }
-            if (code != 0) {
-                throw new IOException("secret '" + key + "': command exited " + code);
-            }
-            while (out.endsWith("\n") || out.endsWith("\r")) {
-                out = out.substring(0, out.length() - 1);
-            }
-            return out.toCharArray();
-        }
+        return SecretSource.resolve(props, key, "secret '" + key + "'");
     }
 
     // ---- key helpers ----

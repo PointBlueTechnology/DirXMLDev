@@ -331,12 +331,15 @@ AD Driver.shim-auth-password=…
 AD Driver.remote-loader-password=…
 AD Driver.named.exchange-service=…
 driverset.named.smtp-relay=…
-# or, per key: <key>Env=VAR_NAME   /   <key>Command=op read "op://vault/item/field"
+# or, per key: <key>Env=VAR_NAME   /   <key>Command=op read "op://vault/item/field"   /   <key>Keychain=service[/account] (macOS)
 ```
 
-A value can be literal, an environment variable, or the output of a command
-(so a password manager or a CI secret store is the real source and nothing
-sensitive sits in a file). The deployer never prints a secret and never writes
+A value can be literal, an environment variable, the output of a command, or
+a macOS Keychain item (so a password manager, the Keychain or a CI secret
+store is the real source and nothing sensitive sits in a file). The same four
+forms apply to the environments file's `password`, `appsPassword` and
+`appsSecret`; both files trigger a one-line warning when readable by other
+users (keep them at mode 600). See [getting-started.md](getting-started.md) §4. The deployer never prints a secret and never writes
 one into a snapshot, an audit line, or a tree.
 
 **In the plan.** Secrets are not diffable — the vault won't return them — so
@@ -375,7 +378,7 @@ path in `IDM_ENVIRONMENTS`):
 ```properties
 stg.url=ldaps://idm-stg:636
 stg.bindDn=cn=idm-deploy,ou=sa,o=system
-stg.password=…                    # or stg.passwordEnv=IDM_STG_PASSWORD
+stg.passwordKeychain=idm-stg/cn=idm-deploy   # or stg.passwordCommand=… | stg.passwordEnv=VAR | stg.password=… (literal)
 stg.driverSet=cn=driverset1,o=system
 stg.tier=stg
 prd.url=…

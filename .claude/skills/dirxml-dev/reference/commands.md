@@ -130,7 +130,7 @@ Artifact paths: `library/<name>`, `drivers/<driver>/<name>`, `drivers/<driver>/s
 
 ## Identity Applications (`bin/apps`; `docs/idapps-rest.md`)
 
-`bin/apps --env <env> [--props environments.properties] [--json] <command>` — Python 3, standard library; needs `<env>.formsUrl`, `<env>.appsUser`, `<env>.appsPassword` (+ `appsClient`, default `rbpmrest`; `appsSecret` when it differs from the password) in the environments file.
+`bin/apps --env <env> [--props environments.properties] [--json] <command>` — Python 3, standard library; needs `<env>.formsUrl`, `<env>.appsUser` and the password in any of the four forms (`appsPassword` literal, `appsPasswordEnv`, `appsPasswordCommand`, `appsPasswordKeychain=service/account`) in the environments file (+ `appsClient`, default `rbpmrest`; `appsSecret`/…`Keychain` when it differs from the password).
 
 `token` · `permission <PRD>` (is it in the applications' permission index? its request form) · `request <PRD> [--recipient DN] [--data key=value]…` (start it: `POST /requests/permissions/v2`; a repeated key = multi-valued) · `index <PRD> [--op ADD_OR_MODIFY|REMOVE|REFRESH]` · `tasks [--q] [--size]` · `task <taskId>` · `approve|deny|claim|refuse|release <taskId>… [--process "<PRD name>"] [--comment]` · `history [--size] [--q]` · `get <path> [k=v]…` / `post <path> <json>` (any access endpoint, for spikes).
 

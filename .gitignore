@@ -28,3 +28,6 @@ cases/**/case.properties
 environments.properties
 secrets*.properties
 deploy-snapshots/
+
+# python bytecode from bin/apps
+__pycache__/

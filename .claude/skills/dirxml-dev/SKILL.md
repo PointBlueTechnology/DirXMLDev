@@ -119,8 +119,8 @@ Two kinds of change (the agent guide, "Two kinds of change"):
 
 | You need | Sign | Ask for |
 |---|---|---|
-| a vault target | `no environments file` / `no environment 'x'` | host (`ldaps://…:636`), bind DN, driver-set DN, tier (dev/stg/prd); it goes in `environments.properties`, gitignored |
-| a secret (new driver, rotated password) | `MISSING SECRET: <driver>.…` in the plan | the value, into `secrets-<env>.properties` (or an env var / command) — never into the chat |
+| a vault target | `no environments file` / `no environment 'x'` | host (`ldaps://…:636`), bind DN, driver-set DN, tier (dev/stg/prd); it goes in `environments.properties`, gitignored, mode 600; the password as `passwordKeychain=service/account` (macOS), `passwordCommand=…` or `passwordEnv=VAR` — a literal only on a throwaway lab |
+| a secret (new driver, rotated password) | `MISSING SECRET: <driver>.…` in the plan | the value, into `secrets-<env>.properties` as `<key>Keychain=`, `<key>Command=` or `<key>Env=` (a literal only on a lab) — never into the chat; the human adds a Keychain item with `security add-generic-password -s … -a … -w` |
 | the engine host for traces | `environment has no sshHost` | the host and user with key-based SSH to the engine; `driver.trace tail` is unavailable until then |
 | a regression corpus | `simulate` finds no cases | harvest from the Event Logger DB (`bin/sim harvest`) or a stopped driver's cache (`driver.cache view --out`), or author cases; a change without a corpus is deployable but unproven — say so |
 | a GCV / Library policy / mapping table a policy references | `validate` reports `gcv-undefined`, `link-unresolved`, `mapping-table-missing` on a tree from an export | a full driver-set source (live vault, LDIF, project) or the missing objects — a single-driver export may omit them |
