@@ -6,15 +6,18 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
+import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.edit.FormOps;
 import com.pointblue.dirxml.dev.edit.FormOpsTest;
 import com.pointblue.dirxml.dev.edit.Result;
 import com.pointblue.dirxml.dev.edit.Transaction;
 import com.pointblue.dirxml.dev.forms.BindingSyncTest;
 import com.pointblue.dirxml.dev.json.Json;
+import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Prd;
+import com.pointblue.dirxml.dev.model.Provisioning;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -208,5 +211,156 @@ public class ProvisioningDeployTest {
             VaultMapping.provisioningPathDn(DS, "drivers/User Application Driver/provisioning/forms/request/Help-desk Request Form"));
         assertEquals("cn=HelpdeskTicket,cn=RequestDefs,cn=AppConfig,cn=User Application Driver," + DS,
             VaultMapping.provisioningPathDn(DS, "drivers/User Application Driver/provisioning/prds/HelpdeskTicket"));
+    }
+
+    // ---- the mass-deletion guard (docs/vault-deploy.md, "Deploy never empties a kind") ------------
+
+    /** vault has 3 forms, tree has none: zero deletes, one note naming the count. */
+    @Test
+    public void threeFormsRemovedAreGuardedWithoutDeleteAll() throws Exception {
+        Path t = treeWithForms("F1", "F2", "F3");
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        to.driver("UA").provisioning.forms.clear();
+
+        ModelDiff diff = ModelDiff.of(from, to);
+        assertEquals(3, diff.changes().size());
+        assertEquals(1, diff.emptyKinds().size());
+        assertEquals("forms", diff.emptyKinds().get(0).kind);
+        assertEquals(3, diff.emptyKinds().get(0).count);
+        assertTrue(diff.text(), diff.text().contains("the tree has no forms but the vault has 3"));
+
+        Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
+        assertTrue(plan.text("stg", DS), plan.steps.isEmpty());
+        assertTrue(plan.notes.toString(), plan.notes.stream().anyMatch(
+            n -> n.contains("pass --delete-all forms to delete them")));
+    }
+
+    /** {@code --delete-all forms} re-enables all three deletes at once. */
+    @Test
+    public void deleteAllFormsOverridesTheGuard() throws Exception {
+        Path t = treeWithForms("F1", "F2", "F3");
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        to.driver("UA").provisioning.forms.clear();
+
+        Plan plan = Plan.of(ModelDiff.of(from, to), to, DS, Secrets.none(), "none", null, true, t, List.of("forms"));
+        assertEquals(3, plan.steps.size());
+        assertTrue(plan.steps.stream().allMatch(s -> s.op == Plan.Op.DELETE));
+        assertTrue(plan.notes.toString(), plan.notes.stream().noneMatch(n -> n.contains("the tree has no forms")));
+        assertEquals(List.of("forms"), List.copyOf(plan.deleteAllKinds));
+    }
+
+    /** The tree still has 1 of 3 forms: the guard doesn't apply, the other 2 delete as before. */
+    @Test
+    public void partialFormRemovalIsNotGuarded() throws Exception {
+        Path t = treeWithForms("F1", "F2", "F3");
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        to.driver("UA").provisioning.forms.removeIf(f -> !f.name.equals("F1"));
+
+        ModelDiff diff = ModelDiff.of(from, to);
+        assertEquals(2, diff.changes().size());
+        assertTrue(diff.emptyKinds().isEmpty());
+
+        Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
+        assertEquals(2, plan.steps.size());
+        assertTrue(plan.steps.stream().allMatch(s -> s.op == Plan.Op.DELETE));
+        assertTrue(plan.notes.toString(), plan.notes.stream().noneMatch(n -> n.contains("the tree has no forms")));
+    }
+
+    /** vault has 3 PRDs, tree has none: zero deletes, one note naming the count. */
+    @Test
+    public void threePrdsRemovedAreGuardedWithoutDeleteAll() throws Exception {
+        Path t = treeWithPrds("P1", "P2", "P3");
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        to.driver("UA").provisioning.prds.clear();
+
+        ModelDiff diff = ModelDiff.of(from, to);
+        assertEquals(3, diff.changes().size());
+        assertEquals(1, diff.emptyKinds().size());
+        assertEquals("prds", diff.emptyKinds().get(0).kind);
+        assertEquals(3, diff.emptyKinds().get(0).count);
+        assertTrue(diff.text(), diff.text().contains("the tree has no prds but the vault has 3"));
+
+        Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
+        assertTrue(plan.text("stg", DS), plan.steps.isEmpty());
+        assertTrue(plan.notes.toString(), plan.notes.stream().anyMatch(
+            n -> n.contains("pass --delete-all prds to delete them")));
+    }
+
+    /** {@code --delete-all prds} re-enables all three deletes at once. */
+    @Test
+    public void deleteAllPrdsOverridesTheGuard() throws Exception {
+        Path t = treeWithPrds("P1", "P2", "P3");
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        to.driver("UA").provisioning.prds.clear();
+
+        Plan plan = Plan.of(ModelDiff.of(from, to), to, DS, Secrets.none(), "none", null, true, t, List.of("prds"));
+        assertEquals(3, plan.steps.size());
+        assertTrue(plan.steps.stream().allMatch(s -> s.op == Plan.Op.DELETE));
+        assertTrue(plan.notes.toString(), plan.notes.stream().noneMatch(n -> n.contains("the tree has no prds")));
+        assertEquals(List.of("prds"), List.copyOf(plan.deleteAllKinds));
+    }
+
+    /** The tree still has 1 of 3 PRDs: the guard doesn't apply, the other 2 delete as before. */
+    @Test
+    public void partialPrdRemovalIsNotGuarded() throws Exception {
+        Path t = treeWithPrds("P1", "P2", "P3");
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        to.driver("UA").provisioning.prds.removeIf(p -> !p.name.equals("P1"));
+
+        ModelDiff diff = ModelDiff.of(from, to);
+        assertEquals(2, diff.changes().size());
+        assertTrue(diff.emptyKinds().isEmpty());
+
+        Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
+        assertEquals(2, plan.steps.size());
+        assertTrue(plan.steps.stream().allMatch(s -> s.op == Plan.Op.DELETE));
+        assertTrue(plan.notes.toString(), plan.notes.stream().noneMatch(n -> n.contains("the tree has no prds")));
+    }
+
+    /** A tree with one UA driver holding the named request forms (all with the same {@code FORM_V1} body). */
+    private Path treeWithForms(String... names) throws Exception {
+        DriverSet ds = new DriverSet("driverset1");
+        ds.dn = DS;
+        Driver ua = new Driver("UA");
+        ua.dn = "cn=UA," + DS;
+        Provisioning p = new Provisioning();
+        p.dn = "cn=AppConfig," + ua.dn;
+        for (String name : names) {
+            p.forms.add(new Form(Form.Kind.REQUEST, name, Json.pretty(Json.parse(BindingSyncTest.FORM_V1))));
+        }
+        ua.provisioning = p;
+        ds.drivers.add(ua);
+        Path t = tmp.newFolder().toPath();
+        AsCodeWriter.write(ds, t);
+        return t;
+    }
+
+    /** A tree with one UA driver holding the named PRDs (all with the same request/process body). */
+    private Path treeWithPrds(String... names) throws Exception {
+        DriverSet ds = new DriverSet("driverset1");
+        ds.dn = DS;
+        Driver ua = new Driver("UA");
+        ua.dn = "cn=UA," + DS;
+        Provisioning p = new Provisioning();
+        p.dn = "cn=AppConfig," + ua.dn;
+        for (String name : names) {
+            Prd prd = new Prd(name);
+            prd.request = BindingSyncTest.el(BindingSyncTest.REQUEST_XML);
+            prd.definition = BindingSyncTest.el("<prov-req-defn status=\"Active\">" + BindingSyncTest.PROCESS_XML + "</prov-req-defn>");
+            prd.process = com.pointblue.dirxml.sim.Xds.childrenByName(prd.definition, "process").get(0);
+            prd.properties.put("status", List.of("Active"));
+            p.prds.add(prd);
+        }
+        ua.provisioning = p;
+        ds.drivers.add(ua);
+        Path t = tmp.newFolder().toPath();
+        AsCodeWriter.write(ds, t);
+        return t;
     }
 }

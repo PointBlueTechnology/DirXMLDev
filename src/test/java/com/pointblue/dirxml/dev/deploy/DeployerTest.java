@@ -184,4 +184,43 @@ public class DeployerTest {
         assertTrue(vault.exists(driverDn));
         assertTrue("nothing should have been written", vault.deleted.isEmpty());
     }
+
+    // ---- --delete-all (docs/vault-deploy.md, "Deploy never empties a kind") ---------------------
+
+    /**
+     * The vault has an entitlement on "AD" that the tree lacks entirely: without {@code --delete-all}
+     * the guard holds the delete back (deploy still succeeds — nothing to verify differs since the
+     * plan has no steps for it); with {@code --delete-all entitlements} the delete goes through and
+     * the audit line names the override.
+     */
+    @Test
+    public void deleteAllEntitlementsIsGuardedThenOverriddenAndAudited() throws Exception {
+        DriverSet ds = VaultMappingTest.model();
+        FakeVault vault = seedVault(ds);
+        String entDn = "cn=Existing,cn=AD," + DS;
+        vault.add(entDn, List.of("Top", VaultMapping.OC_ENTITLEMENT),
+            java.util.Map.of("XmlData", List.of("<entitlement/>".getBytes(StandardCharsets.UTF_8))));
+
+        Path tree = tmp.newFolder("tree").toPath();
+        AsCodeWriter.write(ds, tree);   // no entitlements in the tree
+
+        // without --delete-all: the guard holds the delete back, deploy still reports ok
+        Deployer.Options guarded = options(tree, stgEnv("test"), List.of());
+        Deployer.Result r1 = new Deployer(guarded, vault).run();
+        assertTrue(r1.text(), r1.ok);
+        assertTrue(r1.planText, r1.planText.contains("the tree has no entitlements but the vault has 1"));
+        assertTrue("the guarded entitlement is untouched", vault.exists(entDn));
+
+        // with --delete-all entitlements: the delete goes through and the audit line names it
+        Deployer.Options overridden = options(tree, stgEnv("test"), List.of());
+        overridden.deleteAllKinds = List.of("entitlements");
+        Deployer.Result r2 = new Deployer(overridden, vault).run();
+        assertTrue(r2.text(), r2.ok);
+        assertFalse("the entitlement is deleted", vault.exists(entDn));
+
+        List<DeployLog.Record> log = DeployLog.read(tree, "test");
+        DeployLog.Record last = log.get(log.size() - 1);
+        assertEquals("ok", last.outcome);
+        assertTrue(last.detail, last.detail.contains("--delete-all: entitlements"));
+    }
 }

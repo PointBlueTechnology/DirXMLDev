@@ -13,6 +13,7 @@ import java.util.Map;
  *   vault.diff     <tree> --env <name> [--driver D…] [--json]
  *   vault.deploy   <tree> --env <name> [--driver D…] [--dry-run | --yes | --step] [--confirm <name>]
  *                  [--no-restart] [--secrets none|missing|all] [--allow-missing-secrets] [--capture-drift] [--json]
+ *                  [--delete-driver D…] [--delete-all entitlements|forms|prds …]
  *   vault.verify   <tree> --env <name> [--driver D…] [--json]
  *   vault.rollback --env <name> --snapshot <file> [--yes] [--json]
  *   vault.secrets  --env <name> --driver D --set <key> …
@@ -79,6 +80,7 @@ public final class DeployCli {
                 o.captureDrift = opts.containsKey("capture-drift");
                 o.json = json;
                 o.deleteDrivers = opts.getOrDefault("delete-driver", List.of());
+                o.deleteAllKinds = opts.getOrDefault("delete-all", List.of());
                 Deployer.Result r = new Deployer(o).run();
                 System.out.print(json ? r.json() + "\n" : r.text());
                 return r.ok ? 0 : 1;

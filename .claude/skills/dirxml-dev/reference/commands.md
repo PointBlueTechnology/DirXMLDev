@@ -122,9 +122,11 @@ Artifact paths: `library/<name>`, `drivers/<driver>/<name>`, `drivers/<driver>/s
 
 ## Deploy (`--env <name>` from `environments.properties`)
 
-`vault.diff` · `vault.deploy --dry-run | --yes | --step [--driver D] [--confirm <env>] [--secrets none|missing|all] [--capture-drift] [--delete-driver D]` · `vault.verify` · `vault.rollback --snapshot <file> --yes`
+`vault.diff` · `vault.deploy --dry-run | --yes | --step [--driver D] [--confirm <env>] [--secrets none|missing|all] [--capture-drift] [--delete-driver D] [--delete-all entitlements|forms|prds]` · `vault.verify` · `vault.rollback --snapshot <file> --yes`
 
 `--delete-driver D` (repeatable): deletes a driver that's in the vault but absent from the tree (the diff's `DRIVER_REMOVED`) — refused if it's in the tree, unknown, or not stopped. Snapshots the whole subtree first (so `vault.rollback` can restore it), deletes deepest-first, verifies the driver DN is gone, and audits the driver name(s) and object count.
+
+`--delete-all entitlements|forms|prds` (repeatable): the mass-deletion guard normally holds back every delete for a driver+kind when the tree has **zero** objects of that kind while the vault has one or more (an out-of-date tree, not an intentional wipe — see "Deploy never empties a kind" in docs/vault-deploy.md) and reports one note instead. This flag re-enables the deletes for that kind; it goes through the same gate as any other deploy (`--yes`/`--step`, `--confirm` in prod) and is named in the plan text and the audit line. A partial removal (the tree still has at least one object of the kind) is never guarded.
 
 ## Operate
 
