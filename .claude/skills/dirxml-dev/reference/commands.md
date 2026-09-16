@@ -118,7 +118,9 @@ Artifact paths: `library/<name>`, `drivers/<driver>/<name>`, `drivers/<driver>/s
 
 ## Deploy (`--env <name>` from `environments.properties`)
 
-`vault.diff` · `vault.deploy --dry-run | --yes | --step [--driver D] [--confirm <env>] [--secrets none|missing|all] [--capture-drift]` · `vault.verify` · `vault.rollback --snapshot <file> --yes`
+`vault.diff` · `vault.deploy --dry-run | --yes | --step [--driver D] [--confirm <env>] [--secrets none|missing|all] [--capture-drift] [--delete-driver D]` · `vault.verify` · `vault.rollback --snapshot <file> --yes`
+
+`--delete-driver D` (repeatable): deletes a driver that's in the vault but absent from the tree (the diff's `DRIVER_REMOVED`) — refused if it's in the tree, unknown, or not stopped. Snapshots the whole subtree first (so `vault.rollback` can restore it), deletes deepest-first, verifies the driver DN is gone, and audits the driver name(s) and object count.
 
 ## Operate
 

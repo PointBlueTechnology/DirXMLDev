@@ -29,20 +29,33 @@ public final class VaultDiff {
 
     /** Every attribute of the driver-set subtree (package stamps included), through our own connection. */
     public static DriverSet readLive(Vault.Config config, String driverSetDn) {
-        List<com.pointblue.dirxml.sim.LdifDriverSource.Entry> entries = new java.util.ArrayList<>();
         try (Vault v = Vault.connect(config)) {
-            Vault.Entry root = v.read(driverSetDn);
-            if (root == null) {
-                throw new IllegalArgumentException("driver set " + driverSetDn + " not found in " + config.url);
-            }
-            entries.add(toSourceEntry(root));
-            for (Vault.Entry e : v.search(driverSetDn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
-                if (!e.dn.equalsIgnoreCase(root.dn)) {
-                    entries.add(toSourceEntry(e));
-                }
+            return fromVault(v, driverSetDn, config.url + "/" + driverSetDn);
+        }
+    }
+
+    /**
+     * The same read, through an already-connected {@link VaultAccess} — real or, in tests, a
+     * fake — so {@link Deployer} reads the vault it is about to write to instead of opening a
+     * second connection.
+     */
+    static DriverSet fromVault(VaultAccess v, String driverSetDn) {
+        return fromVault(v, driverSetDn, driverSetDn);
+    }
+
+    private static DriverSet fromVault(VaultAccess v, String driverSetDn, String sourceName) {
+        List<com.pointblue.dirxml.sim.LdifDriverSource.Entry> entries = new java.util.ArrayList<>();
+        Vault.Entry root = v.read(driverSetDn);
+        if (root == null) {
+            throw new IllegalArgumentException("driver set " + driverSetDn + " not found");
+        }
+        entries.add(toSourceEntry(root));
+        for (Vault.Entry e : v.search(driverSetDn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
+            if (!e.dn.equalsIgnoreCase(root.dn)) {
+                entries.add(toSourceEntry(e));
             }
         }
-        return LdifReader.fromEntries(entries, config.url + "/" + driverSetDn);
+        return LdifReader.fromEntries(entries, sourceName);
     }
 
     static com.pointblue.dirxml.sim.LdifDriverSource.Entry toSourceEntry(Vault.Entry e) {

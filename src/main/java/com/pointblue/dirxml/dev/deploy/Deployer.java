@@ -119,9 +119,20 @@ public final class Deployer {
     }
 
     private final Options o;
+    private final VaultAccess testVault;   // non-null only from the package-private test constructor
 
     public Deployer(Options o) {
+        this(o, null);
+    }
+
+    /**
+     * Test seam: run against {@code testVault} (an in-memory fake) instead of a real, connected
+     * {@link Vault} — {@link Vault} is {@code final}, so this is how {@code DeployerTest} exercises
+     * the whole {@link #run()} flow (snapshot, writes, restarts, verify, audit) without a live vault.
+     */
+    Deployer(Options o, VaultAccess testVault) {
         this.o = o;
+        this.testVault = testVault;
     }
 
     public Result run() throws IOException {
@@ -139,9 +150,9 @@ public final class Deployer {
         String treeCommit = DeployLog.treeCommit(o.tree);
         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
 
-        try (Vault vault = Vault.connect(env.vaultConfig())) {
+        try (VaultAccess vault = testVault != null ? testVault : Vault.connect(env.vaultConfig())) {
             // 2. diff and plan
-            DriverSet from = VaultDiff.readLive(env);
+            DriverSet from = VaultDiff.fromVault(vault, dsDn);
             ModelDiff diff = VaultDiff.of(from, to, o.drivers);
             r.diffText = diff.text();
             Map<String, List<String>> liveNamed = new LinkedHashMap<>();
@@ -152,13 +163,12 @@ public final class Deployer {
                     }
                 }
             }
-            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree);
-            for (String del : o.deleteDrivers) {
-                if (from.driver(del) != null && to.driver(del) == null) {
-                    plan.notes.add("--delete-driver " + del + ": not implemented yet (delete the driver's subtree manually)");
-                }
-            }
+            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault);
             r.planText = plan.text(env.name, dsDn);
+            if (!plan.deleteDriverRefusals.isEmpty()) {
+                r.refusal = String.join("; ", plan.deleteDriverRefusals);
+                return r;
+            }
             if (plan.isEmpty()) {
                 r.ok = true;
                 r.planText += "nothing to deploy — the vault matches the tree\n";
@@ -242,10 +252,19 @@ public final class Deployer {
             }
 
             // 7. verify
-            DriverSet after = VaultDiff.readLive(env);
+            DriverSet after = VaultDiff.fromVault(vault, dsDn);
             ModelDiff verify = VaultDiff.of(after, to, o.drivers.isEmpty() ? diff.affectedDrivers() : o.drivers);
             r.verified = verify.isEmpty();
             r.verifyText = verify.isEmpty() ? "" : verify.text();
+            // affectedDrivers() never includes a deleted driver (never restarted), so its removal
+            // needs its own check: the driver DN must no longer exist
+            for (String name : plan.driversDeleted) {
+                String dn = VaultMapping.driverDn(dsDn, name);
+                if (vault.exists(dn)) {
+                    r.verified = false;
+                    r.verifyText = (r.verifyText == null ? "" : r.verifyText) + "driver '" + name + "' (" + dn + ") still exists after --delete-driver\n";
+                }
+            }
             r.ok = r.failure == null && r.verified;
             log.restarted.addAll(r.restarted);
             log.secretsSet.addAll(r.secretsSet);
@@ -254,13 +273,21 @@ public final class Deployer {
             if (stopped && r.verified) {
                 log.outcome = "partial";
             }
+            if (r.ok && !plan.driversDeleted.isEmpty()) {
+                List<String> parts = new ArrayList<>();
+                for (String name : plan.driversDeleted) {
+                    parts.add(name + " (" + plan.deletedObjectCounts.getOrDefault(name, 0) + " object(s))");
+                }
+                String delMsg = "deleted driver(s): " + String.join(", ", parts);
+                log.detail = (log.detail == null || log.detail.isBlank()) ? delMsg : log.detail + "; " + delMsg;
+            }
             DeployLog.append(o.tree, log);
             return r;
         }
     }
 
     /** Execute one step; records it in the result; throws on failure. */
-    private void execute(Vault vault, Plan.Step s, Secrets secrets, Result r) throws IOException {
+    private void execute(VaultAccess vault, Plan.Step s, Secrets secrets, Result r) throws IOException {
         switch (s.op) {
             case ADD:
                 vault.add(s.dn, s.objectClasses, s.values);
@@ -271,6 +298,30 @@ public final class Deployer {
             case DELETE:
                 vault.delete(s.dn);
                 break;
+            case DELETE_SUBTREE: {
+                // deepest first (s.subtreeDns is already sorted that way at plan time): a mid-way
+                // failure reports exactly which objects were deleted and which remain
+                List<String> dns = s.subtreeDns;
+                for (int i = 0; i < dns.size(); i++) {
+                    String dn = dns.get(i);
+                    try {
+                        vault.delete(dn);
+                    } catch (RuntimeException e) {
+                        List<String> deleted = dns.subList(0, i);
+                        List<String> remaining = dns.subList(i, dns.size());
+                        for (String d : deleted) {
+                            r.done.add("delete " + d);
+                        }
+                        throw new IOException("delete driver subtree " + s.dn + ": failed deleting " + dn + " ("
+                            + deleted.size() + " of " + dns.size() + " deleted; " + remaining.size()
+                            + " remaining: " + String.join(", ", remaining) + ")", e);
+                    }
+                }
+                for (String dn : dns) {
+                    r.done.add("delete " + dn);
+                }
+                break;
+            }
             case AUX_CLASS:
                 vault.addObjectClasses(s.dn, s.objectClasses);
                 break;
@@ -312,7 +363,7 @@ public final class Deployer {
     }
 
     /** {@code --step}: per change — show, ask, write, verify that object. Returns false if the user quit. */
-    private boolean stepThrough(Vault vault, Plan plan, DriverSet to, String dsDn, Secrets secrets, Result r) throws IOException {
+    private boolean stepThrough(VaultAccess vault, Plan plan, DriverSet to, String dsDn, Secrets secrets, Result r) throws IOException {
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         for (String change : plan.changes()) {
             List<Plan.Step> steps = plan.stepsOf(change);
@@ -347,6 +398,12 @@ public final class Deployer {
                     }
                 } else if (s.op == Plan.Op.DELETE && vault.exists(s.dn)) {
                     throw new IOException("verify " + s.dn + ": still exists after delete");
+                } else if (s.op == Plan.Op.DELETE_SUBTREE) {
+                    for (String dn : s.subtreeDns) {
+                        if (vault.exists(dn)) {
+                            throw new IOException("verify " + dn + ": still exists after delete driver subtree");
+                        }
+                    }
                 }
             }
             System.out.println("    verified");
@@ -398,7 +455,7 @@ public final class Deployer {
     // ---- the gate ----
 
     /** Null when the deploy may proceed; else the reason it may not. */
-    private String gate(Environments.Environment env, String treeCommit, DriverSet live, Vault vault) throws IOException {
+    private String gate(Environments.Environment env, String treeCommit, DriverSet live, VaultAccess vault) throws IOException {
         if (env.tier != Environments.Tier.PRD) {
             return null;
         }

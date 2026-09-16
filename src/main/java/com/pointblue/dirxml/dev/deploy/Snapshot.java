@@ -91,7 +91,7 @@ public final class Snapshot {
      * state/start option, as of right now. Refuses (IllegalArgumentException)
      * a DN that is not {@code driverSetDn} itself or under it.
      */
-    public static Snapshot capture(Vault v, String env, String driverSetDn, Collection<String> dns,
+    public static Snapshot capture(VaultAccess v, String env, String driverSetDn, Collection<String> dns,
             Collection<String> driverDns, String treeCommit, String label, String planText) {
         for (String dn : dns) {
             requireUnderDriverSet(dn, driverSetDn);
@@ -382,7 +382,7 @@ public final class Snapshot {
     // ---- restore --------------------------------------------------------------------
 
     /** Puts the snapshot back into {@code v}: deletes, restores, re-adds, then restarts. */
-    public RestoreResult restore(Vault v) {
+    public RestoreResult restore(VaultAccess v) {
         return restore(store(v));
     }
 
@@ -489,7 +489,7 @@ public final class Snapshot {
     // ---- differences ------------------------------------------------------------------
 
     /** Re-reads every captured DN and reports how the vault differs from this snapshot; empty = matches. */
-    public List<String> differences(Vault v) {
+    public List<String> differences(VaultAccess v) {
         return differences(store(v));
     }
 
@@ -553,7 +553,7 @@ public final class Snapshot {
         String waitForState(String dn, int wanted, int seconds);
     }
 
-    static Store store(Vault v) {
+    static Store store(VaultAccess v) {
         return new Store() {
             public Vault.Entry read(String dn) {
                 return v.read(dn);
@@ -631,7 +631,8 @@ public final class Snapshot {
             || n.startsWith("localentryid") || n.startsWith("structuralobjectclass") || n.startsWith("subschema");
     }
 
-    private static int componentCount(String dn) {
+    /** Package-visible: {@link Plan} sorts a driver subtree deletion the same way (deepest DN first). */
+    static int componentCount(String dn) {
         if (dn.isBlank()) {
             return 0;
         }
