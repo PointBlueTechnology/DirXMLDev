@@ -70,9 +70,8 @@ loopback).
 - Designer acceptance (§4 of the design note): **PASSED 2026-09-16** — Jerry
   imported the Loopback driver with its entitlement from the vault into
   `Designer-modernized`; both look right.
-- Objects left on idm254 for that check: driver `Loopback` (running) with
-  `TestAccess`, form "DirXMLDev W4b Form", PRD "DirXMLDev W4b", and the
-  grant on uaadmin. Removal afterwards: `prd.delete`, `form.delete`,
-  `entitlement.remove`, `driver.stop`, then the driver itself once
-  `--delete-driver` exists (follow-up in `docs/plan.md`); the grant value on
-  uaadmin is removed by hand or by revoking through a workflow.
+- Objects left on idm254 for that check were removed 2026-09-16 after the
+  Designer pass: `prd.delete`, `form.delete`, `entitlement.remove`,
+  `driver.stop`, then `vault.deploy --delete-driver Loopback`; the grant
+  value on uaadmin was removed over LDAP. `vault.diff` against a fresh
+  import: no differences.

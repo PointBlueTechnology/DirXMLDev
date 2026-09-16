@@ -387,11 +387,14 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   `POST /requests/permissions/item` attempts failed for a JSON-form PRD; find
   the call the dashboard's form renderer makes (`/WFHandler`) or the
   workflow REST API, and script it so the live proofs need no browser.
-- **`PkgTest7`**, the Phase 7 scratch driver, is still on ig4 as of 2026-09-15 —
-  stopped, empty cache. `vault.deploy --delete-driver` is implemented now
-  (see [vault-deploy.md](vault-deploy.md)), so it is removable through the
-  tool — snapshotted and audited like every other change — instead of by hand;
-  housekeeping, not scheduled.
+- **A live run of a W3 integration activity** (REST, role, resource,
+  entity) — the grammar is decompiled from `workflow.jar`'s binding classes
+  and checked, but never executed on a lab; needs a REST endpoint or a role
+  on idm254.
+- **Entitlements in Designer's export format** (`ExportReader`/`ExportWriter`)
+  if a "Export to Configuration File" turns out to carry them — none seen so far.
+- ~~`PkgTest7` on ig4~~ — removed 2026-09-16 with `vault.deploy --delete-driver`
+  (see the incident in [vault-deploy.md](vault-deploy.md)).
 
 ## Non-goals (for now)
 
