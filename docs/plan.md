@@ -223,9 +223,10 @@ spec: [validation.md](validation.md))
   RFI and JFW trees.
 
 **Phase 4 — Vault deploy with safeguards** — ✅ **built and proven on the test
-vault** (2026-09-08; [vault-deploy.md](vault-deploy.md) records what landed and
-what is deliberately deferred: `--delete-driver`, the Remote Loader password,
-`simulate` inside the production gate)
+vault** (2026-09-08; `--delete-driver` implemented 2026-09-16;
+[vault-deploy.md](vault-deploy.md) records what landed and what is
+deliberately deferred: the Remote Loader password, `simulate` inside the
+production gate)
 - Structured `vault.diff`; deploy plan; LDIF snapshot + `rollback`; LDAP writes +
   `RestartDriver`; environment gating; audit log; post-deploy verification
   (re-read → diff empty; optional canary `SubmitEvent` vs simulator prediction).
@@ -387,13 +388,11 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   `POST /requests/permissions/item` attempts failed for a JSON-form PRD; find
   the call the dashboard's form renderer makes (`/WFHandler`) or the
   workflow REST API, and script it so the live proofs need no browser.
-- `vault.deploy --delete-driver <name>` is accepted but prints "not
-  implemented yet": deleting a driver means deleting its subtree
-  (channels, policies, resources, entitlements, jobs) leaves-first, then the
-  driver object, with a snapshot of the subtree first. Until then a scratch
-  driver can only be removed by hand (`PkgTest7`, the Phase 7 scratch driver,
-  is still on ig4 as of 2026-09-15 — stopped, empty cache — waiting for this
-  feature so its removal is snapshotted and audited like every other change).
+- **`PkgTest7`**, the Phase 7 scratch driver, is still on ig4 as of 2026-09-15 —
+  stopped, empty cache. `vault.deploy --delete-driver` is implemented now
+  (see [vault-deploy.md](vault-deploy.md)), so it is removable through the
+  tool — snapshotted and audited like every other change — instead of by hand;
+  housekeeping, not scheduled.
 
 ## Non-goals (for now)
 

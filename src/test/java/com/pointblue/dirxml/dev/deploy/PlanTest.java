@@ -226,6 +226,105 @@ public class PlanTest {
         assertTrue(ent.values.containsKey(VaultMapping.XML_DATA));
     }
 
+    // ---- --delete-driver ---------------------------------------------------------------
+
+    /** {@code from} with an extra driver "Old" (vault-only, stopped, a small subtree) that {@code to} lacks. */
+    private static DriverSet withVaultOnlyDriver(DriverSet from) {
+        Driver old = new Driver("Old");
+        old.shimClass = "com.example.OldShim";
+        old.config.put(Driver.DRIVER_FILTER, ValidatorTest.xml("<filter/>"));
+        old.subscriber.policies.add(new Policy("sub-old", Scope.SUBSCRIBER, "Old", ValidatorTest.xml(
+            "<policy><rule><description>x</description><conditions/><actions/></rule></policy>")));
+        from.drivers.add(old);
+        return from;
+    }
+
+    /** Driver DN + Subscriber + Publisher + one policy = 4 objects. */
+    private static FakeVault vaultWithOldSubtree(String driverDn) {
+        FakeVault vault = new FakeVault();
+        vault.add(driverDn, List.of("Top", "DirXML-Driver"), Map.of());
+        String subDn = "cn=Subscriber," + driverDn;
+        String pubDn = "cn=Publisher," + driverDn;
+        vault.add(subDn, List.of("Top", "DirXML-Subscriber"), Map.of());
+        vault.add(pubDn, List.of("Top", "DirXML-Publisher"), Map.of());
+        vault.add("cn=sub-old," + subDn, List.of("Top", "DirXML-Rule"), Map.of());
+        return vault;
+    }
+
+    @Test
+    public void deleteDriverForVaultOnlyDriverProducesLastStepWithCount() {
+        DriverSet from = withVaultOnlyDriver(VaultMappingTest.model());
+        DriverSet to = VaultMappingTest.model();
+        String oldDn = VaultMapping.driverDn(DS, "Old");
+        FakeVault vault = vaultWithOldSubtree(oldDn);
+
+        Plan p = Plan.of(ModelDiff.of(from, to), to, DS, Secrets.none(), "none", Map.of(), true, null,
+            List.of("Old"), vault);
+
+        assertTrue(p.text("stg", DS), p.deleteDriverRefusals.isEmpty());
+        assertEquals(List.of("Old"), List.copyOf(p.driversDeleted));
+        assertEquals(Integer.valueOf(4), p.deletedObjectCounts.get("Old"));
+        Plan.Step last = p.steps.get(p.steps.size() - 1);
+        assertEquals(Plan.Op.DELETE_SUBTREE, last.op);
+        assertEquals(oldDn, last.dn);
+        assertTrue(last.description, last.description.contains("(4 objects)"));
+        assertEquals(4, last.subtreeDns.size());
+        // deepest first: the driver object (fewest RDNs) is last
+        assertEquals(oldDn, last.subtreeDns.get(last.subtreeDns.size() - 1));
+        assertTrue(p.touchedDns.containsAll(last.subtreeDns));
+    }
+
+    @Test
+    public void deleteDriverInTheTreeIsRefused() {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();   // "AD" is in both — nothing removed
+        Plan p = Plan.of(ModelDiff.of(from, to), to, DS, Secrets.none(), "none", Map.of(), true, null,
+            List.of("AD"), new FakeVault());
+        assertEquals(1, p.deleteDriverRefusals.size());
+        assertTrue(p.deleteDriverRefusals.get(0), p.deleteDriverRefusals.get(0).contains("in the tree"));
+        assertTrue(p.driversDeleted.isEmpty());
+        assertTrue(p.steps.stream().noneMatch(s -> s.op == Plan.Op.DELETE_SUBTREE));
+    }
+
+    @Test
+    public void deleteDriverUnknownIsRefused() {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        Plan p = Plan.of(ModelDiff.of(from, to), to, DS, Secrets.none(), "none", Map.of(), true, null,
+            List.of("Ghost"), new FakeVault());
+        assertEquals(1, p.deleteDriverRefusals.size());
+        assertTrue(p.deleteDriverRefusals.get(0), p.deleteDriverRefusals.get(0).contains("not found in the vault"));
+    }
+
+    @Test
+    public void deleteDriverRunningIsRefused() {
+        DriverSet from = withVaultOnlyDriver(VaultMappingTest.model());
+        DriverSet to = VaultMappingTest.model();
+        String oldDn = VaultMapping.driverDn(DS, "Old");
+        FakeVault vault = vaultWithOldSubtree(oldDn);
+        vault.setDriverState(oldDn, Vault.STATE_RUNNING);
+
+        Plan p = Plan.of(ModelDiff.of(from, to), to, DS, Secrets.none(), "none", Map.of(), true, null,
+            List.of("Old"), vault);
+
+        assertEquals(1, p.deleteDriverRefusals.size());
+        assertTrue(p.deleteDriverRefusals.get(0), p.deleteDriverRefusals.get(0).contains("running"));
+        assertTrue(p.deleteDriverRefusals.get(0), p.deleteDriverRefusals.get(0).contains("stop it first"));
+        assertTrue(p.driversDeleted.isEmpty());
+        assertTrue(p.steps.stream().noneMatch(s -> s.op == Plan.Op.DELETE_SUBTREE));
+    }
+
+    @Test
+    public void deleteDriverStepAbsentWithoutTheFlag() {
+        DriverSet from = withVaultOnlyDriver(VaultMappingTest.model());
+        DriverSet to = VaultMappingTest.model();
+        Plan p = plan(from, to, Secrets.none(), "none");   // no --delete-driver
+        assertTrue(p.steps.stream().noneMatch(s -> s.op == Plan.Op.DELETE_SUBTREE));
+        assertTrue(p.driversDeleted.isEmpty());
+        assertTrue(p.deleteDriverRefusals.isEmpty());
+        assertTrue(p.notes.toString(), p.notes.stream().anyMatch(n -> n.contains("Old") && n.contains("--delete-driver to remove it explicitly")));
+    }
+
     @Test
     public void engineControlValuesAbsentFromTreeAreNotRemoved() throws IOException {
         DriverSet from = VaultMappingTest.model();

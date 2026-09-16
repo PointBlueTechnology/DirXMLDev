@@ -73,7 +73,7 @@ import java.util.TreeMap;
  * Nothing is retried silently; an {@code LDAPException} / {@code NamingException}
  * surfaces as a {@link VaultException} with the DN and operation in the message.
  */
-public final class Vault implements AutoCloseable {
+public final class Vault implements VaultAccess {
 
     /** Attributes read and written as raw bytes. Names are matched case-insensitively by the server. */
     public static final List<String> BINARY_ATTRS = List.of(
