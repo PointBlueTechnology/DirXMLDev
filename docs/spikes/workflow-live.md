@@ -85,11 +85,13 @@ it as **Denied** (the two earlier runs still read Approved).
 
 ## Other facts
 
-- **REST cannot submit a JSON-form PRD.** `POST /requests/permissions/item`
-  (with or without `permReqParams`) answers "Internal exception occurred
-  processing REST service" for a PRD whose request form has mapped fields;
-  only the form renderer's submit (`/WFHandler`, browser session) works.
-  Approving/denying over REST (`POST /tasks`) works fine.
+- **REST cannot submit a JSON-form PRD** — *superseded 2026-09-16*: it can,
+  through `POST /requests/permissions/v2` (the renderer's own call; the PRD
+  must be in the permission index, ≤10 min after deploy) —
+  [prd-rest-live.md](prd-rest-live.md). What stays true: `POST
+  /requests/permissions/item` (with or without `permReqParams`/`dataItems`)
+  answers "Internal exception occurred processing REST service" for a
+  JSON-form PRD. Approving/denying over REST (`POST /tasks`) works fine.
 - Clicking a task name in the Tasks list never opened the approval-form
   window in the app's browser pane (the dashboard opens it with
   `window.open` from the task-details callback); the row's bulk

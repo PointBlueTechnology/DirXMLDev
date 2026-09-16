@@ -128,6 +128,14 @@ Artifact paths: `library/<name>`, `drivers/<driver>/<name>`, `drivers/<driver>/s
 
 `--delete-all entitlements|forms|prds` (repeatable): the mass-deletion guard normally holds back every delete for a driver+kind when the tree has **zero** objects of that kind while the vault has one or more (an out-of-date tree, not an intentional wipe — see "Deploy never empties a kind" in docs/vault-deploy.md) and reports one note instead. This flag re-enables the deletes for that kind; it goes through the same gate as any other deploy (`--yes`/`--step`, `--confirm` in prod) and is named in the plan text and the audit line. A partial removal (the tree still has at least one object of the kind) is never guarded.
 
+## Identity Applications (`bin/apps`; `docs/idapps-rest.md`)
+
+`bin/apps --env <env> [--props environments.properties] [--json] <command>` — Python 3, standard library; needs `<env>.formsUrl`, `<env>.appsUser`, `<env>.appsPassword` (+ `appsClient`, default `rbpmrest`; `appsSecret` when it differs from the password) in the environments file.
+
+`token` · `permission <PRD>` (is it in the applications' permission index? its request form) · `request <PRD> [--recipient DN] [--data key=value]…` (start it: `POST /requests/permissions/v2`; a repeated key = multi-valued) · `index <PRD> [--op ADD_OR_MODIFY|REMOVE|REFRESH]` · `tasks [--q] [--size]` · `task <taskId>` · `approve|deny|claim|refuse|release <taskId>… [--process "<PRD name>"] [--comment]` · `history [--size] [--q]` · `get <path> [k=v]…` / `post <path> <json>` (any access endpoint, for spikes).
+
+A PRD deployed less than ~10 minutes ago is not requestable yet (`request` says so); `<PRD>` is a name (resolved under the User Application driver's `RequestDefs`) or a full DN.
+
 ## Operate
 
 `driverset.status` · `driver.status` · `driver.start|stop|restart` · `driver.cache view [--out dir] | clear --yes` · `driver.migrate --xds f --yes` · `driver.resync [--since t] --yes` · `driver.secrets list|set|remove` · `driver.trace show|set|reset|tail [--lines N] [--grep RE] [--since MIN] [--follow]` · `driver.submit --xds f --yes [--tree tree/]` · `engine.version` · `engine.stats [--driver D]`
