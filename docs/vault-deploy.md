@@ -224,6 +224,42 @@ instead of leaving it alone:
   <name>` as any other production change, and the `DELETE_SUBTREE` step shows
   in the plan text printed before that confirmation, same as every other step.
 
+### Deploy never empties a kind
+
+**The incident (2026-09-16, lab vault ig4).** A tree had been imported by
+`import-live` before the entitlement model existed (`Driver.entitlements` was
+added the same week). Deploying it afterwards diffed the vault's 19
+`DirXML-Entitlement` objects against a tree with none and produced 19
+`ENTITLEMENT_REMOVED` changes → 19 delete steps, executed with `--yes`.
+Recovery came from the deploy snapshot (`vault.rollback`). The same trap
+exists for JSON forms and PRDs (a tree imported before Track P has none under
+a User Application driver that has dozens) and for any future object kind: a
+tree imported before a model extension existed always diffs an entire kind as
+removed, never as "nothing to compare against yet".
+
+**The guard.** For each driver and each of entitlements, JSON forms and PRDs,
+if the *tree* has **zero** objects of that kind for the driver while the
+*vault* has one or more, the plan holds back every delete step for that
+driver + kind and reports one note instead:
+
+```
+driver 'AD': the tree has no entitlements but the vault has 19 — an older
+tree? re-import (import-live) to adopt them, or pass --delete-all
+entitlements to delete them
+```
+
+An individual removal — the tree still has at least one object of the kind —
+is unaffected; it deletes exactly as before. `vault.diff` prints the same
+note under the driver, so the trap is visible before anyone reaches the plan.
+
+**`--delete-all entitlements|forms|prds`** (repeatable) is the explicit
+override: it re-enables the deletes for that kind, for every driver the guard
+would otherwise hold back. It goes through the same gate as any other
+deploy (`--yes`/`--step`, `--confirm <env>` in production), shows in the plan
+text, and is named in the `deploy-log` audit line (`--delete-all:
+entitlements`) — so a real, intentional wipe is deployed the same way as
+anything else, just never by accident.
+
 ### Two ways to walk the plan
 
 - **Automated** (`--yes`): snapshot everything, confirm the whole plan once,
@@ -394,6 +430,12 @@ client's job; the tool never writes outside `driverSet`.
    whole subtree so `vault.rollback` re-adds it parents first, the extra
    driver-gone verify check, and the audit line naming the driver and object
    count — see "`--delete-driver`" above.
+9. ✅ **The mass-deletion guard + `--delete-all`** (2026-09-16, the ig4
+   incident): `ModelDiff#emptyKinds()` finds every driver + kind (entitlements,
+   forms, PRDs) where the tree has zero objects but the vault has some; `Plan`
+   holds back those delete steps (one note per driver + kind) unless
+   `--delete-all <kind>` is given, in which case they deploy and the audit
+   line records the override — see "Deploy never empties a kind" above.
 
 Not done, deliberately deferred: Remote Loader password (no RL driver on the
 test vault to learn from); `idm vault.secrets` as a standalone command (use
@@ -407,6 +449,10 @@ discipline), 5 and 7 are not.
 
 1. ✅ **Deploy never deletes a driver** without `--delete-driver`; a new driver is
    created stopped with start option manual. *(confirmed 2026-09-08)*
+1a. ✅ **Deploy never empties a kind** — entitlements, JSON forms, PRDs — without
+   `--delete-all <kind>`; a driver+kind that goes from N&ge;1 in the vault to
+   zero in the tree is held back and noted, individual removals are not.
+   *(confirmed 2026-09-16, after the ig4 incident)*
 2. **Packaged objects: content only**; `DirXML-pkg*` left to the server; the
    live checksum behaviour measured and recorded, not assumed. *(confirmed 2026-09-08)*
 3. **Snapshots and the audit log live in the client repo** (`deploy-snapshots/`

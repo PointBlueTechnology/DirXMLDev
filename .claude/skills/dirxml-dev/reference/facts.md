@@ -145,6 +145,13 @@ version it was proven on unless stated.
   never deletes a driver on its own, only when named — and only when it's
   stopped and absent from the tree (in the tree, or unknown to the vault, is
   refused). Snapshots the whole subtree before deleting it → `vault-deploy.md`.
+- A tree imported before a model extension (entitlements, JSON forms, PRDs —
+  or any future object kind) lacks that kind entirely for a driver the vault
+  already has some of; diffing it looks like every one of those objects was
+  removed. The plan refuses to empty a kind this way (2026-09-16 incident: 19
+  entitlements deleted from a tree imported before `Driver.entitlements`
+  existed) — one note instead of the deletes, and `--delete-all <kind>` is the
+  explicit override → `vault-deploy.md`, "Deploy never empties a kind".
 
 ## Not proven / not to assume
 

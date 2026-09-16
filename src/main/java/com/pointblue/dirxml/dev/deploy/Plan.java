@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * A deploy plan: the ordered steps that turn a {@link ModelDiff} into vault
@@ -81,6 +82,13 @@ public final class Plan {
     public final Map<String, Integer> deletedObjectCounts = new LinkedHashMap<>();
     /** {@code --delete-driver} names that were refused (in the tree, unknown, or running), with why. */
     public final List<String> deleteDriverRefusals = new ArrayList<>();
+    /**
+     * {@code --delete-all} kinds requested ({@code "entitlements"}, {@code "forms"}, {@code "prds"}),
+     * sorted — the explicit override of the mass-deletion guard (docs/vault-deploy.md, "Deploy never
+     * empties a kind"). Recorded here regardless of whether a guard actually applied, so the plan text
+     * and the deploy audit line always say when the flag was in play.
+     */
+    public final Set<String> deleteAllKinds = new TreeSet<>();
 
     /** Top, DirXML-Driver, plus the package aux classes the stamps need (as Designer's drivers carry them). */
     static List<String> driverClasses(Map<String, List<byte[]>> stamps) {
@@ -124,7 +132,33 @@ public final class Plan {
     public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
                           Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree,
                           List<String> deleteDrivers, VaultAccess vault) {
+        return of(diff, to, dsDn, secrets, secretsMode, liveNamedPasswords, restartRunning, tree, deleteDrivers, vault, List.of());
+    }
+
+    /** As the 8-arg overload, plus {@code --delete-all} kinds, for callers that never need {@code --delete-driver}. */
+    public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
+                          Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree,
+                          List<String> deleteAllKinds) {
+        return of(diff, to, dsDn, secrets, secretsMode, liveNamedPasswords, restartRunning, tree, List.of(), null, deleteAllKinds);
+    }
+
+    /**
+     * @param deleteAllKinds {@code --delete-all} kinds (repeatable): {@code "entitlements"}, {@code "forms"},
+     *                       {@code "prds"} — re-enables deletes for a driver+kind the mass-deletion guard
+     *                       would otherwise hold back (docs/vault-deploy.md, "Deploy never empties a kind")
+     */
+    public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
+                          Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree,
+                          List<String> deleteDrivers, VaultAccess vault, List<String> deleteAllKinds) {
         Plan p = new Plan();
+        p.deleteAllKinds.addAll(deleteAllKinds);
+        // driver -> kind -> the guard (docs/vault-deploy.md, "Deploy never empties a kind"); a REMOVED
+        // change here has its DELETE step held back (one note instead) unless --delete-all covers the kind
+        Map<String, Map<String, ModelDiff.EmptyKind>> emptyKinds = new LinkedHashMap<>();
+        for (ModelDiff.EmptyKind ek : diff.emptyKinds()) {
+            emptyKinds.computeIfAbsent(ek.driver, k -> new LinkedHashMap<>()).put(ek.kind, ek);
+        }
+        Map<String, Set<String>> notedEmptyKinds = new LinkedHashMap<>();   // driver -> kinds already noted
         Set<String> toDelete = new LinkedHashSet<>(deleteDrivers);
         Set<String> deleteHandled = new LinkedHashSet<>();
         List<Step> deleteDriverSteps = new ArrayList<>();
@@ -141,6 +175,16 @@ public final class Plan {
         Set<String> driversNeedingLinkage = new LinkedHashSet<>();
 
         for (ModelDiff.Change c : diff.changes()) {
+            String guardKind = ModelDiff.removalKind(c.kind);
+            if (guardKind != null) {
+                ModelDiff.EmptyKind ek = emptyKinds.getOrDefault(c.driver, Map.of()).get(guardKind);
+                if (ek != null && !p.deleteAllKinds.contains(guardKind)) {
+                    if (notedEmptyKinds.computeIfAbsent(c.driver, k -> new LinkedHashSet<>()).add(guardKind)) {
+                        p.notes.add(ek.note());
+                    }
+                    continue;   // hold back this delete step; the note above explains why
+                }
+            }
             if (c.kind.isProvisioning()) {
                 provisioningSteps(p, c, to, dsDn, tree, provisioning, deletes, ensuredContainers);
                 continue;
@@ -721,6 +765,9 @@ public final class Plan {
         for (String d : newDrivers) {
             sb.append("  new driver '").append(d).append("' is created stopped; start it explicitly when its secrets are in place\n");
         }
+        for (String k : deleteAllKinds) {
+            sb.append("  --delete-all ").append(k).append(": the mass-deletion guard is overridden for this kind\n");
+        }
         for (String m : missingSecrets) {
             sb.append("  MISSING SECRET: ").append(m).append('\n');
         }
@@ -755,6 +802,12 @@ public final class Plan {
         first = true;
         for (String d : newDrivers) {
             sb.append(first ? "" : ",").append(DeployLog.q(d));
+            first = false;
+        }
+        sb.append("],\"deleteAllKinds\":[");
+        first = true;
+        for (String k : deleteAllKinds) {
+            sb.append(first ? "" : ",").append(DeployLog.q(k));
             first = false;
         }
         sb.append("],\"missingSecrets\":[");

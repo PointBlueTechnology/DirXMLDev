@@ -69,7 +69,12 @@ Two kinds of change (the agent guide, "Two kinds of change"):
    `--dry-run` plan in the conversation, and a human's yes. Production needs
    `--confirm <env>` typed by the human, a committed tree, and a vault that
    matches the last recorded deploy — if it doesn't, say what the drift is and
-   let the human choose `--capture-drift`; never run it silently.
+   let the human choose `--capture-drift`; never run it silently. **Read the
+   whole dry-run before `--yes`** — a plan with many deletes of one kind
+   (entitlements, forms, PRDs) usually means an out-of-date tree, not an
+   intentional wipe; the plan itself refuses to empty a kind and names the fix
+   (re-import with `import-live`, or `--delete-all <kind>` when the wipe is
+   really wanted — docs/vault-deploy.md, "Deploy never empties a kind").
 2. **Never `--force`.** A refused operation is information (the agent guide's
    refusal table). Fix the cause, or report it.
 3. **Never print a secret.** Secrets come from the environment's secrets file
