@@ -132,7 +132,10 @@ version it was proven on unless stated.
   the applications' log) — proven live → `entitlements-live.md`.
 - The applications warn "Entitlement configuration object not found" for a
   driver without an `EntitlementConfiguration` resource and grant anyway;
-  the catalog (roles/resources) needs that resource — not built yet.
+  the catalog (roles/resources) needs that resource. It is usually built by
+  hand in Designer; some drivers carry startup policies that create or
+  update it (Jerry) — so ours must not overwrite one a policy maintains.
+  Not built yet.
 - The engine writes `DirXML-EngineControlValues` on a driver's first start;
   a tree that never had them must adopt them (`import-live`), the plan never
   removes them → `entitlements-live.md`.
