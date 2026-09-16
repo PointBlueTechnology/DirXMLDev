@@ -228,44 +228,73 @@ public final class Registry {
             a -> new FormOps.PrdDelete(a.get("driver"), a.get("prd")),
             req("prd", "PRD name"), driver);
 
-        // workflow (flow.*): typed operations on a PRD's <process> (Track W step W2)
+        // workflow (flow.*): typed operations on a PRD's <process> (Track W step W2, integration kinds Track W step W3)
         Arg flowPrd = req("prd", "PRD name");
+        Arg[] flowIntegrationArgs = {
+            opt("protocol", "rest: http|https (required)"),
+            opt("host", "rest: host (required)"),
+            opt("port", "rest: port (required)"),
+            opt("path", "rest: request path (required)"),
+            opt("method", "rest: GET|POST|PUT|DELETE|PATCH, checked case-insensitively, stored as given (required)"),
+            opt("content", "rest: the request body expression"),
+            opt("header", "rest: Key=Value, repeatable (one <http-headers> element per header)"),
+            opt("content-type", "rest: contentTypeHeader"),
+            opt("accept", "rest: acceptHeader"),
+            opt("authorization", "rest: authorizationHeader"),
+            opt("status-to", "rest: data item name that receives the response status code"),
+            opt("content-to", "rest: data item name that receives the response content"),
+            opt("content-type-to", "rest: data item name that receives the response content type"),
+            opt("role", "role-request: a role expression (typically a quoted DN), repeatable, at least one required"),
+            opt("target", "role-request: a target expression, repeatable, at least one required; resource-request: a target-user expression, repeatable, at least one required"),
+            opt("target-type", "role-request: USER|GROUP|CONTAINER|CONTAINER_WITH_SUBTREE|ROLE (default USER)"),
+            opt("action", "role-request: GRANT|REVOKE|EXTEND (default GRANT); resource-request: GRANT|REVOKE (default GRANT)"),
+            opt("description", "role-request/resource-request: the request-description expression (required)"),
+            opt("effective-date", "role-request: the effective-date expression"),
+            opt("expiration-date", "role-request: the expiration-date expression"),
+            opt("correlation-id", "role-request/resource-request: the correlation-id expression; start-flow: the correlationId expression"),
+            opt("resource", "resource-request: the target-resource expression (required)"),
+            opt("param", "resource-request: source=target, repeatable (one <target-param> element per pair)"),
+            opt("process", "start-flow: the processId expression naming the target PRD (required)"),
+            opt("recipient", "start-flow: a recipient expression, repeatable, at least one required"),
+        };
         register("flow.activity.add", "insert a workflow activity after another, wiring its default outgoing link(s)",
             a -> new FlowOps.ActivityAdd(a.get("driver"), a.get("prd"), a.get("kind"), a.get("id"), a.get("after"),
                 a.get("via"), a.get("to"), a.get("on-denied"), a.get("on-false"), a.get("name"), a.get("addressee"),
                 a.get("timeout"), a.get("ontimeout"), a.get("expression"), a.get("message"), a.get("template"),
-                a.get("entitlement-dn"), a.get("entitlement-param"), a.get("form"), a.get("status")),
-            flowPrd, req("kind", "approval|condition|branch|log|notification|mapping|provision"),
-            req("id", "the new activity's id ([A-Za-z_][A-Za-z0-9_-]*)"), req("after", "insert after this activity"),
-            opt("via", "the outgoing link type of --after to consume (when it has more than one)"),
-            opt("to", "required when --after is a branch: the leg's target (the branch's merge, or reachable from it)"),
-            opt("on-denied", "an approval's 'denied' link target (default: the process's 'Workflow Status Denied' mapping, created as 'status_denied' → finish if absent)"),
-            opt("status", "mapping only: approved|denied — the mapping sets flowdata.IDM_COMPLETED_APPROVAL_STATUS (what Request History shows)"),
-            opt("on-false", "a condition's 'false' link target (default: the finish activity)"),
-            opt("name", "display name: lang~Text or plain text (= en); default a sensible label"),
-            opt("addressee", "an approval's addressee expression (default: the stock manager lookup)"),
-            opt("form", "an approval's approval form to bind (default: the driver's stock 'Approval Form' if present; without one the dashboard cannot open the task)"),
-            opt("timeout", "an approval's timeout in milliseconds (default: the stock 8-day timeout)"),
-            opt("ontimeout", "an approval's ontimeout (default: denied)"),
-            opt("expression", "a condition's boolean ECMAScript expression"),
-            opt("message", "a log activity's message expression (default: a quoted 'Activity <id>' literal)"),
-            opt("template", "a notification activity's notify template DN"),
-            opt("entitlement-dn", "a provision activity's entitlement DN (quoted as a literal)"),
-            opt("entitlement-param", "a provision activity's entitlement parameter (default '')"), driver);
+                a.get("entitlement-dn"), a.get("entitlement-param"), a.get("form"), a.get("status"), flowExtra(a)),
+            concatArgs(new Arg[] {flowPrd,
+                req("kind", "approval|condition|branch|log|notification|mapping|provision|rest|role-request|resource-request|start-flow"),
+                req("id", "the new activity's id ([A-Za-z_][A-Za-z0-9_-]*)"), req("after", "insert after this activity"),
+                opt("via", "the outgoing link type of --after to consume (when it has more than one)"),
+                opt("to", "required when --after is a branch: the leg's target (the branch's merge, or reachable from it)"),
+                opt("on-denied", "an approval's 'denied' link target (default: the process's 'Workflow Status Denied' mapping, created as 'status_denied' → finish if absent)"),
+                opt("status", "mapping only: approved|denied — the mapping sets flowdata.IDM_COMPLETED_APPROVAL_STATUS (what Request History shows)"),
+                opt("on-false", "a condition's 'false' link target (default: the finish activity)"),
+                opt("name", "display name: lang~Text or plain text (= en); default a sensible label"),
+                opt("addressee", "an approval's addressee expression (default: the stock manager lookup)"),
+                opt("form", "an approval's approval form to bind (default: the driver's stock 'Approval Form' if present; without one the dashboard cannot open the task)"),
+                opt("timeout", "an approval's timeout in milliseconds (default: the stock 8-day timeout); rest's timeout in milliseconds"),
+                opt("ontimeout", "an approval's ontimeout (default: denied)"),
+                opt("expression", "a condition's boolean ECMAScript expression"),
+                opt("message", "a log activity's message expression (default: a quoted 'Activity <id>' literal)"),
+                opt("template", "a notification activity's notify template DN"),
+                opt("entitlement-dn", "a provision activity's entitlement DN (quoted as a literal)"),
+                opt("entitlement-param", "a provision activity's entitlement parameter (default '')")}, flowIntegrationArgs, new Arg[] {driver}));
 
         register("flow.activity.set", "change an existing workflow activity's attributes/addressee/expression/message/template/entitlement",
             a -> new FlowOps.ActivitySet(a.get("driver"), a.get("prd"), a.get("id"), a.get("name"), repeatable(a.get("attr")),
                 a.get("addressee"), a.get("timeout"), a.get("ontimeout"), a.get("expression"), a.get("message"),
-                a.get("template"), a.get("entitlement-dn"), a.get("entitlement-param"), a.get("approver-type"), a.get("form")),
-            flowPrd, req("id", "the activity's id"), opt("name", "display name: lang~Text or plain text (= en)"),
-            opt("form", "approval only: bind this approval form (declaration, form-binding, stock data items; replaces an existing binding)"),
-            opt("attr", "name=value, repeatable (validated against known enums; activity-id is refused — use flow.activity.rename)"),
-            opt("addressee", "replaces every addressee (repeat --addressee for more than one)"),
-            opt("timeout", "milliseconds"), opt("ontimeout", "approved|denied|refused|timedout|error"),
-            opt("expression", "a condition's expression"), opt("message", "a log activity's message expression"),
-            opt("template", "a notify template DN"), opt("entitlement-dn", "provision only: entitlement DN (quoted as a literal)"),
-            opt("entitlement-param", "provision only: entitlement parameter (quoted as a literal)"),
-            opt("approver-type", "org-approver|group-approver|multiple-approver|quorum-approver"), driver);
+                a.get("template"), a.get("entitlement-dn"), a.get("entitlement-param"), a.get("approver-type"),
+                a.get("form"), flowExtra(a)),
+            concatArgs(new Arg[] {flowPrd, req("id", "the activity's id"), opt("name", "display name: lang~Text or plain text (= en)"),
+                opt("form", "approval only: bind this approval form (declaration, form-binding, stock data items; replaces an existing binding)"),
+                opt("attr", "name=value, repeatable (validated against known enums; activity-id is refused — use flow.activity.rename)"),
+                opt("addressee", "replaces every addressee (repeat --addressee for more than one)"),
+                opt("timeout", "milliseconds"), opt("ontimeout", "approved|denied|refused|timedout|error"),
+                opt("expression", "a condition's expression"), opt("message", "a log activity's message expression"),
+                opt("template", "a notify template DN"), opt("entitlement-dn", "provision only: entitlement DN (quoted as a literal)"),
+                opt("entitlement-param", "provision only: entitlement parameter (quoted as a literal)"),
+                opt("approver-type", "org-approver|group-approver|multiple-approver|quorum-approver")}, flowIntegrationArgs, new Arg[] {driver}));
 
         register("flow.activity.rename", "rename an activity id everywhere it is referenced (links, data-items, form-binding, expressions)",
             a -> new FlowOps.ActivityRename(a.get("driver"), a.get("prd"), a.get("id"), a.get("to")),
@@ -525,6 +554,34 @@ public final class Registry {
             return new ArrayList<>();
         }
         return new ArrayList<>(Arrays.asList(joined.split("\n")));
+    }
+
+    private static Arg[] concatArgs(Arg[]... groups) {
+        List<Arg> out = new ArrayList<>();
+        for (Arg[] g : groups) {
+            out.addAll(Arrays.asList(g));
+        }
+        return out.toArray(new Arg[0]);
+    }
+
+    /** Every {@code flow.activity.add}/{@code .set} flag for the rest/role-request/resource-request/start-flow
+     *  kinds (Track W step W3), collected into the {@code Map<String, List<String>>} shape {@link
+     *  com.pointblue.dirxml.dev.edit.FlowOps.ActivityAdd}/{@link com.pointblue.dirxml.dev.edit.FlowOps.ActivitySet}
+     *  take as {@code extra} — a flag never given contributes no entry (repeated occurrences already arrive
+     *  {@code \n}-joined, courtesy of {@link EditCli}). */
+    private static Map<String, List<String>> flowExtra(Map<String, String> a) {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        for (String key : new String[] {
+            "protocol", "host", "port", "path", "method", "content", "content-type", "accept", "authorization",
+            "status-to", "content-to", "content-type-to", "header",
+            "role", "target", "target-type", "action", "description", "effective-date", "expiration-date",
+            "correlation-id", "resource", "param", "process", "recipient"}) {
+            List<String> v = repeatable(a.get(key));
+            if (!v.isEmpty()) {
+                out.put(key, v);
+            }
+        }
+        return out;
     }
 
     /** Check required args are present; returns the problem or null. */

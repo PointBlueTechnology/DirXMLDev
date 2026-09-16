@@ -1,9 +1,11 @@
 # Track W — Workflow design (the PRD's `<process>`) — design note
 
-Status: **W1, W2, W4 and W5 shipped (2026-09-15, §4)** — `Flow` model,
-engine-faithful `FlowCheck`, `prd.flow`, the twelve `flow.*` operations, the
-live proof on idm254 and Designer's acceptance of the authored PRD. **Open:
-W3 (integration activities), W4b (a Loopback driver with entitlements, needs
+Status: **W1, W2, W3, W4 and W5 shipped (W1/W2/W4/W5 2026-09-15, W3
+2026-09-16, §4)** — `Flow` model, engine-faithful `FlowCheck`, `prd.flow`,
+the twelve `flow.*` operations (`flow.activity.add`/`.set` grew four more
+`--kind` values in W3: `rest`, `role-request`, `resource-request`,
+`start-flow`), the live proof on idm254 and Designer's acceptance of the
+authored PRD. **Open: W4b (a Loopback driver with entitlements, needs
 entitlements modeled).**
 
 Roles and resources are *not* in scope: they are managed in the Identity
@@ -270,9 +272,76 @@ Recommendation: **B, with A's parameters as the first operations**
   activities each with exactly one outgoing link — anything more (multiple
   legs, an activity with its own branching) is refused rather than guessed
   at, since §3 does not say how to collapse those shapes.
-- **W3 Integration activities**: rest, role-request, resource-request,
-  start-correlated-flow (schema known, no stock examples — needs one real
-  case to calibrate against).
+- **W3 Integration activities — ✅ shipped 2026-09-16.** Four more
+  `flow.activity.add`/`.set --kind` values — `rest`, `role-request`,
+  `resource-request`, `start-flow` — for the engine's `rest-activity`,
+  `role-request-activity`, `resource-request-activity` and
+  `start-correlated-flow-activity` elements. **Calibrated against the
+  binding classes only** (`workflow.jar` 4.10.1's JAXB model,
+  `com.novell.soa.af.impl.model.binding`, decompiled in a session scratchpad,
+  never committed) — no stock PRD among the 39 uses any of the four (§1.1's
+  table: 0 occurrences each), and there has been no live run against a real
+  REST endpoint or role/resource on the lab. The grammar table below is the
+  only record of these shapes; treat it as the source of truth until a live
+  proof exists (needs a REST endpoint or a role on the lab — tracked as a
+  follow-up, not blocking this step).
+
+  All four are `ActivityBean`s like every other kind: `activity-id`
+  (required), `audit`, `digital-signature-type`, `legal-disclaimer-id`,
+  `display-name xml:lang` children as usual; the engine does not restrict
+  their outgoing link types (`Flow.Kind` already modeled this in W1 — `REST`
+  is `forward`/`error`, restricted, as an assumption since check 4 does not
+  mention it either way; `ROLE_REQUEST`/`RESOURCE_REQUEST`/
+  `START_CORRELATED_FLOW` are not restricted, `forward`/`error` is only a
+  rendering hint). Data flows in/out through the usual `<data-items
+  activity-id>` block, which `flow.activity.add` creates empty for all four,
+  same as approval/mapping.
+
+  | kind | attributes | children (JAXB default names, in order) |
+  |---|---|---|
+  | `rest-activity` | `protocol` (required, `http`\|`https`), `host` (required), `port` (required), `path` (required), `method` (required, `GET`\|`POST`\|`PUT`\|`DELETE`\|`PATCH` — checked case-insensitively, stored as given), `contentTypeHeader`, `acceptHeader`, `authorizationHeader`, `timeout`, `trustManagers` | `content` (request body expression), `returnStatusCodeOutputMap`, `returnContentTypeOutputMap`, `returnContentOutputMap` (each the data item name that receives the value), zero or more `http-headers` — **each header element is itself named `http-headers`** (`<http-headers key="Name">value</http-headers>`; the JAXB binding is `@XmlElement(name="http-headers") List<THttpHeader>` with `@XmlAttribute key` and `@XmlValue` — not a typo) |
+  | `role-request-activity` | `sod-override-request` (not exposed by `flow.activity.add`/`.set` — see below) | `roles`\* (≥1, required; expression, typically a quoted DN), `targets`\* (≥1, required; expression), `targetType` (enum `USER`\|`GROUP`\|`CONTAINER`\|`CONTAINER_WITH_SUBTREE`\|`ROLE`, default `USER`), `action` (enum `GRANT`\|`REVOKE`\|`EXTEND`, default `GRANT`), `effective-date`, `expiration-date`, `request-description` (required; expression), `correlation-id`, `sod-override-justification`, `sod-overrides`\* (not exposed — see below) |
+  | `resource-request-activity` | — | `target-resource` (required; expression), `target-user`\* (≥1, required; expression), `action` (enum `GRANT`\|`REVOKE`, default `GRANT`), `request-description` (required), `correlation-id`, `target-param`\* (zero or more `<target-param source="…" target="…"/>` maps), `target-guid` (not exposed — see below) |
+  | `start-correlated-flow-activity` | — | `processId` (required; the PRD DN or name expression), `recipient`\* (≥1, required; expression), `correlationId` (camelCase, unlike the others' `correlation-id` — this is what the binding classes actually name it) |
+
+  Not exposed by `flow.activity.add`/`.set` because the build spec's flag
+  list did not call for them (the engine still accepts them on a
+  hand-edited process; `flow.data.set` cannot reach them either, since they
+  are plain child elements, not data items): role-request's
+  `sod-override-request`/`sod-override-justification`/`sod-overrides`,
+  resource-request's `target-guid`.
+
+  `FlowCheck` additions (both purely offline checks, in the spirit of §1.4 —
+  the engine itself only discovers either problem once a request reaches
+  that activity): `flow-activity-incomplete` (error) — the required
+  attribute/child above is missing (checked by presence of the DOM
+  element/attribute, not by the engine, since none of these four are in the
+  &sect;1.2 checklist); `flow-attribute-enum` (existing code, extended) for
+  `protocol`/`method`/`targetType`/role-request's and resource-request's
+  `action`; `flow-expression-syntax` (existing code, extended) for `content`,
+  `roles`, `targets`, `request-description`, `target-resource`,
+  `target-user`, `processId`, `recipient`; `flow-start-flow-unknown`
+  (warning, new) — a `start-flow` activity's `processId` is a quoted literal
+  that names no PRD in this tree by name or DN (checked against every
+  driver's PRDs, not just one — a correlated flow's target can live on any
+  UA driver).
+
+  `prd.flow`'s text view shows each kind's key line: rest —
+  `METHOD protocol://host:port/path`; role-request — `ACTION roles →
+  targets`; resource-request — `ACTION resource → users`; start-flow —
+  `processId → recipients`.
+
+  515 pre-existing tests plus 28 new (13 `FlowOpsTest` — one add + one
+  missing-required-flag refusal + one set per kind, `http-headers`'s DOM
+  shape asserted exactly, `validate` clean after every add, plus the
+  `flow-start-flow-unknown` warning/clean-when-found cases; 14
+  `FlowCheckTest` — one clean-process case and one `flow-activity-incomplete`
+  per kind, one `flow-attribute-enum` per kind that has an enum (plus the
+  case-insensitive-method-is-clean case), one `flow-expression-syntax`, and
+  the `flow-start-flow-unknown` warning with its clean-when-the-PRD-exists
+  counterpart; 1 `FlowViewTest` for the four kinds' text-view key-attrs
+  line), all green (543 total, 11 skipped, same skip count as before —
+  nothing new is skipped).
 - **W4 Live proof on idm254 — ✅ PASSED 2026-09-15** ([spikes/workflow-live.md](spikes/workflow-live.md)):
   an authored condition + two-approval + log workflow deployed, appeared
   under Access → Request, ran through the engine and completed after two

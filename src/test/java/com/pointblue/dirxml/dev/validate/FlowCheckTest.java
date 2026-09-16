@@ -470,6 +470,220 @@ public class FlowCheckTest {
         assertEquals(Finding.Severity.INFO, r.withCode("flow-placeholder").get(0).severity);
     }
 
+    // ---- Track W step W3: rest/role-request/resource-request/start-flow ------------------------
+
+    @Test
+    public void restActivityCleanIsFindingFree() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"api.example.com\" port=\"443\" path=\"/v1\" method=\"POST\">"
+            + "<display-name xml:lang=\"en\">Call</display-name><content>'{}'</content>"
+            + "<http-headers key=\"Accept\">application/json</http-headers></rest-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
+            + "<link source=\"call\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertTrue(r.text(), r.findings().isEmpty());
+    }
+
+    @Test
+    public void flowActivityIncompleteRestMissingRequiredAttribute() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<rest-activity activity-id=\"call\" host=\"api.example.com\" port=\"443\" path=\"/v1\" method=\"POST\">"
+            + "<display-name xml:lang=\"en\">Call</display-name></rest-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
+            + "<link source=\"call\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertEquals(1, r.withCode("flow-activity-incomplete").size());
+        assertTrue(r.withCode("flow-activity-incomplete").get(0).message.contains("protocol"));
+    }
+
+    @Test
+    public void flowAttributeEnumRestMethodInvalid() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"h\" port=\"443\" path=\"/v1\" method=\"BOGUS\">"
+            + "<display-name xml:lang=\"en\">Call</display-name></rest-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
+            + "<link source=\"call\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertEquals(1, r.withCode("flow-attribute-enum").size());
+    }
+
+    @Test
+    public void restMethodCheckedCaseInsensitively() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"h\" port=\"443\" path=\"/v1\" method=\"post\">"
+            + "<display-name xml:lang=\"en\">Call</display-name></rest-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
+            + "<link source=\"call\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertTrue(r.text(), r.withCode("flow-attribute-enum").isEmpty());
+    }
+
+    @Test
+    public void flowExpressionSyntaxRestContent() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"h\" port=\"443\" path=\"/v1\" method=\"POST\">"
+            + "<display-name xml:lang=\"en\">Call</display-name><content>true &amp;&amp;</content></rest-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
+            + "<link source=\"call\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertEquals(1, r.withCode("flow-expression-syntax").size());
+    }
+
+    @Test
+    public void roleRequestActivityCleanIsFindingFree() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<role-request-activity activity-id=\"rr\"><display-name xml:lang=\"en\">RR</display-name>"
+            + "<roles>'cn=Role1,o=data'</roles><targets>recipient</targets><targetType>USER</targetType>"
+            + "<action>GRANT</action><request-description>'Grant'</request-description></role-request-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"rr\" type=\"forward\"/>"
+            + "<link source=\"rr\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertTrue(r.text(), r.findings().isEmpty());
+    }
+
+    @Test
+    public void flowActivityIncompleteRoleRequestMissingRoles() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<role-request-activity activity-id=\"rr\"><display-name xml:lang=\"en\">RR</display-name>"
+            + "<targets>recipient</targets><request-description>'Grant'</request-description></role-request-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"rr\" type=\"forward\"/>"
+            + "<link source=\"rr\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertEquals(1, r.withCode("flow-activity-incomplete").size());
+        assertTrue(r.withCode("flow-activity-incomplete").get(0).message.contains("role"));
+    }
+
+    @Test
+    public void flowAttributeEnumRoleRequestActionInvalid() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<role-request-activity activity-id=\"rr\"><display-name xml:lang=\"en\">RR</display-name>"
+            + "<roles>'cn=Role1,o=data'</roles><targets>recipient</targets><action>BOGUS</action>"
+            + "<request-description>'Grant'</request-description></role-request-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"rr\" type=\"forward\"/>"
+            + "<link source=\"rr\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertEquals(1, r.withCode("flow-attribute-enum").size());
+    }
+
+    @Test
+    public void resourceRequestActivityCleanIsFindingFree() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<resource-request-activity activity-id=\"res\"><display-name xml:lang=\"en\">Res</display-name>"
+            + "<target-resource>'cn=Resource1,o=data'</target-resource><target-user>recipient</target-user>"
+            + "<action>GRANT</action><request-description>'Grant'</request-description></resource-request-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"res\" type=\"forward\"/>"
+            + "<link source=\"res\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertTrue(r.text(), r.findings().isEmpty());
+    }
+
+    @Test
+    public void flowActivityIncompleteResourceRequestMissingTargetUser() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<resource-request-activity activity-id=\"res\"><display-name xml:lang=\"en\">Res</display-name>"
+            + "<target-resource>'cn=Resource1,o=data'</target-resource>"
+            + "<request-description>'Grant'</request-description></resource-request-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"res\" type=\"forward\"/>"
+            + "<link source=\"res\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertEquals(1, r.withCode("flow-activity-incomplete").size());
+        assertTrue(r.withCode("flow-activity-incomplete").get(0).message.contains("target-user"));
+    }
+
+    @Test
+    public void flowAttributeEnumResourceRequestActionInvalid() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<resource-request-activity activity-id=\"res\"><display-name xml:lang=\"en\">Res</display-name>"
+            + "<target-resource>'cn=Resource1,o=data'</target-resource><target-user>recipient</target-user>"
+            + "<action>EXTEND</action><request-description>'Grant'</request-description></resource-request-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"res\" type=\"forward\"/>"
+            + "<link source=\"res\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        // EXTEND is valid for role-request but not resource-request (GRANT|REVOKE only)
+        assertEquals(1, r.withCode("flow-attribute-enum").size());
+    }
+
+    @Test
+    public void startFlowActivityCleanIsFindingFree() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<start-correlated-flow-activity activity-id=\"sf\"><display-name xml:lang=\"en\">SF</display-name>"
+            + "<processId>'Other PRD'</processId><recipient>recipient</recipient></start-correlated-flow-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"sf\" type=\"forward\"/>"
+            + "<link source=\"sf\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        // 'Other PRD' names no PRD in this single-PRD fixture tree: flow-start-flow-unknown warns
+        assertEquals(1, r.withCode("flow-start-flow-unknown").size());
+        for (Finding f : r.findings()) {
+            assertFalse(f.toString(), !f.code.equals("flow-start-flow-unknown"));
+        }
+    }
+
+    @Test
+    public void flowActivityIncompleteStartFlowMissingRecipient() {
+        Report r = run("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<start-correlated-flow-activity activity-id=\"sf\"><display-name xml:lang=\"en\">SF</display-name>"
+            + "<processId>'Other PRD'</processId></start-correlated-flow-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"sf\" type=\"forward\"/>"
+            + "<link source=\"sf\" target=\"finish\" type=\"forward\"/>"
+            + "</process>");
+        assertEquals(1, r.withCode("flow-activity-incomplete").size());
+        assertTrue(r.withCode("flow-activity-incomplete").get(0).message.contains("recipient"));
+    }
+
+    @Test
+    public void flowStartFlowUnknownIsCleanWhenPrdExistsByName() {
+        DriverSet ds = new DriverSet("dvs");
+        Driver d = new Driver("UA");
+        Provisioning p = new Provisioning();
+        Prd target = new Prd("Other PRD");
+        target.process = CanonicalXml.parse("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"finish\" type=\"forward\"/></process>").getDocumentElement();
+        p.prds.add(target);
+        Prd prd = new Prd("P");
+        prd.process = CanonicalXml.parse("<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
+            + "<start-correlated-flow-activity activity-id=\"sf\"><display-name xml:lang=\"en\">SF</display-name>"
+            + "<processId>'Other PRD'</processId><recipient>recipient</recipient></start-correlated-flow-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"sf\" type=\"forward\"/>"
+            + "<link source=\"sf\" target=\"finish\" type=\"forward\"/>"
+            + "</process>").getDocumentElement();
+        p.prds.add(prd);
+        d.provisioning = p;
+        ds.drivers.add(d);
+        Report r = new Report();
+        new FlowCheck().run(ds, r);
+        assertTrue(r.text(), r.withCode("flow-start-flow-unknown").isEmpty());
+    }
+
     @Test
     public void flowDisplayNameMissing() {
         Report r = run("<process version=\"4.5.0\">"
