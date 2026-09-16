@@ -347,7 +347,8 @@ Recommendation: **B, with A's parameters as the first operations**
   under Access → Request, ran through the engine and completed after two
   dashboard approvals; the denied path ended the flow. Found and fixed: the
   dashboard needs an approval form bound to each approval activity
-  (§5); REST cannot submit a JSON-form PRD (form renderer only). Follow-up
+  (§5); REST submission needs `/requests/permissions/v2` (found 2026-09-16,
+  [spikes/prd-rest-live.md](spikes/prd-rest-live.md)). Follow-up
   done: an approval's denied path now defaults to a "Workflow Status
   Denied" mapping (`status_denied`, created on demand, forward → finish)
   so the request history reads Denied; `--kind mapping --status` exists;

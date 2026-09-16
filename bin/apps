@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""Identity Applications REST helper — start a PRD, list/approve tasks, read
+request history — without a browser. Python 3 standard library only.
+
+    bin/apps --env <name> [--props environments.properties] <command> [args]
+
+The environment's keys (same file as vault.deploy; never committed):
+    <env>.formsUrl      https://<identity applications host>
+    <env>.appsUser      user to act as (an admin on a lab)
+    <env>.appsPassword  that user's password (never printed)
+    <env>.appsClient    OSP client id, default rbpmrest (the dashboard's own is rbpm)
+    <env>.appsSecret    OSP client secret, default = appsPassword (labs) — set it when it differs
+
+Commands (see docs/idapps-rest.md for the bodies and accepted values):
+    token                          print token length + expiry (never the token)
+    permission <PRD name|DN>       PRD detail from the permission index (POST /permissions/item)
+    request <PRD name|DN> [--recipient DN] [--data key=value]...
+                                   start the PRD (POST /requests/permissions/v2); --data may repeat,
+                                   a repeated key becomes a multi-valued item
+    index <PRD name|DN> [--op ADD_OR_MODIFY|REMOVE|REFRESH]
+                                   tell the permission index about a PRD (POST /index/permissions)
+    tasks [--q text] [--size N]    my open tasks (GET /tasks/list)
+    task <taskId>                  one task with its data items (POST /tasks/item)
+    approve|deny|claim|refuse|release <taskId>... [--process NAME] [--comment TEXT]
+                                   act on tasks (POST /tasks); --process picks every task of that PRD
+    history [--size N] [--q text]  my requests (GET /requests/historylist)
+    get <path> [query=value]...    any GET under /IDMProv/rest/access (debugging)
+    post <path> <json>             any POST under /IDMProv/rest/access (debugging)
+
+Exit status 0 when the call reports success, 1 otherwise; --json prints the raw response.
+"""
+import argparse, base64, json, os, ssl, sys, urllib.error, urllib.parse, urllib.request
+
+PRD_SUFFIX = ",cn=RequestDefs,cn=AppConfig,cn=User Application Driver,cn=driverset1,o=system"
+
+
+def read_props(path, env):
+    props = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            if k.startswith(env + "."):
+                props[k[len(env) + 1:]] = v.strip()
+    missing = [k for k in ("formsUrl", "appsUser", "appsPassword") if k not in props]
+    if missing:
+        sys.exit("environment '%s' lacks %s in %s" % (env, ", ".join(env + "." + m for m in missing), path))
+    return props
+
+
+class Apps:
+    def __init__(self, props, insecure=False):
+        self.base = props["formsUrl"].rstrip("/")
+        self.user = props["appsUser"]
+        self.password = props["appsPassword"]
+        self.client = props.get("appsClient", "rbpmrest")
+        self.secret = props.get("appsSecret", self.password)
+        self.driver_suffix = props.get("appsPrdSuffix", PRD_SUFFIX)
+        self.ctx = ssl.create_default_context()
+        if insecure:
+            self.ctx.check_hostname = False
+            self.ctx.verify_mode = ssl.CERT_NONE
+        self.token_info = None
+
+    def token(self):
+        if self.token_info:
+            return self.token_info["access_token"]
+        auth = base64.b64encode((self.client + ":" + self.secret).encode()).decode()
+        data = urllib.parse.urlencode({"grant_type": "password", "username": self.user, "password": self.password}).encode()
+        req = urllib.request.Request(self.base + "/osp/a/idm/auth/oauth2/token", data=data,
+                                     headers={"Authorization": "Basic " + auth,
+                                              "Content-Type": "application/x-www-form-urlencoded"})
+        try:
+            with urllib.request.urlopen(req, context=self.ctx, timeout=30) as r:
+                self.token_info = json.load(r)
+        except urllib.error.HTTPError as e:
+            sys.exit("token: HTTP %d from %s (client %s, user %s)" % (e.code, self.base, self.client, self.user))
+        return self.token_info["access_token"]
+
+    def call(self, method, path, body=None, query=None, prefix="/IDMProv/rest/access"):
+        url = self.base + prefix + path
+        if query:
+            url += "?" + urllib.parse.urlencode(query, doseq=True)
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(url, data=data, method=method,
+                                     headers={"Authorization": "Bearer " + self.token(),
+                                              "Content-Type": "application/json", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, context=self.ctx, timeout=120) as r:
+                txt = r.read().decode()
+                return r.status, (json.loads(txt) if txt.strip() else None)
+        except urllib.error.HTTPError as e:
+            txt = e.read().decode()
+            try:
+                return e.code, json.loads(txt)
+            except ValueError:
+                return e.code, {"error": txt[:500]}
+
+    def prd_dn(self, name_or_dn):
+        return name_or_dn if name_or_dn.lower().startswith("cn=") else "cn=" + name_or_dn + self.driver_suffix
+
+
+def fault(r):
+    if isinstance(r, dict) and "Fault" in r:
+        f = r["Fault"]
+        return "%s: %s" % (f.get("Code", {}).get("Subcode", {}).get("Value"), f.get("Reason", {}).get("Text"))
+    return None
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="bin/apps", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--env", required=True)
+    ap.add_argument("--props", default="environments.properties")
+    ap.add_argument("--json", action="store_true", help="print the raw response")
+    ap.add_argument("--insecure", action="store_true", help="skip TLS verification (labs with private CAs)")
+    ap.add_argument("command")
+    ap.add_argument("args", nargs=argparse.REMAINDER)
+    a = ap.parse_args(argv)
+    apps = Apps(read_props(a.props, a.env), a.insecure)
+    cmd, rest = a.command, a.args
+
+    def sub(extra):
+        p = argparse.ArgumentParser(prog="bin/apps " + cmd)
+        for name, kw in extra:
+            p.add_argument(name, **kw)
+        return p.parse_args(rest)
+
+    def out(st, r, ok):
+        if a.json:
+            print(json.dumps(r, indent=1))
+        if not ok:
+            print("FAILED (HTTP %d) %s" % (st, fault(r) or ""), file=sys.stderr)
+        return 0 if ok else 1
+
+    if cmd == "token":
+        apps.token()
+        print("token ok: %d chars, expires in %s s, client %s, user %s" % (
+            len(apps.token_info["access_token"]), apps.token_info.get("expires_in"), apps.client, apps.user))
+        return 0
+
+    if cmd == "permission":
+        o = sub([("prd", {})])
+        st, r = apps.call("POST", "/permissions/item", {"id": apps.prd_dn(o.prd), "entityType": "prd"})
+        ok = st == 200 and isinstance(r, dict) and "Fault" not in r
+        if ok and not a.json:
+            for k in ("name", "id", "entityType", "categories", "requestFormId", "isNewForm", "edition"):
+                print("  %-14s %s" % (k, r.get(k)))
+        return out(st, r, ok)
+
+    if cmd == "request":
+        o = sub([("prd", {}), ("--recipient", {"default": None}), ("--data", {"action": "append", "default": []})])
+        data = {}
+        for kv in o.data:
+            k, _, v = kv.partition("=")
+            data.setdefault(k, []).append(v)
+        body = {"reqPermissions": [{"id": apps.prd_dn(o.prd), "entityType": "PRD"}],
+                "data": [{"key": k, "value": v} for k, v in data.items()]}
+        if o.recipient:
+            body["recipients"] = [{"dn": o.recipient, "type": "user"}]
+        st, r = apps.call("POST", "/requests/permissions/v2", body)
+        ok = st == 200 and isinstance(r, dict) and r.get("success") is True
+        if ok and not a.json:
+            for node in r.get("OperationNodes", []):
+                for s in node.get("succeeded", []):
+                    print("started: request %s for %s" % (s.get("requestId"), node.get("userDn")))
+        elif isinstance(r, dict) and r.get("success") is False and not fault(r):
+            print("not started — the PRD is not in the permission index yet (deploy < 10 min ago?); "
+                  "run 'bin/apps index <PRD>' or wait for the index interval", file=sys.stderr)
+        return out(st, r, ok)
+
+    if cmd == "index":
+        o = sub([("prd", {}), ("--op", {"default": "ADD_OR_MODIFY", "choices": ["ADD_OR_MODIFY", "REMOVE", "REFRESH"]})])
+        change = {"operation": o.op, "permType": "PRD"}
+        if o.op != "REFRESH":
+            change["permId"] = apps.prd_dn(o.prd)
+        st, r = apps.call("POST", "/index/permissions", {"permIndexChanges": [change]})
+        ok = st == 200 and isinstance(r, dict) and r.get("success") is True
+        if ok and not a.json:
+            print("index %s ok" % o.op)
+        return out(st, r, ok)
+
+    if cmd == "tasks":
+        o = sub([("--q", {"default": "*"}), ("--size", {"type": int, "default": 50})])
+        st, r = apps.call("GET", "/tasks/list", query={"fromIndex": 1, "size": o.size, "q": o.q})
+        ok = st == 200 and isinstance(r, dict) and "Fault" not in r
+        if ok and not a.json:
+            tasks = r.get("tasks", []) or []
+            print("%d task(s)" % len(tasks))
+            for t in tasks:
+                print("  %s | %s | %s | recipient %s | %s" % (t.get("taskId"), t.get("processName"), t.get("activityName"),
+                                                             t.get("recipientName"), t.get("createTime")))
+        return out(st, r, ok)
+
+    if cmd == "task":
+        o = sub([("taskId", {})])
+        st, r = apps.call("POST", "/tasks/item", {"taskId": o.taskId})
+        ok = st == 200 and isinstance(r, dict) and "Fault" not in r
+        if ok and not a.json:
+            for k in ("taskId", "processName", "activityName", "processId", "recipient", "initiator", "approvalFormId", "isNewForm"):
+                print("  %-14s %s" % (k, r.get(k)))
+            for d in r.get("dataItems", []) or []:
+                print("  item %-12s %s" % (d.get("name"), d.get("values")))
+        return out(st, r, ok)
+
+    if cmd in ("approve", "deny", "claim", "refuse", "release", "comment"):
+        o = sub([("taskIds", {"nargs": "*"}), ("--process", {"default": None}), ("--comment", {"default": cmd + " via bin/apps"})])
+        ids = list(o.taskIds)
+        if o.process:
+            st, r = apps.call("GET", "/tasks/list", query={"fromIndex": 1, "size": 200, "q": "*"})
+            ids += [t["taskId"] for t in (r or {}).get("tasks", []) or [] if (t.get("processName") or "") == o.process]
+        if not ids:
+            sys.exit("no task ids (give ids or --process NAME)")
+        st, r = apps.call("POST", "/tasks", {"tasks": [{"taskId": i} for i in ids], "action": cmd, "comment": o.comment})
+        ok = st == 200 and isinstance(r, dict) and r.get("success") is True
+        if not a.json and isinstance(r, dict):
+            for s in r.get("succeeded", []) or []:
+                print("%s ok: %s" % (cmd, s.get("id")))
+            for f in r.get("failed", []) or []:
+                print("%s FAILED: %s %s" % (cmd, f.get("id"), f.get("reason")), file=sys.stderr)
+        return out(st, r, ok)
+
+    if cmd == "history":
+        o = sub([("--q", {"default": "*"}), ("--size", {"type": int, "default": 20})])
+        st, r = apps.call("GET", "/requests/historylist", query={"nextIndex": 1, "size": o.size, "q": o.q})
+        ok = st == 200 and isinstance(r, dict) and "Fault" not in r
+        if ok and not a.json:
+            for q in r.get("requests", []) or []:
+                print("  %s | %s | requestState %s processState %s | %s | %s" % (
+                    q.get("confirmationNumber"), q.get("name"), q.get("requestState"), q.get("processState"),
+                    q.get("recipientName"), q.get("id")))
+        return out(st, r, ok)
+
+    if cmd == "get":
+        o = sub([("path", {}), ("query", {"nargs": "*"})])
+        query = [tuple(kv.split("=", 1)) for kv in o.query]
+        st, r = apps.call("GET", o.path, query=query)
+        print(json.dumps(r, indent=1))
+        return 0 if st == 200 else 1
+
+    if cmd == "post":
+        o = sub([("path", {}), ("body", {})])
+        st, r = apps.call("POST", o.path, json.loads(o.body))
+        print(json.dumps(r, indent=1))
+        return 0 if st == 200 else 1
+
+    sys.exit("unknown command %r (see --help)" % cmd)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -153,6 +153,42 @@ version it was proven on unless stated.
   existed) — one note instead of the deletes, and `--delete-all <kind>` is the
   explicit override → `vault-deploy.md`, "Deploy never empties a kind".
 
+## Identity Applications REST (spike W6, `docs/idapps-rest.md`)
+
+- **Start a JSON-form PRD with `POST /IDMProv/rest/access/requests/permissions/v2`**
+  — body `{reqPermissions:[{id:<PRD DN>, entityType:"PRD"}], data:[{key:<form
+  field key>, value:[…]}], recipients:[{dn, type:"user"}]}` (the JSON form
+  renderer's own call; `value` is always a list; `recipients` absent = the
+  caller). `requestId` in the answer = the workflow process id →
+  `prd-rest-live.md`. `bin/apps request` does it.
+- **`/requests/permissions/item` is the legacy-form/role/resource call** and
+  answers "Internal exception occurred processing REST service" for a
+  JSON-form PRD — not a bug in our objects → `workflow-live.md`, `prd-rest-live.md`.
+- **A freshly deployed PRD is not requestable over REST for up to 10 minutes:**
+  the applications resolve permissions in an in-memory index whose PRD
+  provider re-reads the vault every `com.netiq.idm.cis.rbpm.updateInterval[.prd]`
+  minutes (default 10). Symptom: 200 `{"success": false}` with no `Fault` and
+  nothing logged; `POST /permissions/item` says `PermissionIndexException …
+  does not exist`. `POST /index/permissions` accepts `ADD_OR_MODIFY`/`REMOVE`/
+  `REFRESH` (the vendor doc says REMOVE only) — whether it shortens the wait
+  is unproven → `prd-rest-live.md`.
+- **Token:** OSP password grant at `/osp/a/idm/auth/oauth2/token`, Basic
+  `<client>:<secret>`; `rbpmrest` (documented) and `rbpm` (the dashboard's)
+  both work on the lab. Application errors are HTTP 489 with an `NcacFault`
+  body; the XSS filter answers 400 → `idapps-rest.md` §1.
+- **Tasks:** `GET /tasks/list` then `POST /tasks {tasks:[{taskId}], action,
+  comment}`; `action` ∈ approve, deny, comment, refuse, claim, release,
+  reassign, return (case-insensitive) → `idapps-rest.md` §6.
+- **History:** `GET /requests/historylist?nextIndex=1&size=N&q=*` (the short
+  `/requests/history` answered 489 on 2026-09-16); completed-approved =
+  requestState 2 / processState 3, denied = 1 / 3 → `idapps-rest.md` §7.
+- **The index search `GET /permissions?q=*&type=PRD` returns 0 rows** for
+  uaadmin on idm254 even for stock PRDs (three sessions) — not a probe for
+  "is my PRD there"; use `/permissions/item` → `prd-rest-live.md`.
+- **Base paths:** access calls under `/IDMProv/rest/access`, catalog
+  (`/prds`) under `/IDMProv/rest/catalog`, admin (`/cache/*`) under
+  `/IDMProv/rest/admin`; the wrong base is a plain 404 → `idapps-rest.md` §1.
+
 ## Not proven / not to assume
 
 - Roles and resources are managed in the Identity Applications, not in

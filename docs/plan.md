@@ -383,10 +383,16 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   its own (never overwritten by ours). Priority: low — the applications read
   it only when entitlement binding (roles/resources) is configured, which
   is outside the tool's scope today; a workflow's grant works without it.
-- **Start a PRD over REST** (Jerry, 2026-09-15: it should be possible). Our
-  `POST /requests/permissions/item` attempts failed for a JSON-form PRD; find
-  the call the dashboard's form renderer makes (`/WFHandler`) or the
-  workflow REST API, and script it so the live proofs need no browser.
+- ~~**Start a PRD over REST**~~ — done 2026-09-16: `POST
+  /requests/permissions/v2` (the JSON form renderer's call), scripted in
+  `bin/apps` with tasks/approve/history; reference with required fields and
+  accepted values in [idapps-rest.md](idapps-rest.md), proof in
+  [spikes/prd-rest-live.md](spikes/prd-rest-live.md). Open check: whether
+  `POST /index/permissions ADD_OR_MODIFY` makes a just-deployed PRD
+  requestable before the index's 10-minute interval.
+- **`form.field.add --json '{…}'`** is swallowed by the global `--json`
+  output flag ("unexpected argument"); rename the field's extra-properties
+  flag (e.g. `--props`) and keep `--json` for output. Found 2026-09-16.
 - **A live run of a W3 integration activity** (REST, role, resource,
   entity) — the grammar is decompiled from `workflow.jar`'s binding classes
   and checked, but never executed on a lab; needs a REST endpoint or a role

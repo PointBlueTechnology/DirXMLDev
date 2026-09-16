@@ -166,18 +166,23 @@ and refuses a change the engine would reject.
 1. **Visibility.** Sign in as a user with rights to the PRD (an admin on a lab);
    Access → Request → New Request → search the display name. Missing means:
    not Active, no directory rights, or the display name differs.
-2. **Request.** Picking the PRD opens the JSON request form in a new window;
-   fill it and Submit. Over REST, `/requests/permissions/item` failed for a
-   JSON-form PRD in our attempts (`workflow-live.md`); the right REST call is
-   an open task (`docs/plan.md` follow-ups) — until it is found, submit from
-   the browser.
-3. **Approve.** Tasks → select the task → Approve/Deny with a comment (the
-   bulk buttons; opening the task itself needs the approval form bound).
-   Over REST: `GET /IDMProv/rest/access/tasks/list?fromIndex=0&size=20`, then
-   `POST /IDMProv/rest/access/tasks {"tasks":[{"taskId":…}],"action":"approve","comment":"…"}`
-   with an OSP password-grant token (`client_id=rbpm`).
-4. **Verify.** Request History (or `GET …/requests/historylist`) shows the
-   request Approved or Denied; the applications' log shows
+2. **Request.** Over REST (no browser): `bin/apps --env <env> request "<PRD name>" --data reason="…" [--recipient DN]`
+   — `POST /requests/permissions/v2`, the JSON form renderer's own call
+   (`docs/idapps-rest.md` §2). A PRD deployed less than ~10 minutes ago is not
+   yet in the applications' permission index and the call answers
+   `success:false`; `bin/apps permission "<PRD>"` says whether it is indexed,
+   `bin/apps index "<PRD>"` asks the index to add it. In the browser instead:
+   picking the PRD opens the JSON request form in a new window; fill it and
+   Submit. (`/requests/permissions/item` is the legacy-form/role/resource call
+   and fails for a JSON-form PRD.)
+3. **Approve.** `bin/apps --env <env> tasks` then `bin/apps … approve <taskId> --comment "…"`
+   (or `--process "<PRD name>"` for every task of that PRD; `deny` likewise) —
+   `GET /tasks/list` + `POST /tasks`. In the browser: Tasks → select the task →
+   Approve/Deny with a comment (the bulk buttons; opening the task itself needs
+   the approval form bound).
+4. **Verify.** `bin/apps … history` (`GET /requests/historylist`; a completed
+   approved request reads requestState 2 / processState 3) or Request History
+   in the browser; the applications' log shows
    `[Workflow_Started] … [Workflow_Ended]` with every activity in between
    (`kubectl logs` on the identityapplications pod, or the Tomcat log).
 5. **Clean up** scratch forms and PRDs by deleting them from the tree and
