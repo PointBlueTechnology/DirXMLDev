@@ -174,7 +174,7 @@ template placeholder (warning on an `Active` PRD, informational on a template),
 and an activity with no display name. `docs/workflows.md` §1.4 has the full
 rationale; `commands.md` lists every `flow-*` code.
 
-### Author a workflow (Track W step W2)
+### Author a workflow (Track W steps W2/W3)
 
 Changing the flow itself — not just a form's fields — is the `flow.*` typed
 operations (`commands.md` has the full list): one op per concept
@@ -214,6 +214,31 @@ template+maps, retry) and a provision activity's five entitlement data items
 come from the same idm254 templates `prd.add --from-template` copies from
 (`TemplateSingleApproval_TD`, `NoApproval`) — see `commands.md`. Once the
 flow reads right, deploy it the normal way: `vault.diff` → `vault.deploy`.
+
+`flow.activity.add`'s four other kinds — `rest`, `role-request`,
+`resource-request`, `start-flow` — call out to REST, role/resource requests
+and other PRDs, and were calibrated (`docs/workflows.md` §4 W3) against the
+engine's JAXB binding classes alone (no stock PRD uses any of them, so there
+is no example to copy a shape from). Add one the same way as any other
+activity, kind-specific flags after `--kind`:
+
+```bash
+bin/idm flow.activity.add tree/ --prd "Widget Access" --kind rest --id lookup --after Start \
+    --protocol https --host api.example.com --port 443 --path /v1/widgets --method GET \
+    --header "Authorization=Bearer TOKEN" --status-to statusCode --content-to body
+bin/idm flow.activity.add tree/ --prd "Widget Access" --kind role-request --id grant_role --after lookup \
+    --role "'cn=Widget Users,ou=roles,o=data'" --target recipient --description "'Grant the Widget Users role'"
+bin/idm flow.activity.add tree/ --prd "Widget Access" --kind start-flow --id follow_up --after grant_role \
+    --process "'Widget Follow-up'" --recipient recipient
+bin/idm validate tree/          # flow-start-flow-unknown warns here: no PRD named "Widget Follow-up" exists yet
+```
+
+`flow.activity.set` takes the same kind-specific flags to update an existing
+activity of that kind (a flag that doesn't match the activity's kind is
+refused, naming it); a repeatable one (`--header`/`--role`/`--target`/
+`--param`/`--recipient`) replaces the whole list when given. These four kinds
+have no live proof yet — trying one for real needs a REST endpoint or a role
+on the lab (`docs/workflows.md` §4 W3).
 
 ### Entitlements (Track W step W4b)
 

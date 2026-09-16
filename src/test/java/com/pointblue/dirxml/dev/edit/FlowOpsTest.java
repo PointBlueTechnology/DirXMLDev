@@ -614,6 +614,255 @@ public class FlowOpsTest {
 
     // ---- provision activity's entitlement items live on the process, not the definition root --------
 
+    // ---- Track W step W3: rest/role-request/resource-request/start-flow activities --------------
+
+    private static java.util.Map<String, List<String>> extra(String... kv) {
+        java.util.Map<String, List<String>> m = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < kv.length; i += 2) {
+            m.computeIfAbsent(kv[i], k -> new java.util.ArrayList<>()).add(kv[i + 1]);
+        }
+        return m;
+    }
+
+    /** {@code flow.activity.add --kind k --id id --after after}, every other flag null/absent except {@code extra}. */
+    private static FlowOps.ActivityAdd addOp(String kind, String id, String after, java.util.Map<String, List<String>> extra) {
+        return new FlowOps.ActivityAdd(null, "P", kind, id, after, null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, extra);
+    }
+
+    /** {@code flow.activity.set --id id}, every other flag null/absent except {@code extra}. */
+    private static FlowOps.ActivitySet setOp(String id, java.util.Map<String, List<String>> extra) {
+        return new FlowOps.ActivitySet(null, "P", id, null, null, null, null, null, null, null, null, null, null,
+            null, null, extra);
+    }
+
+    @Test
+    public void addRestActivity() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(addOp("rest", "call", "start",
+            extra("protocol", "https", "host", "api.example.com", "port", "443", "path", "/v1/items",
+                "method", "post", "content", "'{}'", "header", "X-Api-Key=secret", "header", "Accept=application/json",
+                "status-to", "statusCode", "content-to", "body")), false, false);
+        assertTrue(r.text(), r.ok());
+        assertNoFlowErrors(r.report);
+
+        Flow flow = flowOf(t);
+        Flow.Activity call = flow.byId("call");
+        assertNotNull(call);
+        assertEquals(Flow.Kind.REST, call.kind);
+        assertEquals("https", call.attr("protocol"));
+        assertEquals("api.example.com", call.attr("host"));
+        assertEquals("443", call.attr("port"));
+        assertEquals("/v1/items", call.attr("path"));
+        assertEquals("post", call.attr("method"));   // stored as given, not uppercased
+        assertEquals("'{}'", call.element.getElementsByTagName("content").item(0).getTextContent());
+        assertEquals("statusCode", call.element.getElementsByTagName("returnStatusCodeOutputMap").item(0).getTextContent());
+        assertEquals("body", call.element.getElementsByTagName("returnContentOutputMap").item(0).getTextContent());
+        org.w3c.dom.NodeList headers = call.element.getElementsByTagName("http-headers");
+        assertEquals(2, headers.getLength());
+        assertEquals("X-Api-Key", ((Element) headers.item(0)).getAttribute("key"));
+        assertEquals("secret", headers.item(0).getTextContent());
+        assertEquals("Accept", ((Element) headers.item(1)).getAttribute("key"));
+        assertEquals("application/json", headers.item(1).getTextContent());
+        assertEquals("[start --forward--> call]", flow.outgoing("start").toString());
+        assertEquals("[call --forward--> prov]", flow.outgoing("call").toString());
+        assertTrue(flow.dataItemsByActivity.containsKey("call"));
+    }
+
+    @Test
+    public void addRestActivityMissingRequiredFlagRefused() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(addOp("rest", "call", "start",
+            extra("protocol", "https", "host", "api.example.com")), false, false);
+        assertFalse(r.ok());
+        assertTrue(r.refusal, r.refusal.contains("--port"));
+
+        Result bad = Transaction.open(t).run(addOp("rest", "call2", "start",
+            extra("protocol", "ftp", "host", "h", "port", "1", "path", "/x", "method", "GET")), false, false);
+        assertFalse(bad.ok());
+        assertTrue(bad.refusal, bad.refusal.contains("protocol"));
+    }
+
+    @Test
+    public void setRestActivityReplacesHeadersAndAttrs() throws Exception {
+        Path t = tree(tmp);
+        Transaction.open(t).run(addOp("rest", "call", "start",
+            extra("protocol", "https", "host", "h1", "port", "443", "path", "/a", "method", "GET",
+                "header", "A=1")), false, false);
+        Result r = Transaction.open(t).run(setOp("call", extra("host", "h2", "method", "put", "header", "B=2")), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        Flow flow = flowOf(t);
+        Flow.Activity call = flow.byId("call");
+        assertEquals("h2", call.attr("host"));
+        assertEquals("put", call.attr("method"));
+        assertEquals("https", call.attr("protocol"));   // untouched
+        org.w3c.dom.NodeList headers = call.element.getElementsByTagName("http-headers");
+        assertEquals(1, headers.getLength());
+        assertEquals("B", ((Element) headers.item(0)).getAttribute("key"));
+        assertNoFlowErrors(r.report);
+
+        Result mismatch = Transaction.open(t).run(setOp("prov", extra("protocol", "https")), false, false);
+        assertFalse(mismatch.ok());
+        assertTrue(mismatch.refusal, mismatch.refusal.contains("--protocol"));
+    }
+
+    @Test
+    public void addRoleRequestActivity() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(addOp("role-request", "rr", "start",
+            extra("role", "'cn=Role1,ou=roles,o=data'", "target", "recipient", "description", "'Grant role'")), false, false);
+        assertTrue(r.text(), r.ok());
+        assertNoFlowErrors(r.report);
+
+        Flow flow = flowOf(t);
+        Flow.Activity rr = flow.byId("rr");
+        assertNotNull(rr);
+        assertEquals(Flow.Kind.ROLE_REQUEST, rr.kind);
+        assertEquals("'cn=Role1,ou=roles,o=data'", rr.element.getElementsByTagName("roles").item(0).getTextContent());
+        assertEquals("recipient", rr.element.getElementsByTagName("targets").item(0).getTextContent());
+        assertEquals("USER", rr.element.getElementsByTagName("targetType").item(0).getTextContent());
+        assertEquals("GRANT", rr.element.getElementsByTagName("action").item(0).getTextContent());
+        assertEquals("'Grant role'", rr.element.getElementsByTagName("request-description").item(0).getTextContent());
+        assertEquals("[start --forward--> rr]", flow.outgoing("start").toString());
+        assertEquals("[rr --forward--> prov]", flow.outgoing("rr").toString());
+    }
+
+    @Test
+    public void addRoleRequestActivityRequiresRoleTargetAndDescription() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(addOp("role-request", "rr", "start",
+            extra("target", "recipient", "description", "'x'")), false, false);
+        assertFalse(r.ok());
+        assertTrue(r.refusal, r.refusal.contains("--role"));
+    }
+
+    @Test
+    public void setRoleRequestActivityReplacesRolesAndTargets() throws Exception {
+        Path t = tree(tmp);
+        Transaction.open(t).run(addOp("role-request", "rr", "start",
+            extra("role", "'cn=Role1,o=data'", "target", "recipient", "description", "'d'")), false, false);
+        Result r = Transaction.open(t).run(setOp("rr", extra("role", "'cn=Role2,o=data'", "action", "REVOKE")), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        Flow flow = flowOf(t);
+        Flow.Activity rr = flow.byId("rr");
+        org.w3c.dom.NodeList roles = rr.element.getElementsByTagName("roles");
+        assertEquals(1, roles.getLength());
+        assertEquals("'cn=Role2,o=data'", roles.item(0).getTextContent());
+        assertEquals("REVOKE", rr.element.getElementsByTagName("action").item(0).getTextContent());
+        assertNoFlowErrors(r.report);
+    }
+
+    @Test
+    public void addResourceRequestActivity() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(addOp("resource-request", "res", "start",
+            extra("resource", "'cn=SomeResource,o=data'", "target", "recipient", "description", "'Grant it'",
+                "param", "reason=Reason")), false, false);
+        assertTrue(r.text(), r.ok());
+        assertNoFlowErrors(r.report);
+
+        Flow flow = flowOf(t);
+        Flow.Activity res = flow.byId("res");
+        assertNotNull(res);
+        assertEquals(Flow.Kind.RESOURCE_REQUEST, res.kind);
+        assertEquals("'cn=SomeResource,o=data'", res.element.getElementsByTagName("target-resource").item(0).getTextContent());
+        assertEquals("recipient", res.element.getElementsByTagName("target-user").item(0).getTextContent());
+        assertEquals("GRANT", res.element.getElementsByTagName("action").item(0).getTextContent());
+        assertEquals("'Grant it'", res.element.getElementsByTagName("request-description").item(0).getTextContent());
+        Element param = (Element) res.element.getElementsByTagName("target-param").item(0);
+        assertEquals("reason", param.getAttribute("source"));
+        assertEquals("Reason", param.getAttribute("target"));
+        assertEquals("[res --forward--> prov]", flow.outgoing("res").toString());
+    }
+
+    @Test
+    public void addResourceRequestActivityRequiresResourceTargetAndDescription() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(addOp("resource-request", "res", "start", extra("target", "recipient")), false, false);
+        assertFalse(r.ok());
+        assertTrue(r.refusal, r.refusal.contains("--resource"));
+    }
+
+    @Test
+    public void setResourceRequestActivityReplacesTargetsAndParams() throws Exception {
+        Path t = tree(tmp);
+        Transaction.open(t).run(addOp("resource-request", "res", "start",
+            extra("resource", "'cn=R,o=data'", "target", "recipient", "description", "'d'")), false, false);
+        Result r = Transaction.open(t).run(setOp("res", extra("action", "REVOKE", "param", "a=b")), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        Flow flow = flowOf(t);
+        Flow.Activity res = flow.byId("res");
+        assertEquals("REVOKE", res.element.getElementsByTagName("action").item(0).getTextContent());
+        Element param = (Element) res.element.getElementsByTagName("target-param").item(0);
+        assertEquals("a", param.getAttribute("source"));
+        assertEquals("b", param.getAttribute("target"));
+        assertNoFlowErrors(r.report);
+    }
+
+    @Test
+    public void addStartFlowActivity() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(addOp("start-flow", "sf", "start",
+            extra("process", "'Some Other PRD'", "recipient", "recipient", "correlation-id", "'corr1'")), false, false);
+        assertTrue(r.text(), r.ok());
+        for (Finding f : r.report.of(Finding.Severity.ERROR)) {
+            assertFalse("unexpected flow error: " + f, f.code.startsWith("flow-"));
+        }
+
+        Flow flow = flowOf(t);
+        Flow.Activity sf = flow.byId("sf");
+        assertNotNull(sf);
+        assertEquals(Flow.Kind.START_CORRELATED_FLOW, sf.kind);
+        assertEquals("'Some Other PRD'", sf.element.getElementsByTagName("processId").item(0).getTextContent());
+        assertEquals("recipient", sf.element.getElementsByTagName("recipient").item(0).getTextContent());
+        assertEquals("'corr1'", sf.element.getElementsByTagName("correlationId").item(0).getTextContent());
+        assertEquals("[sf --forward--> prov]", flow.outgoing("sf").toString());
+        // 'Some Other PRD' does not exist in this tree: an unknown-PRD warning, not an error
+        boolean sawWarning = false;
+        for (Finding f : r.report.findings()) {
+            if ("flow-start-flow-unknown".equals(f.code)) {
+                sawWarning = true;
+            }
+        }
+        assertTrue(r.text(), sawWarning);
+    }
+
+    @Test
+    public void addStartFlowActivityRequiresProcessAndRecipient() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(addOp("start-flow", "sf", "start", extra("recipient", "recipient")), false, false);
+        assertFalse(r.ok());
+        assertTrue(r.refusal, r.refusal.contains("--process"));
+    }
+
+    @Test
+    public void startFlowTargetingAnExistingPrdHasNoUnknownWarning() throws Exception {
+        Path t = tree(tmp);
+        Result r = Transaction.open(t).run(addOp("start-flow", "sf", "start",
+            extra("process", "'P'", "recipient", "recipient")), false, false);
+        assertTrue(r.text(), r.ok());
+        assertNoFlowErrors(r.report);
+        for (Finding f : r.report.findings()) {
+            assertFalse(f.toString(), "flow-start-flow-unknown".equals(f.code));
+        }
+    }
+
+    @Test
+    public void setStartFlowActivityReplacesRecipients() throws Exception {
+        Path t = tree(tmp);
+        Transaction.open(t).run(addOp("start-flow", "sf", "start",
+            extra("process", "'P'", "recipient", "recipient")), false, false);
+        Result r = Transaction.open(t).run(setOp("sf", extra("recipient", "initiator", "correlation-id", "'c2'")), false, false);
+        assertTrue(r.text(), r.ok() && r.written);
+        Flow flow = flowOf(t);
+        Flow.Activity sf = flow.byId("sf");
+        org.w3c.dom.NodeList recipients = sf.element.getElementsByTagName("recipient");
+        assertEquals(1, recipients.getLength());
+        assertEquals("initiator", recipients.item(0).getTextContent());
+        assertEquals("'c2'", sf.element.getElementsByTagName("correlationId").item(0).getTextContent());
+        assertNoFlowErrors(r.report);
+    }
+
     @Test
     public void setEntitlementDnUpdatesTheProvisionDataItem() throws Exception {
         Path t = tree(tmp);   // the fixture's process is a child of <prov-req-defn>, as in every real PRD

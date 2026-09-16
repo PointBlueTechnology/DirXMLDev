@@ -74,6 +74,22 @@ public final class Flow {
     /** {@code bind-role-activity/@action} and {@code bind-resource-status-activity/@action} enum. */
     public static final Set<String> BIND_ACTIONS = Set.of("APPROVED", "DENIED");
 
+    /** {@code rest-activity/@protocol} enum (Track W step W3, docs/workflows.md &sect;4 W3 grammar table). */
+    public static final Set<String> REST_PROTOCOLS = Set.of("http", "https");
+
+    /** {@code rest-activity/@method} enum, checked case-insensitively (the engine's binding stores it as given). */
+    public static final Set<String> REST_METHODS = Set.of("GET", "POST", "PUT", "DELETE", "PATCH");
+
+    /** {@code role-request-activity/targetType} enum; absent defaults to {@code USER}. */
+    public static final Set<String> ROLE_TARGET_TYPES = Set.of(
+        "USER", "GROUP", "CONTAINER", "CONTAINER_WITH_SUBTREE", "ROLE");
+
+    /** {@code role-request-activity/action} enum; absent defaults to {@code GRANT}. */
+    public static final Set<String> ROLE_REQUEST_ACTIONS = Set.of("GRANT", "REVOKE", "EXTEND");
+
+    /** {@code resource-request-activity/action} enum; absent defaults to {@code GRANT}. */
+    public static final Set<String> RESOURCE_REQUEST_ACTIONS = Set.of("GRANT", "REVOKE");
+
     public final Element process;
 
     public final String id;

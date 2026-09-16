@@ -62,6 +62,42 @@ public class FlowViewTest {
         assertTrue(tail, tail.contains("(unreachable)"));
     }
 
+    // ---- Track W step W3: the four integration kinds' key-attrs line -----------------------------
+
+    private static final String W3_XML =
+        "<process id=\"cn=X\" version=\"4.5.0\">"
+        + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">Start</display-name></start-activity>"
+        + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"api.example.com\" port=\"443\" path=\"/v1/items\" method=\"POST\">"
+        + "<display-name xml:lang=\"en\">Call</display-name></rest-activity>"
+        + "<role-request-activity activity-id=\"rr\"><display-name xml:lang=\"en\">RR</display-name>"
+        + "<roles>'cn=Role1,o=data'</roles><targets>recipient</targets><action>GRANT</action>"
+        + "<request-description>'d'</request-description></role-request-activity>"
+        + "<resource-request-activity activity-id=\"res\"><display-name xml:lang=\"en\">Res</display-name>"
+        + "<target-resource>'cn=Res1,o=data'</target-resource><target-user>recipient</target-user><action>GRANT</action>"
+        + "<request-description>'d'</request-description></resource-request-activity>"
+        + "<start-correlated-flow-activity activity-id=\"sf\"><display-name xml:lang=\"en\">SF</display-name>"
+        + "<processId>'Other'</processId><recipient>recipient</recipient></start-correlated-flow-activity>"
+        + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">Finish</display-name></finish-activity>"
+        + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
+        + "<link source=\"call\" target=\"rr\" type=\"forward\"/>"
+        + "<link source=\"rr\" target=\"res\" type=\"forward\"/>"
+        + "<link source=\"res\" target=\"sf\" type=\"forward\"/>"
+        + "<link source=\"sf\" target=\"finish\" type=\"forward\"/>"
+        + "</process>";
+
+    @Test
+    public void textShowsKeyAttrsForEachIntegrationKind() {
+        Prd prd = new Prd("X");
+        prd.process = CanonicalXml.parse(W3_XML).getDocumentElement();
+        Flow flow = Flow.of(prd);
+        String out = FlowView.text(new Driver("UA"), prd, flow, "en");
+
+        assertTrue(out, out.contains("POST https://api.example.com:443/v1/items"));
+        assertTrue(out, out.contains("GRANT 'cn=Role1,o=data' → recipient"));
+        assertTrue(out, out.contains("GRANT 'cn=Res1,o=data' → recipient"));
+        assertTrue(out, out.contains("'Other' → recipient"));
+    }
+
     @Test
     public void mermaidContainsNodesAndEdges() {
         String out = FlowView.mermaid(flow(), "en");
