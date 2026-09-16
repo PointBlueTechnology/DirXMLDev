@@ -141,8 +141,10 @@ version it was proven on unless stated.
 - The engine writes `DirXML-EngineControlValues` on a driver's first start;
   a tree that never had them must adopt them (`import-live`), the plan never
   removes them → `entitlements-live.md`.
-- `vault.deploy --delete-driver` is accepted but unimplemented; drivers are
-  never deleted by a deploy → `docs/plan.md` follow-ups.
+- `vault.deploy --delete-driver D` is implemented (2026-09-16): a deploy still
+  never deletes a driver on its own, only when named — and only when it's
+  stopped and absent from the tree (in the tree, or unknown to the vault, is
+  refused). Snapshots the whole subtree before deleting it → `vault-deploy.md`.
 
 ## Not proven / not to assume
 
