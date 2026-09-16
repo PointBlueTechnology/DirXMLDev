@@ -120,10 +120,28 @@ version it was proven on unless stated.
   without a flush, runs and completes; the trimmed PRD deploy writes only
   `XmlData` + `srvprvProcessXML` for a process change → `workflow-live.md`.
 
+## Entitlements (Track W step W4b)
+
+- A `DirXML-Entitlement` is `cn` + `XmlData` (`<entitlement conflict-resolution
+  display-name description><values multi-valued>…`) + package stamps, a child
+  of the driver; grants live on the recipient as `DirXML-EntitlementRef`
+  (`<DN>#1#<ref><src>AF</src><id>…</id><param>…</param></ref>`) →
+  `docs/entitlements.md`, `entitlements-live.md`.
+- A workflow's provision activity grants an entitlement authored with
+  `entitlement.add` on a hand-built Loopback driver (`Entitlement_Grant` in
+  the applications' log) — proven live → `entitlements-live.md`.
+- The applications warn "Entitlement configuration object not found" for a
+  driver without an `EntitlementConfiguration` resource and grant anyway;
+  the catalog (roles/resources) needs that resource — not built yet.
+- The engine writes `DirXML-EngineControlValues` on a driver's first start;
+  a tree that never had them must adopt them (`import-live`), the plan never
+  removes them → `entitlements-live.md`.
+- `vault.deploy --delete-driver` is accepted but unimplemented; drivers are
+  never deleted by a deploy → `docs/plan.md` follow-ups.
+
 ## Not proven / not to assume
 
 - Roles and resources are managed in the Identity Applications, not in
   Designer or the AppConfig subtree — not a tool track.
-- Entitlements are not a modeled object here yet (only referenced).
 - Whether a normal browser opens the task's approval-form popup (the app's
   browser pane did not; the bulk Approve/Deny buttons work).

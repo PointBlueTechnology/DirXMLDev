@@ -374,6 +374,9 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 
 ## Follow-ups (small, not scheduled)
 
+- **EntitlementConfiguration resource** for hand-built drivers with
+  entitlements (the applications warn without it; the role/resource catalog
+  needs it) — extend `entitlement.add`/`set` to maintain it.
 - **Start a PRD over REST** (Jerry, 2026-09-15: it should be possible). Our
   `POST /requests/permissions/item` attempts failed for a JSON-form PRD; find
   the call the dashboard's form renderer makes (`/WFHandler`) or the
