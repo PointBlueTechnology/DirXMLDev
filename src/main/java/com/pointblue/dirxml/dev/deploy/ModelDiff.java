@@ -109,6 +109,33 @@ public final class ModelDiff {
         }
     }
 
+    /**
+     * A driver + object-kind pair where the tree has <b>zero</b> objects of that kind while the
+     * vault ({@code from}) has one or more — the mass-deletion trap from the 2026-09-16 incident
+     * (docs/vault-deploy.md, "Deploy never empties a kind"): a tree imported before an object kind
+     * existed (or that lost every instance of one some other way) would otherwise diff as N
+     * individual removals and delete every one of them. {@code kind} is one of {@code "entitlements"},
+     * {@code "forms"}, {@code "prds"} — the same words {@code --delete-all} takes. Individual removals
+     * (the tree still has &ge;1 of the kind) are not reported here; they stay ordinary REMOVED changes.
+     */
+    public static final class EmptyKind {
+        public final String driver;
+        public final String kind;
+        public final int count;
+
+        EmptyKind(String driver, String kind, int count) {
+            this.driver = driver;
+            this.kind = kind;
+            this.count = count;
+        }
+
+        /** {@code driver 'X': the tree has no <kind> but the vault has N — …}. */
+        public String note() {
+            return "driver '" + driver + "': the tree has no " + kind + " but the vault has " + count
+                + " — an older tree? re-import (import-live) to adopt them, or pass --delete-all " + kind + " to delete them";
+        }
+    }
+
     private static final List<String> CONFIG_KEYS = Arrays.asList(
         Driver.SHIM_CONFIG_INFO, Driver.CONFIG_VALUES, Driver.DRIVER_FILTER, Driver.ENGINE_CONTROL_VALUES);
 
@@ -134,6 +161,67 @@ public final class ModelDiff {
 
     public List<Change> changes() {
         return Collections.unmodifiableList(changes);
+    }
+
+    /**
+     * The {@link EmptyKind} guards this diff trips: for each driver + kind ({@code "entitlements"},
+     * {@code "forms"}, {@code "prds"}) with one or more REMOVED changes, true when the tree side
+     * ({@code to}) has zero objects of that kind for the driver. Ordered by driver, then kind, for a
+     * stable report. {@link Plan} uses the same list to decide which deletes to hold back.
+     */
+    public List<EmptyKind> emptyKinds() {
+        Map<String, Map<String, Integer>> counts = new TreeMap<>();   // driver -> kind -> count
+        for (Change c : changes) {
+            String kind = removalKind(c.kind);
+            if (kind != null) {
+                counts.computeIfAbsent(c.driver, k -> new TreeMap<>()).merge(kind, 1, Integer::sum);
+            }
+        }
+        List<EmptyKind> out = new ArrayList<>();
+        for (Map.Entry<String, Map<String, Integer>> byDriver : counts.entrySet()) {
+            String driver = byDriver.getKey();
+            for (Map.Entry<String, Integer> byKind : byDriver.getValue().entrySet()) {
+                String kind = byKind.getKey();
+                if (treeHasNoneOfKind(driver, kind)) {
+                    out.add(new EmptyKind(driver, kind, byKind.getValue()));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * {@code "entitlements"}, {@code "forms"}, {@code "prds"} for the three REMOVED kinds the guard covers;
+     * null otherwise. Package-private: {@link Plan} reuses it to recognize the same changes.
+     */
+    static String removalKind(Kind k) {
+        if (k == Kind.ENTITLEMENT_REMOVED) {
+            return "entitlements";
+        }
+        if (k == Kind.FORM_REMOVED) {
+            return "forms";
+        }
+        if (k == Kind.PRD_REMOVED) {
+            return "prds";
+        }
+        return null;
+    }
+
+    private boolean treeHasNoneOfKind(String driver, String kind) {
+        Driver d = to.driver(driver);
+        if (d == null) {
+            return true;   // the driver itself only exists on the vault side (DRIVER_REMOVED handles that)
+        }
+        switch (kind) {
+            case "entitlements":
+                return d.entitlements.isEmpty();
+            case "forms":
+                return d.provisioning == null || d.provisioning.forms.isEmpty();
+            case "prds":
+                return d.provisioning == null || d.provisioning.prds.isEmpty();
+            default:
+                return false;
+        }
     }
 
     /**
@@ -196,6 +284,7 @@ public final class ModelDiff {
                 driverNames.add(c.driver);
             }
         }
+        List<EmptyKind> emptyKinds = emptyKinds();
         for (String name : driverNames) {
             List<Change> forDriver = new ArrayList<>();
             for (Change c : changes) {
@@ -205,6 +294,11 @@ public final class ModelDiff {
             }
             sb.append(name).append(":\n");
             appendChanges(sb, forDriver);
+            for (EmptyKind ek : emptyKinds) {
+                if (name.equals(ek.driver)) {
+                    sb.append("  note: ").append(ek.note()).append('\n');
+                }
+            }
         }
         List<Change> libraryChanges = new ArrayList<>();
         for (Change c : changes) {
@@ -271,6 +365,17 @@ public final class ModelDiff {
         List<String> affected = affectedDrivers();
         for (int i = 0; i < affected.size(); i++) {
             sb.append(i == 0 ? "" : ",").append(q(affected.get(i)));
+        }
+        sb.append(']');
+        sb.append(",\"emptyKinds\":[");
+        List<EmptyKind> emptyKinds = emptyKinds();
+        for (int i = 0; i < emptyKinds.size(); i++) {
+            EmptyKind ek = emptyKinds.get(i);
+            sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(q(ek.driver))
+                .append(",\"kind\":").append(q(ek.kind))
+                .append(",\"count\":").append(ek.count)
+                .append(",\"note\":").append(q(ek.note()))
+                .append('}');
         }
         sb.append(']');
         return sb.append('}').toString();

@@ -28,6 +28,8 @@ import java.util.Map;
  */
 public final class Deployer {
 
+    private static final List<String> VALID_DELETE_ALL_KINDS = List.of("entitlements", "forms", "prds");
+
     public static final class Options {
         public Path tree;
         public Environments.Environment env;
@@ -42,6 +44,8 @@ public final class Deployer {
         public boolean captureDrift;
         public boolean json;
         public List<String> deleteDrivers = List.of();
+        /** {@code --delete-all} kinds ({@code entitlements}, {@code forms}, {@code prds}), repeatable. */
+        public List<String> deleteAllKinds = List.of();
         public int restartWaitSeconds = 180;
     }
 
@@ -146,6 +150,12 @@ public final class Deployer {
             r.refusal = "the tree does not validate: " + validation.summary() + " — fix it first (idm validate)";
             return r;
         }
+        for (String k : o.deleteAllKinds) {
+            if (!VALID_DELETE_ALL_KINDS.contains(k)) {
+                r.refusal = "--delete-all " + k + ": unknown kind (entitlements, forms, prds)";
+                return r;
+            }
+        }
         DriverSet to = AsCodeReader.read(o.tree);
         String treeCommit = DeployLog.treeCommit(o.tree);
         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
@@ -163,7 +173,7 @@ public final class Deployer {
                     }
                 }
             }
-            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault);
+            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault, o.deleteAllKinds);
             r.planText = plan.text(env.name, dsDn);
             if (!plan.deleteDriverRefusals.isEmpty()) {
                 r.refusal = String.join("; ", plan.deleteDriverRefusals);
@@ -280,6 +290,10 @@ public final class Deployer {
                 }
                 String delMsg = "deleted driver(s): " + String.join(", ", parts);
                 log.detail = (log.detail == null || log.detail.isBlank()) ? delMsg : log.detail + "; " + delMsg;
+            }
+            if (!plan.deleteAllKinds.isEmpty()) {
+                String daMsg = "--delete-all: " + String.join(", ", plan.deleteAllKinds);
+                log.detail = (log.detail == null || log.detail.isBlank()) ? daMsg : log.detail + "; " + daMsg;
             }
             DeployLog.append(o.tree, log);
             return r;

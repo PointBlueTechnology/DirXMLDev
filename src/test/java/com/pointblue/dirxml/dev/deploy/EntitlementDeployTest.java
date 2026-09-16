@@ -102,6 +102,11 @@ public class EntitlementDeployTest {
         assertTrue(xml, xml.contains("Group2"));
     }
 
+    /**
+     * The tree ends up with <b>zero</b> entitlements for the driver while the vault has one: the
+     * mass-deletion guard (docs/vault-deploy.md, "Deploy never empties a kind") holds this delete
+     * back too — the guard is about the tree going empty, not about how many objects that costs.
+     */
     @Test
     public void removedEntitlementProducesADeleteStep() throws Exception {
         Path t = tree(true, false);
@@ -112,12 +117,89 @@ public class EntitlementDeployTest {
         ModelDiff diff = ModelDiff.of(from, to);
         assertEquals(1, diff.changes().size());
         assertEquals(ModelDiff.Kind.ENTITLEMENT_REMOVED, diff.changes().get(0).kind);
+        assertEquals(1, diff.emptyKinds().size());
+        assertEquals("entitlements", diff.emptyKinds().get(0).kind);
+        assertTrue(diff.text(), diff.text().contains("the tree has no entitlements but the vault has 1"));
 
         Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
-        assertEquals(1, plan.steps.size());
-        Plan.Step s = plan.steps.get(0);
+        assertTrue(plan.text("stg", DS), plan.steps.isEmpty());
+        assertEquals(1, plan.notes.size());
+        assertTrue(plan.notes.get(0), plan.notes.get(0).contains("pass --delete-all entitlements to delete them"));
+
+        // --delete-all entitlements re-enables the delete
+        Plan overridden = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t, List.of("entitlements"));
+        assertEquals(1, overridden.steps.size());
+        Plan.Step s = overridden.steps.get(0);
         assertEquals(Plan.Op.DELETE, s.op);
         assertEquals("cn=Existing,cn=Loopback," + DS, s.dn);
+        assertTrue(overridden.text("stg", DS), overridden.text("stg", DS).contains("--delete-all entitlements"));
+    }
+
+    /** vault has 3 entitlements, tree has none: zero deletes, one note naming the count. */
+    @Test
+    public void threeEntitlementsRemovedAreGuardedWithoutDeleteAll() throws Exception {
+        Path t = treeWithEntitlements("A", "B", "C");
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        to.driver("Loopback").entitlements.clear();
+
+        ModelDiff diff = ModelDiff.of(from, to);
+        assertEquals(3, diff.changes().size());
+        assertEquals(1, diff.emptyKinds().size());
+        assertEquals(3, diff.emptyKinds().get(0).count);
+
+        Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
+        assertTrue(plan.text("stg", DS), plan.steps.isEmpty());
+        assertEquals(1, plan.notes.size());
+        assertTrue(plan.notes.get(0), plan.notes.get(0).contains("the tree has no entitlements but the vault has 3"));
+    }
+
+    /** {@code --delete-all entitlements} re-enables all three deletes at once. */
+    @Test
+    public void deleteAllEntitlementsOverridesTheGuard() throws Exception {
+        Path t = treeWithEntitlements("A", "B", "C");
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        to.driver("Loopback").entitlements.clear();
+
+        Plan plan = Plan.of(ModelDiff.of(from, to), to, DS, Secrets.none(), "none", null, true, t, List.of("entitlements"));
+        assertEquals(3, plan.steps.size());
+        assertTrue(plan.steps.stream().allMatch(s -> s.op == Plan.Op.DELETE));
+        assertTrue(plan.notes.toString(), plan.notes.isEmpty());
+        assertEquals(List.of("entitlements"), List.copyOf(plan.deleteAllKinds));
+    }
+
+    /** The tree still has 1 of 3 entitlements: the guard doesn't apply, the other 2 delete as before. */
+    @Test
+    public void partialEntitlementRemovalIsNotGuarded() throws Exception {
+        Path t = treeWithEntitlements("A", "B", "C");
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        to.driver("Loopback").entitlements.removeIf(e -> !e.name.equals("A"));
+
+        ModelDiff diff = ModelDiff.of(from, to);
+        assertEquals(2, diff.changes().size());
+        assertTrue(diff.emptyKinds().isEmpty());
+
+        Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
+        assertEquals(2, plan.steps.size());
+        assertTrue(plan.steps.stream().allMatch(s -> s.op == Plan.Op.DELETE));
+        assertTrue(plan.notes.toString(), plan.notes.isEmpty());
+    }
+
+    /** A tree with one driver ("Loopback") holding the named entitlements (all with the same {@code ENT_XML} body). */
+    private Path treeWithEntitlements(String... names) throws Exception {
+        DriverSet ds = new DriverSet("driverset1");
+        ds.dn = DS;
+        Driver d = new Driver("Loopback");
+        d.dn = "cn=Loopback," + DS;
+        for (String name : names) {
+            d.entitlements.add(new Entitlement(name, CanonicalXml.parse(ENT_XML).getDocumentElement()));
+        }
+        ds.drivers.add(d);
+        Path t = tmp.newFolder().toPath();
+        AsCodeWriter.write(ds, t);
+        return t;
     }
 
     @Test
