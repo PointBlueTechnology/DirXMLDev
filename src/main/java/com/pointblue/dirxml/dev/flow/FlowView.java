@@ -224,10 +224,55 @@ public final class FlowView {
             case BIND_RESOURCE_STATUS:
                 append(sb, "action", a.attr("action"));
                 break;
+            case REST:
+                appendRaw(sb, str(a.attr("method")) + " " + str(a.attr("protocol")) + "://"
+                    + str(a.attr("host")) + ":" + str(a.attr("port")) + str(a.attr("path")));
+                break;
+            case ROLE_REQUEST: {
+                String action = textOfChild(a.element, "action");
+                List<String> roles = childTexts(a.element, "roles");
+                List<String> targets = childTexts(a.element, "targets");
+                appendRaw(sb, (action != null ? action + " " : "") + String.join(", ", roles) + " → " + String.join(", ", targets));
+                break;
+            }
+            case RESOURCE_REQUEST: {
+                String action = textOfChild(a.element, "action");
+                String resource = textOfChild(a.element, "target-resource");
+                List<String> users = childTexts(a.element, "target-user");
+                appendRaw(sb, (action != null ? action + " " : "") + str(resource) + " → " + String.join(", ", users));
+                break;
+            }
+            case START_CORRELATED_FLOW: {
+                String processId = textOfChild(a.element, "processId");
+                List<String> recipients = childTexts(a.element, "recipient");
+                appendRaw(sb, str(processId) + " → " + String.join(", ", recipients));
+                break;
+            }
             default:
                 break;
         }
         return sb.toString();
+    }
+
+    private static void appendRaw(StringBuilder sb, String value) {
+        if (value == null || value.isEmpty()) {
+            return;
+        }
+        if (sb.length() > 0) {
+            sb.append(' ');
+        }
+        sb.append(value);
+    }
+
+    private static List<String> childTexts(Element parent, String name) {
+        List<String> out = new ArrayList<>();
+        for (Element c : Xds.childrenByName(parent, name)) {
+            String t = Xds.text(c);
+            if (t != null && !t.isEmpty()) {
+                out.add(t);
+            }
+        }
+        return out;
     }
 
     private static void append(StringBuilder sb, String key, String value) {
