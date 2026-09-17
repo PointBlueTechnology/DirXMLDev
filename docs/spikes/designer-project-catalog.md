@@ -86,7 +86,15 @@ guid + association id and nothing else; the writer keeps them apart.
    stamps back as it does from a Designer-made project; then Jerry's check
    (packages installed, nothing modified, *Check for Package Updates* quiet).
 
-Open: whether Designer writes empty `Idm:vendoraddress`-style attributes
-(compare one jar with empties against its `IdmPackage_`); where a prompt's
-XML lives in the project (not in a contents file — likely nowhere, rebuilt
-from the directive); the CObject types of the unobserved item classes.
+Closed the same day: Designer writes **only non-empty** package fields (no
+`Idm:vendorAddress`/`vendorUrl`/`vendorEmail`/`contact*`/`maxIdmVersion`/
+`min|maxAppVersion` when the jar's elements are empty). A prompt item has a
+`contents` heavy-data attribute and `<I>_contents.xml` **iff** the jar's
+`ds-object` carries `XmlData` (`NOVLEDIRDCFG-SynchronizationPrompts` does,
+`NOVLEDIRBASE-UpgradeSettings` does not — its definitions live only in the
+item's 14–17 KB `Idm:InstallationDirective`); so the writer's rule is "a
+contents file when `PackageJar.Item.content` is non-null", for every class.
+
+Still open: the CObject types of the unobserved item classes (jobs,
+entitlements, notification templates, provisioning items, ID policies) —
+read one package that carries them before writing them.
