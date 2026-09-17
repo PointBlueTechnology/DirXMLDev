@@ -442,8 +442,39 @@ files and every relation that pointed at it; a rename keeps the id; linkage
 rewrites the ordered relations on the driver or channel. Everything else in
 the project is byte-identical afterwards. It refuses a driver that carries
 package metadata (Designer's catalog owns those; deploy to the vault and
-import there) and never deletes a driver. Commit the project after it runs
-and open it in Designer once before trusting a new kind of change.
+import there, or write a whole new project with `--new` below) and never
+deletes a driver. Commit the project after it runs and open it in Designer
+once before trusting a new kind of change.
+
+### A project the team doesn't have yet — `--new`
+
+When there is no Designer project (the tree came from `import-live`, or the
+team wants one without pointing Designer at the vault), write a whole one:
+
+```bash
+bin/idm export-project tree/ ~/designer_workspace/Client --new --dry-run
+bin/idm export-project tree/ ~/designer_workspace/Client --new \
+    --vault-name IDM_TREE --vault-host vault.example.com --vault-user cn=admin,ou=sa,o=system \
+    --server idm-engine --server-context ou=servers,o=system
+```
+
+The directory must not exist, or be empty — **its basename is the project
+name**, and it is written into `.project`, `<name>.proj` and `<name>.cproj`
+(a mismatch is what gives Designer "No valid .proj file" or a silent, empty
+import, so never rename a project folder by hand afterwards). Everything the
+tree holds is written: the driver set, the Library, every driver with its
+channels, filter, policies, resources and GCVs, each driver's `Application_`
+and modeler node, the User Application driver's whole `AppConfig` (forms and
+PRDs) and its entitlements. The vault and server flags are all optional, and
+**no vault password is ever written** (`IdentityVaultSavePassword=false`) —
+Designer asks for it on the first connect.
+
+Packaged items are written with their package attributes and an
+`<id>_initial_state.xml` baseline, but the project's package *catalog*
+(`IdmPackage_` objects, `Idm:InstalledPackages` relations) is milestone N3:
+the result note lists the packages the tree names, and until the catalog
+exists Designer treats those items as plain. `--new` never touches an
+existing project; drop the flag to update one.
 
 ## Conventions
 

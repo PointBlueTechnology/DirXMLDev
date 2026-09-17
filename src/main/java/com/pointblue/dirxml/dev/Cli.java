@@ -107,25 +107,55 @@ public final class Cli {
                 System.exit(0);
             }
             if (args.length >= 3 && args[0].equals("export-project")) {
-                // export-project <tree> <projectDir> [--dry-run] [--json]: update a Designer project to match a tree
+                // export-project <tree> <projectDir> [--new …] [--dry-run] [--json]: update a Designer
+                // project to match a tree, or (--new) write a whole new project for it
                 boolean dryRun = false;
                 boolean json = false;
+                boolean fresh = false;
+                String vaultName = null;
+                String vaultHost = null;
+                String vaultUser = null;
+                String serverName = null;
+                String serverContext = null;
                 List<String> pos = new ArrayList<>();
                 for (int i = 1; i < args.length; i++) {
                     if (args[i].equals("--dry-run")) {
                         dryRun = true;
                     } else if (args[i].equals("--json")) {
                         json = true;
+                    } else if (args[i].equals("--new")) {
+                        fresh = true;
+                    } else if (args[i].equals("--vault-name") && i + 1 < args.length) {
+                        vaultName = args[++i];
+                    } else if (args[i].equals("--vault-host") && i + 1 < args.length) {
+                        vaultHost = args[++i];
+                    } else if (args[i].equals("--vault-user") && i + 1 < args.length) {
+                        vaultUser = args[++i];
+                    } else if (args[i].equals("--server") && i + 1 < args.length) {
+                        serverName = args[++i];
+                    } else if (args[i].equals("--server-context") && i + 1 < args.length) {
+                        serverContext = args[++i];
                     } else {
                         pos.add(args[i]);
                     }
                 }
                 if (pos.size() < 2) {
-                    System.err.println("usage: export-project <tree> <projectDir> [--dry-run] [--json]");
+                    System.err.println("usage: export-project <tree> <projectDir> [--new [--vault-name NAME] "
+                        + "[--vault-host HOST] [--vault-user DN] [--server NAME --server-context DN]] [--dry-run] [--json]");
                     System.exit(2);
                 }
-                com.pointblue.dirxml.dev.source.ProjectWriter.Result r =
-                    com.pointblue.dirxml.dev.source.ProjectWriter.update(Paths.get(pos.get(0)), Paths.get(pos.get(1)), dryRun);
+                if (!fresh && (vaultName != null || vaultHost != null || vaultUser != null
+                    || serverName != null || serverContext != null)) {
+                    System.err.println("export-project: --vault-* / --server* only apply with --new (they describe a "
+                        + "new project's IdentityVault_ and Server_); an existing project keeps its own");
+                    System.exit(2);
+                }
+                com.pointblue.dirxml.dev.source.ProjectWriter.Result r = fresh
+                    ? com.pointblue.dirxml.dev.source.ProjectWriter.create(Paths.get(pos.get(0)), Paths.get(pos.get(1)),
+                        new com.pointblue.dirxml.dev.source.NewProject(
+                            vaultName, vaultHost, vaultUser, serverName, serverContext), dryRun)
+                    : com.pointblue.dirxml.dev.source.ProjectWriter.update(
+                        Paths.get(pos.get(0)), Paths.get(pos.get(1)), dryRun);
                 System.out.print(json ? r.json() + "\n" : r.text());
                 System.exit(r.ok ? 0 : 1);
             }
@@ -341,6 +371,11 @@ public final class Cli {
         System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
         System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
         System.err.println("  export-project <tree> <projectDir> [--dry-run] [--json]  update an existing Designer project to match a tree");
+        System.err.println("  export-project <tree> <newProjectDir> --new [--vault-name NAME] [--vault-host HOST] [--vault-user DN]");
+        System.err.println("                 [--server NAME --server-context DN] [--dry-run] [--json]");
+        System.err.println("                                        write a whole new Designer project for the tree (the directory's");
+        System.err.println("                                        basename is the project name; it must not exist or be empty; no");
+        System.err.println("                                        vault password is ever written)");
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
         System.err.println("  tree.diff <fromDir> <toDir> [--json]  structured diff of two as-code trees (exit 1 if they differ)");

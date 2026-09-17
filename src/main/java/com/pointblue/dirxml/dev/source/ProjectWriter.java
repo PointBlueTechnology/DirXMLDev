@@ -88,9 +88,9 @@ import java.util.stream.Stream;
  *       (both surface as {@code library/*} paths in the model, and the model does
  *       not record which); reordering is noted rather than attempted so an
  *       ambiguous case is never guessed at.</li>
- *   <li>A brand-new project (no existing Designer origin), packaged-driver
- *       creation, and a whole new AppConfig are out of scope per the design
- *       note; all refuse (the last, only for its own driver).</li>
+ *   <li>Driver removal, and — on the {@link #update} path only — packaged-driver
+ *       creation and a whole new AppConfig; all refuse (the last, only for its own
+ *       driver). {@link #create} lifts the last two (see below).</li>
  *   <li>A form/PRD {@code FORM_CHANGED}/{@code PRD_CHANGED} whose only difference
  *       is package stamps (content identical) is noted rather than rewritten —
  *       regenerating the digest from the model would drop
@@ -99,6 +99,30 @@ import java.util.stream.Stream;
  *   <li>A PRD whose Designer digest {@code cn} disagrees with its filename (a
  *       documented but unobserved-in-the-wild Designer quirk) is addressed by
  *       filename, not by the digest's {@code cn}.</li>
+ * </ul>
+ *
+ * <h2>A brand-new project ({@link #create}, milestones N1+N2)</h2>
+ * <p>{@code export-project --new} writes a whole Designer project from a tree:
+ * {@link ProjectSkeleton} lays out the empty project (descriptors, roots, domain,
+ * vault, driver set, library, catalog — N1), then the very same change loop runs
+ * against it, where every diff is an "added". Three refusals are lifted on this
+ * path only, exactly as {@code docs/designer-new-project.md} §3.2 describes:
+ * <ul>
+ *   <li><b>a packaged driver</b> — its items are written with the package
+ *       attributes Designer reads back ({@code Idm:PackageGuid} /
+ *       {@code Idm:PackageAssocGuid} / {@code Idm:ContentChecksum}, derived from
+ *       the tree's own stamps by {@link ExportWriter#fromVaultStamps}) and an
+ *       {@code <id>_initial_state.xml} baseline. The {@code IdmPackage_} objects
+ *       and {@code Idm:InstalledPackages} relations are milestone N3; until then
+ *       the result lists the packages the tree names;</li>
+ *   <li><b>a driver's {@code Application_}</b> — one per driver in the domain
+ *       ({@code NProv} for the User Application driver), with the driver's
+ *       {@code Idm:Application} back-reference,
+ *       {@code IdmParameter:AppIDCreatedDuringImport} and a modeler node;</li>
+ *   <li><b>a missing AppConfig</b> — {@code Model/Provisioning/.provisioning},
+ *       {@code AppConfig/.appconfig} from a bundled template and the container
+ *       digests, after which forms, PRDs and entitlements go through the existing
+ *       provisioning paths.</li>
  * </ul>
  */
 public final class ProjectWriter {
@@ -110,6 +134,12 @@ public final class ProjectWriter {
     private static final SecureRandom RNG = new SecureRandom();
     private static final Pattern DIGEST_GUID = Pattern.compile("<guid>([0-9A-Z]{8})</guid>");
     private static final String DIGEST_DECL = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+    /** A Designer reference placeholder's id, as it survives into a tree's link refs ({@code library/0}). */
+    private static final Pattern STUB_ID = Pattern.compile("[0-9A-Z]{1,8}");
+    private static final String APPCONFIG_TEMPLATE = "/designer/appconfig-template.xml";
+    /** {@code ProjectReader} records the AppConfig container digest's version here. */
+    static final String APPCONFIG_VERSION_META = "project.appconfig-version";
+    private static final String DEFAULT_APPCONFIG_VERSION = "4.8";
 
     private ProjectWriter() {
     }
@@ -125,7 +155,7 @@ public final class ProjectWriter {
             return result;
         }
 
-        Ctx ctx = new Ctx(projectDir, project, treeDs, dryRun, result);
+        Ctx ctx = new Ctx(tree, projectDir, project, treeDs, dryRun, result);
         ctx.scan();
 
         for (ModelDiff.Change c : diff.changes()) {
@@ -139,16 +169,118 @@ public final class ProjectWriter {
             if (c.kind == ModelDiff.Kind.DRIVER_ADDED) {
                 Driver d = treeDs.driver(c.driver);
                 if (ctx.hasPackageMeta(d)) {
-                    result.refusal = "driver '" + d.name + "' carries package metadata — the project needs "
+                    result.refusal = "driver '" + d.name + "' carries package metadata — an existing project needs "
                         + "Designer's IdmPackage installation records, which only Designer produces; deploy it "
-                        + "to the vault and use Designer's \"Import from the Identity Vault\" instead; nothing was written";
+                        + "to the vault and use Designer's \"Import from the Identity Vault\", or write a whole new "
+                        + "project with --new (which carries the package attributes and baselines); nothing was written";
                     return result;
                 }
             }
         }
 
         ctx.detectRenames(diff);
+        applyChanges(ctx, diff, treeDs, project, result);
 
+        ctx.flush();
+        result.ok = true;
+        return result;
+    }
+
+    /**
+     * Milestone N1+N2 of {@code docs/designer-new-project.md}: writes a whole new Designer
+     * project for {@code tree} into {@code projectDir} (which must not exist, or be empty —
+     * its basename becomes the project name). Everything is built in a staging directory
+     * first and copied into place at the end, so a {@code dryRun} genuinely writes nothing
+     * while still reporting every file it would have produced.
+     */
+    public static Result create(Path tree, Path projectDir, NewProject opts, boolean dryRun) throws IOException {
+        Result result = new Result();
+        Path name = projectDir.getFileName();
+        if (name == null || name.toString().isBlank()) {
+            result.refusal = "cannot tell the project name from '" + projectDir + "' — the directory's basename is "
+                + "the project name and is written into .project, <name>.proj and <name>.cproj";
+            return result;
+        }
+        if (Files.exists(projectDir)) {
+            if (!Files.isDirectory(projectDir)) {
+                result.refusal = "'" + projectDir + "' exists and is not a directory; nothing was written";
+                return result;
+            }
+            List<String> existing = new ArrayList<>();
+            try (Stream<Path> s = Files.list(projectDir)) {
+                s.limit(5).forEach(p -> existing.add(p.getFileName().toString()));
+            }
+            if (!existing.isEmpty()) {
+                result.refusal = "'" + projectDir + "' is not empty (" + String.join(", ", existing)
+                    + "…) — --new never writes into an existing project; point it at a new directory, or drop "
+                    + "--new to update the project that is there; nothing was written";
+                return result;
+            }
+        }
+
+        DriverSet treeDs = AsCodeReader.read(tree);
+        Path staging = Files.createTempDirectory("idm-new-project");
+        try {
+            Path work = staging.resolve(name.toString());
+            Files.createDirectories(work);
+            ProjectSkeleton.Plan plan = ProjectSkeleton.write(work, name.toString(), treeDs, opts, result);
+
+            DriverSet project = ProjectReader.read(work);
+            ModelDiff diff = ModelDiff.of(project, treeDs);
+            Ctx ctx = new Ctx(tree, work, project, treeDs, false, result);
+            ctx.plan = plan;
+            ctx.scan();
+            ctx.usedIds.addAll(plan.usedIds);
+            if (ctx.serverId == null) {
+                ctx.serverId = plan.serverToken;
+            }
+            ctx.createDanglingRefStubs();
+            applyChanges(ctx, diff, treeDs, project, result);
+            ctx.finishNewProject();
+            ctx.flush();
+            ctx.reportPackages();
+
+            if (!dryRun) {
+                copyTree(work, projectDir);
+            }
+            result.ok = true;
+            return result;
+        } finally {
+            deleteTree(staging);
+        }
+    }
+
+    private static void copyTree(Path from, Path to) throws IOException {
+        Files.createDirectories(to);
+        try (Stream<Path> s = Files.walk(from)) {
+            for (Path p : (Iterable<Path>) s::iterator) {
+                Path target = to.resolve(from.relativize(p).toString());
+                if (Files.isDirectory(p)) {
+                    Files.createDirectories(target);
+                } else {
+                    Files.createDirectories(target.getParent());
+                    Files.copy(p, target);
+                }
+            }
+        }
+    }
+
+    private static void deleteTree(Path root) throws IOException {
+        if (!Files.exists(root)) {
+            return;
+        }
+        List<Path> all = new ArrayList<>();
+        try (Stream<Path> s = Files.walk(root)) {
+            s.forEach(all::add);
+        }
+        Collections.reverse(all);
+        for (Path p : all) {
+            Files.deleteIfExists(p);
+        }
+    }
+
+    private static void applyChanges(Ctx ctx, ModelDiff diff, DriverSet treeDs, DriverSet project, Result result)
+        throws IOException {
         for (ModelDiff.Change c : diff.changes()) {
             if (ctx.consumed.contains(c)) {
                 continue;
@@ -184,9 +316,14 @@ public final class ProjectWriter {
                     ctx.applyDriverSetGcvs();
                     break;
                 case DRIVERSET_LINKAGE:
-                    result.notes.add("driver-set GCV linkage changed ('" + c.what + "') but reordering the driver "
-                        + "set's own Idm:GlobalConfigs relations is not implemented (ownership between the driver "
-                        + "set and its Library object is ambiguous in the model); left unchanged");
+                    // a brand-new project has no ambiguity to resolve: the tree's own
+                    // driverset.linkage.* meta says which library GCV objects the driver set
+                    // owns, and finishNewProject() writes those relations in that order.
+                    if (!ctx.creating()) {
+                        result.notes.add("driver-set GCV linkage changed ('" + c.what + "') but reordering the driver "
+                            + "set's own Idm:GlobalConfigs relations is not implemented (ownership between the driver "
+                            + "set and its Library object is ambiguous in the model); left unchanged");
+                    }
                     break;
                 case FORM_ADDED: {
                     Form f = resolveFormFromPath(treeDs, c.path);
@@ -260,10 +397,6 @@ public final class ProjectWriter {
                     break;
             }
         }
-
-        ctx.flush();
-        result.ok = true;
-        return result;
     }
 
     // ------------------------------------------------------------------
@@ -373,13 +506,20 @@ public final class ProjectWriter {
         return r.content == null ? null : CanonicalXml.serialize(r.content);
     }
 
+    /**
+     * The CObject type suffix for an artifact. Derived from its kind, except for a resource
+     * whose content type is none of the three Designer models explicitly (an
+     * {@code EntitlementConfiguration}, say), which gets the type the tree recorded when it
+     * came out of a project and {@code IDMResource} — Designer's generic resource type —
+     * otherwise.
+     */
     private static String typeSuffixFor(Artifact a) {
         if (a instanceof Policy) {
             switch (((Policy) a).policyKind()) {
                 case DIRXML_SCRIPT: return "ScriptPolicy";
                 case XSLT: return "StylesheetPolicy";
                 case SCHEMA_MAP: return "MappingPolicy";
-                default: return null;
+                default: return recordedType(a);
             }
         }
         Resource r = (Resource) a;
@@ -392,7 +532,13 @@ public final class ProjectWriter {
         if (r.isEcmaScript()) {
             return "ECMAScriptResource";
         }
-        return null;
+        String recorded = recordedType(a);
+        return recorded != null ? recorded : "IDMResource";
+    }
+
+    private static String recordedType(Artifact a) {
+        String t = a.meta.get("designer.type");
+        return (t == null || t.isEmpty()) ? null : t;
     }
 
     private static String childRelationNameFor(Artifact a) {
@@ -416,6 +562,20 @@ public final class ProjectWriter {
             case SUB_COMMAND: case PUB_COMMAND: return "Idm:CommandPolicies";
             case SUB_PLACEMENT: case PUB_PLACEMENT: return "Idm:PlacementPolicies";
             default: throw new IllegalStateException("unknown policy set " + set);
+        }
+    }
+
+    /** A fresh Designer id (8 characters from {@code [0-9A-Z]}), added to {@code used} so it is never reused. */
+    static String mintId(Set<String> used) {
+        while (true) {
+            StringBuilder sb = new StringBuilder(8);
+            for (int i = 0; i < 8; i++) {
+                sb.append(ID_ALPHABET[RNG.nextInt(ID_ALPHABET.length)]);
+            }
+            String id = sb.toString();
+            if (used.add(id)) {
+                return id;
+            }
         }
     }
 
@@ -514,6 +674,48 @@ public final class ProjectWriter {
         return meta.get("project." + suffix);
     }
 
+    /**
+     * A digest item's {@code protected}/{@code readonly} flag, kept from the tree when it
+     * records one (a packaged, vendor-protected form must not become editable on the way into
+     * a project) and {@code false} otherwise — what a hand-authored item gets.
+     */
+    private static String flag(Map<String, String> meta, String name) {
+        return "true".equals(provPkgMeta(meta, name)) ? "true" : "false";
+    }
+
+    /** {@code <dirguid>}/{@code <dirrev>}: the vault identity of an item the tree read out of a project. */
+    private static void appendDirStamps(StringBuilder sb, Map<String, String> meta) {
+        String dirguid = provPkgMeta(meta, "dirguid");
+        String dirrev = provPkgMeta(meta, "dirrev");
+        if (dirguid != null) {
+            sb.append("<dirguid>").append(CObjectXml.esc(dirguid)).append("</dirguid>");
+        }
+        if (dirrev != null) {
+            sb.append("<dirrev>").append(CObjectXml.esc(dirrev)).append("</dirrev>");
+        }
+    }
+
+    /**
+     * An artifact's package stamp in Designer/export form: the tree's own attribute when it
+     * came from a project or an export, otherwise the vault's {@code dirxml-pkg*} stamps
+     * mapped through {@link ExportWriter#fromVaultStamps} — the one mapping both writers share.
+     */
+    static String packageStamp(Map<String, String> meta, String key) {
+        String v = meta.get(key);
+        return v != null ? v : ExportWriter.fromVaultStamps(meta, key);
+    }
+
+    /** {@code edit.Packages#isPackaged}'s test, over any meta map (entitlements aren't {@link Artifact}s). */
+    private static boolean isPackagedMeta(Map<String, String> meta) {
+        for (String k : meta.keySet()) {
+            String lk = k.toLowerCase();
+            if (lk.equals("package-id") || lk.equals("pkg-assoc-id") || lk.startsWith("dirxml-pkg")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ------------------------------------------------------------------
     // low-level CObject DOM helpers
     // ------------------------------------------------------------------
@@ -592,10 +794,14 @@ public final class ProjectWriter {
     }
 
     private static void appendRelation(Document doc, String name, String type, String id, String typeSuffix) {
+        appendRelationKey(doc, name, type, "#" + id + "." + typeSuffix + "_");
+    }
+
+    private static void appendRelationKey(Document doc, String name, String type, String key) {
         Element rel = doc.createElement("relations");
         rel.setAttribute("name", name);
         rel.setAttribute("type", type);
-        rel.setAttribute("key", "#" + id + "." + typeSuffix + "_");
+        rel.setAttribute("key", key);
         doc.getDocumentElement().appendChild(rel);
     }
 
@@ -604,6 +810,7 @@ public final class ProjectWriter {
     // ------------------------------------------------------------------
 
     private static final class Ctx {
+        final Path treeDir;
         final Path projectDir;
         final DriverSet project;
         final DriverSet treeDs;
@@ -640,7 +847,24 @@ public final class ProjectWriter {
         String serverId;
         String attrSetObjectUri;
 
-        Ctx(Path projectDir, DriverSet project, DriverSet treeDs, boolean dryRun, Result result) {
+        // ---- brand-new project only (null on the update path) ----
+        /** The skeleton's minted ids; non-null exactly when this is a {@code --new} run. */
+        ProjectSkeleton.Plan plan;
+        /** driver name -&gt; its {@code Application_} id, in the order the drivers were written. */
+        final Map<String, String> applicationIdByDriver = new LinkedHashMap<>();
+        /** {@code {folder, Application_ id}} per AppConfig, for {@code .provisioning}. */
+        final List<String[]> appConfigFolders = new ArrayList<>();
+        /** Library GCV objects the driver set (not the Library) owns, in the tree's recorded order. */
+        final List<String> driverSetGcvNames = new ArrayList<>();
+        /** name -&gt; relation key, filled as those objects are written; emitted in order at the end. */
+        final Map<String, String> driverSetGcvKeys = new LinkedHashMap<>();
+        /** Every library-scope GCV object's relation key, for the driver set's Idm:ConfigExtensions. */
+        final List<String> configExtensionKeys = new ArrayList<>();
+        /** {@code <package id>;<symbolic name>;<version>;<name>} the tree's stamps name (for the N3 note). */
+        final Set<String> packagesSeen = new LinkedHashSet<>();
+
+        Ctx(Path treeDir, Path projectDir, DriverSet project, DriverSet treeDs, boolean dryRun, Result result) {
+            this.treeDir = treeDir;
             this.projectDir = projectDir;
             this.project = project;
             this.treeDs = treeDs;
@@ -728,6 +952,45 @@ public final class ProjectWriter {
                     provisioningDirByDriver.put(d.name, provisioningRoot.resolve(dirName));
                 }
             }
+            if (creating()) {
+                driverSetGcvNames.addAll(driverSetOwnedGcvNames(treeDs));
+            }
+        }
+
+        boolean creating() {
+            return plan != null;
+        }
+
+        /**
+         * The library GCV objects the driver set itself owns, in order — read back out of the
+         * tree's {@code driverset.linkage.<n>} meta ({@code cn=<name>,cn=Library,<dsDn>#<order>#14},
+         * the shape {@code ProjectReader} and {@code LdifReader} both record).
+         */
+        private static List<String> driverSetOwnedGcvNames(DriverSet ds) {
+            Map<Integer, String> byOrder = new java.util.TreeMap<>();
+            for (Map.Entry<String, String> e : ds.meta.entrySet()) {
+                if (!e.getKey().startsWith("driverset.linkage.")) {
+                    continue;
+                }
+                String[] parts = e.getValue().split("#");
+                if (parts.length < 3 || !String.valueOf(PolicySet.GCV.id).equals(parts[2].trim())) {
+                    continue;
+                }
+                String dn = parts[0];
+                if (!dn.startsWith("cn=")) {
+                    continue;
+                }
+                int comma = dn.indexOf(',');
+                String name = comma > 0 ? dn.substring(3, comma) : dn.substring(3);
+                int order;
+                try {
+                    order = Integer.parseInt(parts[1].trim());
+                } catch (NumberFormatException nfe) {
+                    order = byOrder.size();
+                }
+                byOrder.put(order, name);
+            }
+            return new ArrayList<>(byOrder.values());
         }
 
         /** The driver's {@code Model/Provisioning/<AppConfig dir>} on disk, or null when the project has none. */
@@ -772,16 +1035,7 @@ public final class ProjectWriter {
         // ---- id / directory resolution ----
 
         String mintId() {
-            while (true) {
-                StringBuilder sb = new StringBuilder(8);
-                for (int i = 0; i < 8; i++) {
-                    sb.append(ID_ALPHABET[RNG.nextInt(ID_ALPHABET.length)]);
-                }
-                String id = sb.toString();
-                if (usedIds.add(id)) {
-                    return id;
-                }
-            }
+            return ProjectWriter.mintId(usedIds);
         }
 
         String libraryId() {
@@ -1049,7 +1303,7 @@ public final class ProjectWriter {
                 String metaXml = CObjectXml.cobject(b.name, typeSuffix,
                     "<associatedAttrSets objectURI=\"" + CObjectXml.esc(uri) + "\">"
                         + "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"DirXML-ConfigValues\"/>"
-                        + "</associatedAttrSets>", "");
+                        + "</associatedAttrSets>" + packageAttrsXml(b.meta), "");
                 writeFile(metaFile, metaXml, true);
                 Path valuesFile = dir.resolve(newId + "_" + serverId + "_DirXML-ConfigValues.xml");
                 writeFile(valuesFile, CanonicalXml.serialize(r.content), true);
@@ -1060,16 +1314,92 @@ public final class ProjectWriter {
                     Resource r = (Resource) b;
                     attrsXml.append(CObjectXml.attr("DirXML-ContentType", r.contentType, "CString"));
                 }
+                attrsXml.append(packageAttrsXml(b.meta));
                 String metaXml = CObjectXml.cobject(b.name, typeSuffix, attrsXml.toString(), "");
                 writeFile(metaFile, metaXml, true);
                 Path contentsFile = dir.resolve(newId + "_contents.xml");
                 String content = contentStringFor(b);
                 writeFile(contentsFile, content == null ? "" : content, true);
             }
+            writeInitialState(b, newId, dir);
 
+            String key = "#" + newId + "." + typeSuffix + "_";
+            if (creating() && "GlobalConfig".equals(typeSuffix) && b.scope == Scope.LIBRARY) {
+                // A library-scope GCV object is owned either by the Library or by the driver set
+                // itself; the tree's driverset.linkage.* meta is the only record of which, and it
+                // is ordered — so those relations are emitted together, in order, at the end.
+                configExtensionKeys.add(key);
+                if (driverSetGcvNames.contains(b.name)) {
+                    driverSetGcvKeys.put(b.name, key);
+                    return;
+                }
+            }
             String ownerId = ownerContainerId(b.scope, b.driver);
             Document ownerDoc = docFor(ownerId);
             appendRelation(ownerDoc, childRelationNameFor(b), "Child", newId, typeSuffix);
+        }
+
+        /**
+         * The package attributes Designer reads back off a packaged item
+         * ({@code ProjectReader#copyPackageMeta}), plus the {@code initial_state} heavy-data
+         * marker that says an {@code <id>_initial_state.xml} baseline sits beside it. Values
+         * come from the tree's own meta, or from its vault stamps through the very same
+         * mapping the export writer uses ({@link ExportWriter#fromVaultStamps}), so a project
+         * and an export carry identical package associations.
+         */
+        private String packageAttrsXml(Map<String, String> meta) {
+            if (!isPackagedMeta(meta)) {
+                return "";
+            }
+            String pkgId = packageStamp(meta, "package-id");
+            String assocId = packageStamp(meta, "pkg-assoc-id");
+            String checksum = packageStamp(meta, "checksum");
+            String directive = meta.get("directive-checksum");
+            if (pkgId != null) {
+                packagesSeen.add(meta.getOrDefault("dirxml-pkgguid", pkgId));
+            }
+            StringBuilder sb = new StringBuilder(
+                "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"initial_state\"/>");
+            if (assocId != null) {
+                sb.append(CObjectXml.attr("Idm:PackageAssocGuid", assocId, "CString"));
+            }
+            if (pkgId != null) {
+                sb.append(CObjectXml.attr("Idm:PackageGuid", pkgId, "CString"));
+            }
+            if (checksum != null) {
+                sb.append(CObjectXml.attr("Idm:ContentChecksum", checksum, "CLong"));
+            }
+            if (directive != null) {
+                sb.append(CObjectXml.attr("Idm:DirectiveChecksum", directive, "CLong"));
+            }
+            return sb.toString();
+        }
+
+        /**
+         * A packaged item's {@code <id>_initial_state.xml}: the package's own content — which
+         * for a customized item is the {@code .package-baseline/} copy the tree kept
+         * ({@code edit.Packages}), and for an untouched one is the item's content itself.
+         * Designer's "modified" test is exactly this baseline differing from the content.
+         */
+        private void writeInitialState(Artifact a, String id, Path dir) throws IOException {
+            if (!isPackagedMeta(a.meta)) {
+                return;
+            }
+            String content = null;
+            if (Packages.isCustomized(a)) {
+                content = Packages.baseline(treeDir, a);
+                if (content == null) {
+                    result.notes.add("packaged artifact '" + a.path() + "' is marked customized but the tree has no "
+                        + ".package-baseline copy; its _initial_state.xml was written from the current content, so "
+                        + "Designer will not show it as modified");
+                }
+            }
+            if (content == null) {
+                content = contentStringFor(a);
+            }
+            if (content != null) {
+                writeFile(dir.resolve(id + "_initial_state.xml"), content, true);
+            }
         }
 
         void applyArtifactRemoved(Artifact a) throws IOException {
@@ -1181,12 +1511,18 @@ public final class ProjectWriter {
             entitlementIdByPath.put(path, newId);
             result.mintedIds.put(path, newId);
 
-            String attrsXml = "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"contents\"/>";
+            String attrsXml = "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"contents\"/>"
+                + packageAttrsXml(e.meta);
             String metaXml = CObjectXml.cobject(e.name, "Entitlement", attrsXml, "");
             writeFile(metaFile, metaXml, true);
             Path contentsFile = dir.resolve(newId + "_contents.xml");
             String content = e.definition == null ? "" : CanonicalXml.serialize(e.definition);
             writeFile(contentsFile, content, true);
+            if (isPackagedMeta(e.meta)) {
+                // an entitlement has no .package-baseline copy of its own (edit.Packages keeps
+                // those for artifacts only), so its baseline is its current definition
+                writeFile(dir.resolve(newId + "_initial_state.xml"), content, true);
+            }
 
             String ownerId = ownerContainerId(Scope.DRIVER, treeDriver.name);
             Document ownerDoc = docFor(ownerId);
@@ -1279,9 +1615,11 @@ public final class ProjectWriter {
             StringBuilder sb = new StringBuilder();
             sb.append("<item cn=\"cn=").append(CObjectXml.esc(f.name)).append("\" filename=\"")
                 .append(CObjectXml.esc(f.name)).append('.').append(formExt(f.kind))
-                .append("\" hasContainment=\"false\" modstamp=\"0\" protected=\"false\" readonly=\"false\" type=\"")
-                .append(f.kind.digestType).append("\" visible=\"true\">");
+                .append("\" hasContainment=\"false\" modstamp=\"0\" protected=\"")
+                .append(flag(f.meta, "protected")).append("\" readonly=\"").append(flag(f.meta, "readonly"))
+                .append("\" type=\"").append(f.kind.digestType).append("\" visible=\"true\">");
             sb.append("<guid>").append(CObjectXml.esc(guid)).append("</guid>");
+            appendDirStamps(sb, f.meta);
             if (pkgId != null) {
                 sb.append("<package-id>").append(CObjectXml.esc(pkgId)).append("</package-id>");
             }
@@ -1399,8 +1737,11 @@ public final class ProjectWriter {
             StringBuilder sb = new StringBuilder();
             sb.append("<item cn=\"cn=").append(CObjectXml.esc(p.name)).append("\" filename=\"")
                 .append(CObjectXml.esc(p.name)).append(".prd")
-                .append("\" hasContainment=\"false\" modstamp=\"0\" protected=\"false\" readonly=\"false\" type=\"srvprvRequest\" visible=\"true\">");
+                .append("\" hasContainment=\"false\" modstamp=\"0\" protected=\"").append(flag(p.meta, "protected"))
+                .append("\" readonly=\"").append(flag(p.meta, "readonly"))
+                .append("\" type=\"srvprvRequest\" visible=\"true\">");
             sb.append("<guid>").append(CObjectXml.esc(guid)).append("</guid>");
+            appendDirStamps(sb, p.meta);
             for (String[] d : langPairs(p.properties.get("localized-names"))) {
                 sb.append("<display xml:lang=\"").append(CObjectXml.esc(d[0])).append("\">")
                     .append(CObjectXml.esc(d[1])).append("</display>");
@@ -1417,9 +1758,13 @@ public final class ProjectWriter {
                 for (Prd.FormBinding b : p.bindings()) {
                     Form f = treeDriver.provisioning.formByName(b.formId);
                     if (f == null) {
-                        result.notes.add("PRD '" + p.name + "' binds form '" + b.formId
+                        // stock template PRDs all bind the same absent "approval_form"; say it once
+                        String note = "PRD '" + p.name + "' binds form '" + b.formId
                             + "' which does not resolve to a form on driver '" + treeDriver.name
-                            + "'; no digest-dependency recorded for it");
+                            + "'; no digest-dependency recorded for it";
+                        if (!result.notes.contains(note)) {
+                            result.notes.add(note);
+                        }
                         continue;
                     }
                     sb.append("<digest-dependency digest-managed=\"false\" force-deploy=\"true\" "
@@ -1597,9 +1942,21 @@ public final class ProjectWriter {
             Path dsChildrenDir = dsChildrenDir();
             Path driverDir = dsChildrenDir.resolve(driverId);
             Path driverMetaFile = dsChildrenDir.resolve(driverId + ".Driver_");
-            String typeAttr = findDriverTypeForShim(treeDriver.shimClass);
+            // the tree records the driver's own Designer type when it came from a project
+            // ("NProv Driver 4.8.0", "Active Directory 4.1.0.0", …) — much better than a guess
+            String typeAttr = treeDriver.meta.get("designer.driver-type");
+            if (typeAttr == null || typeAttr.isEmpty()) {
+                typeAttr = findDriverTypeForShim(treeDriver.shimClass);
+            }
 
             StringBuilder attrs = new StringBuilder();
+            Element configValues = treeDriver.config.get(Driver.CONFIG_VALUES);
+            if (configValues != null) {
+                attrs.append("<associatedAttrSets objectURI=\"")
+                    .append(CObjectXml.esc(attrSetObjectUri == null ? "" : attrSetObjectUri)).append("\">")
+                    .append("<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"DirXML-ConfigValues\"/>")
+                    .append("</associatedAttrSets>");
+            }
             if (treeDriver.shimClass != null) {
                 attrs.append(CObjectXml.attr("DirXML-JavaModule", treeDriver.shimClass, "CString"));
             }
@@ -1618,6 +1975,14 @@ public final class ProjectWriter {
                 attrs.append(CObjectXml.attr("DirXML-EngineControlValues", CanonicalXml.serialize(ecv), "CString"));
             }
             attrs.append(CObjectXml.attr("DirXML-DriverStartOption", "1", "CInteger"));
+            String driverVersion = treeDriver.meta.get("version");
+            if (driverVersion != null && !driverVersion.isEmpty()) {
+                attrs.append(CObjectXml.attr("DirXML-DriverVersion", driverVersion, "CString"));
+            }
+            String applicationId = creating() ? mintId() : null;
+            if (applicationId != null) {
+                attrs.append(CObjectXml.attr("IdmParameter:AppIDCreatedDuringImport", applicationId, "CString"));
+            }
 
             String metaXml = CObjectXml.cobject(treeDriver.name, typeAttr, attrs.toString(), "");
             Document driverDoc = CanonicalXml.parse(metaXml);
@@ -1664,13 +2029,23 @@ public final class ProjectWriter {
             appendRelation(driverDoc, "Idm:Subscriber", "Child", subId, "Subscriber");
             appendRelation(driverDoc, "Idm:Publisher", "Child", pubId, "Publisher");
 
+            if (configValues != null) {
+                Path valuesFile = dsChildrenDir.resolve(driverId + "_" + serverId + "_DirXML-ConfigValues.xml");
+                configValueFilesById.computeIfAbsent(driverId, k -> new ArrayList<>()).add(valuesFile);
+                writeFile(valuesFile, CanonicalXml.serialize(configValues), true);
+            }
+
             if (dsId != null) {
                 Document dsDoc = docFor(dsId);
                 appendRelation(dsDoc, "Idm:Drivers", "Child", driverId, "Driver");
             }
 
-            result.notes.add("driver '" + treeDriver.name + "' added; Designer's verdict on new drivers is "
-                + "pending (spike 6a) — whether this is enough for Designer to accept the project is not yet known");
+            if (applicationId != null) {
+                applyApplicationAdded(treeDriver, driverId, driverDoc, applicationId);
+            } else {
+                result.notes.add("driver '" + treeDriver.name + "' added; Designer's verdict on new drivers is "
+                    + "pending (spike 6a) — whether this is enough for Designer to accept the project is not yet known");
+            }
 
             for (Artifact a : treeDriver.artifacts()) {
                 applyArtifactAdded(a);
@@ -1680,6 +2055,218 @@ public final class ProjectWriter {
                     applyDriverLinkage(treeDriver, set);
                 }
             }
+            for (Entitlement e : treeDriver.entitlements) {
+                applyEntitlementAdded(treeDriver, e);
+            }
+            if (treeDriver.provisioning != null && applicationId != null) {
+                createAppConfig(treeDriver, applicationId);
+                for (Form f : treeDriver.provisioning.forms) {
+                    applyFormAdded(treeDriver, f);
+                }
+                for (Prd p : treeDriver.provisioning.prds) {
+                    applyPrdAdded(treeDriver, p);
+                }
+            } else if (treeDriver.provisioning != null) {
+                requireProvisioningDir(treeDriver.name);
+            }
+        }
+
+        // ---- brand-new project: Application_, AppConfig, dangling-ref stubs, finalizing ----
+
+        /**
+         * The driver's {@code Application_} in the domain — the object the modeler draws, the
+         * one {@code ProjectReader#attachProvisioning} resolves an AppConfig through, and the
+         * one Designer's own vault import mints (hence
+         * {@code IdmParameter:AppIDCreatedDuringImport} on the driver).
+         */
+        private void applyApplicationAdded(Driver treeDriver, String driverId, Document driverDoc, String applicationId)
+            throws IOException {
+            String type = applicationTypeFor(treeDriver);
+            Path domainDir = metaFileById.get(plan.domainId).getParent().resolve(plan.domainId);
+            Path appFile = domainDir.resolve(applicationId + ".Application_");
+            metaFileById.put(applicationId, appFile);
+            typeById.put(applicationId, "Application");
+            writeFile(appFile, CObjectXml.cobject(treeDriver.name, type,
+                CObjectXml.attr("IdmParameter:Modeler.NameInited", "true", "CString"),
+                "<relations name=\"Idm:Drivers\" type=\"Reference\" key=\"#" + driverId + ".Driver_\"/>"), true);
+            appendRelation(driverDoc, "Idm:Application", "BackReference", applicationId, "Application");
+            appendRelation(docFor(plan.domainId), "Idm:DomainItems", "Child", applicationId, "Application");
+            applicationIdByDriver.put(treeDriver.name, applicationId);
+            result.mintedIds.put("drivers/" + treeDriver.name + " (Application_)", applicationId);
+        }
+
+        /**
+         * The {@code Application_}'s type, as {@code test11pf} types its own: {@code NProv} for
+         * the User Application driver's Composer shim, the shim's own application type for the
+         * IDM drivers that have one, and {@code GenericApp} for everything else (which is what
+         * Designer itself uses for a driver it does not recognize).
+         */
+        private static String applicationTypeFor(Driver d) {
+            String shim = d.shimClass == null ? "" : d.shimClass;
+            switch (shim) {
+                case "com.novell.idm.driver.ComposerDriverShim": return "NProv";
+                case "com.novell.nds.dirxml.driver.nrf.NRFDriverShim": return "NrfApp";
+                case "com.novell.nds.dirxml.driver.dcsshim.DCSShim": return "IDMDCS";
+                case "com.novell.nds.dirxml.driver.msgateway.MSGatewayDriverShim": return "MSGATEWAY";
+                case "com.novell.nds.dirxml.driver.delimitedtext.DelimitedTextDriver": return "DelimitedTextApp";
+                case "com.novell.nds.dirxml.driver.loopback.LoopbackDriverShim": return "LoopBack";
+                case "com.novell.nds.dirxml.driver.nds.DriverShimImpl": return "eDirectory";
+                default: break;
+            }
+            String designerType = d.meta.get("designer.driver-type");
+            if (designerType != null && designerType.startsWith("Active Directory")) {
+                return "ActiveDirectory";
+            }
+            return "GenericApp";
+        }
+
+        /**
+         * A whole {@code Model/Provisioning/<folder>}: the {@code .appconfig} ds-object skeleton
+         * from the bundled template and the six container digests
+         * {@code ProjectReader#attachProvisioning} and the provisioning writer expect
+         * (AppConfig, WorkflowForms + its three form containers, RequestDefs). The AppConfig
+         * digest's {@code guid} is the driver's {@code Application_} id — that is the tie the
+         * reader follows back to the driver.
+         */
+        private void createAppConfig(Driver treeDriver, String applicationId) throws IOException {
+            String folder = appConfigFolders.isEmpty() ? "AppConfig" : "AppConfig" + appConfigFolders.size();
+            Path dir = projectDir.resolve("Model").resolve("Provisioning").resolve(folder);
+            String version = treeDriver.provisioning.meta.get(APPCONFIG_VERSION_META);
+            if (version == null || version.isBlank()) {
+                version = DEFAULT_APPCONFIG_VERSION;
+            }
+            writeFile(dir.resolve(".appconfig"), appConfigTemplate(version), true);
+            // the container's cn is always the vault's (cn=AppConfig); only the folder is numbered
+            writeFile(dir.resolve(folder + ".digest"),
+                containerDigest("AppConfig", "srvprvAppConfig", applicationId, treeDriver.name, version), true);
+            Path formsDir = dir.resolve("WorkflowForms");
+            writeFile(formsDir.resolve("WorkflowForms.digest"),
+                containerDigest("WorkflowForms", "srvprvJSONForms", mintId(), "Workflow Forms", null), true);
+            for (Form.Kind kind : Form.Kind.values()) {
+                writeFile(formsDir.resolve(kind.container).resolve(kind.container + ".digest"),
+                    containerDigest(kind.container, kind.digestType + "s", mintId(), formsContainerDisplay(kind), null), true);
+            }
+            writeFile(dir.resolve("RequestDefs").resolve("RequestDefs.digest"),
+                containerDigest("RequestDefs", "srvprvRequestDefs", mintId(),
+                    "Provisioning Request Definitions", null), true);
+            provisioningDirByDriver.put(treeDriver.name, dir);
+            appConfigFolders.add(new String[] {folder, applicationId});
+        }
+
+        private static String formsContainerDisplay(Form.Kind kind) {
+            switch (kind) {
+                case REQUEST: return "Request Forms";
+                case APPROVAL: return "Approval Forms";
+                case TEMPLATE: return "Template Forms";
+                default: throw new IllegalStateException("unknown form kind " + kind);
+            }
+        }
+
+        private static String containerDigest(String cn, String type, String guid, String display, String version) {
+            return DIGEST_DECL + "\n<container cn=\"cn=" + CObjectXml.esc(cn) + "\" protected=\"false\" readonly=\"false\""
+                + " type=\"" + CObjectXml.esc(type) + "\""
+                + (version == null ? "" : " version=\"" + CObjectXml.esc(version) + "\"")
+                + " visible=\"true\"><guid>" + CObjectXml.esc(guid) + "</guid>"
+                + "<display xml:lang=\"en\">" + CObjectXml.esc(display) + "</display>"
+                + "<modstamp>0</modstamp></container>\n";
+        }
+
+        private static String appConfigTemplate(String version) throws IOException {
+            try (java.io.InputStream in = ProjectWriter.class.getResourceAsStream(APPCONFIG_TEMPLATE)) {
+                if (in == null) {
+                    throw new IOException("bundled resource " + APPCONFIG_TEMPLATE + " is missing from the jar");
+                }
+                return new String(in.readAllBytes(), StandardCharsets.UTF_8).replace("@VERSION@", version);
+            }
+        }
+
+        /**
+         * Designer's own placeholder for a relation target the project doesn't hold — a
+         * {@code type="Ref"} CObject whose id is reused project-wide (the {@code
+         * 0.ECMAScriptResource_} / {@code 1.ECMAScriptResource_} of {@code test11pf}). A tree
+         * read from such a project records those links as {@code library/<id>}, so recreating
+         * the stubs is what keeps a driver's {@code Idm:ExtensionFunctions} list intact
+         * through the round trip instead of silently losing entries.
+         */
+        void createDanglingRefStubs() throws IOException {
+            Path orphanDir = projectDir.resolve("Model").resolve("EdirOrphan");
+            for (Driver d : treeDs.drivers) {
+                for (PolicyLink l : d.links) {
+                    if (treeDs.resolve(l.ref) != null || idByPath.containsKey(l.ref)) {
+                        continue;
+                    }
+                    int slash = l.ref.lastIndexOf('/');
+                    String stubId = slash < 0 ? l.ref : l.ref.substring(slash + 1);
+                    if (!STUB_ID.matcher(stubId).matches()) {
+                        result.notes.add("linkage ref '" + l.ref + "' in driver '" + d.name + "' set '" + l.set.key
+                            + "' resolves to nothing in the tree and does not look like a Designer reference "
+                            + "placeholder; left out of the relation list");
+                        continue;
+                    }
+                    String typeSuffix = l.set == PolicySet.ECMASCRIPT ? "ECMAScriptResource"
+                        : l.set == PolicySet.GCV ? "GlobalConfig" : "ScriptPolicy";
+                    if (!metaFileById.containsKey(stubId)) {
+                        Path f = orphanDir.resolve(stubId + "." + typeSuffix + "_");
+                        metaFileById.put(stubId, f);
+                        typeById.put(stubId, typeSuffix);
+                        writeFile(f, CObjectXml.cobject(stubName(l.ref, d), "Ref", "", ""), true);
+                    }
+                    idByPath.put(l.ref, stubId);
+                    typeByPath.put(l.ref, typeById.get(stubId));
+                }
+            }
+        }
+
+        /** The DN Designer would have put on a {@code Ref} stub; the tree no longer records the real one. */
+        private String stubName(String ref, Driver owner) {
+            String dsDn = (treeDs.dn != null && !treeDs.dn.isEmpty()) ? treeDs.dn : "cn=" + treeDs.name + ",o=system";
+            int slash = ref.lastIndexOf('/');
+            String leaf = slash < 0 ? ref : ref.substring(slash + 1);
+            if (ref.startsWith("library/")) {
+                return "cn=" + leaf + ",cn=Library," + dsDn;
+            }
+            return "cn=" + leaf + ",cn=" + owner.name + "," + dsDn;
+        }
+
+        /**
+         * The writes that need every {@code Application_} to exist: the driver set's ordered
+         * GCV relations, the modeler diagram and {@code Model/Provisioning/.provisioning}.
+         */
+        void finishNewProject() throws IOException {
+            if (dsId != null && (!driverSetGcvKeys.isEmpty() || !configExtensionKeys.isEmpty())) {
+                Document dsDoc = docFor(dsId);
+                for (String name : driverSetGcvNames) {
+                    String key = driverSetGcvKeys.remove(name);
+                    if (key != null) {
+                        appendRelationKey(dsDoc, "Idm:GlobalConfigs", "Child", key);
+                    }
+                }
+                for (String key : driverSetGcvKeys.values()) {
+                    appendRelationKey(dsDoc, "Idm:GlobalConfigs", "Child", key);
+                }
+                for (String key : configExtensionKeys) {
+                    appendRelationKey(dsDoc, "Idm:ConfigExtensions", "Reference", key);
+                }
+            }
+            writeFile(projectDir.resolve("Model").resolve("IdentityManager")
+                    .resolve(plan.modelerNodesId + ".ModelerNodes_"),
+                ProjectSkeleton.modelerNodes(plan, new ArrayList<>(applicationIdByDriver.values())), true);
+            if (!appConfigFolders.isEmpty()) {
+                writeFile(projectDir.resolve("Model").resolve("Provisioning").resolve(".provisioning"),
+                    ProjectSkeleton.provisioningIndex(appConfigFolders), true);
+            }
+        }
+
+        /** N3's input: which packages the tree's stamps name, so the catalog step knows what to fetch. */
+        void reportPackages() {
+            if (packagesSeen.isEmpty()) {
+                return;
+            }
+            List<String> sorted = new ArrayList<>(packagesSeen);
+            Collections.sort(sorted);
+            result.notes.add("no IdmPackage_ objects and no Idm:InstalledPackages relations were written (milestone "
+                + "N3): Designer will show these " + sorted.size() + " package(s)' items as plain until the catalog "
+                + "is written or the packages are imported in Designer — " + String.join(", ", sorted));
         }
     }
 }

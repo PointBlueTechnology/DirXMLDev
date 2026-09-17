@@ -1,6 +1,12 @@
 # A fresh Designer project from a tree — design note
 
-Status: **confirmed 2026-09-17 (Jerry: "go with your recommendation" on every §5 point — forms/PRDs/entitlements first and opaque `AppConfig` later; N3 packages as described; optional vault/server flags, default none; `export-project --new`). N1+N2 building; N3 spike running.** Follows
+Status: **N1+N2 built 2026-09-17** (`source.ProjectSkeleton`, `source.NewProject`,
+`ProjectWriter.create`, `bin/idm export-project … --new`; 10 tests, 576 green).
+Confirmed 2026-09-17 (Jerry: "go with your recommendation" on every §5 point —
+forms/PRDs/entitlements first and opaque `AppConfig` later; N3 packages as
+described; optional vault/server flags, default none; `export-project --new`).
+N3 spike running. **§7 below records what was built, where it deviates from this
+note, and what only Designer can answer.** Follows
 [designer-roundtrip.md](designer-roundtrip.md) §3 (the writer that updates an
 existing project) and closes the gap
 [howto-fresh-designer-project.md](howto-fresh-designer-project.md) works
@@ -247,3 +253,107 @@ including the round-trip tests and the first Designer check. N3 packages:
 one on-disk spike (a day) then the catalog-to-CObject writer — the larger
 half, a week. Opaque `AppConfig` (§5.1, second option): after N3, sized when
 chosen. Each milestone ends with Jerry opening the project in Designer.
+
+## 7. Built — N1 + N2 (2026-09-17)
+
+```
+bin/idm export-project tree/ <newProjectDir> --new
+    [--vault-name NAME] [--vault-host HOST] [--vault-user DN]
+    [--server NAME --server-context DN] [--dry-run] [--json]
+```
+
+- `source.NewProject` — the optional vault/server details; deliberately has no
+  password field.
+- `source.ProjectSkeleton` (N1) — `.project`, `<name>.proj`, `<name>.cproj`, the
+  three `CRoot_`s, `Domain_`, `IdentityVault_`, `DriverSet_` + `Library_`,
+  `Server_` (only with `--server`), `ProjectData_` + `IdmCatalog_` + the six
+  stock `IdmCategory_` objects. It also mints the `ModelerNodes_` id and writes
+  the diagram and `Model/Provisioning/.provisioning` at the end, once the
+  `Application_` objects exist.
+- `ProjectWriter.create` (N2) — builds the skeleton in a staging directory, runs
+  the *same* change loop the update path runs (so every fix benefits both), then
+  copies the result into place. `--dry-run` therefore reports every file it would
+  write and leaves the target directory untouched (it is not even created).
+- Lifted on this path only: the packaged-driver refusal, the "no AppConfig"
+  refusal, and the ambiguity note on driver-set GCV linkage (the tree's
+  `driverset.linkage.*` meta settles it for a new project).
+
+Verified: the round trip of §4, check 1, passes on a synthetic project (packaged
+policy, packaged entitlement, protected packaged form, bound PRD, library
+ECMAScript, dangling reference placeholder) and, guarded, on
+`~/IdeaProjects/DirXMLDev-e2e/tree-test11pf` (19 drivers, 4 packaged, 12 forms,
+40 PRDs) — `import-project` of the written project is byte-identical as-code to
+the tree, modulo the minted ids. `src/test/.../source/NewProjectWriterTest.java`.
+
+### 7.1 Deviations from this note
+
+1. **The `.appconfig` template is the skeleton, not test11pf's file.**
+   test11pf's `.appconfig` is 931 KB — the stock `DirectoryModel` entity
+   definitions, `UIConfig` nav items, `RoleConfig` report definitions and
+   `AuthTypes` of one client's vault. Bundling it would ship a client artifact
+   and a megabyte of content §3.4 says stays out, so
+   `src/main/resources/designer/appconfig-template.xml` carries the shape and
+   nothing else: the `srvprvAppConfig` ds-object with `version` (substituted) and
+   the stock `srvprvPlugins`, and every top- and second-level container from
+   test11pf's file (`RequestDefs`, `WorkFlowDefs`, `ResourceDefs`, `ServiceDefs`,
+   `DirectoryModel` + its four, `AppDefs`, `ProxyDefs`, `DelegateeDefs`,
+   `DelegationDefs`, `TeamDefs`, `RoleConfig` + its four, `AuthTypes`,
+   `UIConfig` + `NavItems`), each empty. **This is the first thing for Designer
+   to judge** (§7.2).
+2. **The vault's default name is `Identity Vault`.** The design said "the driver
+   set's tree name"; the model records the driver set's DN but never the
+   eDirectory *tree* name, so there is nothing to infer — pass `--vault-name`.
+3. **`Idm:ConfigExtensions`.** test11pf's driver set references every
+   library-scope GCV object there, whether the driver set or the Library owns it.
+   The tree cannot record that (the reader never walks `ConfigExtensions`), so a
+   new project writes one `Idm:ConfigExtensions` reference per library GCV
+   object — the superset test11pf has.
+4. **Reference placeholders are recreated.** A tree read from a project records a
+   dangling `Idm:ExtensionFunctions` target as `library/<id>` (test11pf's
+   `0.`/`1.ECMAScriptResource_`). `--new` writes those `type="Ref"` stubs back so
+   the linkage list survives the round trip; their `name` is a synthesized DN,
+   because the original one is not in the tree.
+5. **No per-server attribute sets for ordinary driver settings.** `DirXML-ConfigValues`
+   (driver, driver set and GCV objects) goes in an `associatedAttrSets` block the
+   way test11pf does it, but `DirXML-DriverStartOption` / `DirXML-ShimAuthID` and
+   the rest are written at the top level of the CObject — where the reader finds
+   them either way. Without `--server` there is no `Server_` at all and the
+   per-server files are filed under a minted token; pass `--server` for a project
+   Designer will connect to.
+6. **Smaller fixes that fell out of this work and apply to the update path too:**
+   a resource whose content type Designer does not model specially (an
+   `EntitlementConfiguration`) is now written as `IDMResource` instead of being
+   skipped with a note; a new driver keeps the Designer type the tree recorded
+   (`designer.driver-type`) instead of guessing from a sibling's shim; a new
+   driver's own `DirXML-ConfigValues` file is written; a form/PRD digest keeps
+   `protected`/`readonly`/`dirguid`/`dirrev` when the tree carries them; and the
+   "PRD binds a form that does not resolve" note is said once, not once per PRD.
+
+### 7.2 What the Designer check must look at (the code cannot)
+
+1. **The project opens at all** and the System Model, developer view and
+   Provisioning view are populated (a silent empty import is the §1.1 symptom).
+2. **The pruned `.appconfig`** (deviation 1): does the Provisioning view open
+   with empty `DirectoryModel` / `RoleConfig` / `UIConfig` / `AuthTypes`
+   containers, and do the forms and PRDs still open in the form builder and the
+   workflow editor? If Designer needs the stock content, the template grows —
+   from Designer's own defaults, not from a client's file.
+3. **The modeler diagram**: one node per driver, on the canvas, connected to the
+   vault after a *Re-layout*; no missing-node repair prompt. (`--new` writes no
+   driver-set node and no edges — §3.1 said a simple grid; whether Designer
+   re-draws the edges itself is the open question.)
+4. **A project with no `Server_`** (no `--server`): does Designer accept a driver
+   set without one and offer to add a server, or does it repair/complain about
+   the per-server `DirXML-ConfigValues` files filed under a token with no
+   matching object?
+5. **Packaged items without the catalog**: confirm the 7c observation — the
+   items show as plain (not as *modified*), *Check for Package Updates* offers
+   nothing wrong, and importing the packages in Designer afterwards
+   re-associates them (this is what decides whether N3 is required or merely
+   nice).
+6. ***Project → Validate*** is clean, and ***Live → Compare*** against the source
+   vault shows only what §3.4 leaves out (jobs, notification templates, schema,
+   the rest of `AppConfig`, packages).
+7. **Deploy one policy** from the new project to a scratch driver and
+   `vault.diff` against the tree — §4.3, the proof the project is not merely
+   viewable.

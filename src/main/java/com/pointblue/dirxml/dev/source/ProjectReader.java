@@ -268,6 +268,13 @@ public final class ProjectReader {
             Provisioning p = new Provisioning();
             p.dn = target.dn != null ? "cn=AppConfig," + target.dn : null;
             p.meta.put("designer.dir", dirName);
+            // the AppConfig container digest is the only place the project records the
+            // srvprvAppConfig version (4.8 in a 4.8.7 project); the writer needs it to mint
+            // a .appconfig for a driver whose project has none yet.
+            String appConfigVersion = digest.getAttribute("version");
+            if (appConfigVersion != null && !appConfigVersion.isEmpty()) {
+                p.meta.put("project.appconfig-version", appConfigVersion);
+            }
             readFormsDir(dir.resolve("WorkflowForms"), p);
             readPrdsDir(dir.resolve("RequestDefs"), p);
             target.provisioning = p;
