@@ -1,7 +1,9 @@
 # A fresh Designer project from a tree — design note
 
-Status: **N1+N2 built 2026-09-17** (`source.ProjectSkeleton`, `source.NewProject`,
-`ProjectWriter.create`, `bin/idm export-project … --new`; 10 tests, 576 green).
+Status: **N1+N2 built and merged 2026-09-17** (b781d67; `source.ProjectSkeleton`, `source.NewProject`,
+`ProjectWriter.create`, `bin/idm export-project … --new`; 10 tests, 576 green). `~/designer_workspace/test11new`
+was written from `tree-test11pf` for the Designer check (§7.2); round trip through `import-project` is clean.
+N3 spike done → [spikes/designer-project-catalog.md](spikes/designer-project-catalog.md); N3 is next.
 Confirmed 2026-09-17 (Jerry: "go with your recommendation" on every §5 point —
 forms/PRDs/entitlements first and opaque `AppConfig` later; N3 packages as
 described; optional vault/server flags, default none; `export-project --new`).
