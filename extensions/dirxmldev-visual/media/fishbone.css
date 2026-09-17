@@ -155,8 +155,14 @@ svg {
   fill: var(--fg);
   font-size: 10px;
   pointer-events: none;
+  overflow: hidden;
 }
 .policy.unresolved rect { stroke: #c45c5c; }
+
+.bone.resource .policy rect,
+.bone.resource .policy text {
+  max-width: 150px;
+}
 
 .bone:hover rect, .policy:hover rect {
   filter: brightness(1.15);

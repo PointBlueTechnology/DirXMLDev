@@ -71,6 +71,8 @@ import java.util.stream.Stream;
  *       Idm:MappingPolicies / Idm:InputPolicies / Idm:OutputPolicies (Reference,
  *       ordered — schema map / input transform / output transform; a policy bound here
  *       can be a ScriptPolicy_ OR a MappingPolicy_, kind is derived from content),
+ *       Idm:StartupPolicies / Idm:ShutdownPolicies (Reference, ordered — driver-level
+ *       policy sets 15/16; engine ≥ 4.0.2.3),
  *       Idm:ExtensionFunctions (Reference, ordered — ECMAScript resources in scope;
  *       target can be library- or driver-owned, or an unmodeled system resource whose
  *       id has no metadata, e.g. "0.ECMAScriptResource_")
@@ -668,6 +670,8 @@ public final class ProjectReader {
         addLinks(idx, d, m, "Idm:MappingPolicies", PolicySet.SCHEMA_MAPPING, Scope.DRIVER, d.name, 0);
         addLinks(idx, d, m, "Idm:InputPolicies", PolicySet.INPUT, Scope.DRIVER, d.name, 0);
         addLinks(idx, d, m, "Idm:OutputPolicies", PolicySet.OUTPUT, Scope.DRIVER, d.name, 0);
+        addLinks(idx, d, m, "Idm:StartupPolicies", PolicySet.STARTUP, Scope.DRIVER, d.name, 0);
+        addLinks(idx, d, m, "Idm:ShutdownPolicies", PolicySet.SHUTDOWN, Scope.DRIVER, d.name, 0);
         addLinks(idx, d, m, "Idm:ExtensionFunctions", PolicySet.ECMASCRIPT, Scope.LIBRARY, null, 0);
 
         // channels
