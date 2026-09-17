@@ -1983,8 +1983,29 @@ public final class ProjectWriter {
             if (typeAttr == null || typeAttr.isEmpty()) {
                 typeAttr = findDriverTypeForShim(treeDriver.shimClass);
             }
-
             String applicationType = ApplicationType.of(treeDriver);
+            // a live-imported tree records no Designer driver type; Designer's importer settles it from the
+            // shim, or — Remote Loader and SCIM drivers — from the base package's supported-drivers, and
+            // the type is what selects the icon set and the application node (docs/designer-new-project.md §7.2a)
+            // the driver type its base package declares (needs --catalog): the type itself for a Remote
+            // Loader or SCIM shim (Designer's importer does the same), and the icon for any custom shim
+            String baseType = opts == null ? null : ProjectCatalogWriter.baseDriverType(treeDriver, opts.catalogDir);
+            if (typeAttr == null || typeAttr.isEmpty() || "[ANY]".equals(typeAttr)) {
+                String byApp = ApplicationType.driverTypeForApp(applicationType);
+                if (ApplicationType.typeComesFromBasePackage(treeDriver.shimClass) && baseType != null) {
+                    typeAttr = baseType;
+                } else if (byApp != null) {
+                    typeAttr = byApp;
+                } else if (baseType != null && !ApplicationType.GENERIC.equals(applicationType)) {
+                    typeAttr = baseType;
+                }
+            }
+            if (ApplicationType.GENERIC.equals(applicationType)) {
+                String byType = ApplicationType.forDriverType(typeAttr);
+                if (byType != null) {
+                    applicationType = byType;
+                }
+            }
 
             StringBuilder attrs = new StringBuilder();
             Element configValues = treeDriver.config.get(Driver.CONFIG_VALUES);
@@ -1994,7 +2015,7 @@ public final class ProjectWriter {
                     .append("<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"DirXML-ConfigValues\"/>")
                     .append("</associatedAttrSets>");
             }
-            if (writeDriverIcon(applicationType, driverId, dsChildrenDir)) {
+            if (writeDriverIcon(applicationType, typeAttr, baseType, driverId, dsChildrenDir)) {
                 attrs.append("<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" "
                     + "attrName=\"icon\" extension=\"gif\"/>");
             }
@@ -2142,7 +2163,7 @@ public final class ProjectWriter {
          * caller adds the matching {@code CHeavyData} attribute; says so once when no install
          * was found. An icon is never written into a tree, only into a project.
          */
-        private boolean writeDriverIcon(String applicationType, String driverId, Path dsChildrenDir)
+        private boolean writeDriverIcon(String applicationType, String driverType, String baseType, String driverId, Path dsChildrenDir)
             throws IOException {
             if (!creating()) {
                 // an existing project already has Designer's icons for the drivers it holds; a
@@ -2154,7 +2175,7 @@ public final class ProjectWriter {
                 }
                 return false;
             }
-            Path icon = designer.icon(applicationType);
+            Path icon = designer.icon(applicationType, driverType, baseType);
             if (icon == null) {
                 if (!notedMissingIcons) {
                     notedMissingIcons = true;

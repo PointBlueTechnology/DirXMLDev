@@ -40,11 +40,20 @@ public final class DesignerInstall {
     public final String source;
     /** {@code <root>/plugins/com.novell.core_<ver>/icons/iManager}, or null. */
     public final Path iconDir;
+    /** Plugins whose {@code icons/iManager} Designer consults before the core's (the provisioning plugin's NProv.gif is the one test11pf carries). */
+    private static final String[] PREFERRED_PLUGINS = {"com.novell.prov.pal.integration_"};
+    /** Icon directories in lookup order: the preferred plugins' first, the core's last. */
+    private final java.util.List<Path> iconDirs;
 
     private DesignerInstall(Path root, String source, Path iconDir) {
+        this(root, source, iconDir, iconDir == null ? java.util.List.of() : java.util.List.of(iconDir));
+    }
+
+    private DesignerInstall(Path root, String source, Path iconDir, java.util.List<Path> iconDirs) {
         this.root = root;
         this.source = source;
         this.iconDir = iconDir;
+        this.iconDirs = iconDirs;
     }
 
     /** Nothing found — {@link #icon} always returns null. */
@@ -82,7 +91,35 @@ public final class DesignerInstall {
         if (icons == null || !Files.isDirectory(icons)) {
             return new DesignerInstall(root, source, null);
         }
-        return new DesignerInstall(root, source, icons);
+        java.util.List<Path> dirs = new java.util.ArrayList<>();
+        for (String prefix : PREFERRED_PLUGINS) {
+            Path p = newestPlugin(plugins, prefix);
+            if (p != null && Files.isDirectory(p.resolve(ICON_DIR))) {
+                dirs.add(p.resolve(ICON_DIR));
+            }
+        }
+        dirs.add(icons);
+        return new DesignerInstall(root, source, icons, dirs);
+    }
+
+    /** The lexically newest {@code plugins/<prefix>*} directory, or null. */
+    private static Path newestPlugin(Path plugins, String prefix) {
+        if (!Files.isDirectory(plugins)) {
+            return null;
+        }
+        Path best = null;
+        try (java.util.stream.Stream<Path> s = Files.list(plugins)) {
+            for (Path p : (Iterable<Path>) s::iterator) {
+                String n = p.getFileName().toString();
+                if (n.startsWith(prefix) && Files.isDirectory(p)
+                    && (best == null || n.compareTo(best.getFileName().toString()) > 0)) {
+                    best = p;
+                }
+            }
+        } catch (java.io.IOException e) {
+            return null;
+        }
+        return best;
     }
 
     /** True when an icon could actually be copied from here. */
@@ -96,13 +133,46 @@ public final class DesignerInstall {
      * icon of its own). Null when no install was found or neither file exists.
      */
     public Path icon(String applicationType) {
+        return icon(applicationType, null);
+    }
+
+    /**
+     * The same, also trying the Designer driver type's short name ({@code AD-Driver} → {@code AD.gif},
+     * {@code SCIM-Driver} → {@code SCIM.gif}) — the names the iManager icon set uses for drivers
+     * whose application type has no icon of its own.
+     */
+    public Path icon(String applicationType, String driverType) {
+        return icon(applicationType, driverType, null);
+    }
+
+    /**
+     * The same, with a third name to try: the driver type the driver's <b>base package</b>
+     * declares — what gives a custom SCIM-based shim typed {@code [ANY]} the SCIM icon, as
+     * Designer's own importer does (test11pf: Beeline, CyberArk).
+     */
+    public Path icon(String applicationType, String driverType, String basePackageDriverType) {
         if (iconDir == null) {
             return null;
         }
-        if (applicationType != null && !applicationType.isBlank()) {
-            Path p = iconDir.resolve(applicationType + ".gif");
-            if (Files.isRegularFile(p)) {
-                return p;
+        java.util.List<String> names = new java.util.ArrayList<>();
+        if (applicationType != null && !applicationType.isBlank() && !FALLBACK_ICON.equals(applicationType)) {
+            names.add(applicationType);
+        }
+        for (String t : new String[] {driverType, basePackageDriverType}) {
+            if (t != null && !t.isBlank() && !"[ANY]".equals(t)) {
+                names.add(t.endsWith("-Driver") ? t.substring(0, t.length() - 7) : t);
+                String app = ApplicationType.forDriverType(t);
+                if (app != null && !FALLBACK_ICON.equals(app)) {
+                    names.add(app);
+                }
+            }
+        }
+        for (String n : names) {
+            for (Path dir : iconDirs) {
+                Path p = dir.resolve(n + ".gif");
+                if (Files.isRegularFile(p)) {
+                    return p;
+                }
             }
         }
         Path generic = iconDir.resolve(FALLBACK_ICON + ".gif");

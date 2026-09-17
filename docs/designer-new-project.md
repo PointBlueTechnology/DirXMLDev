@@ -353,6 +353,27 @@ the tree, modulo the minted ids. `src/test/.../source/NewProjectWriterTest.java`
 | 6 Validate / Compare | appears ok |
 | 7 deploy from the project | **good** |
 
+### 7.2b Icons and driver types — resolved (2026-09-17, after the ig4new check)
+
+Jerry's second check: everything good except the icons. Cause: Designer's icon set is
+selected by the **driver type** on the `Driver_` (`AD-Driver`, `SCIM-Driver`,
+`LoopBack-Driver`, … `[ANY]` for an unknown shim), and a live-imported tree records
+none, so `--new` wrote `[ANY]` everywhere and the modeler drew the generic box. Now:
+the type comes from Designer's driver definitions by shim class when one shim settles
+it, else — for the Remote Loader proxy shim and SCIM shims, as Designer's importer
+does — from the driver's **base package** (`supported-drivers/@driver-id` in the jar's
+directive, read from `--catalog`); the application type follows the type; and the
+`<id>_icon.gif` is chosen by application type, then driver type, then the base
+package's driver type, from the provisioning plugin's `icons/iManager` before the
+core's (test11pf's User Application icon is the provisioning plugin's). Verified
+against Designer's own import of the same vault (test11pf): every driver's type is
+identical and every icon is byte-identical except (a) three drivers whose icons in
+test11pf are older files of an earlier Designer's icon set (Loopback, Gateway, Null —
+ours are the current install's), (b) custom shims with no base package in the vault
+(Beeline, CyberArk, EventLogger, AcctExpNotif — their test11pf icons were set when
+the drivers were built in Designer; the vault never holds an icon), which get the
+generic icon, and (c) two drivers Designer drew without any icon.
+
 ### 7.2 What the Designer check must look at (the code cannot)
 
 1. **The project opens at all** and the System Model, developer view and
