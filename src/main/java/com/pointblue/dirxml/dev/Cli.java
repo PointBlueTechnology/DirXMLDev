@@ -34,15 +34,40 @@ public final class Cli {
             if (args.length >= 3 && args[0].equals("import-ldif")) {
                 System.exit(write(com.pointblue.dirxml.dev.source.LdifReader.read(Paths.get(args[1])), Paths.get(args[2])));
             }
-            if (args.length >= 3 && args[0].equals("import-live")) {
-                // import-live <driverSetDN> <outDir>  (connection from -Dldap.url/-Dldap.bindDn/-Dldap.password)
-                com.pointblue.dirxml.dev.deploy.Vault.Config c = new com.pointblue.dirxml.dev.deploy.Vault.Config();
-                c.url = need("ldap.url");
-                c.bindDn = need("ldap.bindDn");
-                c.password = need("ldap.password");
-                c.trustAll = !"false".equals(System.getProperty("ldap.trustAll"));
+            if (args.length >= 2 && args[0].equals("import-live")) {
+                // import-live [<driverSetDN>] <outDir> --env NAME      (environments.properties: url, bindDn, password in any form, driverSet)
+                // import-live <driverSetDN> <outDir>                    (connection from -Dldap.url/-Dldap.bindDn/-Dldap.password)
+                java.util.List<String> positional = new java.util.ArrayList<>();
+                String envName = null;
+                for (int i = 1; i < args.length; i++) {
+                    if (args[i].equals("--env") && i + 1 < args.length) {
+                        envName = args[++i];
+                    } else {
+                        positional.add(args[i]);
+                    }
+                }
+                com.pointblue.dirxml.dev.deploy.Vault.Config c;
+                String driverSetDn;
+                if (envName != null) {
+                    com.pointblue.dirxml.dev.deploy.Environments.Environment env =
+                        com.pointblue.dirxml.dev.deploy.Environments.load().get(envName);
+                    c = env.vaultConfig();
+                    driverSetDn = positional.size() >= 2 ? positional.get(0) : env.driverSetDn;
+                } else {
+                    if (positional.size() < 2) {
+                        System.err.println("usage: import-live [<driverSetDN>] <outDir> --env NAME   |   import-live <driverSetDN> <outDir> (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
+                        System.exit(2);
+                    }
+                    c = new com.pointblue.dirxml.dev.deploy.Vault.Config();
+                    c.url = need("ldap.url");
+                    c.bindDn = need("ldap.bindDn");
+                    c.password = need("ldap.password");
+                    c.trustAll = !"false".equals(System.getProperty("ldap.trustAll"));
+                    driverSetDn = positional.get(0);
+                }
+                Path outDir = Paths.get(positional.get(positional.size() - 1));
                 // every attribute (package stamps included) — the same reader vault.diff / deploy use
-                System.exit(write(com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, args[1]), Paths.get(args[2])));
+                System.exit(write(com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, driverSetDn), outDir));
             }
             if (args.length >= 2 && args[0].equals("check")) {
                 System.exit(doCheck(Paths.get(args[1])));
@@ -312,6 +337,7 @@ public final class Cli {
         System.err.println("  import <export.xml> <outDir>          read a driver / driver-set export, write IDM-as-code");
         System.err.println("  import-project <projectDir> <outDir>  read a Designer project, write IDM-as-code");
         System.err.println("  import-ldif <dump.ldif> <outDir>      read an LDIF of the driver-set subtree, write IDM-as-code");
+        System.err.println("  import-live <outDir> --env E          read the live vault named in environments.properties (its driverSet; a DN before <outDir> overrides)");
         System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
         System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
         System.err.println("  export-project <tree> <projectDir> [--dry-run] [--json]  update an existing Designer project to match a tree");

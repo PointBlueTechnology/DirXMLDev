@@ -38,6 +38,7 @@ and [docs/agent-guide.md](docs/agent-guide.md).
 bin/idm import <export.xml> <outDir>          # driver / driver-set export → IDM-as-code
 bin/idm import-project <projectDir> <outDir>  # Designer project → IDM-as-code
 bin/idm import-ldif <dump.ldif> <outDir>      # LDIF of the driver-set subtree → IDM-as-code
+bin/idm import-live <outDir> --env <name>     # live vault → IDM-as-code (connection from environments.properties)
 IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…" \
   bin/idm import-live <driverSetDN> <outDir>  # live vault → IDM-as-code
 bin/idm check <asCodeDir>                     # load a tree, report it, exit 1 on broken links

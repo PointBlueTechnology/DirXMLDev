@@ -539,11 +539,46 @@ public final class ExportWriter {
         putMetaAttr(el, meta, "modified");
     }
 
+    /**
+     * An export attribute from the tree's meta. A tree read from a Designer
+     * export or project carries the attribute under its own name; a tree read
+     * from the vault (live or LDIF) carries the vault's package stamps instead —
+     * {@code dirxml-pkgguid} ({@code id;symbolicName;version;name;shortName}),
+     * {@code dirxml-pkgassociationid}, {@code dirxml-pkgchecksum} and the
+     * {@code package.customized} flag — which map onto the export attributes
+     * one-to-one, so Designer sees the same package associations either way.
+     */
     private static void putMetaAttr(Element el, Map<String, String> meta, String key) {
         String v = meta.get(key);
+        if (v == null) {
+            v = fromVaultStamps(meta, key);
+        }
         if (v != null) {
             el.setAttribute(key, v);
         }
+    }
+
+    static String fromVaultStamps(Map<String, String> meta, String key) {
+        String guid = meta.get("dirxml-pkgguid");
+        switch (key) {
+            case "package-id":
+                return guid == null ? null : field(guid, 0);
+            case "package-version":
+                return guid == null ? null : field(guid, 2);
+            case "pkg-assoc-id":
+                return meta.get("dirxml-pkgassociationid");
+            case "checksum":
+                return meta.get("dirxml-pkgchecksum");
+            case "modified":
+                return "true".equals(meta.get(com.pointblue.dirxml.dev.edit.Packages.CUSTOMIZED_KEY)) ? "true" : null;
+            default:
+                return null;
+        }
+    }
+
+    private static String field(String record, int i) {
+        String[] f = record.split(";", -1);
+        return i < f.length && !f[i].isBlank() ? f[i].trim() : null;
     }
 
     // ---- linkage dn synthesis ----------------------------------------------------

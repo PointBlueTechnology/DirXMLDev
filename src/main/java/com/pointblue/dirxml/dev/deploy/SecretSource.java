@@ -23,6 +23,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *   kCommand=cmd        the stdout of a shell command (trailing newlines stripped), e.g. a password-manager CLI
  *   kKeychain=service[/account]   macOS Keychain: security find-generic-password -s service [-a account] -w
  * </pre>
+ * {@code kCommand} runs through {@code /bin/sh -c} (macOS, Linux) or {@code cmd.exe /c}
+ * (Windows) — on Windows point it at a PowerShell one-liner that reads the
+ * Credential Manager, or use {@code kEnv}.
  * Values come back as {@code char[]} and are never printed by anything in this
  * package. {@link #warnIfShared(Path)} prints one warning per file when a
  * credentials file is readable by anyone but its owner.
@@ -79,7 +82,7 @@ public final class SecretSource {
         }
         String cmd = props.getProperty(key + "Command");
         if (cmd != null && !cmd.isBlank()) {
-            return run(what + " (" + key + "Command)", List.of("/bin/sh", "-c", cmd.trim()));
+            return run(what + " (" + key + "Command)", shell(cmd.trim()));
         }
         String kc = props.getProperty(key + "Keychain");
         if (kc != null && !kc.isBlank()) {
@@ -116,6 +119,12 @@ public final class SecretSource {
                 + " — add one with: security add-generic-password -s '" + service + "' -a '"
                 + (account == null ? System.getProperty("user.name") : account) + "' -w", e);
         }
+    }
+
+    /** The platform shell for a {@code …Command} value: {@code cmd.exe /c} on Windows, {@code /bin/sh -c} elsewhere. */
+    static List<String> shell(String cmd) {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        return os.contains("win") ? List.of("cmd.exe", "/c", cmd) : List.of("/bin/sh", "-c", cmd);
     }
 
     private static char[] run(String what, List<String> command) throws IOException {

@@ -10,7 +10,7 @@ Run `bin/idm` for the full usage with every argument. All commands print
 | `import <export.xml> tree/` | a driver or driver-set export |
 | `import-project <dir> tree/` | a Designer project |
 | `import-ldif <dump.ldif> tree/` | an LDIF of the driver-set subtree (must include the DirXML attributes) |
-| `import-live <driverSetDN> tree/` | the live vault (`IDM_JAVA_OPTS=-Dldap.url/-Dldap.bindDn/-Dldap.password`) |
+| `import-live tree/ --env <name>` | the live vault named in `environments.properties` (a driver-set DN before `tree/` overrides its `driverSet`); the old `import-live <driverSetDN> tree/` with `IDM_JAVA_OPTS=-Dldap.url/-Dldap.bindDn/-Dldap.password` still works |
 | `export tree/ out.xml` | a Designer driver-set export of the tree |
 
 ## Orient
