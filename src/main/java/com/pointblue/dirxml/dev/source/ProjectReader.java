@@ -418,8 +418,10 @@ public final class ProjectReader {
 
         putProjectProp(prd, "status", root.getAttribute("status"));
         putProjectProp(prd, "flow-strategy", root.getAttribute("flow-strategy"));
-        putProjectProp(prd, "grant", root.getAttribute("grant"));
-        putProjectProp(prd, "revoke", root.getAttribute("revoke"));
+        // the vault spells these TRUE/FALSE (srvprvGrant/srvprvRevoke), Designer's .prd true/false;
+        // the model keeps the vault's form so a project-read tree diffs clean against a vault-read one
+        putProjectProp(prd, "grant", upperBoolean(root.getAttribute("grant")));
+        putProjectProp(prd, "revoke", upperBoolean(root.getAttribute("revoke")));
         putProjectProp(prd, "category-key", root.getAttribute("prov-category"));
         if (process != null) {
             putProjectProp(prd, "process-type", process.getAttribute("process-type"));
@@ -675,6 +677,14 @@ public final class ProjectReader {
                 bucket.add(p);
             }
         }
+        // channel-scope resources (a mapping table a channel policy reads lives under the channel
+        // in the vault and in Designer alike; the model keeps them on the driver with their scope)
+        for (String key : relationKeys(m, "Idm:Resources")) {
+            Resource r = readResource(idx, idOf(key), scope, d.name);
+            if (r != null) {
+                d.resources.add(r);
+            }
+        }
         boolean sub = scope == Scope.SUBSCRIBER;
         addLinks(idx, d, m, "Idm:EventPolicies", sub ? PolicySet.SUB_EVENT : PolicySet.PUB_EVENT, scope, d.name, 0);
         addLinks(idx, d, m, "Idm:MatchingPolicies", sub ? PolicySet.SUB_MATCH : PolicySet.PUB_MATCH, scope, d.name, 0);
@@ -790,6 +800,10 @@ public final class ProjectReader {
         ent.meta.put("designer.type", idx.typeById.getOrDefault(id, "Entitlement"));
         copyPackageMeta(m, ent.meta);
         return ent;
+    }
+
+    private static String upperBoolean(String v) {
+        return v == null ? null : ("true".equalsIgnoreCase(v.trim()) ? "TRUE" : "false".equalsIgnoreCase(v.trim()) ? "FALSE" : v);
     }
 
     private static Resource readResource(Index idx, String id, Scope scope, String driverName) {

@@ -1,6 +1,13 @@
 # A fresh Designer project from a tree — design note
 
-Status: **N1+N2+N3 built 2026-09-17** (N1+N2 in b781d67; N3 on `n3-catalog`:
+Status: **N1+N2+N3 built and merged 2026-09-17**; `~/designer_workspace/ig4new` = `export-project --new --catalog`
+of the live-imported `tree-ig4` (19 drivers with icons, 31 packages / 218 items, `Idm:InstalledPackages` on drivers,
+driver set and vault) awaits the second Designer check (§7.5). Its round trip through `import-project` differs from
+the live tree only in the package stamps' representation (vault form vs export form) — content, linkage, forms,
+PRDs and entitlements are identical after three fixes found by that round trip: a new driver's linkage is written
+after the Library's artifacts exist (a Library ECMAScript link resolved to nothing before), `ProjectReader` reads
+channel-scope resources (a subscriber mapping table was dropped), and PRD `grant`/`revoke` keep the vault's spelling.
+(N1+N2 in b781d67; N3 on `n3-catalog`:
 `source.ProjectCatalogWriter`, `source.DesignerInstall`, `source.ApplicationType`,
 `bin/idm export-project … --new --catalog DIR`; 20 tests in `NewProjectWriterTest`, 586 green).
 `~/designer_workspace/test11new` was written from `tree-test11pf` for the first Designer check (§7.2a);
