@@ -416,6 +416,17 @@ survives only along the project → tree → project path. (`--new` adding a typ
 icon to a driver the tree had none for is likewise a real, intended difference: a
 later `import-project` of that project will see an icon the tree does not have.)
 
+### 7.2d ig4new, third cut (2026-09-17, after the driver-icons merge 92858fb)
+
+`~/designer_workspace/ig4new` regenerated from `tree-test11pf` (re-imported from the
+Designer project, so it carries the 19 icons — 17 gif, 2 png) with `--new --catalog`:
+1748 files, 25 packages / 184 items in the project catalog. Against Designer's own
+project of the same vault (test11pf) **every one of the 19 drivers has the identical
+driver type and byte-identical icon** (custom icons included), and `import-project` of
+the new project diffs "no differences" against the tree. For the Designer check:
+open it and confirm the modeler draws the custom icons (EventLogger, AcctExpNotif,
+Beeline, CyberArk) and accepts the two png ones (the AWS drivers).
+
 ### 7.2 What the Designer check must look at (the code cannot)
 
 1. **The project opens at all** and the System Model, developer view and
