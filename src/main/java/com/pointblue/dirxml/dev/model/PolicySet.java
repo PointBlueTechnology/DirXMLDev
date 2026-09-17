@@ -34,12 +34,21 @@ public enum PolicySet {
     }
 
     public static PolicySet byId(int id) {
+        PolicySet s = findById(id);
+        if (s == null) {
+            throw new IllegalArgumentException("unknown policy-set id " + id);
+        }
+        return s;
+    }
+
+    /** {@link #byId(int)} or {@code null} when the engine id is not in this enum. */
+    public static PolicySet findById(int id) {
         for (PolicySet s : values()) {
             if (s.id == id) {
                 return s;
             }
         }
-        throw new IllegalArgumentException("unknown policy-set id " + id);
+        return null;
     }
 
     public static PolicySet byKey(String key) {

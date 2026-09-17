@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.ascode;
 
+import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Entitlement;
@@ -96,6 +97,7 @@ public final class AsCodeReader {
                 d.links.add(new PolicyLink(ps, attr(l, "ref"), Integer.parseInt(attr(l, "order"))));
             }
         }
+        promoteKnownUnknownLinkage(d);
         for (Element ee : children(m, "entitlement")) {
             Path file = dir.resolve(attr(ee, "file"));
             Entitlement e = new Entitlement(attr(ee, "name"), Files.exists(file) ? xml(file) : null);
@@ -170,6 +172,103 @@ public final class AsCodeReader {
             }
             readMeta(a, r.meta);
             resources.add(r);
+        }
+    }
+
+    /**
+     * Trees written before {@link PolicySet} knew Startup (15) / Shutdown (16)
+     * keep those DirXML-Policies values as {@code linkage.unknown.n} metas
+     * ({@code dn#order#setId}). Promote any meta whose set id is now in the enum
+     * into {@link Driver#links} and drop it so a subsequent write emits
+     * {@code <set key="startup">} (and does not duplicate a named link).
+     */
+    static void promoteKnownUnknownLinkage(Driver d) {
+        List<String> keys = new ArrayList<>();
+        for (String k : d.meta.keySet()) {
+            if (k.startsWith("linkage.unknown.")) {
+                keys.add(k);
+            }
+        }
+        for (String k : keys) {
+            String raw = d.meta.get(k);
+            ParsedUnknown parsed = parseUnknownLinkage(raw);
+            if (parsed == null) {
+                continue;
+            }
+            PolicySet set = PolicySet.findById(parsed.setId);
+            if (set == null) {
+                continue;
+            }
+            String ref = refFromLinkageDn(parsed.dn, d.name);
+            boolean dup = false;
+            for (PolicyLink l : d.links) {
+                if (l.set == set && l.ref.equals(ref)) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup) {
+                d.links.add(new PolicyLink(set, ref, parsed.order));
+            }
+            d.meta.remove(k);
+        }
+    }
+
+    static ParsedUnknown parseUnknownLinkage(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String v = raw.trim();
+        int h2 = v.lastIndexOf('#');
+        int h1 = h2 < 0 ? -1 : v.lastIndexOf('#', h2 - 1);
+        if (h1 < 0) {
+            return null;
+        }
+        try {
+            int order = Integer.parseInt(v.substring(h1 + 1, h2));
+            int setId = Integer.parseInt(v.substring(h2 + 1));
+            return new ParsedUnknown(v.substring(0, h1), order, setId);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Same rule as ExportReader.resolveRef: first CN is the artifact name; second
+     * CN of Library / Publisher / Subscriber picks scope; anything else is
+     * driver-scope of this driver.
+     */
+    static String refFromLinkageDn(String dn, String driverName) {
+        String[] comps = dn.split(",", 3);
+        String name = stripCn(comps.length > 0 ? comps[0] : "");
+        String second = stripCn(comps.length > 1 ? comps[1] : "");
+        if (second.equalsIgnoreCase("Library")) {
+            return Artifact.path(Scope.LIBRARY, null, name);
+        }
+        if (second.equalsIgnoreCase("Publisher")) {
+            return Artifact.path(Scope.PUBLISHER, driverName, name);
+        }
+        if (second.equalsIgnoreCase("Subscriber")) {
+            return Artifact.path(Scope.SUBSCRIBER, driverName, name);
+        }
+        return Artifact.path(Scope.DRIVER, driverName, name);
+    }
+
+    private static String stripCn(String comp) {
+        String s = comp.trim();
+        int eq = s.indexOf('=');
+        return eq >= 0 ? s.substring(eq + 1).trim() : s;
+    }
+
+    static final class ParsedUnknown {
+        final String dn;
+        final int order;
+        final int setId;
+
+        ParsedUnknown(String dn, int order, int setId) {
+            this.dn = dn;
+            this.order = order;
+            this.setId = setId;
         }
     }
 
