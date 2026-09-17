@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<attr-name-map>
+  <attribute>
+    <nds-name>Surname</nds-name>
+    <app-name>sn</app-name>
+  </attribute>
+</attr-name-map>
