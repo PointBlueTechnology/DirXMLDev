@@ -12,8 +12,13 @@ instead of `bin\idm`.
 What you get: a project holding the whole driver set (every driver with its
 policies, filters, schema maps, GCVs, mapping tables, ECMAScript, engine
 control values, shim settings and package associations, plus the Library).
-What the configuration-file route does **not** carry, and how to get it, is in
-§5.
+
+**Two routes.** §4 writes the project *straight from the tree*
+(`export-project --new`) — no Designer import step, and it carries the User
+Application driver's forms, PRDs and entitlements and the package catalog that
+the configuration file cannot. §5 is the older configuration-file route, kept
+for a Designer that will not open a project it did not create itself and for
+comparison. Both start from the same `tree\` of §2.
 
 ## 1. One-time setup on the Windows workstation
 
@@ -74,7 +79,7 @@ If Java cannot reach the vault at all but a jump host can, run the same
 `import-live` on the jump host (any OS; the tool is the same jar) and copy
 `tree\` over, or copy the export file from §3.
 
-## 3. Write the configuration file
+## 3. Write the configuration file (only for the §5 route)
 
 ```bat
 bin\idm export tree customer-driverset.xml
@@ -98,7 +103,81 @@ second tree gives identical content — the only differences `tree.diff` reports
 are the package stamps' representation (vault form vs export form) and the 11
 forms and 39 PRDs the format cannot carry (§5).
 
-## 4. Import it into a new project in Designer
+## 4. Write the project itself (`export-project --new`)
+
+```bat
+bin\idm export-project tree C:\designer_workspace\Customer --new ^
+    --vault-name IDM_CUSTOMER --vault-host idm.customer.example ^
+    --vault-user cn=admin,ou=sa,o=system ^
+    --server idm-engine --server-context ou=servers,o=system ^
+    --catalog packages
+```
+
+The directory must not exist or be empty and **its basename is the project
+name** (`Customer` above): it is written into `.project`, `Customer.proj` and
+`Customer.cproj`, so never rename the folder afterwards. Add `--dry-run` first
+to see every file it would write without creating anything. **No vault
+password is ever written** — Designer asks on its first connect.
+
+What it writes: the Eclipse and Designer descriptors, the three model roots,
+the domain, the `IdentityVault_`, the driver set and its Library, the modeler
+diagram, and then everything the tree holds — every driver with its channels,
+filter, schema map, policies, resources, GCVs, engine control values and shim
+settings, an `Application_` and a driver icon per driver, the User Application
+driver's whole `AppConfig` (`.provisioning`, `.appconfig`, the container
+digests, the forms and the PRDs) and its entitlements. Packaged items carry
+their package attributes and an `<id>_initial_state.xml` baseline, so Designer
+can tell a customized object from an untouched one.
+
+**`--catalog` is what makes a packaged driver look packaged.** Point it at the
+git package catalog (`docs/packages.md`; `bin\idm package.fetch` and
+`package.build` fill it). For every package the tree's stamps name, the
+command finds the jar and writes the package into the project's *own* catalog
+— the category, the category folder, the `IdmPackage_` with its readme,
+licence, change log and language bundles, its nine package folders and one
+object per package item — and then the `Idm:InstalledPackages` relations from
+the driver, the driver set and the vault. Without it the items are still
+stamped but Designer shows them as plain objects and its driver-set *Packages*
+page reports "invalid values".
+
+If the catalog is missing a package the tree uses, the command **refuses and
+lists every missing one**, writing nothing:
+
+```
+REFUSED — the package catalog packages does not hold 3 of the 9 package(s) this tree's
+stamps name; fetch or build them (package.fetch / package.build) and run again — nothing
+was written:
+  NOVLADBASE 2.2.7.20220330111630 [57T9GSLL_201003011155340962]
+  …
+```
+
+Fetch them (`bin\idm package.fetch --catalog packages --package NOVLADBASE`) or,
+for a package the customer built, `package.build`, and run again.
+
+**Driver icons** come from a Designer install on the same machine — the tool
+copies `plugins\com.novell.core_*\icons\iManager\<ApplicationType>.gif` the way
+Designer's own importer does. It looks at `IDM_DESIGNER`, then the `designer`
+system property, then the usual install locations; `--designer DIR` overrides
+all three. With no install found it writes no icon and says so once; Designer
+draws its own once the project is open.
+
+Then in Designer: **File → Open Projects from File System…** (or *Import →
+Existing Projects into Workspace*) and pick the folder. Check a driver's
+policy set, the Provisioning view for the forms and PRDs, and a packaged
+driver's *Packages* page.
+
+**What `--new` still leaves out:** jobs (`DirXML-Job`), notification
+templates, the Identity Vault schema, the rest of `AppConfig` (DirectoryModel,
+UIConfig, RoleConfig, TeamDefs, AppDefs, AuthTypes), the driver-set settings no
+tree records (`DSetCreatePartition`, `DirXML-LogEvents`, the trace/log
+settings, `JavaEnvParameters`, `NamedPasswords`) and every password. Get the
+first three with a Designer *Live → Import* of just those objects if they
+matter; set the driver-set settings in Designer; keep passwords out of the
+project and let `vault.deploy` set them from the secrets file.
+
+## 5. The older route: import a configuration file into an empty project
+
+Use this when §4 is not an option. It needs §3's `customer-driverset.xml`.
 
 1. **Designer → File → New → Project**, a name, an empty project (no vault
    connection asked for).
@@ -110,7 +189,7 @@ forms and 39 PRDs the format cannot carry (§5).
    creates the driver set and every driver from the file. Answer the prompts
    about the driver set placement with the same container as the vault
    (`o=system` in the example); leave every driver's password prompts empty —
-   they are not in the file (§5).
+   they are not in the file.
 4. Save the project. Open a driver's policy set and a policy to see the
    content is there; *Project → Validate* if you like.
 
@@ -123,19 +202,15 @@ Updates* against the vendor site, and, for packages built with
 from the catalog leaves its objects in the project as plain, un-packaged
 objects — they work, but Designer will not offer upgrades for them.
 
-## 5. What the configuration-file route leaves out
+**What this route leaves out, on top of §4's list:**
 
 | Not in the file | Why | How to get it |
 |---|---|---|
-| **Provisioning forms, request definitions (PRDs, workflows), entitlements** under the User Application driver's `AppConfig` | Designer's configuration-file format has no place for them | Designer → *Live → Import* on the **User Application driver only**, pick *Provisioning* objects. That is a small subtree and fast even on a slow link. Or leave them out: DirXMLDev authors and deploys forms, PRDs and entitlements as code without Designer ([forms.md](forms.md), [workflows.md](workflows.md), [entitlements.md](entitlements.md)). |
+| **Provisioning forms, request definitions (PRDs, workflows), entitlements** under the User Application driver's `AppConfig` | Designer's configuration-file format has no place for them | use §4 instead, which writes them; or Designer → *Live → Import* on the **User Application driver only**, picking *Provisioning* objects. Or leave them out: DirXMLDev authors and deploys forms, PRDs and entitlements as code without Designer ([forms.md](forms.md), [workflows.md](workflows.md), [entitlements.md](entitlements.md)). |
+| **The project's package catalog** | the file names packages but cannot carry them | use §4 with `--catalog`; or import the packages into Designer's workstation catalog before step 3 |
 | **Jobs** (`DirXML-Job`) and role-based entitlement policies | not carried by the export format; the tree notes their count only | Designer *Live → Import* of those objects, if they matter |
 | **Passwords**: shim, Remote Loader, named passwords, application passwords in GCVs | the vault never returns them | type them in Designer when needed, or keep them out of the project (recommended) and let `vault.deploy` set them from the secrets file at deploy time |
 | Designer-only decoration: diagram layout, notes, colours | not vault objects | Designer lays out the imported project itself |
-
-**The planned replacement for §4–5:** `export-project --new`, a project
-written straight from the tree with the `AppConfig` objects and the package
-catalog entries the configuration file cannot carry —
-[designer-new-project.md](designer-new-project.md).
 
 ## 6. Keeping the project in step afterwards
 
@@ -155,14 +230,26 @@ Once the project exists, do not repeat the import for every change:
 
 ## 7. What is verified, and what is not yet
 
-- Verified: the vault read, the file, and its round trip through the tool's
-  own reader (§3). The tool round-trips Designer's own exports byte-for-byte
-  in its tests, so the format is Designer's.
-- **Not yet verified in Designer itself:** the import of a file the tool
-  wrote — in particular that Designer associates the packages from the
+- Verified in code: the vault read; the configuration file and its round trip
+  through the tool's own reader (§3); and, for §4, that `import-project` of a
+  written project reads back equal to the tree, that a package written from a
+  jar is identical to Designer's own copy of the same package version (attribute
+  for attribute, item for item, and byte for byte in the readme, licence,
+  language bundles and item contents), and that a driver icon is the same file
+  Designer's importer copies.
+- **Verified in Designer (2026-09-17, first check):** a `--new` project opens,
+  the System Model / developer / Provisioning views are populated, the forms and
+  PRDs open, the diagram is right, *Validate* is clean and a policy deploys from
+  it. Two problems, both fixed since: drivers had no icon, and the driver-set
+  *Packages* page reported "invalid values" because the project had no package
+  catalog. See `docs/designer-new-project.md` §7.2a.
+- **Not yet verified in Designer:** a `--new --catalog` project's *Packages*
+  pages (driver set and driver) — packages installed, nothing marked modified —
+  and that *Check for Package Updates* offers nothing wrong. Do the first one on
+  a scratch project and record the result; the checklist is
+  `docs/designer-new-project.md` §7.5.
+- **Not yet verified in Designer:** the import of a configuration file the tool
+  wrote (§5) — in particular that Designer associates the packages from the
   `package-id`/`pkg-assoc-id` attributes the way it does for its own exports.
-  Do the first one on a scratch project, check that a packaged driver shows
-  its packages installed and nothing marked modified, and record the result
-  in `docs/spikes/` (the same check spike 7c made for a vault import). If
-  Designer rejects the file, send the error text and, if the customer allows
+  If Designer rejects the file, send the error text and, if the customer allows
   it, the file itself to the DirXMLDev maintainers.

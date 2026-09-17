@@ -101,6 +101,28 @@ final class CObjectXml {
             + "</com.novell.designer.model:CObject>\n";
     }
 
+    /**
+     * A CObject with a name and no {@code type} attribute — the shape every catalog object
+     * has in {@code test11pf} ({@code IdmCategoryFolder_}, {@code IdmPackage_},
+     * {@code IdmPackageFolder_} and the package's own item CObjects). The {@code xsi}
+     * namespace is declared only when the body actually uses it, again as Designer writes it.
+     */
+    static String cobjectNoType(String name, String bodyXml) {
+        String xsi = bodyXml.contains("xsi:") ? "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" " : "";
+        String open = "<com.novell.designer.model:CObject " + xsi
+            + "xmlns:com.novell.designer.model=\"http://com.novell.designer.model\" name=\"" + esc(name) + "\"";
+        if (bodyXml.isEmpty()) {
+            return DECL + "\n" + open + "/>\n";
+        }
+        // block-indented like Designer's own files; every snippet is one self-closing tag and
+        // esc() turns '>' inside a value into &gt;, so "/><" is always a real element boundary
+        StringBuilder sb = new StringBuilder(DECL).append('\n').append(open).append(">\n");
+        for (String el : bodyXml.split("(?<=/>)(?=<)")) {
+            sb.append("  ").append(el).append('\n');
+        }
+        return sb.append("</com.novell.designer.model:CObject>\n").toString();
+    }
+
     /** A {@code <attributes .../>} snippet for {@link #cobject}. */
     static String attr(String attrName, String value, String xsiType) {
         return "<attributes xsi:type=\"com.novell.designer.model:" + xsiType + "\" attrName=\""
