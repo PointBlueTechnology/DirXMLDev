@@ -31,3 +31,9 @@ deploy-snapshots/
 
 # python bytecode from bin/apps
 __pycache__/
+
+# VS Code / Cursor extension
+extensions/*/node_modules/
+extensions/*/out/
+extensions/*/*.vsix
+**/.dirxmldev/

@@ -1,0 +1,46 @@
+{
+  "name": "dirxmldev-visual",
+  "description": "Thin MCP/tool hooks for the DirXMLDev fishbone. There is no MCP server in DirXMLDev today (CLI-only). These tool definitions are the adapter surface; implementations are TypeScript helpers in src/hooks.ts and the VS Code commands.",
+  "tools": [
+    {
+      "name": "fishbone.get",
+      "description": "Return the Designer-style policy-flow fishbone JSON for one driver from an IDM-as-code tree (driverset.xml).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tree": { "type": "string", "description": "Absolute path of the as-code tree root." },
+          "driver": { "type": "string", "description": "Driver name; omitted = first driver in driverset.xml." }
+        },
+        "required": ["tree"]
+      },
+      "run": "node extensions/dirxmldev-visual/out/cli.js dump <tree> [driver]"
+    },
+    {
+      "name": "fishbone.refresh",
+      "description": "Reload an open fishbone webview from disk after agent edits. Does not write policies.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tree": { "type": "string", "description": "As-code tree root (sentinel is written here)." },
+          "driver": { "type": "string" }
+        },
+        "required": ["tree"]
+      },
+      "run": "touch <tree>/.dirxmldev/fishbone.refresh   # or VS Code command dirxmldev.fishbone.refresh"
+    },
+    {
+      "name": "fishbone.reveal",
+      "description": "Resolve a fishbone node (bone key, policy ref, or node id) to a content file path for the editor to open.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tree": { "type": "string" },
+          "driver": { "type": "string" },
+          "ref": { "type": "string", "description": "Artifact path (drivers/D/subscriber/…), bone key (subscriber-event), or node id." }
+        },
+        "required": ["tree", "driver", "ref"]
+      },
+      "vscodeCommand": "dirxmldev.fishbone.reveal"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<library>
+  <artifact kind="policy" scope="library" name="lib-common-event" file="lib-common-event.policy.xml">
+    <meta key="pkg.guid">ABC-123</meta>
+  </artifact>
+  <artifact kind="resource" scope="library" name="es-misc" file="es-misc.js" content-type="application/vnd.novell.dirxml.ecmascript" text="true"/>
+</library>

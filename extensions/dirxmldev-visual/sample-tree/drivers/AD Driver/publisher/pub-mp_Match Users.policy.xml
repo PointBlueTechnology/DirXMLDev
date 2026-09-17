@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<policy>
+  <rule>
+    <description>match by CN</description>
+    <conditions>
+      <and>
+        <if-class-name op="equal">User</if-class-name>
+      </and>
+    </conditions>
+    <actions>
+      <do-veto/>
+    </actions>
+  </rule>
+</policy>
