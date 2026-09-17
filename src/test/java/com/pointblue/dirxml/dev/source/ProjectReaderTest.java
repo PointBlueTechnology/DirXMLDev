@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -64,6 +66,11 @@ public class ProjectReaderTest {
     private void write(Path file, String content) throws IOException {
         Files.createDirectories(file.getParent());
         Files.write(file, content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void writeBytes(Path file, byte[] content) throws IOException {
+        Files.createDirectories(file.getParent());
+        Files.write(file, content);
     }
 
     /**
@@ -163,7 +170,8 @@ public class ProjectReaderTest {
             + "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"DirXML-ConfigValues\"/>"
             + cstring("DirXML-DriverVersion", "1.0.0")
             + cstring("Idm:PackageGuid", "PKG-DRV")
-            + cstring("Idm:PackageAssocGuid", "PKGASSOC-DRV");
+            + cstring("Idm:PackageAssocGuid", "PKGASSOC-DRV")
+            + "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"icon\" extension=\"gif\"/>";
         String driverRelations = rel("Idm:Filter", "Child", "FILT1.Filter_")
             + rel("Idm:Subscriber", "Child", "SUB1.Subscriber_")
             + rel("Idm:Publisher", "Child", "PUB1.Publisher_")
@@ -176,6 +184,8 @@ public class ProjectReaderTest {
             + rel("Idm:GlobalConfigs", "Child", "GCVID.GlobalConfig_")
             + rel("Idm:ExtensionFunctions", "Reference", "LIBJSID.ECMAScriptResource_");
         write(orphan.resolve("DRV1ID.Driver_"), cobject("AD", "AD-Driver", driverAttrs, driverRelations));
+        // the driver's icon: the heavy-data attribute above plus these bytes beside the Driver_
+        writeBytes(orphan.resolve("DRV1ID_icon.gif"), AsCodeRoundTripTest.TINY_GIF);
 
         // DS1 itself, after its children so paths above already exist
         write(orphan.resolve("DS1ID.DriverSet_"), cobject("DS1", "DriverSet",
@@ -322,6 +332,39 @@ public class ProjectReaderTest {
         assertEquals(10, ds.index().size());
     }
 
+    // ---- driver icon -----------------------------------------------------------------
+
+    @Test
+    public void theDriverIconIsReadFromTheHeavyDataAttributeAndItsSiblingFile() throws IOException {
+        Driver d = ProjectReader.read(buildProject()).driver("AD");
+        assertArrayEquals(AsCodeRoundTripTest.TINY_GIF, d.icon);
+        assertEquals("gif", d.iconExtension);
+    }
+
+    /** No {@code icon} attribute on the CObject means no icon, even if a stray file is there. */
+    @Test
+    public void withoutTheAttributeThereIsNoIcon() throws IOException {
+        Path root = buildProject();
+        Path meta = root.resolve("Model/EdirOrphan/DRV1ID.Driver_");
+        write(meta, Files.readString(meta, StandardCharsets.UTF_8)
+            .replace("<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"icon\" extension=\"gif\"/>", ""));
+        assertNull(ProjectReader.read(root).driver("AD").icon);
+    }
+
+    /** The attribute's {@code extension} is authoritative — Designer writes {@code png} for some drivers. */
+    @Test
+    public void thePngExtensionIsKeptAsDesignerWroteIt() throws IOException {
+        Path root = buildProject();
+        Path meta = root.resolve("Model/EdirOrphan/DRV1ID.Driver_");
+        write(meta, Files.readString(meta, StandardCharsets.UTF_8)
+            .replace("attrName=\"icon\" extension=\"gif\"", "attrName=\"icon\" extension=\"png\""));
+        Files.move(root.resolve("Model/EdirOrphan/DRV1ID_icon.gif"),
+            root.resolve("Model/EdirOrphan/DRV1ID_icon.png"));
+        Driver d = ProjectReader.read(root).driver("AD");
+        assertEquals("png", d.iconExtension);
+        assertArrayEquals(AsCodeRoundTripTest.TINY_GIF, d.icon);
+    }
+
     // ---- real projects (guarded) ----------------------------------------------------
 
     @Test
@@ -346,6 +389,35 @@ public class ProjectReaderTest {
         if (!unresolved.isEmpty()) {
             System.out.println("  sample: " + unresolved.get(0));
         }
+    }
+
+    /**
+     * {@code test11pf} is Designer's own import of the test vault. Several of its drivers carry
+     * a <b>custom</b> icon — one a user set in Designer, which no application-type or
+     * driver-type lookup can reproduce — and {@code EventLogger} is one of them. The reader must
+     * hand back exactly the bytes of the file beside the {@code Driver_}, and the tree must
+     * carry them through unchanged.
+     */
+    @Test
+    public void realTest11pfCarriesEventLoggersCustomIconThroughTheTree() throws IOException {
+        Path project = Path.of(System.getProperty("user.home"), "designer_workspace", "test11pf");
+        assumeTrue("needs the local test11pf Designer workspace", Files.isDirectory(project));
+
+        Driver d = ProjectReader.read(project).driver("EventLogger");
+        assertNotNull("test11pf should hold an EventLogger driver", d);
+        assertNotNull("EventLogger's icon is a custom one; the reader must carry it", d.icon);
+        assertEquals("gif", d.iconExtension);
+
+        Path onDisk = project.resolve("Model/EdirOrphan/ZEZTZUKV")
+            .resolve(d.meta.get("designer.id") + "_icon." + d.iconExtension);
+        assertTrue("no icon file at " + onDisk, Files.isRegularFile(onDisk));
+        assertArrayEquals(Files.readAllBytes(onDisk), d.icon);
+
+        // and through a tree: byte for byte, both ways
+        Path tree = tmp.newFolder("test11pf-tree").toPath();
+        com.pointblue.dirxml.dev.ascode.AsCodeWriter.write(ProjectReader.read(project), tree);
+        assertArrayEquals(d.icon,
+            com.pointblue.dirxml.dev.ascode.AsCodeReader.read(tree).driver("EventLogger").icon);
     }
 
     @Test

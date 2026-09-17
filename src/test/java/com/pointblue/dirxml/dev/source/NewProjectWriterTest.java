@@ -1,6 +1,7 @@
 package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
+import com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -25,6 +26,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -228,7 +230,7 @@ public class NewProjectWriterTest {
             for (Path p : (Iterable<Path>) s.filter(Files::isRegularFile).sorted()::iterator) {
                 sb.append("== ").append(dir.relativize(p)).append('\n');
                 boolean inMeta = false;
-                for (String line : Files.readString(p, StandardCharsets.UTF_8).split("\n")) {
+                for (String line : AsCodeRoundTripTest.content(p).split("\n")) {
                     if (inMeta) {
                         // a multi-line meta value (a vault-read tree's dirxml-pkgextensions,
                         // dirxml-pkglinkages…) — skip to its closing tag
@@ -270,7 +272,11 @@ public class NewProjectWriterTest {
         Path tree = syntheticTree();
         Path project = tmp.newFolder("out" + (seq++)).toPath().resolve("ClientProject");
 
-        ProjectWriter.Result r = ProjectWriter.create(tree, project, NewProject.defaults(), false);
+        // noDesigner(): this tree carries no icon, and a Designer install on the machine would
+        // add a type-derived one — a real difference between the two models, not a round-trip
+        // failure (the icon round trip has tests of its own below)
+        ProjectWriter.Result r = ProjectWriter.create(tree, project,
+            NewProject.defaults().withDesignerRoot(noDesigner()), false);
         assertNull(r.text(), r.refusal);
         assertTrue(r.text(), r.ok);
         assertTrue(r.deletedFiles.isEmpty());
@@ -513,8 +519,11 @@ public class NewProjectWriterTest {
         Assume.assumeTrue(Files.isDirectory(tree));
         Path project = tmp.newFolder("out" + (seq++)).toPath().resolve("test11new");
 
+        // noDesigner(): with a real install on the machine --new would add a type-derived icon
+        // that the (older) e2e tree does not carry, and the round trip compares the two models
         ProjectWriter.Result r = ProjectWriter.create(tree, project,
-            new NewProject("IDM_TEST_TREE", null, null, "idm-test", "ou=servers,o=system"), false);
+            new NewProject("IDM_TEST_TREE", null, null, "idm-test", "ou=servers,o=system")
+                .withDesignerRoot(noDesigner()), false);
         assertNull(r.text(), r.refusal);
         assertTrue(r.text(), r.ok);
 
@@ -789,6 +798,71 @@ public class NewProjectWriterTest {
         Path tree = tmp.newFolder("adtree" + (seq++)).toPath();
         AsCodeWriter.write(ProjectReader.read(root), tree);
         return tree;
+    }
+
+    /**
+     * The same minimal AD project, but the driver carries a <b>custom</b> icon, the way a
+     * driver someone set an icon on in Designer does — bytes no icon set holds.
+     */
+    private Path buildIconTree(byte[] icon, String ext) throws IOException {
+        Path root = tmp.newFolder("iconsource" + (seq++)).toPath();
+        write(root.resolve("Model/DS3.DriverSet_"),
+            cobject("driverset1", "DriverSet", cstring("DSetContext", "o=system"),
+                rel("Idm:Drivers", "Child", "IDRV.Driver_")));
+        write(root.resolve("Model/DS3/IDRV.Driver_"),
+            cobject("Active Directory Driver", "AD-Driver",
+                cstring("DirXML-JavaModule", "com.novell.nds.dirxml.remote.driver.DriverShimImpl")
+                    + "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"icon\" "
+                    + "extension=\"" + ext + "\"/>",
+                rel("Idm:Filter", "Child", "IFLT.Filter_")));
+        Files.write(root.resolve("Model/DS3/IDRV_icon." + ext), icon);
+        write(root.resolve("Model/DS3/IDRV/IFLT.Filter_"), cobject("Filter", "Filter", heavy("contents"), ""));
+        write(root.resolve("Model/DS3/IDRV/IFLT_contents.xml"), FILTER_XML);
+        Path tree = tmp.newFolder("icontree" + (seq++)).toPath();
+        AsCodeWriter.write(ProjectReader.read(root), tree);
+        return tree;
+    }
+
+    /**
+     * A custom icon the tree carries beats the type lookup — otherwise {@code import-project}
+     * followed by {@code export-project --new} would silently replace the icon someone chose
+     * in Designer with the generic one for that driver type.
+     */
+    @Test
+    public void theTreesOwnIconWinsOverTheInstalls() throws IOException {
+        Path tree = buildIconTree(AsCodeRoundTripTest.TINY_GIF, "gif");
+        Path project = tmp.newFolder("out" + (seq++)).toPath().resolve("CustomIcon");
+        ProjectWriter.Result r = ProjectWriter.create(tree, project,
+            NewProject.defaults().withDesignerRoot(fakeDesigner("ActiveDirectory", "GenericApp")), false);
+        assertNull(r.text(), r.refusal);
+
+        Path driverFile = findFile(project.resolve("Model/EdirOrphan"), ".Driver_");
+        String driverId = driverFile.getFileName().toString().replace(".Driver_", "");
+        Path icon = driverFile.resolveSibling(driverId + "_icon.gif");
+        assertArrayEquals("the tree's bytes, not the install's ActiveDirectory.gif",
+            AsCodeRoundTripTest.TINY_GIF, Files.readAllBytes(icon));
+        assertTrue(read(driverFile), read(driverFile).contains("attrName=\"icon\" extension=\"gif\""));
+
+        // and reading the written project back gives the tree's bytes again
+        assertArrayEquals(AsCodeRoundTripTest.TINY_GIF,
+            ProjectReader.read(project).driver("Active Directory Driver").icon);
+        assertEquals(asCode(AsCodeReader.read(tree)), asCode(ProjectReader.read(project)));
+    }
+
+    /** The extension Designer recorded travels with the bytes: a {@code png} icon stays {@code png}. */
+    @Test
+    public void aPngIconInTheTreeStaysPngInTheNewProject() throws IOException {
+        Path tree = buildIconTree(AsCodeRoundTripTest.TINY_GIF, "png");
+        Path project = tmp.newFolder("out" + (seq++)).toPath().resolve("PngIcon");
+        assertNull(ProjectWriter.create(tree, project,
+            NewProject.defaults().withDesignerRoot(fakeDesigner("ActiveDirectory", "GenericApp")), false).refusal);
+
+        Path driverFile = findFile(project.resolve("Model/EdirOrphan"), ".Driver_");
+        String driverId = driverFile.getFileName().toString().replace(".Driver_", "");
+        assertTrue(Files.exists(driverFile.resolveSibling(driverId + "_icon.png")));
+        assertFalse(Files.exists(driverFile.resolveSibling(driverId + "_icon.gif")));
+        assertTrue(read(driverFile), read(driverFile).contains("attrName=\"icon\" extension=\"png\""));
+        assertEquals("png", ProjectReader.read(project).driver("Active Directory Driver").iconExtension);
     }
 
     @Test

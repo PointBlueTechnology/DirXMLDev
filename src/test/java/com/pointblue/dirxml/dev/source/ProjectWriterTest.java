@@ -1,6 +1,7 @@
 package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
+import com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.deploy.VaultMapping;
 import com.pointblue.dirxml.dev.edit.ArtifactOps;
@@ -41,6 +42,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -161,7 +163,7 @@ public class ProjectWriterTest {
         try (Stream<Path> s = Files.walk(dir)) {
             for (Path p : (Iterable<Path>) s.filter(Files::isRegularFile).sorted()::iterator) {
                 sb.append("== ").append(dir.relativize(p)).append('\n');
-                for (String line : Files.readString(p, StandardCharsets.UTF_8).split("\n")) {
+                for (String line : AsCodeRoundTripTest.content(p).split("\n")) {
                     if (line.contains("<meta key=\"")) {
                         continue;   // designer.id / designer.type / dn.synthesized bookkeeping differs on new objects
                     }
@@ -450,6 +452,99 @@ public class ProjectWriterTest {
         Driver d = reread.driver("BlankDriver");
         assertNotNull(d);
         assertEquals("com.example.idm.BlankShim", d.shimClass);
+    }
+
+    // ---- driver icon ----------------------------------------------------------------------------
+
+    /** {@code AcctExpNotif}'s CObject id in test11 — the driver whose icon these tests move around. */
+    private static final String ACCT_EXP_ID = "8G96HRHC";
+    private static final String ICON_ATTR =
+        "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"icon\" extension=\"gif\"/>";
+
+    private static Path projectIcon(Path project, String ext) {
+        return project.resolve("Model/EdirOrphan/ZEZTZUKV").resolve(ACCT_EXP_ID + "_icon." + ext);
+    }
+
+    @Test
+    public void aChangedIconRewritesOnlyTheIconFile() throws IOException {
+        Path project = copyProject();
+        Path tree = buildTree(project);
+        Path treeIcon = tree.resolve("drivers/AcctExpNotif/icon.gif");
+        assertTrue("the tree must carry the project's icon", Files.exists(treeIcon));
+        Files.write(treeIcon, AsCodeRoundTripTest.TINY_GIF);
+
+        Map<String, String> before = hashAll(project);
+        ProjectWriter.Result r = ProjectWriter.update(tree, project, false);
+        assertTrue(r.text(), r.ok);
+
+        String expected = project.relativize(projectIcon(project, "gif")).toString().replace('\\', '/');
+        assertEquals(List.of(expected), r.changedFiles);
+        assertTrue(r.createdFiles.isEmpty());
+        assertTrue(r.deletedFiles.isEmpty());
+        // the CObject already said extension="gif": new bytes give it no reason to be rewritten
+        assertOnlyChanged(before, hashAll(project), Set.of(expected), Set.of());
+        assertArrayEquals(AsCodeRoundTripTest.TINY_GIF,
+            ProjectReader.read(project).driver("AcctExpNotif").icon);
+    }
+
+    @Test
+    public void anIconRemovedFromTheTreeIsRemovedFromTheProject() throws IOException {
+        Path project = copyProject();
+        Path tree = buildTree(project);
+        Files.delete(tree.resolve("drivers/AcctExpNotif/icon.gif"));
+        Path manifest = tree.resolve("drivers/AcctExpNotif/driver.xml");
+        Files.writeString(manifest, Files.readString(manifest, StandardCharsets.UTF_8)
+            .replaceAll("\n *<icon file=\"icon\\.gif\"/>", ""), StandardCharsets.UTF_8);
+
+        ProjectWriter.Result r = ProjectWriter.update(tree, project, false);
+        assertTrue(r.text(), r.ok);
+        assertFalse(Files.exists(projectIcon(project, "gif")));
+        assertEquals(List.of(project.relativize(projectIcon(project, "gif")).toString().replace('\\', '/')),
+            r.deletedFiles);
+        String driverFile = Files.readString(
+            project.resolve("Model/EdirOrphan/ZEZTZUKV/" + ACCT_EXP_ID + ".Driver_"), StandardCharsets.UTF_8);
+        assertFalse(driverFile, driverFile.contains("attrName=\"icon\""));
+        assertNull(ProjectReader.read(project).driver("AcctExpNotif").icon);
+    }
+
+    /** A driver Designer never drew an icon for gets the tree's, attribute and file together. */
+    @Test
+    public void anIconTheProjectLacksIsAdded() throws IOException {
+        Path project = copyProject();
+        Path tree = buildTree(project);                      // the tree keeps the icon …
+        Path meta = project.resolve("Model/EdirOrphan/ZEZTZUKV/" + ACCT_EXP_ID + ".Driver_");
+        String stripped = Files.readString(meta, StandardCharsets.UTF_8).replace(ICON_ATTR, "");
+        assertFalse("the icon attribute must really have been there", stripped.contains("attrName=\"icon\""));
+        Files.writeString(meta, stripped, StandardCharsets.UTF_8);
+        Files.delete(projectIcon(project, "gif"));           // … which the project no longer has
+
+        ProjectWriter.Result r = ProjectWriter.update(tree, project, false);
+        assertTrue(r.text(), r.ok);
+        assertTrue(r.createdFiles.toString(), r.createdFiles.stream().anyMatch(f -> f.endsWith("_icon.gif")));
+        Driver back = ProjectReader.read(project).driver("AcctExpNotif");
+        assertNotNull(back.icon);
+        assertEquals("gif", back.iconExtension);
+        assertArrayEquals(Files.readAllBytes(tree.resolve("drivers/AcctExpNotif/icon.gif")), back.icon);
+    }
+
+    /** A different image format replaces the old file rather than leaving two behind. */
+    @Test
+    public void aChangedIconFormatReplacesTheFile() throws IOException {
+        Path project = copyProject();
+        Path tree = buildTree(project);
+        Files.delete(tree.resolve("drivers/AcctExpNotif/icon.gif"));
+        Files.write(tree.resolve("drivers/AcctExpNotif/icon.png"), AsCodeRoundTripTest.TINY_GIF);
+        Path manifest = tree.resolve("drivers/AcctExpNotif/driver.xml");
+        Files.writeString(manifest, Files.readString(manifest, StandardCharsets.UTF_8)
+            .replace("<icon file=\"icon.gif\"/>", "<icon file=\"icon.png\"/>"), StandardCharsets.UTF_8);
+
+        ProjectWriter.Result r = ProjectWriter.update(tree, project, false);
+        assertTrue(r.text(), r.ok);
+        assertFalse(Files.exists(projectIcon(project, "gif")));
+        assertTrue(Files.exists(projectIcon(project, "png")));
+        Driver back = ProjectReader.read(project).driver("AcctExpNotif");
+        assertEquals("png", back.iconExtension);
+        assertArrayEquals(AsCodeRoundTripTest.TINY_GIF, back.icon);
     }
 
     // ---- dry run --------------------------------------------------------------------------------

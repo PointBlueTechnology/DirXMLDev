@@ -757,7 +757,7 @@ public final class DocsGenerator {
         }
         try {
             DriverSet then = AsCodeReader.read(checkout);
-            ModelDiff diff = ModelDiff.of(then, now);
+            ModelDiff diff = ModelDiff.of(then, now, true);
             StringBuilder sb = new StringBuilder();
             sb.append("# Changes since ").append(sinceCommit).append("\n\n");
             if (diff.isEmpty()) {

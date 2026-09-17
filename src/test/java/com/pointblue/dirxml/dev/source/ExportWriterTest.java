@@ -333,16 +333,9 @@ public class ExportWriterTest {
     }
 
     /** relative path -> file bytes (as string), for whole-tree comparison. */
+    /** relative path -> file bytes, binary-safe (a tree can hold a driver icon). */
     private static Map<String, String> snapshot(Path root) throws IOException {
-        Map<String, String> out = new TreeMap<>();
-        try (Stream<Path> s = Files.walk(root)) {
-            for (Path p : (Iterable<Path>) s::iterator) {
-                if (Files.isRegularFile(p)) {
-                    out.put(root.relativize(p).toString().replace('\\', '/'), Files.readString(p));
-                }
-            }
-        }
-        return out;
+        return com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest.snapshot(root);
     }
 
     /** A tree read from the vault carries dirxml-pkg* stamps, not Designer's export attributes; the writer maps them. */

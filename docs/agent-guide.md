@@ -16,7 +16,8 @@ tree/
   config-values.xml                 driver-set GCVs
   library/library.xml               Library manifest
   library/<name>.policy.xml         shared policies, mapping tables, GCV objects, ECMAScript
-  drivers/<driver>/driver.xml       manifest: config files, artifacts, policy-set linkage
+  drivers/<driver>/driver.xml       manifest: config files, icon, artifacts, policy-set linkage
+  drivers/<driver>/icon.gif         the driver's Designer icon, if it has one (opaque bytes)
   drivers/<driver>/*.policy.xml     driver-scope policies (schema map, input/output transforms, …)
   drivers/<driver>/subscriber/…     channel policies
   drivers/<driver>/publisher/…

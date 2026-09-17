@@ -593,6 +593,24 @@ public final class ProjectReader {
             d.config.put(Driver.CONFIG_VALUES, ownConfigValues);
         }
 
+        // the driver's icon: a CHeavyData attribute whose bytes live in <ID>_icon.<extension>
+        // beside the Driver_ (docs/designer-new-project.md §7.2c). Designer writes one for
+        // every driver it draws, and a custom one no type lookup could produce for some.
+        Element iconAttr = attrElement(m, "icon");
+        if (iconAttr != null) {
+            String ext = iconAttr.getAttribute("extension");
+            Path iconFile = idx.iconById.get(drvId);
+            if (iconFile != null) {
+                try {
+                    d.icon = Files.readAllBytes(iconFile);
+                    String fn = iconFile.getFileName().toString();
+                    d.iconExtension = ext != null && !ext.isEmpty() ? ext : fn.substring(fn.lastIndexOf('.') + 1);
+                } catch (IOException e) {
+                    d.meta.put("unread.icon", iconFile.getFileName().toString());
+                }
+            }
+        }
+
         List<String> filterKeys = relationKeys(m, "Idm:Filter");
         if (!filterKeys.isEmpty()) {
             Path c = idx.contentsById.get(idOf(filterKeys.get(0)));
@@ -919,6 +937,37 @@ public final class ProjectReader {
         return null;
     }
 
+    /** First descendant {@code <attributes attrName=name/>}, whatever its {@code xsi:type}, or null. */
+    private static Element attrElement(Element cobject, String attrName) {
+        if (cobject == null) {
+            return null;
+        }
+        for (Element a : descendantsByName(cobject, "attributes")) {
+            if (attrName.equals(a.getAttribute("attrName"))) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    /** The file-name suffix Designer gives a driver's icon: {@code <ID>_icon.<ext>}. */
+    private static final String ICON_SUFFIX = "_icon";
+
+    /**
+     * {@code "1K4NAIPS_icon.gif"} -&gt; {@code "1K4NAIPS"}; null when the file is not a driver
+     * icon. Package-private: {@code ProjectWriter} recognizes the same files.
+     */
+    static String iconIdOf(String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        if (dot <= 0 || dot == fileName.length() - 1) {
+            return null;
+        }
+        String stem = fileName.substring(0, dot);
+        return stem.length() > ICON_SUFFIX.length() && stem.endsWith(ICON_SUFFIX)
+            ? stem.substring(0, stem.length() - ICON_SUFFIX.length())
+            : null;
+    }
+
     private static List<Element> descendantsByName(Node ctx, String localName) {
         List<Element> out = new ArrayList<>();
         NodeList kids = ctx.getChildNodes();
@@ -969,6 +1018,8 @@ public final class ProjectReader {
         final Map<String, Path> metaById = new LinkedHashMap<>();
         final Map<String, String> typeById = new LinkedHashMap<>();
         final Map<String, Path> contentsById = new LinkedHashMap<>();
+        /** {@code <ID>_icon.<ext>} beside an {@code <ID>.Driver_} — the driver's icon bytes. */
+        final Map<String, Path> iconById = new LinkedHashMap<>();
         final List<Path> configValueFiles = new ArrayList<>();
         final Map<String, Element> metaCache = new LinkedHashMap<>();
         /** designer id -> (scope, driver, name), populated as artifacts are created, so
@@ -986,6 +1037,8 @@ public final class ProjectReader {
                         idx.configValueFiles.add(f);
                     } else if (fn.endsWith("_initial_state.xml") || fn.endsWith("_schema.xml")) {
                         // package baseline / eDir schema — not read by this reader
+                    } else if (iconIdOf(fn) != null) {
+                        idx.iconById.putIfAbsent(iconIdOf(fn), f);
                     } else {
                         int dot = fn.lastIndexOf('.');
                         if (dot > 0 && fn.endsWith("_")) {
