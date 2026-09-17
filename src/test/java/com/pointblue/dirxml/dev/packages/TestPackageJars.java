@@ -21,12 +21,12 @@ import java.util.jar.JarOutputStream;
  * only, so the package-level {@code checksum} attribute is also exact — no
  * reliance on the "known mismatch" carve-outs).
  */
-final class TestPackageJars {
+public final class TestPackageJars {
 
     private TestPackageJars() {
     }
 
-    static final class Obj {
+    public static final class Obj {
         final String objectClass;
         final String name;
         final String xmlContent;     // XmlData content, e.g. "<policy>...</policy>"
@@ -35,7 +35,7 @@ final class TestPackageJars {
         final String guid;
         Long forcedContentChecksum;  // when set, store this instead of the real recomputed value (for negative tests)
 
-        Obj(String objectClass, String name, String xmlContent, String directiveXml, String assocId, String guid) {
+        public Obj(String objectClass, String name, String xmlContent, String directiveXml, String assocId, String guid) {
             this.objectClass = objectClass;
             this.name = name;
             this.xmlContent = xmlContent;
@@ -45,21 +45,25 @@ final class TestPackageJars {
         }
     }
 
-    static final class Spec {
-        String id;
-        String shortName;
-        String symbolicName;
-        String displayName = "Test Package";
-        String version;
-        int type = 2;
-        boolean basePackage;
+    public static final class Spec {
+        public String id;
+        public String shortName;
+        public String symbolicName;
+        public String displayName = "Test Package";
+        public String version;
+        public int type = 2;
+        public boolean basePackage;
+        /** {@code package/@category} — one of Designer's six stock ones, or anything else. */
+        public String category = "Test";
+        /** {@code package/@category-folder}, the {@code IdmCategoryFolder_} the package is filed in. */
+        public String categoryFolder = "Test";
         // embedded inline in package_import.xml (not a separately-decoded document, unlike an item's directive) — no XML declaration
-        String installDirectiveXml = "<installation-directive><ds-attributes/></installation-directive>";
-        List<Obj> objects = new ArrayList<>();
+        public String installDirectiveXml = "<installation-directive><ds-attributes/></installation-directive>";
+        public List<Obj> objects = new ArrayList<>();
     }
 
     /** Builds the jar bytes and writes them under {@code dir}, returning the path. */
-    static Path build(Path dir, Spec s) throws IOException {
+    public static Path build(Path dir, Spec s) throws IOException {
         Map<String, String> assocToChecksum = new LinkedHashMap<>();
         StringBuilder children = new StringBuilder();
         for (Obj o : s.objects) {
@@ -86,7 +90,7 @@ final class TestPackageJars {
         String readmeB64 = Base64.getEncoder().encodeToString("a test package".getBytes(StandardCharsets.UTF_8));
 
         String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><package base-package=\"" + s.basePackage
-            + "\" category=\"Test\" category-folder=\"Test\" checksum=\"" + pkgChecksum + "\" directive-checksum=\""
+            + "\" category=\"" + s.category + "\" category-folder=\"" + s.categoryFolder + "\" checksum=\"" + pkgChecksum + "\" directive-checksum=\""
             + dirChecksum + "\" id=\"" + s.id + "\" name=\"" + s.displayName + "\" symbolic-name=\"" + s.symbolicName
             + "\" type=\"" + s.type + "\" version=\"" + s.version + "\">"
             + "<description></description><category-description></category-description><category-folder-description></category-folder-description>"

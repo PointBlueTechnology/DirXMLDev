@@ -117,6 +117,8 @@ public final class Cli {
                 String vaultUser = null;
                 String serverName = null;
                 String serverContext = null;
+                String catalogDir = null;
+                String designerRoot = null;
                 List<String> pos = new ArrayList<>();
                 for (int i = 1; i < args.length; i++) {
                     if (args[i].equals("--dry-run")) {
@@ -135,25 +137,33 @@ public final class Cli {
                         serverName = args[++i];
                     } else if (args[i].equals("--server-context") && i + 1 < args.length) {
                         serverContext = args[++i];
+                    } else if (args[i].equals("--catalog") && i + 1 < args.length) {
+                        catalogDir = args[++i];
+                    } else if (args[i].equals("--designer") && i + 1 < args.length) {
+                        designerRoot = args[++i];
                     } else {
                         pos.add(args[i]);
                     }
                 }
                 if (pos.size() < 2) {
                     System.err.println("usage: export-project <tree> <projectDir> [--new [--vault-name NAME] "
-                        + "[--vault-host HOST] [--vault-user DN] [--server NAME --server-context DN]] [--dry-run] [--json]");
+                        + "[--vault-host HOST] [--vault-user DN] [--server NAME --server-context DN] "
+                        + "[--catalog DIR] [--designer DIR]] [--dry-run] [--json]");
                     System.exit(2);
                 }
                 if (!fresh && (vaultName != null || vaultHost != null || vaultUser != null
-                    || serverName != null || serverContext != null)) {
-                    System.err.println("export-project: --vault-* / --server* only apply with --new (they describe a "
-                        + "new project's IdentityVault_ and Server_); an existing project keeps its own");
+                    || serverName != null || serverContext != null || catalogDir != null || designerRoot != null)) {
+                    System.err.println("export-project: --vault-* / --server* / --catalog / --designer only apply "
+                        + "with --new (they describe a new project's IdentityVault_, Server_ and package catalog); "
+                        + "an existing project keeps its own");
                     System.exit(2);
                 }
                 com.pointblue.dirxml.dev.source.ProjectWriter.Result r = fresh
                     ? com.pointblue.dirxml.dev.source.ProjectWriter.create(Paths.get(pos.get(0)), Paths.get(pos.get(1)),
                         new com.pointblue.dirxml.dev.source.NewProject(
-                            vaultName, vaultHost, vaultUser, serverName, serverContext), dryRun)
+                            vaultName, vaultHost, vaultUser, serverName, serverContext,
+                            catalogDir == null ? null : Paths.get(catalogDir),
+                            designerRoot == null ? null : Paths.get(designerRoot)), dryRun)
                     : com.pointblue.dirxml.dev.source.ProjectWriter.update(
                         Paths.get(pos.get(0)), Paths.get(pos.get(1)), dryRun);
                 System.out.print(json ? r.json() + "\n" : r.text());
@@ -372,10 +382,13 @@ public final class Cli {
         System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
         System.err.println("  export-project <tree> <projectDir> [--dry-run] [--json]  update an existing Designer project to match a tree");
         System.err.println("  export-project <tree> <newProjectDir> --new [--vault-name NAME] [--vault-host HOST] [--vault-user DN]");
-        System.err.println("                 [--server NAME --server-context DN] [--dry-run] [--json]");
+        System.err.println("                 [--server NAME --server-context DN] [--catalog DIR] [--designer DIR] [--dry-run] [--json]");
         System.err.println("                                        write a whole new Designer project for the tree (the directory's");
         System.err.println("                                        basename is the project name; it must not exist or be empty; no");
-        System.err.println("                                        vault password is ever written)");
+        System.err.println("                                        vault password is ever written). --catalog is the git package");
+        System.err.println("                                        catalog: it fills the project's own package catalog and refuses");
+        System.err.println("                                        if a package the tree names is missing. --designer overrides the");
+        System.err.println("                                        Designer install driver icons are copied from (IDM_DESIGNER).");
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
         System.err.println("  tree.diff <fromDir> <toDir> [--json]  structured diff of two as-code trees (exit 1 if they differ)");
