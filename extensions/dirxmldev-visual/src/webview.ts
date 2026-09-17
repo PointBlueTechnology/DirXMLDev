@@ -54,13 +54,16 @@ export function fishboneHtml(model: FishboneModel, nonce: string, csp: string, c
 
 function renderSvg(model: FishboneModel): string {
   const width = 1240;
-  const height = 640;
   const spineY = 320;
   const ribXs = [250, 400, 550, 700, 850];
   const idvX = 80;
   const appX = 1165;
   const schemaX = 990;
   const ioX = 990;
+  const resourceY = 548;
+  const resourceExtra =
+    Math.max(0, ...model.resources.map((b) => b.policies.length), 0) * POLICY_CHIP_STEP;
+  const height = 640 + resourceExtra;
 
   const pubBones = model.publisher;
   const subBones = model.subscriber;
@@ -71,7 +74,7 @@ function renderSvg(model: FishboneModel): string {
   const parts: string[] = [];
   parts.push(`<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Policy flow fishbone">`);
   parts.push(`<text class="channel-label pub" x="530" y="36" text-anchor="middle">Publisher channel</text>`);
-  parts.push(`<text class="channel-label sub" x="530" y="624" text-anchor="middle">Subscriber channel</text>`);
+  parts.push(`<text class="channel-label sub" x="530" y="${height - 16}" text-anchor="middle">Subscriber channel</text>`);
 
   // spine
   parts.push(`<line class="spine" x1="${idvX + 48}" y1="${spineY}" x2="${appX - 48}" y2="${spineY}"/>`);
@@ -95,9 +98,9 @@ function renderSvg(model: FishboneModel): string {
     parts.push(ioBone(ioX, spineY, 1, output));
   }
 
-  // Filter + GCV / ECMAScript — Designer keeps these off the channel ribs.
+  // Filter + driver-level sets (ECMAScript, GCV, Startup, Shutdown) — off the channel ribs.
   let rx = 24;
-  const ry = 548;
+  const ry = resourceY;
   if (model.filter) {
     const w = 130;
     parts.push(`<g class="bone filter" data-node="${escAttr(model.filter.id)}" tabindex="0">
@@ -109,7 +112,7 @@ function renderSvg(model: FishboneModel): string {
   }
   for (const bone of model.resources) {
     const w = 150;
-    parts.push(resourceChip(rx, ry, w, bone));
+    parts.push(resourceBone(rx, ry, w, bone));
     rx += w + 12;
   }
 
@@ -168,28 +171,39 @@ function rib(cx: number, spineY: number, dir: number, bone: FishboneBone): strin
   </g>`;
 }
 
+const POLICY_CHIP_W = 150;
+const POLICY_CHIP_STEP = 26;
+
 function policyStack(cx: number, startY: number, bone: FishboneBone, dir: number): string {
   return bone.policies
     .map((p, i) => {
-      const y = startY + dir * i * 26;
-      const w = 150;
+      const y = startY + dir * i * POLICY_CHIP_STEP;
+      const w = POLICY_CHIP_W;
+      const clipId = clipIdFor(p.id);
       const klass = p.unresolved ? "policy unresolved" : "policy";
       return `<g class="${klass}" data-node="${escAttr(p.id)}">
+        <clipPath id="${escAttr(clipId)}"><rect x="${cx - w / 2}" y="${y - 10}" width="${w}" height="22" rx="4"/></clipPath>
         <rect x="${cx - w / 2}" y="${y - 10}" width="${w}" height="22" rx="4"/>
-        <text x="${cx}" y="${y + 5}" text-anchor="middle">${esc(shortName(p))}</text>
+        <text x="${cx}" y="${y + 5}" text-anchor="middle" clip-path="url(#${escAttr(clipId)})">${esc(shortName(p))}</text>
       </g>`;
     })
     .join("\n");
 }
 
-function resourceChip(x: number, y: number, w: number, bone: FishboneBone): string {
+function resourceBone(x: number, y: number, w: number, bone: FishboneBone): string {
   const empty = bone.policies.length === 0 ? " empty" : "";
-  const names = bone.policies.map((p) => p.name).join(", ") || "none";
+  const cx = x + w / 2;
+  const n = bone.policies.length;
   return `<g class="bone resource${empty}" data-node="${escAttr(bone.id)}" tabindex="0">
     <rect x="${x}" y="${y}" width="${w}" height="48" rx="6"/>
     <text class="bone-title" x="${x + 10}" y="${y + 20}" text-anchor="start">${esc(bone.label)}</text>
-    <text class="count" x="${x + 10}" y="${y + 38}" text-anchor="start">${esc(names)}</text>
+    <text class="count" x="${x + 10}" y="${y + 38}" text-anchor="start">${n} ${n === 1 ? "item" : "items"}</text>
+    ${policyStack(cx, y + 64, bone, 1)}
   </g>`;
+}
+
+function clipIdFor(nodeId: string): string {
+  return "clip-" + nodeId.replace(/[^A-Za-z0-9_-]/g, "_");
 }
 
 function shortName(p: FishbonePolicy): string {

@@ -3,7 +3,8 @@ package com.pointblue.dirxml.dev.model;
 /**
  * The engine's policy sets, by the ids used in {@code <linkage-item policy-set=…>}
  * (exports) and {@code DirXML-Policies} values {@code <dn>#<order>#<setId>} (vault).
- * Subscriber sets are even, publisher sets odd, from 4 up.
+ * Subscriber sets are even, publisher sets odd, from 4 through 13.
+ * Startup is 15 and Shutdown is 16 (IDM 4.0.2.3+; Understanding Policies Guide).
  */
 public enum PolicySet {
     SCHEMA_MAPPING(0, "schema-mapping"),
@@ -20,7 +21,9 @@ public enum PolicySet {
     PUB_COMMAND(11, "publisher-command"),
     SUB_PLACEMENT(12, "subscriber-placement"),
     PUB_PLACEMENT(13, "publisher-placement"),
-    GCV(14, "gcv");
+    GCV(14, "gcv"),
+    STARTUP(15, "startup"),
+    SHUTDOWN(16, "shutdown");
 
     public final int id;
     public final String key;
@@ -48,11 +51,16 @@ public enum PolicySet {
         throw new IllegalArgumentException("unknown policy-set key '" + key + "'");
     }
 
+    /** Channel policy sets only (event through placement). GCV / Startup / Shutdown are driver-level. */
+    public boolean isChannel() {
+        return id >= SUB_EVENT.id && id <= PUB_PLACEMENT.id;
+    }
+
     public boolean isSubscriber() {
-        return id >= 4 && id % 2 == 0 && id != GCV.id;
+        return isChannel() && id % 2 == 0;
     }
 
     public boolean isPublisher() {
-        return id >= 5 && id % 2 == 1;
+        return isChannel() && id % 2 == 1;
     }
 }
