@@ -76,6 +76,8 @@ final class ProjectCatalogWriter {
     private static final String CLASS_RULE = "DirXML-Rule";
     private static final String CLASS_RESOURCE = "DirXML-Resource";
     private static final String CLASS_GCV_DEF = "DirXML-GlobalConfigDef";
+    private static final String CLASS_STYLESHEET = "DirXML-StyleSheet";
+    private static final String CLASS_ENTITLEMENT = "DirXML-Entitlement";
 
     private ProjectCatalogWriter() {
     }
@@ -171,13 +173,15 @@ final class ProjectCatalogWriter {
         if (n == null) {
             return;
         }
-        if (n.version == null && f.length > 2 && !f[2].isBlank()) {
+        // the vault itself records "<id>;unknown;0.0.0" on provisioning objects (PRDs, forms) — no
+        // version there, so the newest catalog version of that id is the only candidate
+        if (n.version == null && f.length > 2 && !f[2].isBlank() && !"0.0.0".equals(f[2].trim())) {
             n.version = f[2].trim();
         }
         if (n.displayName == null && f.length > 3 && !f[3].isBlank()) {
             n.displayName = f[3].trim();
         }
-        if (n.shortName == null && f.length > 4 && !f[4].isBlank()) {
+        if (n.shortName == null && f.length > 4 && !f[4].isBlank() && !"unknown".equals(f[4].trim())) {
             n.shortName = f[4].trim();
         }
     }
@@ -517,24 +521,39 @@ final class ProjectCatalogWriter {
                 default: return "ScriptPolicy";
             }
         }
+        if (CLASS_STYLESHEET.equals(it.objectClass)) {
+            return "StylesheetPolicy";
+        }
         if (CLASS_RESOURCE.equals(it.objectClass)) {
+            // by content type, as test11pf's catalog holds them (spike designer-project-catalog.md)
+            String ct = it.contentType == null ? "" : it.contentType.toLowerCase();
+            if (ct.contains("mapping-table")) {
+                return "MappingTableResource";
+            }
+            if (ct.startsWith("text/ecmascript")) {
+                return "ECMAScriptResource";
+            }
             return "IDMResource";
         }
         if (CLASS_GCV_DEF.equals(it.objectClass)) {
             return "GlobalConfig";
         }
+        if (CLASS_ENTITLEMENT.equals(it.objectClass)) {
+            return "Entitlement";
+        }
         return null;
     }
 
-    /** The {@code IdmPackageFolder_}'s child relation name, by item type (test11pf's three). */
+    /** The {@code IdmPackageFolder_}'s child relation name, by item type (as test11pf's catalog has them). */
     private static String relationNameFor(String type) {
-        if ("GlobalConfig".equals(type)) {
-            return "Idm:GlobalConfigs";
+        switch (type) {
+            case "GlobalConfig": return "Idm:GlobalConfigs";
+            case "IDMResource":
+            case "MappingTableResource":
+            case "ECMAScriptResource": return "Idm:Resources";
+            case "Entitlement": return "Idm:Entitlements";
+            default: return "Idm:Policies";
         }
-        if ("IDMResource".equals(type)) {
-            return "Idm:Resources";
-        }
-        return "Idm:Policies";
     }
 
     /**
