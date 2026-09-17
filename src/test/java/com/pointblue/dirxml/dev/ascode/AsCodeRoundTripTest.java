@@ -94,6 +94,10 @@ public class AsCodeRoundTripTest {
         d.links.add(new PolicyLink(PolicySet.SUB_EVENT, "drivers/AD: Prod/Users/subscriber/sub-etp \"Scoping\"", 0));
         d.links.add(new PolicyLink(PolicySet.OUTPUT, "drivers/AD: Prod/Users/publisher/pub-otp_Transform", 0));
         d.links.add(new PolicyLink(PolicySet.ECMASCRIPT, "library/es-misc", 0));
+        d.policies.add(new Policy("NOVLADENTEX-Startup-InitEntitlementConfigurationResource", Scope.DRIVER, d.name, xml(
+            "<policy><rule><description>init entitlements</description><conditions/><actions/></rule></policy>")));
+        d.links.add(new PolicyLink(PolicySet.STARTUP,
+            "drivers/AD: Prod/Users/NOVLADENTEX-Startup-InitEntitlementConfigurationResource", 0));
         // a custom Designer icon: opaque bytes the tree carries beside driver.xml
         d.icon = TINY_GIF.clone();
         d.iconExtension = "gif";
@@ -129,17 +133,20 @@ public class AsCodeRoundTripTest {
         assertEquals("4.1.2", d.meta.get("pkg.version"));
         assertTrue(d.config.containsKey(Driver.DRIVER_FILTER));
         assertTrue(d.config.containsKey(Driver.CONFIG_VALUES));
-        assertEquals(1, d.policies.size());
+        assertEquals(2, d.policies.size());
         assertEquals(1, d.subscriber.policies.size());
         assertEquals(1, d.publisher.policies.size());
-        assertEquals(Policy.Kind.SCHEMA_MAP, d.policies.get(0).policyKind());
+        assertTrue(d.policies.stream().anyMatch(p -> p.policyKind() == Policy.Kind.SCHEMA_MAP));
+        assertTrue(d.policies.stream().anyMatch(p -> p.name.startsWith("NOVLADENTEX-Startup")));
         assertEquals(Policy.Kind.XSLT, d.publisher.policies.get(0).policyKind());
 
         // links: same count, same order within a set
-        assertEquals(5, d.links.size());
+        assertEquals(6, d.links.size());
         List<PolicyLink> sub = d.links(PolicySet.SUB_EVENT);
         assertEquals("drivers/AD: Prod/Users/subscriber/sub-etp \"Scoping\"", sub.get(0).ref);
         assertEquals("library/lib-common-event", sub.get(1).ref);
+        assertEquals("drivers/AD: Prod/Users/NOVLADENTEX-Startup-InitEntitlementConfigurationResource",
+            d.links(PolicySet.STARTUP).get(0).ref);
 
         // content: significant whitespace in token-text survives; resources typed correctly
         Policy shared = (Policy) back.resolve("library/lib-common-event");

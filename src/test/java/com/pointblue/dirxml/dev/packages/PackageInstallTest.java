@@ -51,7 +51,9 @@ public class PackageInstallTest {
         assertEquals(PolicySet.SUB_MATCH, PackageInstall.policySet("subscriber matching", ""));
         assertEquals(PolicySet.GCV, PackageInstall.policySet("gcv", ""));
         assertEquals(PolicySet.ECMASCRIPT, PackageInstall.policySet("ecma-script", ""));
-        assertNull(PackageInstall.policySet("Startup", ""));
+        assertEquals(PolicySet.STARTUP, PackageInstall.policySet("Startup", ""));
+        assertEquals(PolicySet.SHUTDOWN, PackageInstall.policySet("Shutdown", ""));
+        assertNull(PackageInstall.policySet("not-a-set", ""));
     }
 
     @Test
