@@ -956,6 +956,8 @@ public final class PackageInstall implements Operation {
             case "schema": case "schema-mapping": return PolicySet.SCHEMA_MAPPING;
             case "gcv": return PolicySet.GCV;
             case "ecma-script": case "ecmascript": return PolicySet.ECMASCRIPT;
+            case "startup": return PolicySet.STARTUP;
+            case "shutdown": return PolicySet.SHUTDOWN;
             case "event": return pub ? PolicySet.PUB_EVENT : PolicySet.SUB_EVENT;
             case "matching": return pub ? PolicySet.PUB_MATCH : PolicySet.SUB_MATCH;
             case "creation": case "create": return pub ? PolicySet.PUB_CREATE : PolicySet.SUB_CREATE;
@@ -969,7 +971,8 @@ public final class PackageInstall implements Operation {
     static final List<PolicySet> ADD_POLICY_SET_REFS_ORDER = List.of(
         PolicySet.INPUT, PolicySet.SCHEMA_MAPPING, PolicySet.PUB_EVENT, PolicySet.PUB_MATCH, PolicySet.PUB_CREATE,
         PolicySet.PUB_PLACEMENT, PolicySet.PUB_COMMAND, PolicySet.OUTPUT, PolicySet.SUB_COMMAND, PolicySet.SUB_PLACEMENT,
-        PolicySet.SUB_CREATE, PolicySet.SUB_MATCH, PolicySet.SUB_EVENT, PolicySet.GCV, PolicySet.ECMASCRIPT);
+        PolicySet.SUB_CREATE, PolicySet.SUB_MATCH, PolicySet.SUB_EVENT,
+        PolicySet.STARTUP, PolicySet.SHUTDOWN, PolicySet.GCV, PolicySet.ECMASCRIPT);
 
     static final Map<PolicySet, String> DESIGNER_SET_NAMES = Map.ofEntries(
         Map.entry(PolicySet.INPUT, "input"), Map.entry(PolicySet.SCHEMA_MAPPING, "schema"),
@@ -978,7 +981,9 @@ public final class PackageInstall implements Operation {
         Map.entry(PolicySet.PUB_COMMAND, "command"), Map.entry(PolicySet.OUTPUT, "output"),
         Map.entry(PolicySet.SUB_COMMAND, "command"), Map.entry(PolicySet.SUB_PLACEMENT, "placement"),
         Map.entry(PolicySet.SUB_CREATE, "creation"), Map.entry(PolicySet.SUB_MATCH, "matching"),
-        Map.entry(PolicySet.SUB_EVENT, "event"), Map.entry(PolicySet.GCV, "gcv"), Map.entry(PolicySet.ECMASCRIPT, "ecma-script"));
+        Map.entry(PolicySet.SUB_EVENT, "event"), Map.entry(PolicySet.STARTUP, "Startup"),
+        Map.entry(PolicySet.SHUTDOWN, "Shutdown"), Map.entry(PolicySet.GCV, "gcv"),
+        Map.entry(PolicySet.ECMASCRIPT, "ecma-script"));
 
     /**
      * The artifacts a package installed on target {@code d} (or the Library,

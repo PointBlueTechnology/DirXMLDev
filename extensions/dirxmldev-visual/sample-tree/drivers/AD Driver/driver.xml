@@ -6,6 +6,12 @@
   <artifact kind="policy" scope="driver" name="itp_Input" file="itp_Input.policy.xml"/>
   <artifact kind="policy" scope="driver" name="otp_Output" file="otp_Output.policy.xml"/>
   <artifact kind="policy" scope="driver" name="sch_Map" file="sch_Map.policy.xml"/>
+  <artifact kind="policy" scope="driver" name="NOVLADENTEX-Startup-InitEntitlementConfigurationResource" file="NOVLADENTEX-Startup-InitEntitlementConfigurationResource.policy.xml"/>
+  <artifact kind="resource" scope="driver" name="NOVLADENTEX-GCVs" file="NOVLADENTEX-GCVs.gcv.xml" content-type="application/vnd.novell.dirxml.gcv+xml"/>
+  <artifact kind="resource" scope="driver" name="NOVLADDCFG-GCVs" file="NOVLADDCFG-GCVs.gcv.xml" content-type="application/vnd.novell.dirxml.gcv+xml"/>
+  <artifact kind="resource" scope="driver" name="NOVLPWDSYNC-GCVs" file="NOVLPWDSYNC-GCVs.gcv.xml" content-type="application/vnd.novell.dirxml.gcv+xml"/>
+  <artifact kind="resource" scope="driver" name="NOVLADENTEX-EntitlementGCVs" file="NOVLADENTEX-EntitlementGCVs.gcv.xml" content-type="application/vnd.novell.dirxml.gcv+xml"/>
+  <artifact kind="resource" scope="driver" name="NOVLPWDSNC-GCVs" file="NOVLPWDSNC-GCVs.gcv.xml" content-type="application/vnd.novell.dirxml.gcv+xml"/>
   <artifact kind="policy" scope="publisher" name="pub-cp_Create User" file="publisher/pub-cp_Create User.policy.xml"/>
   <artifact kind="policy" scope="publisher" name="pub-ctp_Transform" file="publisher/pub-ctp_Transform.policy.xml"/>
   <artifact kind="policy" scope="publisher" name="pub-etp_Scoping" file="publisher/pub-etp_Scoping.policy.xml"/>
@@ -28,6 +34,16 @@
     </set>
     <set key="ecmascript">
       <link ref="library/es-misc" order="0"/>
+    </set>
+    <set key="gcv">
+      <link ref="drivers/AD Driver/NOVLADENTEX-GCVs" order="0"/>
+      <link ref="drivers/AD Driver/NOVLADDCFG-GCVs" order="1"/>
+      <link ref="drivers/AD Driver/NOVLPWDSYNC-GCVs" order="2"/>
+      <link ref="drivers/AD Driver/NOVLADENTEX-EntitlementGCVs" order="3"/>
+      <link ref="drivers/AD Driver/NOVLPWDSNC-GCVs" order="4"/>
+    </set>
+    <set key="startup">
+      <link ref="drivers/AD Driver/NOVLADENTEX-Startup-InitEntitlementConfigurationResource" order="0"/>
     </set>
     <set key="subscriber-event">
       <link ref="drivers/AD Driver/subscriber/sub-etp_Scoping" order="0"/>
