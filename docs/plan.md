@@ -399,6 +399,16 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   [spikes/prd-rest-live.md](spikes/prd-rest-live.md). Open check: whether
   `POST /index/permissions ADD_OR_MODIFY` makes a just-deployed PRD
   requestable before the index's 10-minute interval.
+- **`bin/idm query <tree> fishbone <driver> --json`** — the JSON the VS Code /
+  Cursor fishbone viewer (`extensions/dirxmldev-visual/`, PR #1) builds itself from `driver.xml`; serving it from the CLI keeps
+  one reader of the manifest and lets the viewer follow model changes
+  (`docs/vscode-extension-v1.md` proposes it).
+- **`package.fetch` refuses every download with `REFUSED <short>_<ver>: null`**
+  (2026-09-17, both update sites, `--dry-run` lists the versions fine, `curl`
+  downloads the same URL): the download step throws with a null message that
+  the CLI swallows. Print the exception class, and find the cause (Java HTTPS
+  from this Mac, or the site's redirect). Workaround: `curl` the jar and
+  `package.import` it.
 - **`bin/idm` usage omits `vault.*`, `driver.submit` and `driver.trace tail`**
   (they run, and each prints its own usage when called wrong); add them to
   the top-level listing. Found 2026-09-16 while writing the walkthrough.
