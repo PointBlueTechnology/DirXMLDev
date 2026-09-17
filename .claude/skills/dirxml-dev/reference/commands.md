@@ -91,7 +91,7 @@ Stock defaults (copied from the idm254 templates, never the templates themselves
 
 Deploy: forms and PRDs ride the normal `vault.diff`/`vault.deploy`/`vault.rollback` (no driver restart; the plan says when the Identity Applications may need a cache flush).
 
-`export-project` (below) also carries a driver's forms/PRDs into an existing Designer project — same command, no new flags.
+`export-project` (below) also carries a driver's forms/PRDs into an existing Designer project — same command, no new flags; `export-project --new` writes the whole `AppConfig` (`.provisioning`, `.appconfig`, container digests, forms and PRDs) for a project that has none yet.
 
 ## Entitlements (`docs/entitlements.md`)
 
@@ -149,6 +149,7 @@ Gating: reads are free; start/restart/trace/secrets need `--yes` on stg and `--y
 ## Designer and documentation
 
 - `export-project <tree> <projectDir> [--dry-run] [--json]` — update an existing Designer project in place from the tree (only the files the diff needs; refuses packaged new drivers and driver deletes; also carries a driver's forms/PRDs, refusing only that driver's provisioning when the project has no AppConfig for it)
+- `export-project <tree> <newProjectDir> --new [--vault-name NAME] [--vault-host HOST] [--vault-user DN] [--server NAME --server-context DN] [--dry-run] [--json]` — write a **whole new** Designer project for the tree (`docs/designer-new-project.md`, milestones N1+N2). The directory must not exist or be empty, and **its basename is the project name** — it is written into `.project`, `<name>.proj` and `<name>.cproj`, so never rename a project folder by hand afterwards. Writes the descriptors, the three roots, the domain, the vault, the driver set + Library and the package catalog's six stock categories, then everything the tree holds: drivers with channels/filters/policies/resources/GCVs, an `Application_` and a modeler node per driver (`NProv` for the User Application driver), the UA driver's whole `AppConfig` (`.provisioning`, `.appconfig`, container digests, forms, PRDs) and its entitlements. Packaged items get their package attributes and an `<id>_initial_state.xml` baseline, but **no `IdmPackage_` catalog and no `Idm:InstalledPackages` relations** (milestone N3) — the result note lists the packages the tree names, and Designer shows those items as plain until the catalog exists or the packages are imported in Designer. The vault/server flags are optional and **no vault password is ever written** (`IdentityVaultSavePassword=false`); `--new` never touches an existing project
 - `docs <tree> --out <dir> [--driver D…] [--since <commit>] [--format md|html]` — README, `drivers/<name>.md`, `library.md`, `changes.md`
 
 ## Packages (Phase 7, in progress)
