@@ -593,6 +593,8 @@ public final class ProjectWriter {
             case OUTPUT: return "Idm:OutputPolicies";
             case ECMASCRIPT: return "Idm:ExtensionFunctions";
             case GCV: return "Idm:GlobalConfigs";
+            case STARTUP: return "Idm:StartupPolicies";
+            case SHUTDOWN: return "Idm:ShutdownPolicies";
             case SUB_EVENT: case PUB_EVENT: return "Idm:EventPolicies";
             case SUB_MATCH: case PUB_MATCH: return "Idm:MatchingPolicies";
             case SUB_CREATE: case PUB_CREATE: return "Idm:CreatePolicies";
@@ -617,8 +619,7 @@ public final class ProjectWriter {
     }
 
     private static boolean isDriverLevel(PolicySet set) {
-        return set == PolicySet.SCHEMA_MAPPING || set == PolicySet.INPUT || set == PolicySet.OUTPUT
-            || set == PolicySet.ECMASCRIPT || set == PolicySet.GCV;
+        return !set.isSubscriber() && !set.isPublisher();
     }
 
     // ------------------------------------------------------------------

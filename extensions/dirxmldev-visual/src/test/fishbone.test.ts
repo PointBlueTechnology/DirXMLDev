@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, it } from "node:test";
 import { findTreeRoot, loadTree } from "../ascode";
-import { filesForNode, loadFishbone, PUBLISHER_RIBS, SUBSCRIBER_RIBS } from "../fishbone";
+import { filesForNode, loadFishbone, PUBLISHER_RIBS, RESOURCE_SETS, SUBSCRIBER_RIBS } from "../fishbone";
 import { fishboneGet, fishboneRefresh, fishboneReveal } from "../hooks";
 import { fishboneHtml } from "../webview";
 
@@ -38,6 +38,8 @@ describe("sample as-code tree", () => {
       "input",
       "output",
       "ecmascript",
+      "gcv",
+      "startup",
     ]) {
       assert.ok(keys.has(k), "missing set " + k);
     }
@@ -89,11 +91,55 @@ describe("fishbone model", () => {
       "Input Transformation",
       "Output Transformation",
       "Filter",
+      "ECMAScript",
+      "GCVs",
+      "Startup",
+      "Shutdown",
       "sub-etp_Scoping",
       "sch_Map",
+      "NOVLADENTEX-Startup-InitEntitlementConfigurationResource".slice(0, 20) + "…",
     ]) {
       assert.ok(html.includes(label), "missing " + label);
     }
+  });
+
+  it("maps AD-style Startup linkage to a driver-level bone with policies", () => {
+    const model = fishboneGet(sample, "AD Driver");
+    assert.deepEqual(
+      model.resources.map((b) => b.key),
+      RESOURCE_SETS.map((s) => s.key),
+    );
+    const startup = model.resources.find((b) => b.key === "startup")!;
+    assert.equal(startup.setId, 15);
+    assert.equal(startup.label, "Startup");
+    assert.equal(startup.channel, "driver");
+    assert.equal(startup.policies.length, 1);
+    assert.equal(startup.policies[0]!.name, "NOVLADENTEX-Startup-InitEntitlementConfigurationResource");
+    assert.equal(
+      startup.policies[0]!.file,
+      "drivers/AD Driver/NOVLADENTEX-Startup-InitEntitlementConfigurationResource.policy.xml",
+    );
+    assert.equal(startup.policies[0]!.unresolved, false);
+
+    const shutdown = model.resources.find((b) => b.key === "shutdown")!;
+    assert.equal(shutdown.setId, 16);
+    assert.equal(shutdown.policies.length, 0);
+  });
+
+  it("stacks GCV chips vertically instead of a comma-separated run-on", () => {
+    const model = fishboneGet(sample, "AD Driver");
+    const gcv = model.resources.find((b) => b.key === "gcv")!;
+    const names = gcv.policies.map((p) => p.name);
+    assert.ok(names.length >= 5, "expected several GCV objects");
+    const html = fishboneHtml(model, "n", "default-src 'none'", "fishbone.css");
+    assert.equal(html.includes(names.join(", ")), false, "must not dump GCV names as one horizontal string");
+    for (const p of gcv.policies) {
+      assert.ok(html.includes(`data-node="${p.id}"`), "missing stacked chip for " + p.name);
+    }
+    const gcvBone = html.indexOf('data-node="bone:gcv"');
+    const firstChip = html.indexOf(`data-node="${gcv.policies[0]!.id}"`);
+    const secondChip = html.indexOf(`data-node="${gcv.policies[1]!.id}"`);
+    assert.ok(gcvBone >= 0 && firstChip > gcvBone && secondChip > firstChip);
   });
 
   it("reveal hook maps a ref to a real file", () => {

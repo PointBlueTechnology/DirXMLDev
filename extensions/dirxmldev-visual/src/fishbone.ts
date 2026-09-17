@@ -45,6 +45,8 @@ export const SPINE_SETS: PolicySetDef[] = [
 export const RESOURCE_SETS: PolicySetDef[] = [
   { key: "ecmascript", id: 3, label: "ECMAScript", channel: "driver" },
   { key: "gcv", id: 14, label: "GCVs", channel: "driver" },
+  { key: "startup", id: 15, label: "Startup", channel: "driver" },
+  { key: "shutdown", id: 16, label: "Shutdown", channel: "driver" },
 ];
 
 /** Same order as ReadCli.PUB_CHAIN / SUB_CHAIN (engine execution). */

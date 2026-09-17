@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<policy>
+  <rule>
+    <description>Init Entitlement Configuration Resource</description>
+    <conditions>
+      <and>
+        <if-operation op="equal">status</if-operation>
+      </and>
+    </conditions>
+    <actions>
+      <do-trace-message>
+        <arg-string>
+          <token-text>startup</token-text>
+        </arg-string>
+      </do-trace-message>
+    </actions>
+  </rule>
+</policy>

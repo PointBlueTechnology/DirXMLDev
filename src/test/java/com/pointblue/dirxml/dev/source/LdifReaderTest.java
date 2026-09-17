@@ -58,7 +58,9 @@ public class LdifReaderTest {
                 "DirXML-Policies", lib + "#1#4",
                 "DirXML-Policies", pubPol + "#0#2",
                 "DirXML-Policies", missing + "#2#4",
-                "DirXML-Policies", "cn=NOVLADDCFG-GCVs," + drv + "#0#14"),
+                "DirXML-Policies", "cn=NOVLADDCFG-GCVs," + drv + "#0#14",
+                "DirXML-Policies", "cn=NOVLADENTEX-Startup-InitEntitlementConfigurationResource," + drv + "#0#15",
+                "DirXML-Policies", "cn=drv-shutdown," + drv + "#0#16"),
             entry("cn=NOVLADDCFG-GCVs," + drv, "DirXML-GlobalConfigDef",
                 "DirXML-ConfigValues", "<?xml version=\"1.0\"?><configuration-values><definitions/></configuration-values>",
                 "DirXML-pkgChecksum", "4234957497"),
@@ -67,7 +69,11 @@ public class LdifReaderTest {
             entry(schema, "DirXML-Rule", "XmlData", "<attr-name-map/>"),
             entry(subPol, "DirXML-Rule", "XmlData", "<policy><rule><conditions/><actions><do-veto/></actions></rule></policy>"),
             entry(pubPol, "DirXML-StyleSheet", "XmlData",
-                "<xsl:stylesheet xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" version=\"1.0\"/>"));
+                "<xsl:stylesheet xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" version=\"1.0\"/>"),
+            entry("cn=NOVLADENTEX-Startup-InitEntitlementConfigurationResource," + drv, "DirXML-Rule",
+                "XmlData", "<policy><rule><description>init entitlements</description><conditions/><actions/></rule></policy>"),
+            entry("cn=drv-shutdown," + drv, "DirXML-Rule",
+                "XmlData", "<policy><rule><description>shutdown</description><conditions/><actions/></rule></policy>"));
         return LdifReader.fromEntries(entries, "synthetic.ldif");
     }
 
@@ -86,7 +92,7 @@ public class LdifReaderTest {
         assertEquals("svc", ad.shimAuthId);
         assertTrue(ad.config.containsKey(Driver.DRIVER_FILTER));
         assertEquals("PKG-1", ad.meta.get("dirxml-pkgguid"));
-        assertEquals(1, ad.policies.size());                 // sch_Map at driver scope
+        assertEquals(3, ad.policies.size());                 // sch_Map + startup + shutdown at driver scope
         assertEquals(Policy.Kind.SCHEMA_MAP, ad.policies.get(0).policyKind());
         assertEquals(1, ad.subscriber.policies.size());
         assertEquals(1, ad.publisher.policies.size());
@@ -110,7 +116,7 @@ public class LdifReaderTest {
     public void linkageMapsToPathsAndReportsMissingTargets() {
         DriverSet ds = sample();
         Driver ad = ds.driver("AD");
-        assertEquals(6, ad.links.size());
+        assertEquals(8, ad.links.size());
         // a DirXML-GlobalConfigDef becomes a GCV-def resource so the set-14 link resolves
         assertEquals("drivers/AD/NOVLADDCFG-GCVs", ad.links(PolicySet.GCV).get(0).ref);
         Resource gcv = (Resource) ds.resolve("drivers/AD/NOVLADDCFG-GCVs");
@@ -124,6 +130,10 @@ public class LdifReaderTest {
         assertEquals("library/lib-not-exported", sub.get(2).ref);
         assertEquals("drivers/AD/sch_Map", ad.links(PolicySet.SCHEMA_MAPPING).get(0).ref);
         assertEquals("drivers/AD/publisher/pub-otp", ad.links(PolicySet.OUTPUT).get(0).ref);
+        assertEquals("drivers/AD/NOVLADENTEX-Startup-InitEntitlementConfigurationResource",
+            ad.links(PolicySet.STARTUP).get(0).ref);
+        assertEquals("drivers/AD/drv-shutdown", ad.links(PolicySet.SHUTDOWN).get(0).ref);
+        assertTrue(ad.meta.keySet().stream().noneMatch(k -> k.startsWith("linkage.unknown.")));
 
         List<PolicyLink> broken = ds.unresolvedLinks();
         assertEquals(1, broken.size());

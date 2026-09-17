@@ -44,6 +44,8 @@ public class ExportReaderTest {
         + "      <linkage-item dn=\"cn=pub-otp_Xform,cn=Publisher,cn=UKG,cn=driverset1,ou=idm,o=system\" order=\"0\" policy-set=\"5\"/>"
         + "      <linkage-item dn=\"cn=sub-ctp_Xslt,cn=Subscriber,cn=UKG,cn=driverset1,ou=idm,o=system\" order=\"1\" policy-set=\"10\"/>"
         + "      <linkage-item dn=\"cn=JFW-UKG_GCVs,cn=UKG,cn=driverset1,ou=idm,o=system\" order=\"0\" policy-set=\"14\"/>"
+        + "      <linkage-item dn=\"cn=NOVLADENTEX-Startup-InitEntitlementConfigurationResource,cn=UKG,cn=driverset1,ou=idm,o=system\" order=\"0\" policy-set=\"15\"/>"
+        + "      <linkage-item dn=\"cn=drv-shutdown,cn=UKG,cn=driverset1,ou=idm,o=system\" order=\"0\" policy-set=\"16\"/>"
         + "      <linkage-item dn=\"cn=weird,cn=UKG,cn=driverset1,ou=idm,o=system\" order=\"0\" policy-set=\"99\"/>"
         + "    </policy-linkage>"
         + "    <shim-auth-id value=\"IDVAULTAPI\"/>"
@@ -65,6 +67,8 @@ public class ExportReaderTest {
         + "      <stylesheet name=\"sub-ctp_Xslt\"><xsl:stylesheet xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" version=\"1.0\"/></stylesheet>"
         + "    </children></subscriber>"
         + "    <rule name=\"sch_Employee Map\"><attr-name-map/></rule>"
+        + "    <rule name=\"NOVLADENTEX-Startup-InitEntitlementConfigurationResource\"><policy><rule><conditions/><actions/></rule></policy></rule>"
+        + "    <rule name=\"drv-shutdown\"><policy><rule><conditions/><actions/></rule></policy></rule>"
         + "    <global-config-def name=\"JFW-UKG_GCVs\" package-id=\"PKG-1\"><attributes/>"
         + "<configuration-values><definitions><definition name=\"drv.x\" display-name=\"x\" type=\"string\"><value>1</value></definition></definitions></configuration-values>"
         + "</global-config-def>"
@@ -116,7 +120,7 @@ public class ExportReaderTest {
     @Test
     public void singleDriverFormPlacesPoliciesByChannelAndKind() {
         Driver ukg = singleDriverSample().driver("UKG");
-        assertEquals(1, ukg.policies.size());
+        assertEquals(3, ukg.policies.size());
         assertEquals("sch_Employee Map", ukg.policies.get(0).name);
         assertEquals(Policy.Kind.SCHEMA_MAP, ukg.policies.get(0).policyKind());
         assertEquals(Scope.DRIVER, ukg.policies.get(0).scope);
@@ -139,10 +143,11 @@ public class ExportReaderTest {
         DriverSet ds = singleDriverSample();
         Driver ukg = ds.driver("UKG");
 
-        // 6 linkage-items in the export; one (set 99) is an unknown policy-set id.
-        assertEquals(5, ukg.links.size());
+        // 8 linkage-items in the export; one (set 99) is an unknown policy-set id.
+        assertEquals(7, ukg.links.size());
         assertTrue(ukg.meta.containsKey("linkage.unknown.0"));
         assertTrue(ukg.meta.get("linkage.unknown.0").contains("cn=weird"));
+        assertEquals(1, ukg.meta.keySet().stream().filter(k -> k.startsWith("linkage.unknown.")).count());
 
         assertEquals("drivers/UKG/sch_Employee Map", ukg.links(PolicySet.SCHEMA_MAPPING).get(0).ref);
         assertEquals("drivers/UKG/subscriber/sub-etp_Scoping", ukg.links(PolicySet.SUB_EVENT).get(0).ref);
@@ -154,6 +159,9 @@ public class ExportReaderTest {
         List<PolicyLink> unresolved = ds.unresolvedLinks();
         assertTrue("expected no unresolved links, got " + unresolved, unresolved.isEmpty());
         assertEquals("drivers/UKG/JFW-UKG_GCVs", ukg.links(PolicySet.GCV).get(0).ref);
+        assertEquals("drivers/UKG/NOVLADENTEX-Startup-InitEntitlementConfigurationResource",
+            ukg.links(PolicySet.STARTUP).get(0).ref);
+        assertEquals("drivers/UKG/drv-shutdown", ukg.links(PolicySet.SHUTDOWN).get(0).ref);
         com.pointblue.dirxml.dev.model.Resource gcv =
             (com.pointblue.dirxml.dev.model.Resource) ds.resolve("drivers/UKG/JFW-UKG_GCVs");
         assertNotNull(gcv);

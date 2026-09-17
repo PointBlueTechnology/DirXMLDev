@@ -152,7 +152,9 @@ public final class ReadCli {
         }
         Set<PolicySet> shown = new LinkedHashSet<>(sub ? SUB_CHAIN : PUB_CHAIN);
         for (PolicySet set : PolicySet.values()) {
-            if (!shown.contains(set) && !d.links(set).isEmpty() && (set == PolicySet.ECMASCRIPT || set == PolicySet.GCV)) {
+            if (!shown.contains(set) && !d.links(set).isEmpty()
+                && (set == PolicySet.ECMASCRIPT || set == PolicySet.GCV
+                    || set == PolicySet.STARTUP || set == PolicySet.SHUTDOWN)) {
                 System.out.println("  " + set.key + " (resources)");
                 for (PolicyLink l : d.links(set)) {
                     System.out.printf("    %2d  %s%n", l.order, l.ref);
