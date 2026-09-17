@@ -41,6 +41,29 @@ public class PlanTest {
         assertTrue(p.text("stg", DS), p.isEmpty());
     }
 
+    /**
+     * The driver icon is a Designer-project asset the vault has no attribute for. Even when a
+     * diff does carry one (an icon-aware {@code ModelDiff}, as {@code export-project} builds),
+     * the plan must be empty: no step, no touched DN, no restart.
+     */
+    @Test
+    public void anIconChangeProducesNoStepAtAll() {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        to.driver("AD").icon = new byte[] {'G', 'I', 'F', '8', '9', 'a'};
+        to.driver("AD").iconExtension = "gif";
+
+        ModelDiff diff = ModelDiff.of(from, to, true);
+        assertEquals(diff.text(), 1, diff.changes().size());
+        assertEquals(ModelDiff.Kind.DRIVER_ICON, diff.changes().get(0).kind);
+
+        Plan p = Plan.of(diff, to, DS, Secrets.none(), "none", Map.of(), true);
+        assertTrue(p.text("stg", DS), p.isEmpty());
+        assertEquals(List.of(), p.steps);
+        assertTrue(p.touchedDns.toString(), p.touchedDns.isEmpty());
+        assertTrue(p.restart.toString(), p.restart.isEmpty());
+    }
+
     @Test
     public void addedPolicyIsAddThenLinkageThenRestart() {
         DriverSet from = VaultMappingTest.model();

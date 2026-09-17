@@ -58,6 +58,7 @@ Sources feed the same model: driver / driver-set **export** (`ExportReader`), **
   drivers/<driver>/
     driver.xml                      manifest: dn, shim, config files, artifacts, LINKAGE
     shim-config-info.xml  config-values.xml  driver-filter.xml  engine-control-values.xml
+    icon.gif                        the driver's Designer icon (opaque bytes; .png on some)
     <name>.policy.xml               driver-scope policies / resources
     subscriber/<name>.policy.xml
     publisher/<name>.policy.xml
@@ -83,6 +84,11 @@ Sources feed the same model: driver / driver-set **export** (`ExportReader`), **
   ```
 - **Filenames** are the artifact name with filesystem-unsafe characters replaced; the
   manifest's `name` is authoritative, so odd names never corrupt identity.
+- **The driver icon** is the one binary file a tree holds: `<icon file="icon.gif"/>` in
+  `driver.xml` and the bytes beside it, carried byte for byte. It exists only in a
+  Designer project (the vault has no icon attribute), and it is opaque — nothing reads
+  inside it, and a diff reports only its size and format, never its bytes. See
+  [designer-new-project.md](designer-new-project.md) §7.2c.
 - **Round-trip contract:** `read(write(model))` ≡ `model` (structural equality), and
   `write` is idempotent byte-for-byte — the basis of clean git history. A source →
   model → as-code import is checked the same way (model equality; source bytes are

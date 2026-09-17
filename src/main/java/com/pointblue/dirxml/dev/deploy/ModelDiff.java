@@ -44,6 +44,7 @@ public final class ModelDiff {
     public enum Kind {
         ARTIFACT_ADDED, ARTIFACT_REMOVED, ARTIFACT_CHANGED, ARTIFACT_KIND_CHANGED,
         DRIVER_ADDED, DRIVER_REMOVED, DRIVER_SETTING, DRIVER_CONFIG, DRIVER_LINKAGE, DRIVER_STAMPS,
+        DRIVER_ICON,
         DRIVERSET_GCVS, DRIVERSET_LINKAGE,
         FORM_ADDED, FORM_REMOVED, FORM_CHANGED, PRD_ADDED, PRD_REMOVED, PRD_CHANGED,
         ENTITLEMENT_ADDED, ENTITLEMENT_REMOVED, ENTITLEMENT_CHANGED;
@@ -59,9 +60,18 @@ public final class ModelDiff {
             return this == ENTITLEMENT_ADDED || this == ENTITLEMENT_REMOVED || this == ENTITLEMENT_CHANGED;
         }
 
-        /** Neither kind needs the owning driver restarted. */
+        /**
+         * The driver's Designer icon: a project-only asset the vault has no attribute for.
+         * Nothing deploys it and nothing restarts for it — {@link Plan} produces no step at all
+         * (see {@code docs/designer-new-project.md} §7.2c).
+         */
+        public boolean isIcon() {
+            return this == DRIVER_ICON;
+        }
+
+        /** None of these kinds needs the owning driver restarted. */
         public boolean noRestart() {
-            return isProvisioning() || isEntitlement();
+            return isProvisioning() || isEntitlement() || isIcon();
         }
     }
 
@@ -141,16 +151,32 @@ public final class ModelDiff {
 
     private final DriverSet from;
     private final DriverSet to;
+    private final boolean compareIcons;
     private final List<Change> changes = new ArrayList<>();
 
-    private ModelDiff(DriverSet from, DriverSet to) {
+    private ModelDiff(DriverSet from, DriverSet to, boolean compareIcons) {
         this.from = from;
         this.to = to;
+        this.compareIcons = compareIcons;
     }
 
-    /** Computes the diff of {@code from} (current state) against {@code to} (desired state). */
+    /**
+     * Computes the diff of {@code from} (current state) against {@code to} (desired state),
+     * leaving driver icons out — the right choice whenever one side comes from a vault, an
+     * export or an LDIF, none of which hold an icon: comparing them would report every
+     * driver's icon as "added" on every deploy.
+     */
     public static ModelDiff of(DriverSet from, DriverSet to) {
-        ModelDiff d = new ModelDiff(Objects.requireNonNull(from, "from"), Objects.requireNonNull(to, "to"));
+        return of(from, to, false);
+    }
+
+    /**
+     * The same, comparing driver icons when {@code compareIcons} — for the two sides that can
+     * both hold one, a tree and a Designer project ({@code export-project}), or two trees
+     * ({@code tree.diff}, {@code docs --since}). See {@link Kind#DRIVER_ICON}.
+     */
+    public static ModelDiff of(DriverSet from, DriverSet to, boolean compareIcons) {
+        ModelDiff d = new ModelDiff(Objects.requireNonNull(from, "from"), Objects.requireNonNull(to, "to"), compareIcons);
         d.compute();
         return d;
     }
@@ -739,6 +765,7 @@ public final class ModelDiff {
         settingChange(a, "shim-class", a.shimClass, b.shimClass);
         settingChange(a, "shim-auth-server", a.shimAuthServer, b.shimAuthServer);
         settingChange(a, "shim-auth-id", a.shimAuthId, b.shimAuthId);
+        diffDriverIcon(a, b);
         List<String> lines = new ArrayList<>();
         for (String k : List.of("dirxml-pkgguid", "dirxml-pkgextensions")) {
             String x = a.meta.get(k);
@@ -752,6 +779,31 @@ public final class ModelDiff {
             changes.add(new Change(Kind.DRIVER_STAMPS, a.name, "drivers/" + a.name, "package-stamps",
                 "~ package stamps of driver " + a.name, String.join("\n", lines)));
         }
+    }
+
+    /**
+     * The driver's icon (a project-only asset, see {@link Kind#DRIVER_ICON}). The change text
+     * says the size and the format and never the bytes: an icon is a binary blob, and dumping
+     * it into a diff — or a git-committed docs page — helps nobody.
+     */
+    private void diffDriverIcon(Driver a, Driver b) {
+        if (!compareIcons) {
+            return;
+        }
+        boolean sameBytes = Arrays.equals(a.icon, b.icon);
+        if (sameBytes && (a.icon == null || Objects.equals(a.iconExtension, b.iconExtension))) {
+            return;
+        }
+        String summary = a.icon == null ? "+ icon added (" + describeIcon(b) + ")"
+            : b.icon == null ? "- icon removed (was " + describeIcon(a) + ")"
+            : "~ icon changed (" + describeIcon(a) + " -> " + describeIcon(b) + ")";
+        changes.add(new Change(Kind.DRIVER_ICON, a.name, "drivers/" + a.name, "icon", summary, null));
+    }
+
+    /** {@code "1234 bytes, gif"} — never the bytes themselves. */
+    private static String describeIcon(Driver d) {
+        return d.icon == null ? "(none)"
+            : d.icon.length + " bytes, " + (d.iconExtension == null ? "?" : d.iconExtension);
     }
 
     private void settingChange(Driver a, String what, String oldV, String newV) {
