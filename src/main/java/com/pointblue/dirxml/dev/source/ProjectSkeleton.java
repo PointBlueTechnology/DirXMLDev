@@ -76,6 +76,8 @@ final class ProjectSkeleton {
         String libraryId;
         String projectDataId;
         String catalogId;
+        /** The six stock {@code IdmCategory_} objects, by name — N3 files a package under one. */
+        final java.util.Map<String, String> categoryIdByName = new java.util.LinkedHashMap<>();
         /** The token every per-server file is named with ({@code <id>_<serverToken>_DirXML-ConfigValues.xml}). */
         String serverToken;
         /** True when a real {@code Server_} object was written (i.e. {@code --server} was given). */
@@ -157,6 +159,7 @@ final class ProjectSkeleton {
             write(root, result, catalogDir + plan.catalogId + "/" + categoryIds.get(i) + ".IdmCategory_",
                 DECL_UTF8 + "\n<com.novell.designer.model:CObject " + CROOT_NS
                     + " name=\"" + CObjectXml.esc(CATEGORIES[i]) + "\"/>\n");
+            plan.categoryIdByName.put(CATEGORIES[i], categoryIds.get(i));
         }
         return plan;
     }

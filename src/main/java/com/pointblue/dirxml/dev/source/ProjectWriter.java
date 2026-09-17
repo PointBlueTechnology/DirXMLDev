@@ -229,6 +229,10 @@ public final class ProjectWriter {
             ModelDiff diff = ModelDiff.of(project, treeDs);
             Ctx ctx = new Ctx(tree, work, project, treeDs, false, result);
             ctx.plan = plan;
+            ctx.opts = opts;
+            ctx.designer = opts.designerRoot != null
+                ? DesignerInstall.at(opts.designerRoot, "explicit")
+                : DesignerInstall.resolve();
             ctx.scan();
             ctx.usedIds.addAll(plan.usedIds);
             if (ctx.serverId == null) {
@@ -237,8 +241,13 @@ public final class ProjectWriter {
             ctx.createDanglingRefStubs();
             applyChanges(ctx, diff, treeDs, project, result);
             ctx.finishNewProject();
+            ctx.writeProjectCatalog();
+            if (result.refusal != null) {
+                // the staging tree is thrown away in the finally block: nothing reached projectDir
+                return result;
+            }
             ctx.flush();
-            ctx.reportPackages();
+            ctx.reportNewProjectGaps();
 
             if (!dryRun) {
                 copyTree(work, projectDir);
@@ -850,6 +859,12 @@ public final class ProjectWriter {
         // ---- brand-new project only (null on the update path) ----
         /** The skeleton's minted ids; non-null exactly when this is a {@code --new} run. */
         ProjectSkeleton.Plan plan;
+        /** {@code --new}'s options (vault/server details, {@code --catalog}, the Designer install). */
+        NewProject opts;
+        /** Where driver icons come from; {@link DesignerInstall#none()} when there is no install. */
+        DesignerInstall designer = DesignerInstall.none();
+        /** Set once a driver icon could not be written, so the note is said once, not per driver. */
+        private boolean notedMissingIcons;
         /** driver name -&gt; its {@code Application_} id, in the order the drivers were written. */
         final Map<String, String> applicationIdByDriver = new LinkedHashMap<>();
         /** {@code {folder, Application_ id}} per AppConfig, for {@code .provisioning}. */
@@ -860,9 +875,6 @@ public final class ProjectWriter {
         final Map<String, String> driverSetGcvKeys = new LinkedHashMap<>();
         /** Every library-scope GCV object's relation key, for the driver set's Idm:ConfigExtensions. */
         final List<String> configExtensionKeys = new ArrayList<>();
-        /** {@code <package id>;<symbolic name>;<version>;<name>} the tree's stamps name (for the N3 note). */
-        final Set<String> packagesSeen = new LinkedHashSet<>();
-
         Ctx(Path treeDir, Path projectDir, DriverSet project, DriverSet treeDs, boolean dryRun, Result result) {
             this.treeDir = treeDir;
             this.projectDir = projectDir;
@@ -1355,9 +1367,6 @@ public final class ProjectWriter {
             String assocId = packageStamp(meta, "pkg-assoc-id");
             String checksum = packageStamp(meta, "checksum");
             String directive = meta.get("directive-checksum");
-            if (pkgId != null) {
-                packagesSeen.add(meta.getOrDefault("dirxml-pkgguid", pkgId));
-            }
             StringBuilder sb = new StringBuilder(
                 "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"initial_state\"/>");
             if (assocId != null) {
@@ -1949,6 +1958,8 @@ public final class ProjectWriter {
                 typeAttr = findDriverTypeForShim(treeDriver.shimClass);
             }
 
+            String applicationType = ApplicationType.of(treeDriver);
+
             StringBuilder attrs = new StringBuilder();
             Element configValues = treeDriver.config.get(Driver.CONFIG_VALUES);
             if (configValues != null) {
@@ -1956,6 +1967,10 @@ public final class ProjectWriter {
                     .append(CObjectXml.esc(attrSetObjectUri == null ? "" : attrSetObjectUri)).append("\">")
                     .append("<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"DirXML-ConfigValues\"/>")
                     .append("</associatedAttrSets>");
+            }
+            if (writeDriverIcon(applicationType, driverId, dsChildrenDir)) {
+                attrs.append("<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" "
+                    + "attrName=\"icon\" extension=\"gif\"/>");
             }
             if (treeDriver.shimClass != null) {
                 attrs.append(CObjectXml.attr("DirXML-JavaModule", treeDriver.shimClass, "CString"));
@@ -2041,7 +2056,7 @@ public final class ProjectWriter {
             }
 
             if (applicationId != null) {
-                applyApplicationAdded(treeDriver, driverId, driverDoc, applicationId);
+                applyApplicationAdded(treeDriver, driverId, driverDoc, applicationId, applicationType);
             } else {
                 result.notes.add("driver '" + treeDriver.name + "' added; Designer's verdict on new drivers is "
                     + "pending (spike 6a) — whether this is enough for Designer to accept the project is not yet known");
@@ -2079,9 +2094,8 @@ public final class ProjectWriter {
          * one Designer's own vault import mints (hence
          * {@code IdmParameter:AppIDCreatedDuringImport} on the driver).
          */
-        private void applyApplicationAdded(Driver treeDriver, String driverId, Document driverDoc, String applicationId)
-            throws IOException {
-            String type = applicationTypeFor(treeDriver);
+        private void applyApplicationAdded(Driver treeDriver, String driverId, Document driverDoc,
+                                           String applicationId, String type) throws IOException {
             Path domainDir = metaFileById.get(plan.domainId).getParent().resolve(plan.domainId);
             Path appFile = domainDir.resolve(applicationId + ".Application_");
             metaFileById.put(applicationId, appFile);
@@ -2096,28 +2110,41 @@ public final class ProjectWriter {
         }
 
         /**
-         * The {@code Application_}'s type, as {@code test11pf} types its own: {@code NProv} for
-         * the User Application driver's Composer shim, the shim's own application type for the
-         * IDM drivers that have one, and {@code GenericApp} for everything else (which is what
-         * Designer itself uses for a driver it does not recognize).
+         * {@code <driverId>_icon.gif} beside the {@code Driver_}, copied out of a Designer
+         * install exactly as Designer's own vault importer does
+         * ({@code com.novell.core_<ver>} &rarr; {@code icons/iManager/<ApplicationType>.gif}, falling back to
+         * {@code GenericApp.gif}) — without it Designer draws no icon for the driver, which is
+         * what the first Designer check found. Returns true when one was written, so the
+         * caller adds the matching {@code CHeavyData} attribute; says so once when no install
+         * was found. An icon is never written into a tree, only into a project.
          */
-        private static String applicationTypeFor(Driver d) {
-            String shim = d.shimClass == null ? "" : d.shimClass;
-            switch (shim) {
-                case "com.novell.idm.driver.ComposerDriverShim": return "NProv";
-                case "com.novell.nds.dirxml.driver.nrf.NRFDriverShim": return "NrfApp";
-                case "com.novell.nds.dirxml.driver.dcsshim.DCSShim": return "IDMDCS";
-                case "com.novell.nds.dirxml.driver.msgateway.MSGatewayDriverShim": return "MSGATEWAY";
-                case "com.novell.nds.dirxml.driver.delimitedtext.DelimitedTextDriver": return "DelimitedTextApp";
-                case "com.novell.nds.dirxml.driver.loopback.LoopbackDriverShim": return "LoopBack";
-                case "com.novell.nds.dirxml.driver.nds.DriverShimImpl": return "eDirectory";
-                default: break;
+        private boolean writeDriverIcon(String applicationType, String driverId, Path dsChildrenDir)
+            throws IOException {
+            if (!creating()) {
+                // an existing project already has Designer's icons for the drivers it holds; a
+                // driver this run adds gets one the next time Designer draws it
+                if (!notedMissingIcons) {
+                    notedMissingIcons = true;
+                    result.notes.add("the added driver has no <id>_icon.gif; Designer draws its own, or "
+                        + "write the project fresh with --new (which copies the icon from a Designer install)");
+                }
+                return false;
             }
-            String designerType = d.meta.get("designer.driver-type");
-            if (designerType != null && designerType.startsWith("Active Directory")) {
-                return "ActiveDirectory";
+            Path icon = designer.icon(applicationType);
+            if (icon == null) {
+                if (!notedMissingIcons) {
+                    notedMissingIcons = true;
+                    result.notes.add("no driver icons were written: " + designer.describe()
+                        + " — Designer draws its own icon once it has one, or set IDM_DESIGNER "
+                        + "(or -Ddesigner=<installRoot>) and run again");
+                }
+                return false;
             }
-            return "GenericApp";
+            Path out = dsChildrenDir.resolve(driverId + "_icon.gif");
+            Files.createDirectories(out.getParent());
+            Files.copy(icon, out);
+            result.createdFiles.add(relative(out));
+            return true;
         }
 
         /**
@@ -2257,16 +2284,125 @@ public final class ProjectWriter {
             }
         }
 
-        /** N3's input: which packages the tree's stamps name, so the catalog step knows what to fetch. */
-        void reportPackages() {
-            if (packagesSeen.isEmpty()) {
+        /**
+         * Milestone N3: the project's own package catalog
+         * ({@link ProjectCatalogWriter}) plus the {@code Idm:InstalledPackages} relations from
+         * the driver, driver set and vault. Without {@code --catalog} nothing is written and
+         * the pre-N3 note names the packages Designer will therefore not associate.
+         */
+        void writeProjectCatalog() throws IOException {
+            Map<String, ProjectCatalogWriter.Need> needs = ProjectCatalogWriter.needs(treeDs);
+            if (opts == null || opts.catalogDir == null) {
+                if (!needs.isEmpty()) {
+                    result.notes.add("no IdmPackage_ objects and no Idm:InstalledPackages relations were written "
+                        + "(no --catalog): Designer will show these " + needs.size() + " package(s)' items as plain, "
+                        + "and its driver-set Packages page reports \"invalid values\", until the catalog is written "
+                        + "or the packages are imported in Designer — "
+                        + needs.values().stream().map(ProjectCatalogWriter.Need::describe)
+                            .collect(java.util.stream.Collectors.joining(", ")));
+                }
                 return;
             }
-            List<String> sorted = new ArrayList<>(packagesSeen);
-            Collections.sort(sorted);
-            result.notes.add("no IdmPackage_ objects and no Idm:InstalledPackages relations were written (milestone "
-                + "N3): Designer will show these " + sorted.size() + " package(s)' items as plain until the catalog "
-                + "is written or the packages are imported in Designer — " + String.join(", ", sorted));
+            ProjectCatalogWriter.Result cat =
+                ProjectCatalogWriter.write(needs, opts.catalogDir, plan.catalogId, plan.categoryIdByName, host());
+            if (cat.refusal != null) {
+                result.refusal = cat.refusal;
+                return;
+            }
+            if (cat.packages > 0) {
+                result.notes.add("project package catalog: " + cat.packages + " package(s) with " + cat.items
+                    + " item(s) written from " + opts.catalogDir
+                    + ", with their Idm:InstalledPackages relations");
+            }
+        }
+
+        /** The project-side callbacks {@link ProjectCatalogWriter} writes through. */
+        private ProjectCatalogWriter.Host host() {
+            return new ProjectCatalogWriter.Host() {
+                @Override
+                public String mintId() {
+                    return Ctx.this.mintId();
+                }
+
+                @Override
+                public void write(Path file, String content) throws IOException {
+                    writeFile(file, content, true);
+                    // a catalog CObject can gain relations after it is written (a category folder
+                    // collects its packages) — register it so docFor()/flush() can find it
+                    String fn = file.getFileName().toString();
+                    int dot = fn.lastIndexOf('.');
+                    if (dot > 0 && fn.endsWith("_")) {
+                        String id = fn.substring(0, dot);
+                        metaFileById.put(id, file);
+                        typeById.put(id, fn.substring(dot + 1, fn.length() - 1));
+                        newlyCreatedIds.add(id);
+                    }
+                }
+
+                @Override
+                public void writeBytes(Path file, byte[] content) throws IOException {
+                    if (!dryRun) {
+                        Files.createDirectories(file.getParent());
+                        Files.write(file, content);
+                    }
+                    result.createdFiles.add(relative(file));
+                }
+
+                @Override
+                public void note(String note) {
+                    result.notes.add(note);
+                }
+
+                @Override
+                public Path childrenDir(String id) {
+                    return metaFileById.get(id).getParent().resolve(id);
+                }
+
+                @Override
+                public void addRelation(String ownerId, String relationName, String type, String targetId,
+                                        String targetType) {
+                    appendRelation(docFor(ownerId), relationName, type, targetId, targetType);
+                    markDirty(ownerId);
+                }
+
+                @Override
+                public List<String[]> installTargets(int packageType, Set<String> driverNames) {
+                    List<String[]> out = new ArrayList<>();
+                    if (packageType == 3) {
+                        if (dsId != null) {
+                            out.add(new String[] {dsId, "DriverSet", "Idm:InstalledPackageDSetRefs"});
+                        }
+                    } else if (packageType == 4) {
+                        out.add(new String[] {plan.vaultId, "IdentityVault", "Idm:InstalledPackageIVRefs"});
+                    } else {
+                        for (String name : driverNames) {
+                            String id = driverId(name);
+                            if (id != null) {
+                                out.add(new String[] {id, "Driver", "Idm:InstalledPackageDriverRefs"});
+                            }
+                        }
+                    }
+                    return out;
+                }
+            };
+        }
+
+        /**
+         * What a brand-new project cannot carry because the tree never recorded it. The driver
+         * set is the one that matters: {@code test11pf}'s {@code DriverSet_} also holds
+         * {@code DSetCreatePartition}, {@code DirXML-LogEvents}, {@code DirXML-JavaDebugPort},
+         * {@code DirXML-JavaTraceFile}, {@code DirXML-LogLimit}, {@code DirXML-TraceSizeLimit},
+         * {@code DirXML-XSLTraceLevel}, {@code JavaEnvParameters} and {@code NamedPasswords},
+         * and a tree's {@code driverset.xml} records only its config values (checked on
+         * {@code tree-test11pf}, {@code tree-7c}, {@code tree-ig4} and {@code tree-idm254}:
+         * none of them carries a single driver-set setting). They are left absent rather than
+         * invented — Designer fills its own defaults.
+         */
+        void reportNewProjectGaps() {
+            result.notes.add("the driver set was written with the name, DSetContext and config values the tree "
+                + "records; DSetCreatePartition, DirXML-LogEvents, DirXML-JavaDebugPort, DirXML-JavaTraceFile, "
+                + "DirXML-LogLimit, DirXML-TraceSizeLimit, DirXML-XSLTraceLevel, JavaEnvParameters and "
+                + "NamedPasswords are left absent because no tree records them (set them in Designer)");
         }
     }
 }
