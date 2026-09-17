@@ -37,6 +37,13 @@ public class AsCodeRoundTripTest {
         return CanonicalXml.parse(s).getDocumentElement();
     }
 
+    /**
+     * A 1x1 GIF — the smallest real one there is. Synthetic: no byte of it comes from a
+     * Designer install, so it can live in the repository.
+     */
+    public static final byte[] TINY_GIF = java.util.Base64.getDecoder()
+        .decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
+
     /** A small but representative driver set. */
     static DriverSet sample() {
         DriverSet ds = new DriverSet("driverset1");
@@ -87,6 +94,9 @@ public class AsCodeRoundTripTest {
         d.links.add(new PolicyLink(PolicySet.SUB_EVENT, "drivers/AD: Prod/Users/subscriber/sub-etp \"Scoping\"", 0));
         d.links.add(new PolicyLink(PolicySet.OUTPUT, "drivers/AD: Prod/Users/publisher/pub-otp_Transform", 0));
         d.links.add(new PolicyLink(PolicySet.ECMASCRIPT, "library/es-misc", 0));
+        // a custom Designer icon: opaque bytes the tree carries beside driver.xml
+        d.icon = TINY_GIF.clone();
+        d.iconExtension = "gif";
         ds.drivers.add(d);
         return ds;
     }
@@ -141,6 +151,37 @@ public class AsCodeRoundTripTest {
         Resource js = (Resource) back.resolve("library/es-misc");
         assertTrue(js.isEcmaScript() && js.isText());
         assertEquals("function f(x) {\n  return x + 1;\n}\n", js.text);
+
+        // the icon comes back byte for byte, with the format Designer recorded
+        assertArrayEquals(TINY_GIF, d.icon);
+        assertEquals("gif", d.iconExtension);
+    }
+
+    /** A driver with no icon writes no icon file and no manifest entry, and reads back null. */
+    @Test
+    public void aDriverWithoutAnIconCarriesNothing() throws Exception {
+        DriverSet ds = sample();
+        ds.driver("AD: Prod/Users").icon = null;
+        ds.driver("AD: Prod/Users").iconExtension = null;
+        Path a = tmp.newFolder("noicon").toPath();
+        AsCodeWriter.write(ds, a);
+        assertFalse(Files.exists(a.resolve("drivers/AD_ Prod_Users/icon.gif")));
+        assertFalse(Files.readString(a.resolve("drivers/AD_ Prod_Users/driver.xml")).contains("<icon "));
+        assertNull(AsCodeReader.read(a).driver("AD: Prod/Users").icon);
+    }
+
+    /** Whatever extension Designer recorded is what the file gets, and what comes back. */
+    @Test
+    public void thePngIconKeepsItsExtension() throws Exception {
+        DriverSet ds = sample();
+        ds.driver("AD: Prod/Users").iconExtension = "png";
+        Path a = tmp.newFolder("png").toPath();
+        AsCodeWriter.write(ds, a);
+        assertTrue(Files.exists(a.resolve("drivers/AD_ Prod_Users/icon.png")));
+        assertFalse(Files.exists(a.resolve("drivers/AD_ Prod_Users/icon.gif")));
+        Driver back = AsCodeReader.read(a).driver("AD: Prod/Users");
+        assertEquals("png", back.iconExtension);
+        assertArrayEquals(TINY_GIF, back.icon);
     }
 
     @Test
@@ -160,26 +201,48 @@ public class AsCodeRoundTripTest {
         assertTrue(Files.exists(drv.resolve("driver-filter.xml")));
         assertTrue(Files.exists(drv.resolve("config-values.xml")));
         assertTrue(Files.exists(drv.resolve("sch_Map.policy.xml")));
+        assertTrue("the icon sits beside driver.xml", Files.exists(drv.resolve("icon.gif")));
+        assertArrayEquals(TINY_GIF, Files.readAllBytes(drv.resolve("icon.gif")));
         assertTrue(Files.exists(drv.resolve("subscriber/sub-etp _Scoping_.policy.xml")));
         assertTrue(Files.exists(drv.resolve("publisher/pub-otp_Transform.policy.xml")));
         String manifest = Files.readString(drv.resolve("driver.xml"));
         assertTrue(manifest.contains("name=\"AD: Prod/Users\""));
+        assertTrue(manifest, manifest.contains("<icon file=\"icon.gif\"/>"));
         assertTrue(manifest.contains("<set key=\"subscriber-event\">"));
         // content files are pure content: a policy file starts with the policy, not a wrapper
         String pol = Files.readString(drv.resolve("sch_Map.policy.xml"));
         assertTrue(pol.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<attr-name-map"));
     }
 
-    /** relative path -> file bytes (as string), for whole-tree comparison. */
-    static Map<String, String> snapshot(Path root) throws IOException {
+    /**
+     * relative path -&gt; file bytes, for whole-tree comparison. A tree holds binary files too
+     * (a driver's {@code icon.gif}), so bytes that are not UTF-8 are compared as hex rather
+     * than decoded — {@code Files.readString} would simply throw on them.
+     */
+    public static Map<String, String> snapshot(Path root) throws IOException {
         Map<String, String> out = new TreeMap<>();
         try (Stream<Path> s = Files.walk(root)) {
             for (Path p : (Iterable<Path>) s::iterator) {
                 if (Files.isRegularFile(p)) {
-                    out.put(root.relativize(p).toString().replace('\\', '/'), Files.readString(p));
+                    out.put(root.relativize(p).toString().replace('\\', '/'), content(p));
                 }
             }
         }
         return out;
+    }
+
+    /** A file's text, or {@code "hex:…"} when its bytes are not UTF-8. */
+    public static String content(Path p) throws IOException {
+        byte[] bytes = Files.readAllBytes(p);
+        try {
+            return java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+                .decode(java.nio.ByteBuffer.wrap(bytes)).toString();
+        } catch (java.nio.charset.CharacterCodingException e) {
+            StringBuilder sb = new StringBuilder("hex:");
+            for (byte b : bytes) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        }
     }
 }
