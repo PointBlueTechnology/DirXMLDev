@@ -372,6 +372,15 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 4. **Package overrides are the supported customization method** — make them easy
    and always set the modified/customized flag correctly; never refuse by default.
 
+## Proposed next track (design note written, awaiting decisions)
+
+- **A fresh Designer project from a tree** — `export-project --new`:
+  skeleton, drivers, the UA driver's `AppConfig` with forms/PRDs/entitlements,
+  and the packaged drivers' `IdmPackage_` catalog entries from the git
+  catalog, so a team gets a complete project without Designer reading the
+  vault → [designer-new-project.md](designer-new-project.md) (2026-09-17;
+  decisions in its §5).
+
 ## Follow-ups (small, not scheduled)
 
 - **EntitlementConfiguration resource** for hand-built drivers with

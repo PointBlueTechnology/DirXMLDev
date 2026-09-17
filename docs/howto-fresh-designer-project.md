@@ -132,6 +132,11 @@ objects — they work, but Designer will not offer upgrades for them.
 | **Passwords**: shim, Remote Loader, named passwords, application passwords in GCVs | the vault never returns them | type them in Designer when needed, or keep them out of the project (recommended) and let `vault.deploy` set them from the secrets file at deploy time |
 | Designer-only decoration: diagram layout, notes, colours | not vault objects | Designer lays out the imported project itself |
 
+**The planned replacement for §4–5:** `export-project --new`, a project
+written straight from the tree with the `AppConfig` objects and the package
+catalog entries the configuration file cannot carry —
+[designer-new-project.md](designer-new-project.md).
+
 ## 6. Keeping the project in step afterwards
 
 Once the project exists, do not repeat the import for every change:

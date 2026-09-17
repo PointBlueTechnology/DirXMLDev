@@ -130,6 +130,8 @@ Generating a project from nothing (a vault with no Designer origin → Designer
 imports from the vault instead), packaged-driver creation in a project (the
 package catalog is Designer's), the workspace's `.metadata`, and
 `_initial_state.xml` maintenance for objects the tree didn't touch.
+*2026-09-17: the first two are proposed as the next track —
+[designer-new-project.md](designer-new-project.md).*
 
 ### Provisioning (JSON forms + PRDs — Track P step 6, 2026-09-11)
 
