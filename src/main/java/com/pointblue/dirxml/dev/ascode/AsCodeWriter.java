@@ -96,6 +96,14 @@ public final class AsCodeWriter {
             m.child("config").attr("kind", kind).attr("file", file);
         }
 
+        // the driver's icon: opaque bytes beside driver.xml, named by the extension Designer
+        // recorded on the heavy-data attribute (docs/designer-new-project.md §7.2c)
+        if (d.icon != null) {
+            String file = "icon." + iconExtension(d);
+            Files.write(dir.resolve(file), d.icon);
+            m.child("icon").attr("file", file);
+        }
+
         // artifacts: driver scope in the driver dir, channels in subdirs
         List<Artifact> driverScope = new ArrayList<>(d.policies);
         driverScope.addAll(d.resources);
@@ -264,6 +272,23 @@ public final class AsCodeWriter {
             return ".gcv.xml";
         }
         return r.isText() ? ".txt" : ".resource.xml";
+    }
+
+    /**
+     * The file extension for a driver's icon: exactly what Designer recorded (kept as written,
+     * case and all, so the round trip back into a project is faithful), reduced to the
+     * characters a file name can safely hold, and {@code "gif"} — Designer's own default, and
+     * what every project sampled but two drivers carries — when the driver records none.
+     */
+    public static String iconExtension(Driver d) {
+        String ext = d.iconExtension == null ? "" : d.iconExtension.strip();
+        StringBuilder sb = new StringBuilder();
+        for (char c : ext.toCharArray()) {
+            if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+                sb.append(c);
+            }
+        }
+        return sb.length() == 0 ? "gif" : sb.toString();
     }
 
     /** A filesystem-safe file/dir name; the manifest keeps the real name. */

@@ -1,6 +1,7 @@
 package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
+import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.deploy.ModelDiff;
 import com.pointblue.dirxml.dev.deploy.VaultMapping;
 import com.pointblue.dirxml.dev.edit.Packages;
@@ -149,7 +150,7 @@ public final class ProjectWriter {
         Result result = new Result();
         DriverSet project = ProjectReader.read(projectDir);
         DriverSet treeDs = AsCodeReader.read(tree);
-        ModelDiff diff = ModelDiff.of(project, treeDs);
+        ModelDiff diff = ModelDiff.of(project, treeDs, true);
         if (diff.isEmpty()) {
             result.ok = true;
             return result;
@@ -226,7 +227,7 @@ public final class ProjectWriter {
             ProjectSkeleton.Plan plan = ProjectSkeleton.write(work, name.toString(), treeDs, opts, result);
 
             DriverSet project = ProjectReader.read(work);
-            ModelDiff diff = ModelDiff.of(project, treeDs);
+            ModelDiff diff = ModelDiff.of(project, treeDs, true);
             Ctx ctx = new Ctx(tree, work, project, treeDs, false, result);
             ctx.plan = plan;
             ctx.opts = opts;
@@ -338,6 +339,9 @@ public final class ProjectWriter {
                     break;
                 case DRIVER_SETTING:
                     ctx.applyDriverSetting(c.driver, c.what, treeDs.driver(c.driver));
+                    break;
+                case DRIVER_ICON:
+                    ctx.applyDriverIcon(c.driver, treeDs.driver(c.driver));
                     break;
                 case DRIVER_CONFIG:
                     ctx.applyDriverConfig(c.driver, c.what, treeDs.driver(c.driver));
@@ -854,6 +858,8 @@ public final class ProjectWriter {
         final Map<String, String> typeById = new LinkedHashMap<>();
         final Map<String, Path> contentsFileById = new LinkedHashMap<>();
         final Map<String, Path> initialStateFileById = new LinkedHashMap<>();
+        /** {@code <ID>_icon.<ext>} beside an {@code <ID>.Driver_} — the driver's icon bytes. */
+        final Map<String, Path> iconFileById = new LinkedHashMap<>();
         final Map<String, List<Path>> configValueFilesById = new LinkedHashMap<>();
         final Set<String> usedIds = new HashSet<>();
 
@@ -943,6 +949,8 @@ public final class ProjectWriter {
                         contentsFileById.put(fn.substring(0, fn.length() - "_contents.xml".length()), f);
                     } else if (fn.endsWith("_initial_state.xml")) {
                         initialStateFileById.put(fn.substring(0, fn.length() - "_initial_state.xml".length()), f);
+                    } else if (ProjectReader.iconIdOf(fn) != null) {
+                        iconFileById.putIfAbsent(ProjectReader.iconIdOf(fn), f);
                     } else if (cvm.matches()) {
                         configValueFilesById.computeIfAbsent(cvm.group(1), k -> new ArrayList<>()).add(f);
                         if (serverId == null) {
@@ -1201,18 +1209,17 @@ public final class ProjectWriter {
             el.setAttribute("xsi:type", "com.novell.designer.model:" + xsiType);
             el.setAttribute("attrName", attrName);
             el.setAttribute("value", value);
-            Node firstRelation = null;
+            root.insertBefore(el, firstRelation(root));
+        }
+
+        /** The first {@code <relations>} child, or null — attributes are written before it. */
+        private Node firstRelation(Element root) {
             for (Node n = root.getFirstChild(); n != null; n = n.getNextSibling()) {
                 if (n.getNodeType() == Node.ELEMENT_NODE && "relations".equals(n.getNodeName())) {
-                    firstRelation = n;
-                    break;
+                    return n;
                 }
             }
-            if (firstRelation != null) {
-                root.insertBefore(el, firstRelation);
-            } else {
-                root.appendChild(el);
-            }
+            return null;
         }
 
         // ---- file IO bookkeeping ----
@@ -1225,6 +1232,15 @@ public final class ProjectWriter {
             if (!dryRun) {
                 Files.createDirectories(p.getParent());
                 Files.write(p, content.getBytes(StandardCharsets.UTF_8));
+            }
+            (created ? result.createdFiles : result.changedFiles).add(relative(p));
+        }
+
+        /** The same for an opaque binary payload (a driver icon). */
+        void writeBytes(Path p, byte[] content, boolean created) throws IOException {
+            if (!dryRun) {
+                Files.createDirectories(p.getParent());
+                Files.write(p, content);
             }
             (created ? result.createdFiles : result.changedFiles).add(relative(p));
         }
@@ -1841,6 +1857,56 @@ public final class ProjectWriter {
             setStringAttribute(driverId, attrName, value, "CString");
         }
 
+        /**
+         * The driver's icon (docs/designer-new-project.md §7.2c): the {@code CHeavyData}
+         * {@code icon} attribute on the {@code Driver_} plus the sibling
+         * {@code <ID>_icon.<ext>} that holds the bytes. Both move together — an icon the tree
+         * dropped takes the attribute with it, and one whose format changed
+         * ({@code gif} &rarr; {@code png}) replaces the old file rather than leaving two
+         * behind. Nothing else in the project refers to the file, so there are no relations
+         * to fix up.
+         */
+        void applyDriverIcon(String driverName, Driver treeDriver) throws IOException {
+            String driverId = driverId(driverName);
+            if (driverId == null || !metaFileById.containsKey(driverId)) {
+                return;
+            }
+            Path existing = iconFileById.get(driverId);
+            // parsed(), not docFor(): new bytes in the same format leave the CObject untouched,
+            // and the writer never rewrites a file it has no reason to
+            Document doc = parsed(driverId);
+            Element root = doc.getDocumentElement();
+            Element attr = findAttributeElement(root, "icon");
+            if (treeDriver == null || treeDriver.icon == null) {
+                deleteFile(existing);
+                iconFileById.remove(driverId);
+                if (attr != null) {
+                    attr.getParentNode().removeChild(attr);
+                }
+                markDirty(driverId);
+                return;
+            }
+            String ext = AsCodeWriter.iconExtension(treeDriver);
+            Path out = metaFileById.get(driverId).getParent().resolve(driverId + "_icon." + ext);
+            if (existing != null && !existing.equals(out)) {
+                deleteFile(existing);
+            }
+            writeBytes(out, treeDriver.icon, existing == null || !existing.equals(out));
+            iconFileById.put(driverId, out);
+            if (attr == null) {
+                attr = doc.createElement("attributes");
+                attr.setAttribute("xsi:type", "com.novell.designer.model:CHeavyData");
+                attr.setAttribute("attrName", "icon");
+                attr.setAttribute("extension", ext);
+                root.insertBefore(attr, firstRelation(root));
+                markDirty(driverId);
+            } else if (!ext.equals(attr.getAttribute("extension"))) {
+                // only the format changed; new bytes in the same format leave the CObject alone
+                attr.setAttribute("extension", ext);
+                markDirty(driverId);
+            }
+        }
+
         void applyDriverConfig(String driverName, String key, Driver treeDriver) throws IOException {
             String driverId = driverId(driverName);
             if (driverId == null) {
@@ -2015,9 +2081,10 @@ public final class ProjectWriter {
                     .append("<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"DirXML-ConfigValues\"/>")
                     .append("</associatedAttrSets>");
             }
-            if (writeDriverIcon(applicationType, typeAttr, baseType, driverId, dsChildrenDir)) {
+            String iconExt = writeDriverIcon(treeDriver, applicationType, typeAttr, baseType, driverId, dsChildrenDir);
+            if (iconExt != null) {
                 attrs.append("<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" "
-                    + "attrName=\"icon\" extension=\"gif\"/>");
+                    + "attrName=\"icon\" extension=\"" + CObjectXml.esc(iconExt) + "\"/>");
             }
             if (treeDriver.shimClass != null) {
                 attrs.append(CObjectXml.attr("DirXML-JavaModule", treeDriver.shimClass, "CString"));
@@ -2155,16 +2222,24 @@ public final class ProjectWriter {
         }
 
         /**
-         * {@code <driverId>_icon.gif} beside the {@code Driver_}, copied out of a Designer
-         * install exactly as Designer's own vault importer does
-         * ({@code com.novell.core_<ver>} &rarr; {@code icons/iManager/<ApplicationType>.gif}, falling back to
-         * {@code GenericApp.gif}) — without it Designer draws no icon for the driver, which is
-         * what the first Designer check found. Returns true when one was written, so the
-         * caller adds the matching {@code CHeavyData} attribute; says so once when no install
-         * was found. An icon is never written into a tree, only into a project.
+         * {@code <driverId>_icon.<ext>} beside the {@code Driver_}. The tree's own icon wins:
+         * a driver that came from a Designer project carries the icon that project had — which
+         * may be a <b>custom</b> one no type lookup could ever produce (test11pf: EventLogger,
+         * AcctExpNotif, Beeline, CyberArk). Only when the tree has none does this fall back to
+         * the type-derived icon out of a Designer install, exactly as Designer's own vault
+         * importer does ({@code com.novell.core_<ver>} &rarr;
+         * {@code icons/iManager/<ApplicationType>.gif}, falling back to {@code GenericApp.gif})
+         * — without an icon Designer draws none for the driver, which is what the first Designer
+         * check found. Returns the extension to put on the {@code CHeavyData} attribute, or null
+         * when no icon was written; says so once when no install was found.
          */
-        private boolean writeDriverIcon(String applicationType, String driverType, String baseType, String driverId, Path dsChildrenDir)
-            throws IOException {
+        private String writeDriverIcon(Driver treeDriver, String applicationType, String driverType, String baseType,
+                                       String driverId, Path dsChildrenDir) throws IOException {
+            if (treeDriver != null && treeDriver.icon != null) {
+                String ext = AsCodeWriter.iconExtension(treeDriver);
+                writeBytes(dsChildrenDir.resolve(driverId + "_icon." + ext), treeDriver.icon, true);
+                return ext;
+            }
             if (!creating()) {
                 // an existing project already has Designer's icons for the drivers it holds; a
                 // driver this run adds gets one the next time Designer draws it
@@ -2173,7 +2248,7 @@ public final class ProjectWriter {
                     result.notes.add("the added driver has no <id>_icon.gif; Designer draws its own, or "
                         + "write the project fresh with --new (which copies the icon from a Designer install)");
                 }
-                return false;
+                return null;
             }
             Path icon = designer.icon(applicationType, driverType, baseType);
             if (icon == null) {
@@ -2183,13 +2258,10 @@ public final class ProjectWriter {
                         + " — Designer draws its own icon once it has one, or set IDM_DESIGNER "
                         + "(or -Ddesigner=<installRoot>) and run again");
                 }
-                return false;
+                return null;
             }
-            Path out = dsChildrenDir.resolve(driverId + "_icon.gif");
-            Files.createDirectories(out.getParent());
-            Files.copy(icon, out);
-            result.createdFiles.add(relative(out));
-            return true;
+            writeBytes(dsChildrenDir.resolve(driverId + "_icon.gif"), Files.readAllBytes(icon), true);
+            return "gif";
         }
 
         /**

@@ -36,6 +36,20 @@ public final class Driver {
     public final Map<String, String> meta = new LinkedHashMap<>();
     /** This driver's {@code cn=AppConfig} subtree (forms, PRDs); null if it has none. */
     public Provisioning provisioning;
+    /**
+     * The driver's icon, as opaque bytes, or null when it has none. Designer lets a driver
+     * carry a custom icon that no type lookup can produce (test11pf: EventLogger, AcctExpNotif,
+     * Beeline, CyberArk), and it lives only in a Designer project — the vault has no icon
+     * attribute, so an export, an LDIF and a live read never produce one. See
+     * {@code docs/designer-new-project.md} §7.2c.
+     */
+    public byte[] icon;
+    /**
+     * The image format of {@link #icon}, as Designer's {@code CHeavyData extension} names it —
+     * {@code "gif"} on nearly every driver, {@code "png"} on some. Kept exactly as Designer
+     * wrote it; null when there is no icon.
+     */
+    public String iconExtension;
     /** {@code DirXML-Entitlement} objects hanging directly off this driver, in read order. */
     public final List<Entitlement> entitlements = new ArrayList<>();
 

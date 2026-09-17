@@ -202,16 +202,8 @@ public class ProvisioningGuardedTest {
         return n;
     }
 
+    /** relative path -> file bytes, binary-safe (a tree can hold a driver icon). */
     private static Map<String, String> snapshot(Path root) throws IOException {
-        Map<String, String> out = new TreeMap<>();
-        try (Stream<Path> s = Files.walk(root)) {
-            for (Path p : (Iterable<Path>) s::iterator) {
-                if (Files.isRegularFile(p)) {
-                    out.put(root.relativize(p).toString().replace('\\', '/'),
-                        Files.readString(p, java.nio.charset.StandardCharsets.UTF_8));
-                }
-            }
-        }
-        return out;
+        return com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest.snapshot(root);
     }
 }

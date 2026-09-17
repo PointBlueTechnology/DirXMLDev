@@ -374,6 +374,48 @@ ours are the current install's), (b) custom shims with no base package in the va
 the drivers were built in Designer; the vault never holds an icon), which get the
 generic icon, and (c) two drivers Designer drew without any icon.
 
+### 7.2c Custom icons — carried in the tree (2026-09-17)
+
+§7.2b made `--new` *derive* an icon from the driver type. That is the right answer
+only for a driver whose icon Designer itself derived. Designer also lets a user **set
+a custom icon** on a driver, and several do carry one (test11pf: `EventLogger`,
+`AcctExpNotif`, `Beeline`, `CyberArk`) — bytes no type lookup can ever produce, which
+is exactly the (b) gap §7.2b listed. So the icon is now a **first-class tree asset**:
+
+- **The model** carries `Driver.icon` (opaque `byte[]`, null when there is none) and
+  `Driver.iconExtension` — the `extension` Designer wrote on the heavy-data attribute,
+  `gif` on nearly every driver and `png` on a few (test11: `AWS-identity`). Whatever
+  Designer wrote is kept.
+- **The tree** holds it as `drivers/<name>/icon.<ext>` beside `driver.xml`, listed in
+  the manifest as `<icon file="icon.gif"/>` the way `<config …/>` lists a config blob.
+  `AsCodeWriter`/`AsCodeReader` round-trip the bytes exactly; the byte-identity tests
+  cover a driver with an icon.
+- **`import-project`** reads the `icon` `CHeavyData` attribute on the `Driver_` and the
+  sibling `<driverId>_icon.<ext>`. **`export-project --new`** writes *the tree's* icon
+  when it has one, and only falls back to the §7.2b type lookup in a Designer install
+  when it does not — so `import-project` → `export-project --new` no longer replaces a
+  custom icon with the generic one for that driver type. **`export-project`** (the
+  update path) carries an added / changed / removed icon into an existing project:
+  attribute and file move together, a format change (`gif` → `png`) replaces the old
+  file rather than leaving two behind, and new bytes in the same format leave the
+  `Driver_` itself untouched.
+- **Nothing else changes.** The vault has no icon attribute, so `export`
+  (configuration file), `import-ldif` and `import-live` neither read nor write one, and
+  **deploy ignores the icon entirely**: the diff kind is `DRIVER_ICON`, `Plan` produces
+  no step for it, it touches no DN and it never restarts a driver. It is compared only
+  between two sides that can both hold one — a tree against a Designer project
+  (`export-project`) or a tree against a tree (`tree.diff`, `docs --since`) — because a
+  vault-side model has no icon and would otherwise report every driver's as "added".
+  The change text says only the size and the format, never the bytes.
+
+**What still cannot be recovered.** A tree imported from a **vault** (`import-live`,
+`import-ldif`) or from an **export** has no icon in it, because the vault never held
+one — if that driver's custom icon was set in some *other* Designer project, nothing
+here can bring it back, and `--new` gives it the type-derived icon instead. The icon
+survives only along the project → tree → project path. (`--new` adding a type-derived
+icon to a driver the tree had none for is likewise a real, intended difference: a
+later `import-project` of that project will see an icon the tree does not have.)
+
 ### 7.2 What the Designer check must look at (the code cannot)
 
 1. **The project opens at all** and the System Model, developer view and
