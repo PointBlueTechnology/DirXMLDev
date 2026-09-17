@@ -121,8 +121,8 @@ public class ProvisioningProjectReaderTest {
         assertTrue(prd.isJsonForms());
         assertEquals("Active", prd.property("status"));
         assertEquals("SingleFlow", prd.property("flow-strategy"));
-        assertEquals("true", prd.property("grant"));
-        assertEquals("false", prd.property("revoke"));
+        assertEquals("TRUE", prd.property("grant")); // the vault's spelling; the .prd itself says true
+        assertEquals("FALSE", prd.property("revoke"));
         assertEquals("accounts", prd.property("category-key"));
         assertEquals("en~My PRD", prd.property("localized-names"));
         assertEquals("en~A test PRD", prd.property("localized-descrs"));

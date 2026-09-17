@@ -290,9 +290,33 @@ public final class ProjectWriter {
 
     private static void applyChanges(Ctx ctx, ModelDiff diff, DriverSet treeDs, DriverSet project, Result result)
         throws IOException {
+        // two passes: linkage last, so a link to an artifact this same run creates (a Library ECMAScript
+        // resource a driver's ecmascript set names, on a fresh project) finds its minted id
         for (ModelDiff.Change c : diff.changes()) {
+            if (c.kind != ModelDiff.Kind.DRIVER_LINKAGE && c.kind != ModelDiff.Kind.DRIVERSET_LINKAGE) {
+                applyChange(ctx, c, treeDs, project, result);
+            }
+        }
+        for (ModelDiff.Change c : diff.changes()) {
+            if (c.kind == ModelDiff.Kind.DRIVER_LINKAGE || c.kind == ModelDiff.Kind.DRIVERSET_LINKAGE) {
+                applyChange(ctx, c, treeDs, project, result);
+            }
+        }
+        for (Driver d : ctx.deferredLinkage) {
+            for (PolicySet set : PolicySet.values()) {
+                if (!d.links(set).isEmpty()) {
+                    ctx.applyDriverLinkage(d, set);
+                }
+            }
+        }
+        ctx.deferredLinkage.clear();
+    }
+
+    private static void applyChange(Ctx ctx, ModelDiff.Change c, DriverSet treeDs, DriverSet project, Result result)
+        throws IOException {
+        {
             if (ctx.consumed.contains(c)) {
-                continue;
+                return;
             }
             switch (c.kind) {
                 case DRIVER_ADDED:
@@ -875,6 +899,8 @@ public final class ProjectWriter {
         final Map<String, String> driverSetGcvKeys = new LinkedHashMap<>();
         /** Every library-scope GCV object's relation key, for the driver set's Idm:ConfigExtensions. */
         final List<String> configExtensionKeys = new ArrayList<>();
+        /** Drivers added this run whose linkage is written after every artifact exists. */
+        final List<Driver> deferredLinkage = new ArrayList<>();
         Ctx(Path treeDir, Path projectDir, DriverSet project, DriverSet treeDs, boolean dryRun, Result result) {
             this.treeDir = treeDir;
             this.projectDir = projectDir;
@@ -2065,11 +2091,9 @@ public final class ProjectWriter {
             for (Artifact a : treeDriver.artifacts()) {
                 applyArtifactAdded(a);
             }
-            for (PolicySet set : PolicySet.values()) {
-                if (!treeDriver.links(set).isEmpty()) {
-                    applyDriverLinkage(treeDriver, set);
-                }
-            }
+            // linkage last (see applyChanges): a link to a Library artifact this same run creates — an
+            // ecmascript set naming NOVLLIBAJC-JS on a fresh project — has no id until the Library is written
+            deferredLinkage.add(treeDriver);
             for (Entitlement e : treeDriver.entitlements) {
                 applyEntitlementAdded(treeDriver, e);
             }
