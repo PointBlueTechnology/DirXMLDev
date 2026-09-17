@@ -1,0 +1,73 @@
+{
+  "name": "dirxmldev-visual",
+  "displayName": "DirXMLDev Visual",
+  "description": "Designer-style policy-flow fishbone for DirXMLDev IDM-as-code trees.",
+  "version": "0.1.0",
+  "publisher": "pointblue",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "DirXML",
+    "Identity Manager",
+    "IDM",
+    "NetIQ",
+    "OpenText",
+    "fishbone",
+    "policy flow"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/driverset.xml",
+    "workspaceContains:bin/idm",
+    "workspaceContains:**/.project"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "dirxmldev.fishbone.show",
+        "title": "DirXMLDev: Show Policy Flow (Fishbone)"
+      },
+      {
+        "command": "dirxmldev.fishbone.reveal",
+        "title": "DirXMLDev: Reveal Fishbone Node Source"
+      },
+      {
+        "command": "dirxmldev.fishbone.refresh",
+        "title": "DirXMLDev: Refresh Fishbone from Disk"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "dirxmldev.fishbone.show",
+          "when": "resourceFilename == driver.xml || resourceFilename == driverset.xml",
+          "group": "dirxmldev@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "dirxmldev.fishbone.refresh",
+          "when": "dirxmldev.fishboneOpen",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test out/test/*.js",
+    "cli": "node out/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.7.2"
+  }
+}

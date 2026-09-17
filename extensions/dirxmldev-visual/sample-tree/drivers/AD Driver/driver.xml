@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<driver name="AD Driver" dn="cn=AD Driver,cn=driverset1,o=system" shim-class="com.novell.nds.dirxml.driver.ad.ADDriverShim" shim-auth-server="ad.example.com" shim-auth-id="svc-idm">
+  <meta key="pkg.version">4.1.2</meta>
+  <config kind="config-values" file="config-values.xml"/>
+  <config kind="driver-filter" file="driver-filter.xml"/>
+  <artifact kind="policy" scope="driver" name="itp_Input" file="itp_Input.policy.xml"/>
+  <artifact kind="policy" scope="driver" name="otp_Output" file="otp_Output.policy.xml"/>
+  <artifact kind="policy" scope="driver" name="sch_Map" file="sch_Map.policy.xml"/>
+  <artifact kind="policy" scope="publisher" name="pub-cp_Create User" file="publisher/pub-cp_Create User.policy.xml"/>
+  <artifact kind="policy" scope="publisher" name="pub-ctp_Transform" file="publisher/pub-ctp_Transform.policy.xml"/>
+  <artifact kind="policy" scope="publisher" name="pub-etp_Scoping" file="publisher/pub-etp_Scoping.policy.xml"/>
+  <artifact kind="policy" scope="publisher" name="pub-mp_Match Users" file="publisher/pub-mp_Match Users.policy.xml"/>
+  <artifact kind="policy" scope="publisher" name="pub-pp_Place User" file="publisher/pub-pp_Place User.policy.xml"/>
+  <artifact kind="policy" scope="subscriber" name="sub-cp_Create User" file="subscriber/sub-cp_Create User.policy.xml"/>
+  <artifact kind="policy" scope="subscriber" name="sub-ctp_Transform" file="subscriber/sub-ctp_Transform.policy.xml"/>
+  <artifact kind="policy" scope="subscriber" name="sub-etp_Scoping" file="subscriber/sub-etp_Scoping.policy.xml"/>
+  <artifact kind="policy" scope="subscriber" name="sub-mp_Match Users" file="subscriber/sub-mp_Match Users.policy.xml"/>
+  <artifact kind="policy" scope="subscriber" name="sub-pp_Place User" file="subscriber/sub-pp_Place User.policy.xml"/>
+  <linkage>
+    <set key="schema-mapping">
+      <link ref="drivers/AD Driver/sch_Map" order="0"/>
+    </set>
+    <set key="input">
+      <link ref="drivers/AD Driver/itp_Input" order="0"/>
+    </set>
+    <set key="output">
+      <link ref="drivers/AD Driver/otp_Output" order="0"/>
+    </set>
+    <set key="ecmascript">
+      <link ref="library/es-misc" order="0"/>
+    </set>
+    <set key="subscriber-event">
+      <link ref="drivers/AD Driver/subscriber/sub-etp_Scoping" order="0"/>
+      <link ref="library/lib-common-event" order="1"/>
+    </set>
+    <set key="publisher-event">
+      <link ref="drivers/AD Driver/publisher/pub-etp_Scoping" order="0"/>
+    </set>
+    <set key="subscriber-matching">
+      <link ref="drivers/AD Driver/subscriber/sub-mp_Match Users" order="0"/>
+    </set>
+    <set key="publisher-matching">
+      <link ref="drivers/AD Driver/publisher/pub-mp_Match Users" order="0"/>
+    </set>
+    <set key="subscriber-create">
+      <link ref="drivers/AD Driver/subscriber/sub-cp_Create User" order="0"/>
+    </set>
+    <set key="publisher-create">
+      <link ref="drivers/AD Driver/publisher/pub-cp_Create User" order="0"/>
+    </set>
+    <set key="subscriber-command">
+      <link ref="drivers/AD Driver/subscriber/sub-ctp_Transform" order="0"/>
+    </set>
+    <set key="publisher-command">
+      <link ref="drivers/AD Driver/publisher/pub-ctp_Transform" order="0"/>
+    </set>
+    <set key="subscriber-placement">
+      <link ref="drivers/AD Driver/subscriber/sub-pp_Place User" order="0"/>
+    </set>
+    <set key="publisher-placement">
+      <link ref="drivers/AD Driver/publisher/pub-pp_Place User" order="0"/>
+    </set>
+  </linkage>
+</driver>

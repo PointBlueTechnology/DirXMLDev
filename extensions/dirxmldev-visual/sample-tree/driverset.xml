@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<driverset name="driverset1" dn="cn=driverset1,o=system">
+  <meta key="source">extensions/dirxmldev-visual/sample-tree</meta>
+  <driver name="AD Driver" dir="drivers/AD Driver"/>
+</driverset>

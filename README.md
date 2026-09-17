@@ -98,5 +98,6 @@ mvn test
 ## Layout
 
 - `docs/plan.md` — the plan (architecture, phases, decisions, safeguards).
+- `docs/vscode-extension-v1.md` — thin VS Code/Cursor fishbone (policy-flow) viewer; scaffold in `extensions/dirxmldev-visual/`.
 - `docs/spikes/` — spike findings (Phase 0, 4, 5).
 - `src/` — model, as-code, validate, edit, simulate, deploy, operate.
