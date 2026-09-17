@@ -52,18 +52,84 @@ export function fishboneHtml(model: FishboneModel, nonce: string, csp: string, c
 </html>`;
 }
 
+const POLICY_CHIP_W = 150;
+const POLICY_CHIP_STEP = 26;
+const POLICY_CHIP_H = 22;
+/** Chip rect is drawn at centerY - POLICY_CHIP_TOP. */
+const POLICY_CHIP_TOP = 10;
+
+const LAYOUT = {
+  width: 1240,
+  spineY: 320,
+  ribXs: [250, 400, 550, 700, 850] as const,
+  idvX: 80,
+  appX: 1165,
+  schemaX: 990,
+  ioX: 990,
+  ribOffset: 118,
+  boxHalf: 22,
+  stackFromBox: 36,
+  resourceGap: 32,
+  resourceTileH: 48,
+  resourceStackFromTile: 64,
+  bottomPad: 40,
+};
+
+export interface FishboneLayout {
+  width: number;
+  height: number;
+  spineY: number;
+  resourceY: number;
+  ribXs: readonly number[];
+}
+
+/**
+ * Resource-row Y sits below the lowest subscriber (and output) chip so Startup /
+ * Shutdown tiles cannot cover Creation / Placement stacks. SVG height grows with
+ * both that row and any GCV/ECMAScript chips hanging under it.
+ */
+export function fishboneLayout(model: FishboneModel): FishboneLayout {
+  const { width, spineY, ribXs } = LAYOUT;
+  const channelBottom = subscriberSideBottom(model);
+  const resourceY = channelBottom + LAYOUT.resourceGap;
+  let resourceBottom = resourceY + LAYOUT.resourceTileH;
+  for (const bone of model.resources) {
+    if (bone.policies.length === 0) {
+      continue;
+    }
+    const lastCenter = resourceY + LAYOUT.resourceStackFromTile + (bone.policies.length - 1) * POLICY_CHIP_STEP;
+    resourceBottom = Math.max(resourceBottom, lastCenter + (POLICY_CHIP_H - POLICY_CHIP_TOP));
+  }
+  return { width, height: resourceBottom + LAYOUT.bottomPad, spineY, resourceY, ribXs };
+}
+
+function subscriberSideBottom(model: FishboneModel): number {
+  const { spineY, ribOffset, boxHalf } = LAYOUT;
+  let bottom = spineY + ribOffset + boxHalf;
+  for (const bone of model.subscriber) {
+    bottom = Math.max(bottom, stackBottom(spineY, 1, bone));
+  }
+  const output = model.spine.find((b) => b.key === "output");
+  if (output) {
+    bottom = Math.max(bottom, stackBottom(spineY, 1, output));
+  }
+  return bottom;
+}
+
+function stackBottom(spineY: number, dir: number, bone: FishboneBone): number {
+  const boxY = spineY + dir * LAYOUT.ribOffset;
+  const boxEdge = boxY + dir * LAYOUT.boxHalf;
+  if (bone.policies.length === 0) {
+    return Math.max(boxY, boxEdge);
+  }
+  const startY = boxY + dir * LAYOUT.stackFromBox;
+  const lastCenter = startY + dir * (bone.policies.length - 1) * POLICY_CHIP_STEP;
+  return lastCenter + dir * (POLICY_CHIP_H - POLICY_CHIP_TOP);
+}
+
 function renderSvg(model: FishboneModel): string {
-  const width = 1240;
-  const spineY = 320;
-  const ribXs = [250, 400, 550, 700, 850];
-  const idvX = 80;
-  const appX = 1165;
-  const schemaX = 990;
-  const ioX = 990;
-  const resourceY = 548;
-  const resourceExtra =
-    Math.max(0, ...model.resources.map((b) => b.policies.length), 0) * POLICY_CHIP_STEP;
-  const height = 640 + resourceExtra;
+  const { width, height, spineY, resourceY, ribXs } = fishboneLayout(model);
+  const { idvX, appX, schemaX, ioX } = LAYOUT;
 
   const pubBones = model.publisher;
   const subBones = model.subscriber;
@@ -104,7 +170,7 @@ function renderSvg(model: FishboneModel): string {
   if (model.filter) {
     const w = 130;
     parts.push(`<g class="bone filter" data-node="${escAttr(model.filter.id)}" tabindex="0">
-      <rect x="${rx}" y="${ry}" width="${w}" height="48" rx="6"/>
+      <rect x="${rx}" y="${ry}" width="${w}" height="${LAYOUT.resourceTileH}" rx="6"/>
       <text class="bone-title" x="${rx + 10}" y="${ry + 20}" text-anchor="start">Filter</text>
       <text class="count" x="${rx + 10}" y="${ry + 38}" text-anchor="start">driver-filter.xml</text>
     </g>`);
@@ -146,33 +212,30 @@ function spineBox(
 function ioBone(cx: number, spineY: number, dir: number, bone: FishboneBone): string {
   // Input sits above the schema node toward the app; output below — Designer
   // places both transforms at the application end of the spine.
-  const boxY = spineY + dir * 118;
+  const boxY = spineY + dir * LAYOUT.ribOffset;
   const empty = bone.policies.length === 0 ? " empty" : "";
   const klass = dir < 0 ? "pub" : "sub";
   return `<g class="bone ${klass}${empty}" data-node="${escAttr(bone.id)}" tabindex="0">
-    <line class="rib" x1="${cx}" y1="${spineY + dir * 22}" x2="${cx}" y2="${boxY - dir * 22}"/>
-    <rect x="${cx - 70}" y="${boxY - 22}" width="140" height="44" rx="6"/>
+    <line class="rib" x1="${cx}" y1="${spineY + dir * LAYOUT.boxHalf}" x2="${cx}" y2="${boxY - dir * LAYOUT.boxHalf}"/>
+    <rect x="${cx - 70}" y="${boxY - LAYOUT.boxHalf}" width="140" height="${LAYOUT.boxHalf * 2}" rx="6"/>
     <text class="bone-title" x="${cx}" y="${boxY - 4}" text-anchor="middle">${esc(bone.label)}</text>
     <text class="count" x="${cx}" y="${boxY + 14}" text-anchor="middle">${bone.policies.length} polic${bone.policies.length === 1 ? "y" : "ies"}</text>
-    ${policyStack(cx, boxY + dir * 36, bone, dir)}
+    ${policyStack(cx, boxY + dir * LAYOUT.stackFromBox, bone, dir)}
   </g>`;
 }
 
 function rib(cx: number, spineY: number, dir: number, bone: FishboneBone): string {
-  const boxY = spineY + dir * 118;
+  const boxY = spineY + dir * LAYOUT.ribOffset;
   const empty = bone.policies.length === 0 ? " empty" : "";
   const klass = dir < 0 ? "pub" : "sub";
   return `<g class="bone ${klass}${empty}" data-node="${escAttr(bone.id)}" tabindex="0">
-    <line class="rib" x1="${cx}" y1="${spineY}" x2="${cx}" y2="${boxY - dir * 22}"/>
-    <rect x="${cx - 68}" y="${boxY - 22}" width="136" height="44" rx="6"/>
+    <line class="rib" x1="${cx}" y1="${spineY}" x2="${cx}" y2="${boxY - dir * LAYOUT.boxHalf}"/>
+    <rect x="${cx - 68}" y="${boxY - LAYOUT.boxHalf}" width="136" height="${LAYOUT.boxHalf * 2}" rx="6"/>
     <text class="bone-title" x="${cx}" y="${boxY - 4}" text-anchor="middle">${esc(bone.label)}</text>
     <text class="count" x="${cx}" y="${boxY + 14}" text-anchor="middle">${bone.policies.length} polic${bone.policies.length === 1 ? "y" : "ies"}</text>
-    ${policyStack(cx, boxY + dir * 36, bone, dir)}
+    ${policyStack(cx, boxY + dir * LAYOUT.stackFromBox, bone, dir)}
   </g>`;
 }
-
-const POLICY_CHIP_W = 150;
-const POLICY_CHIP_STEP = 26;
 
 function policyStack(cx: number, startY: number, bone: FishboneBone, dir: number): string {
   return bone.policies
@@ -182,8 +245,8 @@ function policyStack(cx: number, startY: number, bone: FishboneBone, dir: number
       const clipId = clipIdFor(p.id);
       const klass = p.unresolved ? "policy unresolved" : "policy";
       return `<g class="${klass}" data-node="${escAttr(p.id)}">
-        <clipPath id="${escAttr(clipId)}"><rect x="${cx - w / 2}" y="${y - 10}" width="${w}" height="22" rx="4"/></clipPath>
-        <rect x="${cx - w / 2}" y="${y - 10}" width="${w}" height="22" rx="4"/>
+        <clipPath id="${escAttr(clipId)}"><rect x="${cx - w / 2}" y="${y - POLICY_CHIP_TOP}" width="${w}" height="${POLICY_CHIP_H}" rx="4"/></clipPath>
+        <rect x="${cx - w / 2}" y="${y - POLICY_CHIP_TOP}" width="${w}" height="${POLICY_CHIP_H}" rx="4"/>
         <text x="${cx}" y="${y + 5}" text-anchor="middle" clip-path="url(#${escAttr(clipId)})">${esc(shortName(p))}</text>
       </g>`;
     })
@@ -195,10 +258,10 @@ function resourceBone(x: number, y: number, w: number, bone: FishboneBone): stri
   const cx = x + w / 2;
   const n = bone.policies.length;
   return `<g class="bone resource${empty}" data-node="${escAttr(bone.id)}" tabindex="0">
-    <rect x="${x}" y="${y}" width="${w}" height="48" rx="6"/>
+    <rect x="${x}" y="${y}" width="${w}" height="${LAYOUT.resourceTileH}" rx="6"/>
     <text class="bone-title" x="${x + 10}" y="${y + 20}" text-anchor="start">${esc(bone.label)}</text>
     <text class="count" x="${x + 10}" y="${y + 38}" text-anchor="start">${n} ${n === 1 ? "item" : "items"}</text>
-    ${policyStack(cx, y + 64, bone, 1)}
+    ${policyStack(cx, y + LAYOUT.resourceStackFromTile, bone, 1)}
   </g>`;
 }
 

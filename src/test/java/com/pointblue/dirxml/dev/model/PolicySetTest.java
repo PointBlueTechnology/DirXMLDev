@@ -19,6 +19,8 @@ public class PolicySetTest {
         assertEquals(PolicySet.SHUTDOWN, PolicySet.byId(16));
         assertEquals(PolicySet.STARTUP, PolicySet.byKey("startup"));
         assertEquals(PolicySet.SHUTDOWN, PolicySet.byKey("shutdown"));
+        assertEquals(PolicySet.STARTUP, PolicySet.findById(15));
+        assertEquals(null, PolicySet.findById(99));
     }
 
     @Test

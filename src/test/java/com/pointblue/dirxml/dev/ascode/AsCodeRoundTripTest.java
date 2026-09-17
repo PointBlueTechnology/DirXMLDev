@@ -221,6 +221,52 @@ public class AsCodeRoundTripTest {
         assertTrue(pol.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<attr-name-map"));
     }
 
+    @Test
+    public void linkageUnknownStartupMetaBecomesNamedSet() throws Exception {
+        DriverSet ds = sample();
+        Driver d = ds.driver("AD: Prod/Users");
+        d.links.removeIf(l -> l.set == PolicySet.STARTUP);
+        d.meta.put("linkage.unknown.0",
+            "cn=NOVLADENTEX-Startup-InitEntitlementConfigurationResource,cn=AD: Prod/Users,cn=driverset1,o=system#0#15");
+        d.meta.put("linkage.unknown.1",
+            "cn=weird,cn=AD: Prod/Users,cn=driverset1,o=system#0#99");
+        Path a = tmp.newFolder("unknown-startup").toPath();
+        AsCodeWriter.write(ds, a);
+        Path driverXml = a.resolve("drivers/AD_ Prod_Users/driver.xml");
+        String written = Files.readString(driverXml);
+        assertFalse(written.contains("<set key=\"startup\">"));
+        assertTrue(written.contains("linkage.unknown.0"));
+
+        DriverSet back = AsCodeReader.read(a);
+        Driver bd = back.driver("AD: Prod/Users");
+        assertEquals(1, bd.links(PolicySet.STARTUP).size());
+        assertEquals("drivers/AD: Prod/Users/NOVLADENTEX-Startup-InitEntitlementConfigurationResource",
+            bd.links(PolicySet.STARTUP).get(0).ref);
+        assertFalse(bd.meta.containsKey("linkage.unknown.0"));
+        assertTrue(bd.meta.containsKey("linkage.unknown.1"));
+        assertTrue(bd.meta.get("linkage.unknown.1").contains("cn=weird"));
+
+        Path b = tmp.newFolder("unknown-startup-rewritten").toPath();
+        AsCodeWriter.write(back, b);
+        String rewritten = Files.readString(b.resolve("drivers/AD_ Prod_Users/driver.xml"));
+        assertTrue(rewritten.contains("<set key=\"startup\">"));
+        assertFalse(rewritten.contains("linkage.unknown.0"));
+        assertTrue(rewritten.contains("linkage.unknown.1"));
+    }
+
+    @Test
+    public void namedStartupIsNotDuplicatedByUnknownMeta() throws Exception {
+        DriverSet ds = sample();
+        Driver d = ds.driver("AD: Prod/Users");
+        d.meta.put("linkage.unknown.0",
+            "cn=NOVLADENTEX-Startup-InitEntitlementConfigurationResource,cn=AD: Prod/Users,cn=driverset1,o=system#0#15");
+        Path a = tmp.newFolder("dup-startup").toPath();
+        AsCodeWriter.write(ds, a);
+        Driver back = AsCodeReader.read(a).driver("AD: Prod/Users");
+        assertEquals(1, back.links(PolicySet.STARTUP).size());
+        assertFalse(back.meta.containsKey("linkage.unknown.0"));
+    }
+
     /**
      * relative path -&gt; file bytes, for whole-tree comparison. A tree holds binary files too
      * (a driver's {@code icon.gif}), so bytes that are not UTF-8 are compared as hex rather
