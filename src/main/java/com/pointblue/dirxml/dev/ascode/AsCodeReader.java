@@ -74,6 +74,16 @@ public final class AsCodeReader {
         for (Element c : children(m, "config")) {
             d.config.put(attr(c, "kind"), xml(dir.resolve(attr(c, "file"))));
         }
+        Element icon = child(m, "icon");
+        if (icon != null && attr(icon, "file") != null) {
+            Path iconFile = dir.resolve(attr(icon, "file"));
+            if (Files.exists(iconFile)) {
+                d.icon = Files.readAllBytes(iconFile);
+                String name = iconFile.getFileName().toString();
+                int dot = name.lastIndexOf('.');
+                d.iconExtension = dot > 0 ? name.substring(dot + 1) : null;
+            }
+        }
         for (Element a : children(m, "artifact")) {
             Scope scope = Scope.byKey(attr(a, "scope"));
             List<Policy> policies = scope == Scope.SUBSCRIBER ? d.subscriber.policies
