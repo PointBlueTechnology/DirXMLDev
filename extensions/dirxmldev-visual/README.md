@@ -75,9 +75,9 @@ Same compile, then either:
 
 ```bash
 cd extensions/dirxmldev-visual && npm install && npm run compile
-# Cursor: copy or symlink this directory into ~/.cursor/extensions/pointblue.dirxmldev-visual-0.1.0
+# Cursor: copy or symlink this directory into ~/.cursor/extensions/pointblue.dirxmldev-visual-0.1.1
 # VS Code: ~/.vscode/extensions/…
-ln -s "$(pwd)" ~/.cursor/extensions/pointblue.dirxmldev-visual-0.1.0
+ln -s "$(pwd)" ~/.cursor/extensions/pointblue.dirxmldev-visual-0.1.1
 ```
 
 Restart Cursor, open `sample-tree` (or any repo with a `driverset.xml`), run

@@ -43,6 +43,8 @@ export interface DriverInfo {
   artifacts: ArtifactInfo[];
   links: LinkInfo[];
   configs: ConfigInfo[];
+  /** Driver-level <meta key> values from driver.xml. */
+  meta: Record<string, string>;
 }
 
 export interface LibraryInfo {
@@ -104,6 +106,32 @@ export function loadTree(root: string): AsCodeTree {
   };
 }
 
+/**
+ * Engine policy-set ids from {@code com.pointblue.dirxml.dev.model.PolicySet}.
+ * Do not invent aliases — keys must match the Java enum.
+ */
+export const POLICY_SET_BY_ID: Readonly<Record<number, string>> = {
+  0: "schema-mapping",
+  1: "input",
+  2: "output",
+  3: "ecmascript",
+  4: "subscriber-event",
+  5: "publisher-event",
+  6: "subscriber-matching",
+  7: "publisher-matching",
+  8: "subscriber-create",
+  9: "publisher-create",
+  10: "subscriber-command",
+  11: "publisher-command",
+  12: "subscriber-placement",
+  13: "publisher-placement",
+  14: "gcv",
+  15: "startup",
+  16: "shutdown",
+};
+
+const UNKNOWN_LINKAGE = /^linkage\.unknown\.\d+$/;
+
 function readDriver(m: XmlElem, dir: string): DriverInfo {
   const links: LinkInfo[] = [];
   const linkage = child(m, "linkage");
@@ -119,19 +147,99 @@ function readDriver(m: XmlElem, dir: string): DriverInfo {
       }
     }
   }
+  const meta: Record<string, string> = {};
+  for (const el of children(m, "meta")) {
+    const key = attr(el, "key");
+    if (key) {
+      meta[key] = el.text;
+    }
+  }
+  const name = attr(m, "name");
+  mergeUnknownLinkage(links, meta, name);
   const configs: ConfigInfo[] = children(m, "config").map((c) => ({
     kind: attr(c, "kind"),
     file: attr(c, "file"),
   }));
   return {
-    name: attr(m, "name"),
+    name,
     dn: attr(m, "dn"),
     shimClass: attr(m, "shim-class"),
     dir,
     artifacts: readArtifacts(m),
     links,
     configs,
+    meta,
   };
+}
+
+/**
+ * Trees exported before PolicySet knew Startup (15) / Shutdown (16) keep those
+ * DirXML-Policies values as {@code <meta key="linkage.unknown.n">dn#order#setId</meta>}.
+ * Map known set ids onto {@link LinkInfo} the same way named {@code <set key>} links
+ * resolve, without duplicating a ref the named set already has.
+ */
+function mergeUnknownLinkage(links: LinkInfo[], meta: Record<string, string>, driverName: string): void {
+  for (const [key, raw] of Object.entries(meta)) {
+    if (!UNKNOWN_LINKAGE.test(key)) {
+      continue;
+    }
+    const parsed = parseUnknownLinkage(raw);
+    if (!parsed) {
+      continue;
+    }
+    const setKey = POLICY_SET_BY_ID[parsed.setId];
+    if (!setKey) {
+      continue;
+    }
+    const ref = refFromLinkageDn(parsed.dn, driverName);
+    if (links.some((l) => l.setKey === setKey && l.ref === ref)) {
+      continue;
+    }
+    links.push({ setKey, ref, order: parsed.order });
+  }
+}
+
+/** Vault / as-code unknown-linkage payload: {@code dn#order#setId}. */
+export function parseUnknownLinkage(raw: string): { dn: string; order: number; setId: number } | undefined {
+  const v = raw.trim();
+  const h2 = v.lastIndexOf("#");
+  const h1 = h2 < 0 ? -1 : v.lastIndexOf("#", h2 - 1);
+  if (h1 < 0) {
+    return undefined;
+  }
+  const order = Number(v.slice(h1 + 1, h2));
+  const setId = Number(v.slice(h2 + 1));
+  if (!Number.isFinite(order) || !Number.isFinite(setId)) {
+    return undefined;
+  }
+  return { dn: v.slice(0, h1), order, setId };
+}
+
+/**
+ * Same rule as {@code ExportReader.resolveRef}: first CN is the artifact name;
+ * second CN of Library / Publisher / Subscriber picks scope; anything else is
+ * driver-scope of this driver.
+ */
+export function refFromLinkageDn(dn: string, driverName: string): string {
+  const comps = dn.split(",", 3);
+  const name = stripCn(comps[0] ?? "");
+  const second = stripCn(comps[1] ?? "");
+  if (second.toLowerCase() === "library") {
+    return "library/" + name;
+  }
+  if (second.toLowerCase() === "publisher") {
+    return "drivers/" + driverName + "/publisher/" + name;
+  }
+  if (second.toLowerCase() === "subscriber") {
+    return "drivers/" + driverName + "/subscriber/" + name;
+  }
+  return "drivers/" + driverName + "/" + name;
+}
+
+function stripCn(comp: string): string {
+  const s = comp.trim();
+  const eq = s.indexOf("=");
+  return eq >= 0 ? s.slice(eq + 1).trim() : s;
 }
 
 function readArtifacts(m: XmlElem): ArtifactInfo[] {
