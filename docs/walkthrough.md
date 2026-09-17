@@ -22,9 +22,8 @@ Pick the source you trust most. The live vault is the ground truth; a Designer
 project or an export is fine when the vault is not reachable yet.
 
 ```bash
-# the live vault (recommended)
-IDM_JAVA_OPTS="-Dldap.url=ldaps://idm-stg.example.com:636 -Dldap.bindDn=cn=idm-deploy,ou=sa,o=system -Dldap.password=$IDM_STG_PASSWORD" \
-  bin/idm import-live cn=driverset1,o=system tree/
+# the live vault (recommended): connection and driver set from environments.properties
+bin/idm import-live tree/ --env stg
 
 # alternatives
 bin/idm import-project ~/designer_workspace/Client tree/     # a Designer project
@@ -275,6 +274,11 @@ re-imported, so their layout and history survive:
 bin/idm export-project tree/ ~/designer_workspace/Client --dry-run   # what it would touch
 bin/idm export-project tree/ ~/designer_workspace/Client             # writes only the files the diff calls for
 ```
+
+A team that has no project yet gets one from the tree without Designer ever
+connecting to the vault: `bin/idm export tree/ driverset.xml` and Designer's
+*Import from Configuration File* — the full recipe, Windows included, is
+[howto-fresh-designer-project.md](howto-fresh-designer-project.md).
 
 Or, simpler, let Designer *Import from the Identity Vault* after the deploy:
 everything the tool writes — policies, forms, PRDs with their workflows,

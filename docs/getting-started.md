@@ -63,8 +63,11 @@ the simulator jar on the class path. `IDM_SIM_VERSION` selects another
 installed simulator version; `IDM_JAVA_OPTS` passes JVM options through (used
 for `import-live` credentials and for TLS settings, below).
 
-Windows: run the same `java -cp` line the script builds, or use WSL; the tool
-itself has no OS-specific code except the form-builder launcher (§5).
+Windows: `bin\idm.cmd` is the equivalent launcher (`IDM_JAVA_HOME` or
+`JAVA_HOME` must point at a JDK 21; the simulator jar is found under
+`%USERPROFILE%\.m2`); `bin/idm` also works from Git Bash or WSL. For the common
+Windows task — a fresh Designer project from a vault without Designer touching
+the vault — see [howto-fresh-designer-project.md](howto-fresh-designer-project.md).
 
 ### 2.3 Use it from an agent
 
@@ -289,8 +292,7 @@ Run these once; every one should succeed before the first real change.
 bin/idm                                            # usage: the tool runs
 bin/idm engine.version --env stg                   # LDAPS + bind + driver set found
 bin/idm driverset.status --env stg                 # every driver: state, start option, cache
-IDM_JAVA_OPTS="-Dldap.url=ldaps://idm-stg.example.com:636 -Dldap.bindDn=cn=idm-deploy,ou=sa,o=system -Dldap.password=$IDM_STG_PASSWORD" \
-  bin/idm import-live cn=driverset1,o=system tree/   # the driver set as code
+bin/idm import-live tree/ --env stg                 # the driver set as code (url, bind, password, driver set from the environment)
 bin/idm validate tree/                             # the real compilers load every policy; expect 0 errors
 bin/idm vault.diff tree/ --env stg                  # "no differences" right after an import
 bin/idm form.edit tree/ "<any request form>" --check   # only if you will use the builder

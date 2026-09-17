@@ -344,4 +344,48 @@ public class ExportWriterTest {
         }
         return out;
     }
+
+    /** A tree read from the vault carries dirxml-pkg* stamps, not Designer's export attributes; the writer maps them. */
+    @Test
+    public void vaultPackageStampsBecomeExportAttributes() throws Exception {
+        DriverSet ds = ValidatorTest.clean();
+        Driver ad = ds.driver("AD");
+        ad.meta.put("dirxml-pkgguid", "B5PAGQ5E_201005261601510810;com.netiqcorporation.novluabase;4.10.1.20250606222933;User Application Base;NOVLUABASE");
+        Policy smp = ad.policies.get(0);
+        smp.meta.put("dirxml-pkgguid", "B5PAGQ5E_201005261601510810;com.netiqcorporation.novluabase;4.10.1.20250606222933;User Application Base;NOVLUABASE");
+        smp.meta.put("dirxml-pkgassociationid", "CZPE929X_201006281545180995");
+        smp.meta.put("dirxml-pkgchecksum", "870369150");
+        smp.meta.put("dirxml-pkglinkages", "<policy-linkage/>");
+        smp.meta.put(com.pointblue.dirxml.dev.edit.Packages.CUSTOMIZED_KEY, "true");
+
+        Document doc = CanonicalXml.parse(ExportWriter.toXml(ds));
+        Element drv = (Element) doc.getElementsByTagName("driver-configuration").item(0);
+        assertEquals("B5PAGQ5E_201005261601510810", drv.getAttribute("package-id"));
+        assertEquals("4.10.1.20250606222933", drv.getAttribute("package-version"));
+        assertFalse(drv.hasAttribute("modified"));
+        // a DirXML Script policy is a <rule> element in Designer's export form
+        Element pol = null;
+        NodeList pols = doc.getElementsByTagName("rule");
+        for (int i = 0; i < pols.getLength(); i++) {
+            if (((Element) pols.item(i)).getAttribute("name").equals(smp.name)) {
+                pol = (Element) pols.item(i);
+            }
+        }
+        assertNotNull(pol);
+        assertEquals("B5PAGQ5E_201005261601510810", pol.getAttribute("package-id"));
+        assertEquals("CZPE929X_201006281545180995", pol.getAttribute("pkg-assoc-id"));
+        assertEquals("870369150", pol.getAttribute("checksum"));
+        assertEquals("true", pol.getAttribute("modified"));
+
+        // an explicit export attribute still wins over the stamp
+        smp.meta.put("package-id", "PKG-EXPLICIT");
+        doc = CanonicalXml.parse(ExportWriter.toXml(ds));
+        pols = doc.getElementsByTagName("rule");
+        for (int i = 0; i < pols.getLength(); i++) {
+            Element e = (Element) pols.item(i);
+            if (e.getAttribute("name").equals(smp.name)) {
+                assertEquals("PKG-EXPLICIT", e.getAttribute("package-id"));
+            }
+        }
+    }
 }
