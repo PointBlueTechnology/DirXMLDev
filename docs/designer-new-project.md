@@ -1,6 +1,6 @@
 # A fresh Designer project from a tree — design note
 
-Status: **proposed 2026-09-17, awaiting Jerry's decisions (§5).** Follows
+Status: **confirmed 2026-09-17 (Jerry: "go with your recommendation" on every §5 point — forms/PRDs/entitlements first and opaque `AppConfig` later; N3 packages as described; optional vault/server flags, default none; `export-project --new`). N1+N2 building; N3 spike running.** Follows
 [designer-roundtrip.md](designer-roundtrip.md) §3 (the writer that updates an
 existing project) and closes the gap
 [howto-fresh-designer-project.md](howto-fresh-designer-project.md) works
