@@ -331,6 +331,18 @@ the tree, modulo the minted ids. `src/test/.../source/NewProjectWriterTest.java`
    `protected`/`readonly`/`dirguid`/`dirrev` when the tree carries them; and the
    "PRD binds a form that does not resolve" note is said once, not once per PRD.
 
+### 7.2a Designer check — results (Jerry, 2026-09-17, `Designer-modernized`, project `test11new`)
+
+| # | Result |
+|---|---|
+| 1 opens, views populated | **good** — except most drivers have **no icon** (test11pf's drivers carry `<id>_icon.gif`, copied by Designer's importer from its `com.novell.core_*/icons/iManager/<ApplicationType>.gif`; `--new` writes none, and typed the AD driver `GenericApp` because its shim is the Remote Loader's `com.novell.nds.dirxml.remote.driver.DriverShimImpl`) → fix in N3 |
+| 2 pruned `.appconfig` | **good** — forms and PRDs open with the empty containers |
+| 3 diagram | **good** |
+| 4 no `Server_` | **fine**; a server must be added before a deploy (as expected — `--server`, or in Designer) |
+| 5 packaged items, no catalog | *Packages* on the driver-set properties **first showed an "invalid values" error** — the generated `DriverSet_` has no `Idm:InstalledPackages` (nor `Idm:Servers`/`Idm:Jobs`) and the items name packages the project's catalog does not hold → N3 (the catalog + the InstalledPackages relations) is **required**, not merely nice |
+| 6 Validate / Compare | appears ok |
+| 7 deploy from the project | **good** |
+
 ### 7.2 What the Designer check must look at (the code cannot)
 
 1. **The project opens at all** and the System Model, developer view and
