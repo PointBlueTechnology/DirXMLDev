@@ -1,9 +1,12 @@
 # A fresh Designer project from a tree — design note
 
-Status: **N1+N2 built and merged 2026-09-17** (b781d67; `source.ProjectSkeleton`, `source.NewProject`,
-`ProjectWriter.create`, `bin/idm export-project … --new`; 10 tests, 576 green). `~/designer_workspace/test11new`
-was written from `tree-test11pf` for the Designer check (§7.2); round trip through `import-project` is clean.
-N3 spike done → [spikes/designer-project-catalog.md](spikes/designer-project-catalog.md); N3 is next.
+Status: **N1+N2+N3 built 2026-09-17** (N1+N2 in b781d67; N3 on `n3-catalog`:
+`source.ProjectCatalogWriter`, `source.DesignerInstall`, `source.ApplicationType`,
+`bin/idm export-project … --new --catalog DIR`; 20 tests in `NewProjectWriterTest`, 586 green).
+`~/designer_workspace/test11new` was written from `tree-test11pf` for the first Designer check (§7.2a);
+round trip through `import-project` is clean. The N3 spike is
+[spikes/designer-project-catalog.md](spikes/designer-project-catalog.md); what N3 built, where it
+deviates and what only Designer can answer are in §7.3 and §7.4.
 Confirmed 2026-09-17 (Jerry: "go with your recommendation" on every §5 point —
 forms/PRDs/entitlements first and opaque `AppConfig` later; N3 packages as
 described; optional vault/server flags, default none; `export-project --new`).
@@ -371,3 +374,135 @@ the tree, modulo the minted ids. `src/test/.../source/NewProjectWriterTest.java`
 7. **Deploy one policy** from the new project to a scratch driver and
    `vault.diff` against the tree — §4.3, the proof the project is not merely
    viewable.
+
+### 7.3 Built — N3 (2026-09-17)
+
+```
+bin/idm export-project tree/ <newProjectDir> --new
+    [--vault-name NAME] [--vault-host HOST] [--vault-user DN]
+    [--server NAME --server-context DN]
+    [--catalog DIR]        # the git package catalog: fills the project's own catalog
+    [--designer DIR]       # the Designer install driver icons are copied from
+    [--dry-run] [--json]
+```
+
+- **`source.ProjectCatalogWriter`** — the project's own package catalog, written from the
+  jars `--catalog` holds, exactly as [spikes/designer-project-catalog.md](spikes/designer-project-catalog.md)
+  read it off `test11pf`: the `IdmCategory_` chosen by `package/@category`, an
+  `IdmCategoryFolder_` per `@category-folder` (`Idm:Packages` Child relations), the
+  `IdmPackage_` with the spike's attribute table (only non-empty fields,
+  `Idm:PackageImported=true`, `Idm:InstallationDirective` as `PackageJar.directive` holds it),
+  the heavy-data files (`<K>_license.xml`, `<K>_readme.txt`, `<K>_change.log`,
+  `<K>_<lang>.properties`), all nine `IdmPackageFolder_` with `Idm:FolderId` even when empty,
+  and one CObject per item (`DirXML-Rule` → `ScriptPolicy_`/`StylesheetPolicy_`/`MappingPolicy_`
+  by content, `DirXML-Resource` → `IDMResource_` with `DirXML-ContentType` and
+  `Idm:PkgPromptType`, `DirXML-GlobalConfigDef` → `GlobalConfig_`) carrying
+  `Idm:PackageGuid`/`PackageAssocGuid`/`ContentChecksum`/`DirectiveChecksum`/`InstallationDirective`
+  verbatim, plus `<I>_contents.xml` when the jar item has content. Then the relations:
+  `Idm:InstalledPackages` Reference on each `Driver_` (type 2), on `DriverSet_` (type 3) and on
+  `IdentityVault_` (type 4), with the `Idm:InstalledPackageDriverRefs` /
+  `Idm:InstalledPackageDSetRefs` / `Idm:InstalledPackageIVRefs` back-references.
+- **Refusals.** With `--catalog`, a package the tree names that the catalog does not hold
+  refuses the whole run and lists every missing one (short name + version + id, as far as the
+  tree records them); an item class outside the table above refuses and names the class, the
+  item and the package rather than guessing a CObject type. Nothing reaches the target
+  directory in either case — everything is built in a staging directory first.
+- **Without `--catalog`** nothing changed: no `IdmPackage_` objects, and the result note names
+  the packages Designer will therefore not associate.
+- **`source.DesignerInstall`** — driver icons. Designer's own vault importer copies
+  `plugins/com.novell.core_<ver>/icons/iManager/<ApplicationType>.gif` to
+  `<driverId>_icon.gif` beside the `Driver_`, with a
+  `<attributes xsi:type="…CHeavyData" attrName="icon" extension="gif"/>` attribute; `--new`
+  does the same, falling back to `GenericApp.gif`, and says once in the result when no install
+  was found. The install is found the way `form.edit` finds the form builder: `IDM_DESIGNER`,
+  then the `designer` system property, then the platform's default roots (`--designer`
+  overrides all three). Nothing else is ever read out of the install, and an icon is never
+  written into a tree.
+- **`source.ApplicationType`** — the `Application_` type. The old switch typed the Active
+  Directory driver `GenericApp` because its `DirXML-JavaModule` is the Remote Loader proxy
+  `com.novell.nds.dirxml.remote.driver.DriverShimImpl`. Two tables, both read out of a Designer
+  install's own `defs/model_items/Drivers/*.xml` (`<driver type=… primaryApp=…>` with
+  `<supported-shims>`): shim class → application type for the Java shims that map to exactly one
+  application, and Designer driver type → application type for all 79 driver types. A
+  Remote Loader driver has no shim class to go on, so the tree's `designer.driver-type`
+  (`AD-Driver`) settles it — which is how the AD driver now comes out `ActiveDirectory`, as
+  `test11pf` has it.
+
+### 7.4 Deviations from this note and from `test11pf` (N3)
+
+1. **The tree may not record a package version.** A tree read from a *project* records only
+   `package-id` on its items (Designer's project format keeps no version there); a tree read
+   from a *vault* records the whole five-field `dirxml-pkgguid`
+   (`id;symbolic-name;version;name;SHORT`). So the catalog lookup is by id + version when the
+   tree has a version and by id alone — taking the catalog's newest version of that package —
+   when it does not. The refusal list says `(version not recorded in the tree)` in that case.
+2. **`<K>_change.log` is generated, not copied.** No jar carries a change log: it is the
+   *project's* local history of that package, and Designer's importer writes exactly three
+   lines ("Setting package imported flag to 'null'", "Changed installation directive for …",
+   "Changed license for package …") stamped with the import time. `--new` writes the same three
+   lines with the current time. Every package in `test11pf` has exactly those three.
+3. **A package whose `@category` is not one of Designer's six gets a seventh `IdmCategory_`.**
+   Locally built packages do (`package.build` writes `category="Custom"`), so refusing would
+   make a Point Blue package unusable. The new category object has the same shape as the stock
+   six and the result notes it.
+4. **`provext` is not written.** Two of `test11pf`'s notification-template packages carry a
+   `<K>_provext.xml` heavy-data file (`<prov-extensions packages="true"/>`); none of the jars
+   in the e2e catalog has a package-level element it could come from, so the source is
+   unidentified and nothing is invented.
+5. **A text-only `XmlData` is written as a contents file.** The spike's rule is "a contents
+   file iff the item's content element is non-null". An item whose `XmlData` is text rather
+   than an element (an ECMAScript resource, say) does not occur in `test11pf`'s two packages;
+   `--new` writes the text as `<I>_contents.xml` rather than dropping it, which is inference,
+   not observation.
+6. **Two cosmetic escaping differences**, both pre-existing and both parsing back identically:
+   an attribute value that embeds XML escapes `>` as `&gt;` and newlines/tabs as `&#10;`/`&#9;`,
+   where Designer writes `>` and `&#xA;`/`&#x9;`. With those normalized, a package written from
+   `NOVLEDIRBASE 2.1.2.20190219130306` / `NOVLEDIRDCFG 2.1.0.20120831225140` is **identical to
+   `test11pf`'s own copy** (`80FZS91C` / `8QA7Z65G`): same attribute set, order and values on
+   the package and on every item, the same nine folders, the same item CObject types, and
+   byte-identical `_license.xml`, `_readme.txt`, `_<lang>.properties` and `_contents.xml` files.
+   Only the minted ids differ.
+7. **SCIM drivers keep `GenericApp`.** Designer's driver definitions map `SCIM-Driver` to a
+   `SCIM` application type, but `test11pf`'s `MITLL-Druva` — a `SCIM-Driver` — has a
+   `GenericApp` application, so `SCIM-Driver` is deliberately absent from the driver-type table
+   and a SCIM shim class returns `GenericApp`.
+8. **The driver set carries only what the tree records** (deviation for §4 of the N3 brief).
+   `test11pf`'s `DriverSet_` also holds `DSetCreatePartition`, `DirXML-LogEvents`,
+   `DirXML-JavaDebugPort`, `DirXML-JavaTraceFile`, `DirXML-LogLimit`, `DirXML-TraceSizeLimit`,
+   `DirXML-XSLTraceLevel`, `JavaEnvParameters` and `NamedPasswords`. A tree's `driverset.xml`
+   records the name, the DN and the config values and nothing else — checked on
+   `tree-test11pf`, `tree-7c`, `tree-ig4` and `tree-idm254`, none of which carries a single
+   driver-set setting. They are left absent rather than invented, and the result says so in a
+   note; set them in Designer (or teach the readers to record them, which is a separate change
+   to the vault/project readers, the as-code format and `vault.diff`).
+9. **The update path is unchanged.** A catalog and an icon are `--new` things: an existing
+   project already has Designer's icons and its own `IdmPackage_` objects, and `update` still
+   refuses to add a packaged driver at all. A driver `update` *does* add now gets a note saying
+   Designer will draw its icon.
+10. **`Idm:Jobs` and `Idm:Servers` on the driver set** are still absent (jobs are out of scope
+   per §3.4; a `Server_` only exists with `--server`). Point 5 of the first Designer check
+   named all three as the cause of the "invalid values" error on the Packages page; N3 fixes
+   the `Idm:InstalledPackages` half, which is the one that page is actually about.
+
+### 7.5 What the Designer check must look at (N3)
+
+On a project written with `--new --catalog` (a driver set whose packages the catalog holds —
+the e2e pair is `tree-7c`'s `PkgTest7` with `NOVLEDIRBASE` + `NOVLEDIRDCFG`):
+
+1. **The driver-set properties → *Packages* page opens without the "invalid values" error**
+   that point 5 of §7.2a hit, and lists the driver-set-level packages.
+2. **Each driver's properties → *Packages* page** shows its packages **installed**, with
+   **nothing marked modified** (the 7c check): the `Idm:InstalledPackages` reference, the
+   `IdmPackage_` in the project catalog and the item stamps must agree.
+3. ***Help → Check for Package Updates*** (or *Package Catalog → Check for updates*) offers
+   **nothing wrong** — no spurious "newer version available" for a package written at the
+   version the tree names, and no complaint about a package that is not in the workstation
+   catalog.
+4. **The Package Catalog view** (Project → *Package Catalog*) shows the packages under the
+   right category and category folder, with their readme, licence and change log readable in
+   the package properties, and the package's content tree (Policies / Resources / Global
+   Configurations) populated.
+5. **Every driver now has an icon** in the modeler and the outline, and the Active Directory
+   driver's is the Active Directory one, not the generic application icon.
+6. **A package upgrade still works**: *Package → Upgrade* on a driver in the new project
+   offers the newer version from the workstation catalog and applies it.

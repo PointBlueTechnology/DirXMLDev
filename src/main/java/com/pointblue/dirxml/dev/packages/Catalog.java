@@ -85,6 +85,14 @@ public final class Catalog {
         return packages.get(shortName);
     }
 
+    /**
+     * The jar file holding one version of one package, whether or not it is on disk
+     * ({@code jars/<SHORT>/<SHORT>_<version>.jar} — the layout {@link #add} writes).
+     */
+    public Path jar(String shortName, String version) {
+        return dir.resolve("jars").resolve(shortName).resolve(shortName + "_" + version + ".jar");
+    }
+
     /** Every package id → SHORT name in this catalog (dependency/feature entries reference packages by id). */
     public Map<String, String> idIndex() {
         Map<String, String> out = new LinkedHashMap<>();
