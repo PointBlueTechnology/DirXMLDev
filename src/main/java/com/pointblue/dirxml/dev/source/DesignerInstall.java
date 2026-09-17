@@ -18,13 +18,16 @@ import java.util.stream.Stream;
  * then the platform's default install roots.
  *
  * <p>The one thing {@code export-project --new} takes out of an install is a driver
- * icon: Designer's own vault importer copies
+ * icon, and only for a driver the <b>tree</b> carries no icon of its own (see
+ * {@code docs/designer-new-project.md} §7.2c — a tree read from a Designer project keeps
+ * that project's icon, custom or not, and that one always wins). Designer's own vault
+ * importer copies
  * {@code plugins/com.novell.core_<ver>/icons/iManager/<ApplicationType>.gif} to
  * {@code <driverId>_icon.gif} beside the {@code Driver_} CObject (verified byte for
  * byte against {@code ~/designer_workspace/test11pf}: its
  * {@code 1K4NAIPS_icon.gif} is {@code NrfApp.gif} and its {@code 83OISG7Y_icon.gif}
  * is {@code ActiveDirectory.gif}). Nothing else is ever read or copied out of the
- * install, and an icon is never committed to a tree.
+ * install, and an icon taken from an install is never written back into a tree.
  */
 public final class DesignerInstall {
 

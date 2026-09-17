@@ -288,6 +288,11 @@ public final class Plan {
                 case DRIVER_LINKAGE:
                     driversNeedingLinkage.add(c.driver);
                     break;
+                case DRIVER_ICON:
+                    // a Designer-project asset: the vault has no icon attribute, so there is
+                    // nothing to deploy, nothing to touch and nothing to restart
+                    // (docs/designer-new-project.md §7.2c)
+                    break;
                 case DRIVER_STAMPS: {
                     Driver d = to.driver(c.driver);
                     String dn = VaultMapping.driverDn(dsDn, c.driver);
