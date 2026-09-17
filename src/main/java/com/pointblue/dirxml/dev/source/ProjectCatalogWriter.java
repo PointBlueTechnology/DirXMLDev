@@ -1,5 +1,9 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.xml.CanonicalXml;
+
+import com.pointblue.dirxml.dev.packages.Dependency;
+
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -660,5 +664,45 @@ final class ProjectCatalogWriter {
     private static String dsValue(Element dsAttribute) {
         Element v = child(dsAttribute, "ds-value");
         return v == null ? null : textOf(v);
+    }
+
+    /**
+     * The Designer driver type a driver's <b>base package</b> declares ({@code
+     * supported-drivers/definition/@driver-id} in its installation directive — {@code AD-Driver}
+     * for NOVLADBASE, {@code SCIM-Driver} for NETQSCIMBASE), read from the git catalog; null
+     * when the tree names no base package, the catalog lacks it, or the package names none.
+     */
+    static String baseDriverType(Driver d, Path catalogDir) {
+        String record = d.meta.get("dirxml-pkgguid");
+        if (record == null || record.isBlank() || catalogDir == null) {
+            return null;
+        }
+        String[] f = record.split(";", -1);
+        try {
+            Catalog catalog = Catalog.open(catalogDir);
+            String shortName = catalog.idIndex().get(f[0].trim());
+            Catalog.PackageEntry entry = shortName == null ? null : catalog.get(shortName);
+            if (entry == null) {
+                return null;
+            }
+            String version = f.length > 2 && !f[2].isBlank() && !"0.0.0".equals(f[2].trim()) ? f[2].trim() : entry.newestVersion();
+            Path jar = version == null ? null : catalog.jar(entry.shortName, version);
+            if (jar == null || !Files.isRegularFile(jar)) {
+                return null;
+            }
+            PackageJar p = PackageJar.read(jar);
+            if (p.directive == null || p.directive.isBlank()) {
+                return null;
+            }
+            Element root = CanonicalXml.parse(p.directive).getDocumentElement();
+            for (Dependency.SupportedDriver sd : Dependency.SupportedDriver.parse(root)) {
+                if (sd.driverId != null && !sd.driverId.isBlank()) {
+                    return sd.driverId.trim();
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+        return null;
     }
 }

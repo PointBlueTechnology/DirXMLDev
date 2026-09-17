@@ -150,6 +150,10 @@ final class ApplicationType {
         t.put("NIS-Driver", "NIS");
         t.put("Notes-Driver", "Notes");
         t.put("Null-Driver", "Null");
+        // present in Designer's defs (com.novell.idm and com.novell.prov.pal.integration) but absent from the
+        // first cut of this table — test11pf types its SCIM drivers SCIM-Driver and the RRSD NrfDriver
+        t.put("SCIM-Driver", "SCIM");
+        t.put("NrfDriver", "NrfApp");
         t.put("NxSettings-Driver", "Linux");
         t.put("ORACLEEBSHR-Driver", "Oracle-EBSHR");
         t.put("ORACLEEBSTCA-Driver", "Oracle-EBSTCA");
@@ -189,6 +193,50 @@ final class ApplicationType {
     }
 
     private ApplicationType() {
+    }
+
+    /** The application type for a Designer driver type ({@code AD-Driver} → {@code ActiveDirectory}); null when unknown. */
+    static String forDriverType(String driverType) {
+        if (driverType == null || driverType.isEmpty()) {
+            return null;
+        }
+        String t = BY_DRIVER_TYPE.get(driverType);
+        if (t != null) {
+            return t;
+        }
+        if (driverType.startsWith("NProv")) {
+            return "NProv";
+        }
+        if (driverType.startsWith("Nrf")) {
+            return "NrfApp";
+        }
+        return null;
+    }
+
+    /** The one Designer driver type with this application type, or null when none or several have it. */
+    static String driverTypeForApp(String app) {
+        if (app == null || GENERIC.equals(app)) {
+            return null;
+        }
+        String found = null;
+        for (Map.Entry<String, String> e : BY_DRIVER_TYPE.entrySet()) {
+            if (app.equals(e.getValue())) {
+                if (found != null) {
+                    return null;
+                }
+                found = e.getKey();
+            }
+        }
+        return found;
+    }
+
+    /**
+     * True when the driver's own shim class cannot settle its type — the Remote Loader proxy
+     * (the shim is elsewhere) or a SCIM connector (several Designer types list it) — so the
+     * base package's {@code supported-drivers} is the authority, as Designer's importer uses it.
+     */
+    static boolean typeComesFromBasePackage(String shimClass) {
+        return REMOTE_LOADER_SHIM.equals(shimClass) || isScimShim(shimClass);
     }
 
     /** True for a SCIM connector shim, which Designer types {@code GenericApp} anyway. */
