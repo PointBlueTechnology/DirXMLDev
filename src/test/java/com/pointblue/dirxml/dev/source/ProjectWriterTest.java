@@ -487,10 +487,16 @@ public class ProjectWriterTest {
             ProjectReader.read(project).driver("AcctExpNotif").icon);
     }
 
+    /**
+     * A tree without an icon has no opinion (a tree written before icons were carried, or one
+     * imported from an LDIF that lacked the attribute): the project's icon stays as it is.
+     */
     @Test
-    public void anIconRemovedFromTheTreeIsRemovedFromTheProject() throws IOException {
+    public void aTreeWithoutAnIconLeavesTheProjectIconAlone() throws IOException {
         Path project = copyProject();
         Path tree = buildTree(project);
+        byte[] before = ProjectReader.read(project).driver("AcctExpNotif").icon;
+        assertNotNull(before);
         Files.delete(tree.resolve("drivers/AcctExpNotif/icon.gif"));
         Path manifest = tree.resolve("drivers/AcctExpNotif/driver.xml");
         Files.writeString(manifest, Files.readString(manifest, StandardCharsets.UTF_8)
@@ -498,13 +504,12 @@ public class ProjectWriterTest {
 
         ProjectWriter.Result r = ProjectWriter.update(tree, project, false);
         assertTrue(r.text(), r.ok);
-        assertFalse(Files.exists(projectIcon(project, "gif")));
-        assertEquals(List.of(project.relativize(projectIcon(project, "gif")).toString().replace('\\', '/')),
-            r.deletedFiles);
+        assertTrue(Files.exists(projectIcon(project, "gif")));
+        assertEquals(List.of(), r.deletedFiles);
         String driverFile = Files.readString(
             project.resolve("Model/EdirOrphan/ZEZTZUKV/" + ACCT_EXP_ID + ".Driver_"), StandardCharsets.UTF_8);
-        assertFalse(driverFile, driverFile.contains("attrName=\"icon\""));
-        assertNull(ProjectReader.read(project).driver("AcctExpNotif").icon);
+        assertTrue(driverFile, driverFile.contains("attrName=\"icon\""));
+        assertArrayEquals(before, ProjectReader.read(project).driver("AcctExpNotif").icon);
     }
 
     /** A driver Designer never drew an icon for gets the tree's, attribute and file together. */

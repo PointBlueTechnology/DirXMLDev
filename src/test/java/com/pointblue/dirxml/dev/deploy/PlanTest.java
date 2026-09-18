@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
@@ -42,26 +43,46 @@ public class PlanTest {
     }
 
     /**
-     * The driver icon is a Designer-project asset the vault has no attribute for. Even when a
-     * diff does carry one (an icon-aware {@code ModelDiff}, as {@code export-project} builds),
-     * the plan must be empty: no step, no touched DN, no restart.
+     * The driver icon is the vault's {@code DirXML-DriverImage}: an icon change is one attribute
+     * write on the driver — and never a restart, because the engine does not read it.
      */
     @Test
-    public void anIconChangeProducesNoStepAtAll() {
+    public void anIconChangeIsOneAttributeWriteWithoutRestart() {
         DriverSet from = VaultMappingTest.model();
         DriverSet to = VaultMappingTest.model();
-        to.driver("AD").icon = new byte[] {'G', 'I', 'F', '8', '9', 'a'};
+        byte[] gif = new byte[] {'G', 'I', 'F', '8', '9', 'a'};
+        to.driver("AD").icon = gif;
         to.driver("AD").iconExtension = "gif";
 
-        ModelDiff diff = ModelDiff.of(from, to, true);
+        ModelDiff diff = ModelDiff.of(from, to);
         assertEquals(diff.text(), 1, diff.changes().size());
         assertEquals(ModelDiff.Kind.DRIVER_ICON, diff.changes().get(0).kind);
 
         Plan p = Plan.of(diff, to, DS, Secrets.none(), "none", Map.of(), true);
-        assertTrue(p.text("stg", DS), p.isEmpty());
-        assertEquals(List.of(), p.steps);
-        assertTrue(p.touchedDns.toString(), p.touchedDns.isEmpty());
+        assertEquals(p.text("stg", DS), 1, p.steps.size());
+        Plan.Step s = p.steps.get(0);
+        assertEquals(Plan.Op.MODIFY, s.op);
+        assertEquals("cn=AD," + DS, s.dn);
+        assertEquals(VaultMapping.DRIVER_IMAGE, s.attr);
+        assertArrayEquals(gif, s.values.get(VaultMapping.DRIVER_IMAGE).get(0));
+        assertTrue(s.description, s.description.contains("6 bytes, gif"));
+        assertFalse("never the bytes", s.description.contains("GIF89a"));
+        assertEquals(List.of("cn=AD," + DS), List.copyOf(p.touchedDns));
         assertTrue(p.restart.toString(), p.restart.isEmpty());
+    }
+
+    /** A tree without an icon leaves the vault's image alone: no change, no step. */
+    @Test
+    public void aTreeWithoutAnIconLeavesTheVaultImageAlone() {
+        DriverSet from = VaultMappingTest.model();
+        from.driver("AD").icon = new byte[] {'G', 'I', 'F', '8', '9', 'a'};
+        from.driver("AD").iconExtension = "gif";
+        DriverSet to = VaultMappingTest.model();
+
+        ModelDiff diff = ModelDiff.of(from, to);
+        assertTrue(diff.text(), diff.isEmpty());
+        Plan p = Plan.of(diff, to, DS, Secrets.none(), "none", Map.of(), true);
+        assertTrue(p.text("stg", DS), p.isEmpty());
     }
 
     @Test

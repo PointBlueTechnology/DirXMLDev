@@ -37,19 +37,45 @@ public final class Driver {
     /** This driver's {@code cn=AppConfig} subtree (forms, PRDs); null if it has none. */
     public Provisioning provisioning;
     /**
-     * The driver's icon, as opaque bytes, or null when it has none. Designer lets a driver
-     * carry a custom icon that no type lookup can produce (test11pf: EventLogger, AcctExpNotif,
-     * Beeline, CyberArk), and it lives only in a Designer project — the vault has no icon
-     * attribute, so an export, an LDIF and a live read never produce one. See
-     * {@code docs/designer-new-project.md} §7.2c.
+     * The driver's icon, as opaque bytes, or null when it has none. It is the vault's
+     * {@code DirXML-DriverImage} (a single-valued octet string on {@code DirXML-Driver}):
+     * Designer writes the driver's custom icon there on deploy — or its stock icon for the
+     * driver type when the driver has no custom one — and reads it back on import, so a live
+     * read, an LDIF and a Designer export all carry it, iManager displays it, and a Designer
+     * project stores the same bytes as the driver's {@code icon} heavy-data attribute. See
+     * {@code docs/designer-new-project.md} §7.2e.
      */
     public byte[] icon;
     /**
-     * The image format of {@link #icon}, as Designer's {@code CHeavyData extension} names it —
-     * {@code "gif"} on nearly every driver, {@code "png"} on some. Kept exactly as Designer
-     * wrote it; null when there is no icon.
+     * The image format of {@link #icon}: the {@code extension} Designer wrote on the heavy-data
+     * attribute when the icon came from a project ({@code "gif"} on nearly every driver,
+     * {@code "png"} on some), or {@link #iconExtensionOf} from the bytes' magic number when it
+     * came from the vault, an LDIF or an export. Null when there is no icon.
      */
     public String iconExtension;
+
+    /**
+     * The image format the bytes' magic number says — {@code gif}, {@code png}, {@code jpg},
+     * {@code bmp} — or {@code bin} when it is none of those (never null for non-empty bytes).
+     */
+    public static String iconExtensionOf(byte[] b) {
+        if (b == null || b.length < 4) {
+            return "bin";
+        }
+        if (b[0] == 'G' && b[1] == 'I' && b[2] == 'F' && b[3] == '8') {
+            return "gif";
+        }
+        if ((b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') {
+            return "png";
+        }
+        if ((b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8 && (b[2] & 0xFF) == 0xFF) {
+            return "jpg";
+        }
+        if (b[0] == 'B' && b[1] == 'M') {
+            return "bmp";
+        }
+        return "bin";
+    }
     /** {@code DirXML-Entitlement} objects hanging directly off this driver, in read order. */
     public final List<Entitlement> entitlements = new ArrayList<>();
 

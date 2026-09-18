@@ -19,9 +19,14 @@ import com.pointblue.dirxml.sim.SchemaModel;
 import com.pointblue.dirxml.sim.Xds;
 import org.w3c.dom.Element;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,10 +57,14 @@ public final class LdifReader {
 
     /** From an LDIF file (must include the DirXML data attributes — see the simulator docs). */
     public static DriverSet read(Path ldif) {
-        return fromSource(LdifDriverSource.load(ldif), ldif.getFileName().toString());
+        return fromEntries(LdifDriverSource.load(ldif).entries(), ldif.getFileName().toString(), driverImages(ldif));
     }
 
-    /** Live: read the driver-set subtree over LDAP. */
+    /**
+     * Live: read the driver-set subtree over LDAP through the simulator's search — the text
+     * attributes only, so no driver icon; {@code VaultDiff.readLive} (what {@code import-live}
+     * uses) reads through our own {@code Vault} and carries the icon too.
+     */
     public static DriverSet readLive(JndiLdapSearch.Config ldap, String driverSetDn) {
         LdifDriverSource src = new JndiLdapSearch(ldap, SchemaModel.empty()).readDriverConfig(driverSetDn);
         return fromSource(src, ldap.url + "/" + driverSetDn);
@@ -66,6 +75,16 @@ public final class LdifReader {
     }
 
     public static DriverSet fromEntries(Collection<Entry> entries, String sourceName) {
+        return fromEntries(entries, sourceName, Map.of());
+    }
+
+    /**
+     * The same, with each driver's {@code DirXML-DriverImage} by lower-cased DN. A source
+     * {@link Entry} holds text only (the simulator decodes every value as UTF-8, which mangles
+     * an image), so the one binary attribute the model carries travels beside the entries:
+     * {@code VaultDiff} reads it as bytes over LDAP, {@link #read} re-reads it from the LDIF.
+     */
+    public static DriverSet fromEntries(Collection<Entry> entries, String sourceName, Map<String, byte[]> driverImages) {
         // 1. the driver set
         Entry dsEntry = null;
         for (Entry e : entries) {
@@ -112,6 +131,11 @@ public final class LdifReader {
             putConfig(d, Driver.CONFIG_VALUES, e.first("DirXML-ConfigValues"));
             putConfig(d, Driver.DRIVER_FILTER, e.first("DirXML-DriverFilter"));
             putConfig(d, Driver.ENGINE_CONTROL_VALUES, e.first("DirXML-EngineControlValues"));
+            byte[] image = driverImages.get(e.dn.toLowerCase());
+            if (image != null && image.length > 0) {
+                d.icon = image;
+                d.iconExtension = Driver.iconExtensionOf(image);
+            }
             copyMeta(e, d.meta, "DirXML-Driver");
             ds.drivers.add(d);
             driversByLowerName.put(d.name.toLowerCase(), d);
@@ -448,6 +472,56 @@ public final class LdifReader {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * Every {@code DirXML-DriverImage} in an LDIF, by lower-cased DN, read from the file as
+     * bytes: an LDIF holds a binary value base64-encoded ({@code attr:: …}), and the
+     * simulator's reader decodes that to UTF-8 text, which is lossy for an image.
+     */
+    static Map<String, byte[]> driverImages(Path ldif) {
+        Map<String, byte[]> out = new HashMap<>();
+        List<String> lines;
+        try {
+            lines = Files.readAllLines(ldif, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return out;
+        }
+        List<String> unfolded = new ArrayList<>();
+        for (String l : lines) {
+            if (l.startsWith(" ") && !unfolded.isEmpty()) {
+                unfolded.set(unfolded.size() - 1, unfolded.get(unfolded.size() - 1) + l.substring(1));
+            } else {
+                unfolded.add(l);
+            }
+        }
+        String dn = null;
+        for (String l : unfolded) {
+            if (l.isBlank()) {
+                dn = null;
+                continue;
+            }
+            int colon = l.indexOf(':');
+            if (colon < 0) {
+                continue;
+            }
+            String name = l.substring(0, colon);
+            boolean b64 = l.startsWith("::", colon);
+            String value = l.substring(colon + (b64 ? 2 : 1)).strip();
+            try {
+                if (name.equalsIgnoreCase("dn")) {
+                    dn = b64 ? new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8) : value;
+                } else if (dn != null && b64 && name.equalsIgnoreCase("DirXML-DriverImage")) {
+                    byte[] image = Base64.getDecoder().decode(value);
+                    if (image.length > 0) {
+                        out.put(dn.toLowerCase(), image);
+                    }
+                }
+            } catch (IllegalArgumentException malformed) {
+                // not base64 after all — no image for this entry
+            }
+        }
+        return out;
     }
 
     /** Preserve package/state attributes the model doesn't interpret. */

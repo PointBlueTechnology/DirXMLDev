@@ -496,8 +496,10 @@ public final class Deployer {
             return "cannot check out the last deployed commit " + last.treeCommit.substring(0, 12) + " from the tree's git history";
         }
         try {
+            // an icon set in Designer since the last deploy is not drift worth refusing over: the
+            // deploy neither restarts for it nor clobbers policy because of it
             ModelDiff drift = ModelDiff.of(AsCodeReader.read(known), live);
-            if (!drift.isEmpty()) {
+            if (!drift.isEmptyButForIcons()) {
                 return driftRefusal(env, live, drift, "the vault differs from the last deploy on record (" + last.treeCommit.substring(0, 12) + ")");
             }
         } finally {
@@ -530,7 +532,7 @@ public final class Deployer {
             // model, never through git's view (which may normalize line endings)
             boolean differs;
             try {
-                differs = !ModelDiff.of(AsCodeReader.read(wt), live).isEmpty();
+                differs = !ModelDiff.of(AsCodeReader.read(wt), live).isEmptyButForIcons();
             } catch (RuntimeException | IOException e) {
                 differs = true;
             }

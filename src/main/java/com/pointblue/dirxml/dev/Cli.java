@@ -267,7 +267,7 @@ public final class Cli {
                 }
                 DriverSet from = AsCodeReader.read(Paths.get(pos.get(0)));
                 DriverSet to = AsCodeReader.read(Paths.get(pos.get(1)));
-                com.pointblue.dirxml.dev.deploy.ModelDiff diff = com.pointblue.dirxml.dev.deploy.ModelDiff.of(from, to, true);
+                com.pointblue.dirxml.dev.deploy.ModelDiff diff = com.pointblue.dirxml.dev.deploy.ModelDiff.of(from, to);
                 System.out.print(json ? diff.json() + "\n" : diff.text());
                 System.exit(diff.isEmpty() ? 0 : 1);
             }

@@ -371,7 +371,8 @@ identical and every icon is byte-identical except (a) three drivers whose icons 
 test11pf are older files of an earlier Designer's icon set (Loopback, Gateway, Null —
 ours are the current install's), (b) custom shims with no base package in the vault
 (Beeline, CyberArk, EventLogger, AcctExpNotif — their test11pf icons were set when
-the drivers were built in Designer; the vault never holds an icon), which get the
+the drivers were built in Designer; §7.2e: the vault holds them too, as
+`DirXML-DriverImage`, which the tool did not yet read), which get the
 generic icon, and (c) two drivers Designer drew without any icon.
 
 ### 7.2c Custom icons — carried in the tree (2026-09-17)
@@ -399,22 +400,14 @@ is exactly the (b) gap §7.2b listed. So the icon is now a **first-class tree as
   attribute and file move together, a format change (`gif` → `png`) replaces the old
   file rather than leaving two behind, and new bytes in the same format leave the
   `Driver_` itself untouched.
-- **Nothing else changes.** The vault has no icon attribute, so `export`
-  (configuration file), `import-ldif` and `import-live` neither read nor write one, and
-  **deploy ignores the icon entirely**: the diff kind is `DRIVER_ICON`, `Plan` produces
-  no step for it, it touches no DN and it never restarts a driver. It is compared only
-  between two sides that can both hold one — a tree against a Designer project
-  (`export-project`) or a tree against a tree (`tree.diff`, `docs --since`) — because a
-  vault-side model has no icon and would otherwise report every driver's as "added".
-  The change text says only the size and the format, never the bytes.
+- ~~**Nothing else changes.** The vault has no icon attribute …~~ **Wrong — superseded
+  by §7.2e the next day:** the vault *does* hold the icon (`DirXML-DriverImage`), and
+  the live read, the LDIF, the export and the deploy now all carry it. Only the change
+  text rule survives from this bullet: it says the size and the format, never the bytes.
 
-**What still cannot be recovered.** A tree imported from a **vault** (`import-live`,
-`import-ldif`) or from an **export** has no icon in it, because the vault never held
-one — if that driver's custom icon was set in some *other* Designer project, nothing
-here can bring it back, and `--new` gives it the type-derived icon instead. The icon
-survives only along the project → tree → project path. (`--new` adding a type-derived
-icon to a driver the tree had none for is likewise a real, intended difference: a
-later `import-project` of that project will see an icon the tree does not have.)
+~~**What still cannot be recovered.** A tree imported from a vault … has no icon in
+it …~~ — likewise wrong; see §7.2e. A tree from `import-live` carries every driver's
+icon, custom ones included, straight from the vault.
 
 ### 7.2d ig4new, third cut (2026-09-17, after the driver-icons merge 92858fb)
 
@@ -426,6 +419,75 @@ driver type and byte-identical icon** (custom icons included), and `import-proje
 the new project diffs "no differences" against the tree. For the Designer check:
 open it and confirm the modeler draws the custom icons (EventLogger, AcctExpNotif,
 Beeline, CyberArk) and accepts the two png ones (the AWS drivers).
+
+### 7.2e The vault holds the icon — `DirXML-DriverImage` (2026-09-18)
+
+Jerry: "I'm sure I've seen the custom icons displayed in Designer when a project is
+freshly imported from an IDV … the iManager ones have to be [in the directory],
+because that is where they are read from." He was right and §7.2c was wrong.
+
+**What the vault holds.** `DirXML-DriverImage` (OID `2.16.840.1.113719.1.14.4.1.43`,
+octet string, single-valued) is in the `DirXML-Driver` class's MAY list. Every one of
+ig4's 19 drivers has a value, and 18 of the 19 are byte-identical to the icons in
+Designer's own test11pf project — custom ones (EventLogger, AcctExpNotif, Beeline,
+CyberArk) and the two png AWS icons included. The one that differs (Querytest: both
+custom, neither a stock icon, vault object modified 2026-09-17 15:36Z) is drift
+between the project and the vault, not a format difference.
+
+**What Designer does with it** (decompiled `com.novell.idm.deploy` / `com.novell.idm`
+4.0.0.202507091432, in the session scratchpad only):
+
+- *Import from vault* reads the attribute into the driver's custom icon
+  (`ImportConfigAction`, `DeployUtil`) — hence a never-seen project showing custom
+  icons right after an import.
+- *Deploy* writes the custom icon when the driver has one; when it has none, Designer
+  writes **its own stock iManager icon for the driver type** instead (`DriverImpl`,
+  `DriverDef.getDefault_iMangerIconPath` → `IdmDSUtil.getIManagerImageBytes`). So a
+  Designer-deployed driver always has an image in the vault, and that image is what
+  iManager displays.
+- *Compare* diffs it (`DeployedByteArray`), so an icon change is a deploy difference.
+- Its XML form is `<driver-image>` with the base64 bytes as text or CDATA, or
+  `<driver-image delete-value="true"/>` for none (`DeployImporter_Load.importBase64Stream`);
+  a package's `ds-attributes` carry the same thing as `driver-image`.
+
+**What changed here** (commit after 4760176):
+
+- **Read.** `Vault.BINARY_ATTRS` names `DirXML-DriverImage`, so JNDI hands it over as
+  bytes; `VaultDiff.fromVault` (what `import-live` and the deploy's own read use)
+  carries it beside the text entries and `LdifReader` sets `Driver.icon`, with
+  `Driver.iconExtensionOf` reading the format from the magic number (gif, png, jpg,
+  bmp; `bin` otherwise). `import-ldif` re-reads the base64 value from the file, because
+  the simulator's LDIF reader decodes every value as UTF-8 text. The export reader and
+  writer carry `<driver-image>` the way Designer serializes it.
+- **Diff.** Icons are compared by default — the `compareIcons` flag is gone — with one
+  rule: **a `to` side without an icon has no opinion**, so an icon is reported added
+  or changed but never removed. A tree written before icons were carried (every
+  `import-live` tree before today) must not strip 19 icons on its next deploy, and a
+  project must not lose its icons to such a tree on `export-project`. Same bytes are
+  the same icon across format spellings (`gif` from the magic vs `GIF` or nothing
+  from a project); a real format change with the same bytes (`gif` → `png`) still
+  counts, because it renames the project file.
+- **Deploy.** `DRIVER_ICON` is one `modify` of `DirXML-DriverImage` on the driver,
+  **no restart** (the engine never reads it; iManager and Designer do). A new driver
+  is created with its icon in `VaultMapping.driverAttributes`. The deployer's drift
+  checks ignore icon-only differences (`ModelDiff.isEmptyButForIcons`): an icon set in
+  Designer since the last deploy is not a reason to refuse.
+
+**Verified live (ig4, 2026-09-18).** `import-live` → 19 of 19 drivers carry an icon,
+18 byte-identical to the Designer project's; `vault.diff` of that tree against the
+vault: no differences. `export-project --new` from that live tree (no Designer project
+anywhere in the chain) → 19 of 19 project icons byte-identical to the vault's images.
+The one drifted icon (Querytest): `vault.diff tree-test11pf --env ig4` reports
+`~ icon changed (6253 bytes, gif -> 3439 bytes, gif)`, the plan is `1 step(s), 0
+restart(s)`, `--yes` wrote it (verify: vault matches the tree), and deploying the live
+tree back restored the original bytes exactly — ig4 left as found. Tests: 618, 0
+failures.
+
+**Left as a follow-up (found on the way).** `export-project --new` from a *live*
+tree writes the packaged artifacts **without their package stamps** (218 items in
+ig4: `dirxml-pkgguid` / `-pkgassociationid` / `-pkgchecksum` / `-pkglinkages` gone
+after `import-project` of the new project), while the same round trip from the
+project-originated `tree-test11pf` was clean. Not an icon matter; on the plan's list.
 
 ### 7.2 What the Designer check must look at (the code cannot)
 

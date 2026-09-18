@@ -447,6 +447,12 @@ public final class ExportWriter {
             wrap.appendChild(doc.importNode(shimInfo, true));
             attrs.appendChild(wrap);
         }
+        if (d.icon != null && d.icon.length > 0) {
+            // DirXML-DriverImage the way Designer serializes it: base64 text in <driver-image>
+            Element image = doc.createElement("driver-image");
+            image.appendChild(doc.createTextNode(java.util.Base64.getEncoder().encodeToString(d.icon)));
+            attrs.appendChild(image);
+        }
     }
 
     /** Writes {@code <policy-linkage>} for {@code d}'s links, resolving each link's dn via {@code dnFn}. */

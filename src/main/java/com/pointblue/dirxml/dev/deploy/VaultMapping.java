@@ -39,6 +39,8 @@ public final class VaultMapping {
     public static final String SHIM_CONFIG_INFO = "DirXML-ShimConfigInfo";
     public static final String DRIVER_FILTER = "DirXML-DriverFilter";
     public static final String ENGINE_CONTROL_VALUES = "DirXML-EngineControlValues";
+    /** The driver's icon (single-valued octet string) — what Designer deploys and iManager shows. */
+    public static final String DRIVER_IMAGE = "DirXML-DriverImage";
     public static final String PKG_CHECKSUM = "DirXML-pkgChecksum";
     public static final String PKG_GUID = "DirXML-pkgGUID";
     public static final String PKG_ASSOC = "DirXML-pkgAssociationId";
@@ -221,6 +223,9 @@ public final class VaultMapping {
         blob(m, CONFIG_VALUES, d.config.get(Driver.CONFIG_VALUES));
         blob(m, DRIVER_FILTER, d.config.get(Driver.DRIVER_FILTER));
         blob(m, ENGINE_CONTROL_VALUES, d.config.get(Driver.ENGINE_CONTROL_VALUES));
+        if (d.icon != null && d.icon.length > 0) {
+            m.put(DRIVER_IMAGE, List.of(d.icon));
+        }
         return m;
     }
 

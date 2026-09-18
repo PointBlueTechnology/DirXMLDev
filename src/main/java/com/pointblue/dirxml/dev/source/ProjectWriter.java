@@ -150,7 +150,7 @@ public final class ProjectWriter {
         Result result = new Result();
         DriverSet project = ProjectReader.read(projectDir);
         DriverSet treeDs = AsCodeReader.read(tree);
-        ModelDiff diff = ModelDiff.of(project, treeDs, true);
+        ModelDiff diff = ModelDiff.of(project, treeDs);
         if (diff.isEmpty()) {
             result.ok = true;
             return result;
@@ -227,7 +227,7 @@ public final class ProjectWriter {
             ProjectSkeleton.Plan plan = ProjectSkeleton.write(work, name.toString(), treeDs, opts, result);
 
             DriverSet project = ProjectReader.read(work);
-            ModelDiff diff = ModelDiff.of(project, treeDs, true);
+            ModelDiff diff = ModelDiff.of(project, treeDs);
             Ctx ctx = new Ctx(tree, work, project, treeDs, false, result);
             ctx.plan = plan;
             ctx.opts = opts;

@@ -172,4 +172,16 @@ public class VaultMappingTest {
         // an artifact element left with no meta children is written self-closed
         return sb.toString().replaceAll("(<artifact [^>]*)>\\n\\s*</artifact>", "$1/>");
     }
+
+    /** A new driver is created with its icon — DirXML-DriverImage, the bytes as they are. */
+    @Test
+    public void driverAttributesCarryTheIcon() {
+        Driver d = model().driver("AD");
+        org.junit.Assert.assertFalse(VaultMapping.driverAttributes(d).containsKey(VaultMapping.DRIVER_IMAGE));
+        d.icon = com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest.TINY_GIF;
+        d.iconExtension = "gif";
+        Map<String, List<byte[]>> m = VaultMapping.driverAttributes(d);
+        org.junit.Assert.assertArrayEquals(com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest.TINY_GIF,
+            m.get(VaultMapping.DRIVER_IMAGE).get(0));
+    }
 }
