@@ -708,8 +708,24 @@ public final class ProjectWriter {
     }
 
     /** A package stamp copied from provisioning meta the way {@code ProjectReader} maps a digest item's stamps back. */
+    /**
+     * A provisioning item's digest field: the {@code project.*} extras the project reader keeps
+     * (guid, dirguid, dirrev, protected, readonly), and for the three package fields whatever
+     * vocabulary the tree speaks — the vault's {@code dirxml-pkg*} (a live tree, a project tree
+     * read since 2026-09-18) or the older {@code project.package-id} / {@code project.pkg-assoc-id}
+     * / {@code project.pkg-checksum}.
+     */
     private static String provPkgMeta(Map<String, String> meta, String suffix) {
-        return meta.get("project." + suffix);
+        switch (suffix) {
+            case "package-id":
+                return com.pointblue.dirxml.dev.model.PackageStamps.packageId(meta);
+            case "pkg-assoc-id":
+                return com.pointblue.dirxml.dev.model.PackageStamps.assocId(meta);
+            case "pkg-checksum":
+                return com.pointblue.dirxml.dev.model.PackageStamps.checksum(meta);
+            default:
+                return meta.get("project." + suffix);
+        }
     }
 
     /**

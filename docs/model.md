@@ -92,6 +92,20 @@ Sources feed the same model: driver / driver-set **export** (`ExportReader`), **
   magic number that names the format, a diff reports only its size and format, never
   its bytes, and a tree without one leaves the vault's (or the project's) alone. See
   [designer-new-project.md](designer-new-project.md) §7.2e.
+- **Package stamps** have one vocabulary in a tree — the vault's attribute names, lower-cased,
+  as the live and LDIF readers record them: `dirxml-pkgguid` (the record
+  `id;symbolicName;version;name;SHORT`), `dirxml-pkgassociationid`, `dirxml-pkgchecksum`,
+  `dirxml-pkglinkages`, `dirxml-pkgextensions` on a driver, and `package.installed.<SHORT>`
+  (the same record, `;base` for the base package) on a driver or the driver set. Every reader
+  writes it: the vault readers verbatim, `import-project` by composing the record from the
+  project's own `IdmPackage_` objects (the symbolic name the way Designer derives it,
+  `com.<vendor>.<short>`), `import` of an export with what the export names (the id, and a
+  version on the driver — a *partial* record). `PackageStamps` is the one reader of them:
+  it also accepts the older `package-id` / `pkg-assoc-id` / `checksum` (and the digests'
+  `project.package-id`…) that trees written before 2026-09-18 carry, compares records field
+  by field where both sides know the field (Designer's `unknown;0.0.0` placeholders count as
+  unknown), and completes a partial record from the fullest one either side of a diff or a
+  deploy knows, so the vault always gets the five-field record Designer writes.
 - **Round-trip contract:** `read(write(model))` ≡ `model` (structural equality), and
   `write` is idempotent byte-for-byte — the basis of clean git history. A source →
   model → as-code import is checked the same way (model equality; source bytes are
