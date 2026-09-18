@@ -3,6 +3,7 @@ package com.pointblue.dirxml.dev.deploy;
 import com.pointblue.dirxml.dev.json.Json;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.PackageStamps;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
@@ -176,6 +177,16 @@ public final class ModelDiff {
 
     public boolean isEmpty() {
         return changes.isEmpty();
+    }
+
+    /** The current-state side. */
+    public DriverSet from() {
+        return from;
+    }
+
+    /** The desired-state side. */
+    public DriverSet to() {
+        return to;
     }
 
     /** True when every change is a driver icon — nothing the engine would notice. */
@@ -531,15 +542,7 @@ public final class ModelDiff {
 
     /** Package stamps (GUID, association id, installed checksum, linkage record) differ while the content is the same. */
     private void stampsMaybeChanged(Artifact a, Artifact b) {
-        List<String> lines = new ArrayList<>();
-        for (String k : com.pointblue.dirxml.dev.deploy.VaultMapping.STAMP_KEYS) {
-            String x = a.meta.get(k);
-            String y = b.meta.get(k);
-            if (!Objects.equals(x, y)) {
-                lines.add("- " + k + ": " + display(x));
-                lines.add("+ " + k + ": " + display(y));
-            }
-        }
+        List<String> lines = stampLines(a.meta, b.meta);
         if (!lines.isEmpty()) {
             changes.add(new Change(Kind.ARTIFACT_CHANGED, a.driver, a.path(), "package-stamps",
                 "~ package stamps " + describeKind(a) + " " + a.path(), String.join("\n", lines)));
@@ -687,17 +690,35 @@ public final class ModelDiff {
         }
     }
 
+    /**
+     * The stamp differences between two metas, read through {@link PackageStamps} so either
+     * vocabulary compares: the package record field by field where both sides know the field
+     * (an export's id-only record agrees with the vault's full one), the association id and the
+     * checksum exactly, and the linkage record only when the {@code to} side carries one — a
+     * project or an export never does, and that is not a request to remove the vault's.
+     */
     private static List<String> stampLines(Map<String, String> ma, Map<String, String> mb) {
         List<String> lines = new ArrayList<>();
-        for (String k : com.pointblue.dirxml.dev.deploy.VaultMapping.STAMP_KEYS) {
-            String x = ma.get(k);
-            String y = mb.get(k);
-            if (!Objects.equals(x, y)) {
-                lines.add("- " + k + ": " + display(x));
-                lines.add("+ " + k + ": " + display(y));
-            }
+        PackageStamps.Guid ga = PackageStamps.guid(ma);
+        PackageStamps.Guid gb = PackageStamps.guid(mb);
+        if (!PackageStamps.sameGuid(ga, gb)) {
+            lines.add("- " + PackageStamps.GUID + ": " + display(ga == null ? null : ga.format()));
+            lines.add("+ " + PackageStamps.GUID + ": " + display(gb == null ? null : gb.format()));
         }
+        stampLine(lines, PackageStamps.ASSOC, PackageStamps.assocId(ma), PackageStamps.assocId(mb), false);
+        stampLine(lines, PackageStamps.CHECKSUM, PackageStamps.checksum(ma), PackageStamps.checksum(mb), false);
+        stampLine(lines, PackageStamps.LINKAGES, PackageStamps.linkages(ma), PackageStamps.linkages(mb), true);
         return lines;
+    }
+
+    private static void stampLine(List<String> lines, String key, String x, String y, boolean toMayLack) {
+        if (toMayLack && y == null) {
+            return;
+        }
+        if (!Objects.equals(x, y)) {
+            lines.add("- " + key + ": " + display(x));
+            lines.add("+ " + key + ": " + display(y));
+        }
     }
 
     // ---- entitlements (DirXML-Entitlement objects hanging directly off a driver) ----
@@ -770,13 +791,19 @@ public final class ModelDiff {
         settingChange(a, "shim-auth-id", a.shimAuthId, b.shimAuthId);
         diffDriverIcon(a, b);
         List<String> lines = new ArrayList<>();
-        for (String k : List.of("dirxml-pkgguid", "dirxml-pkgextensions")) {
-            String x = a.meta.get(k);
-            String y = b.meta.get(k);
-            if (!Objects.equals(x, y)) {
-                lines.add("- " + k + ": " + (x == null ? "(none)" : k.equals("dirxml-pkgextensions") ? "(" + x.length() + " chars)" : x));
-                lines.add("+ " + k + ": " + (y == null ? "(none)" : k.equals("dirxml-pkgextensions") ? "(" + y.length() + " chars)" : y));
-            }
+        // the driver's own record (its base package) — either vocabulary, field by field; the
+        // filter-extension cache only when the to side carries one (a project never does)
+        PackageStamps.Guid ga = PackageStamps.guid(a.meta);
+        PackageStamps.Guid gb = PackageStamps.guid(b.meta);
+        if (!PackageStamps.sameGuid(ga, gb)) {
+            lines.add("- " + PackageStamps.GUID + ": " + (ga == null ? "(none)" : ga.format()));
+            lines.add("+ " + PackageStamps.GUID + ": " + (gb == null ? "(none)" : gb.format()));
+        }
+        String xe = a.meta.get(PackageStamps.EXTENSIONS);
+        String ye = b.meta.get(PackageStamps.EXTENSIONS);
+        if (ye != null && !Objects.equals(xe, ye)) {
+            lines.add("- " + PackageStamps.EXTENSIONS + ": " + (xe == null ? "(none)" : "(" + xe.length() + " chars)"));
+            lines.add("+ " + PackageStamps.EXTENSIONS + ": (" + ye.length() + " chars)");
         }
         if (!lines.isEmpty()) {
             changes.add(new Change(Kind.DRIVER_STAMPS, a.name, "drivers/" + a.name, "package-stamps",

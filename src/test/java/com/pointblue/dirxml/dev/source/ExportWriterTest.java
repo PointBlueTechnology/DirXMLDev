@@ -103,13 +103,12 @@ public class ExportWriterTest {
         ds.meta.put("source.file", "sample.xml");
 
         // packaged meta: on a driver, and on an artifact
-        ad.meta.put("package-id", "PKG-DRV-1");
-        ad.meta.put("package-version", "3.2.1");
+        ad.meta.put("dirxml-pkgguid", "PKG-DRV-1;;3.2.1");        // what the export can name: id and version
         ad.meta.put("modified", "2024-05-01T00:00:00Z");
         Policy smp = ad.policies.get(0);
-        smp.meta.put("package-id", "PKG-ART-1");
-        smp.meta.put("pkg-assoc-id", "ASSOC-1");
-        smp.meta.put("checksum", "123456789");
+        smp.meta.put("dirxml-pkgguid", "PKG-ART-1");              // an item: the id alone
+        smp.meta.put("dirxml-pkgassociationid", "ASSOC-1");
+        smp.meta.put("dirxml-pkgchecksum", "123456789");
         smp.meta.put("modified", "2024-05-02T00:00:00Z");
 
         return ds;
@@ -127,11 +126,13 @@ public class ExportWriterTest {
         assertEquals(ds1.index().keySet(), ds2.index().keySet());
         assertTrue(ds2.unresolvedLinks().isEmpty());
         Driver ad = ds2.driver("AD");
-        assertEquals("PKG-DRV-1", ad.meta.get("package-id"));
-        assertEquals("3.2.1", ad.meta.get("package-version"));
+        assertEquals("PKG-DRV-1;;3.2.1", ad.meta.get("dirxml-pkgguid"));
         Policy smp = (Policy) ds2.resolve("drivers/AD/smp");
-        assertEquals("PKG-ART-1", smp.meta.get("package-id"));
-        assertEquals("123456789", smp.meta.get("checksum"));
+        assertEquals("PKG-ART-1", smp.meta.get("dirxml-pkgguid"));
+        assertEquals("123456789", smp.meta.get("dirxml-pkgchecksum"));
+        // the export itself carries Designer's attribute names
+        assertTrue(ExportWriter.toXml(ds1).contains("package-id=\"PKG-DRV-1\" package-version=\"3.2.1\"")
+            || ExportWriter.toXml(ds1).contains("package-version=\"3.2.1\""));
         Resource gcv = (Resource) ds2.resolve("library/dvs-GCVs");
         assertTrue(gcv.isGcvDef());
         assertEquals("cn=dvs-GCVs,cn=dvs,o=system#0#14", ds2.meta.get("driverset.linkage.0"));

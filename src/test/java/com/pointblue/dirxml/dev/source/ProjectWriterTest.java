@@ -329,7 +329,7 @@ public class ProjectWriterTest {
         Artifact a = before.resolve(path);
         assertNotNull(a);
         assertTrue(Packages.isPackaged(a));
-        String originalChecksum = a.meta.get("checksum");
+        String originalChecksum = com.pointblue.dirxml.dev.model.PackageStamps.checksum(a.meta);
         assertNotNull(originalChecksum);
 
         String newContent = "<policy><rule><description>customized</description><conditions/><actions/></rule></policy>";

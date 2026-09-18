@@ -118,9 +118,10 @@ What install does, per F2/F8/F9/F11/F12/F13 (in this order, as Designer does):
 3. Apply driver `ds-attributes` by name: filter, GCVs, shim config, manifest
    are **set**; engine control values are **merged** (F12).
 4. Create objects at their placement (driver / subscriber / publisher / library),
-   content from the package (post-transform), stamped in the artifact's meta:
-   `package-id` (the 5-field record `id;symbolic;version;name;SHORT`),
-   `pkg-assoc-id`, `pkg-checksum` (the **installed** checksum — content plus
+   content from the package (post-transform), stamped in the artifact's meta
+   in the vault's own names (`docs/model.md`, "Package stamps"):
+   `dirxml-pkgguid` (the 5-field record `id;symbolic;version;name;SHORT`),
+   `dirxml-pkgassociationid`, `dirxml-pkgchecksum` (the **installed** checksum — content plus
    linked set names, recomputed after linking, F2), `pkg-linkages` (the
    `<policy-linkage>` record with `Driver=` the driver's `designer.id`, minted
    if absent — the same 8-char id the project writer uses), and the initial

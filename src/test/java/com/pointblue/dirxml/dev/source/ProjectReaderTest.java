@@ -183,7 +183,19 @@ public class ProjectReaderTest {
             + rel("Idm:OutputPolicies", "Reference", "OUTID.ScriptPolicy_")
             + rel("Idm:GlobalConfigs", "Child", "GCVID.GlobalConfig_")
             + rel("Idm:ExtensionFunctions", "Reference", "LIBJSID.ECMAScriptResource_");
+        driverRelations += rel("Idm:InstalledPackages", "Reference", "PKGDRVID.IdmPackage_")
+            + rel("Idm:InstalledPackages", "Reference", "PKG1ID.IdmPackage_");
         write(orphan.resolve("DRV1ID.Driver_"), cobject("AD", "AD-Driver", driverAttrs, driverRelations));
+        // the project's package catalog: the two packages the driver has installed (the symbolic
+        // name is not stored — Designer derives it from the vendor and short names)
+        Path catalog = root.resolve("Model/Project/PROJID/CATID/Directory/FOLDID");
+        write(catalog.resolve("PKGDRVID.IdmPackage_"), cobject("Driver Base", "IdmPackage",
+            cstring("Idm:PackageGuid", "PKG-DRV") + cstring("Idm:PackageVersion", "1.0.0")
+            + cstring("Idm:shortName", "NOVLDRV") + cstring("Idm:vendorName", "Novell, Inc.")
+            + "<attributes xsi:type=\"com.novell.designer.model:CBoolean\" attrName=\"Idm:BasePackage\" value=\"true\"/>", ""));
+        write(catalog.resolve("PKG1ID.IdmPackage_"), cobject("GCV Package", "IdmPackage",
+            cstring("Idm:PackageGuid", "PKG-1") + cstring("Idm:PackageVersion", "2.0.0")
+            + cstring("Idm:shortName", "NOVLGCV") + cstring("Idm:vendorName", "NetIQ Corporation"), ""));
         // the driver's icon: the heavy-data attribute above plus these bytes beside the Driver_
         writeBytes(orphan.resolve("DRV1ID_icon.gif"), AsCodeRoundTripTest.TINY_GIF);
 
@@ -257,8 +269,16 @@ public class ProjectReaderTest {
         assertEquals("Driver", ad.meta.get("designer.type"));
         assertEquals("AD-Driver", ad.meta.get("designer.driver-type"));
         assertEquals("1.0.0", ad.meta.get("version"));
-        assertEquals("PKG-DRV", ad.meta.get("package-id"));
-        assertEquals("PKGASSOC-DRV", ad.meta.get("pkg-assoc-id"));
+        // package stamps in the tree's (the vault's) vocabulary: the full record Designer would
+        // deploy, composed from the project's IdmPackage_ objects; the installed packages as the
+        // package installer records them, the base one also as the driver's own record
+        assertEquals("PKG-DRV;com.novellinc.novldrv;1.0.0;Driver Base;NOVLDRV", ad.meta.get("dirxml-pkgguid"));
+        assertEquals("PKGASSOC-DRV", ad.meta.get("dirxml-pkgassociationid"));
+        assertEquals("PKG-DRV;com.novellinc.novldrv;1.0.0;Driver Base;NOVLDRV;base", ad.meta.get("package.installed.NOVLDRV"));
+        assertEquals("PKG-1;com.netiqcorporation.novlgcv;2.0.0;GCV Package;NOVLGCV", ad.meta.get("package.installed.NOVLGCV"));
+        assertEquals("2", ad.meta.get("packages.count"));
+        assertNull(ad.meta.get("package-id"));
+        assertNull(ad.meta.get("pkg-assoc-id"));
 
         assertTrue(ad.config.containsKey(Driver.SHIM_CONFIG_INFO));
         assertEquals("driver-config", ad.config.get(Driver.SHIM_CONFIG_INFO).getLocalName());
@@ -287,9 +307,10 @@ public class ProjectReaderTest {
         assertTrue(gcv.isGcvDef());
         assertNotNull(gcv.content);
         assertEquals("configuration-values", gcv.content.getLocalName());
-        assertEquals("PKG-1", gcv.meta.get("package-id"));
-        assertEquals("PKGASSOC-1", gcv.meta.get("pkg-assoc-id"));
-        assertEquals("12345", gcv.meta.get("checksum"));
+        assertEquals("PKG-1;com.netiqcorporation.novlgcv;2.0.0;GCV Package;NOVLGCV", gcv.meta.get("dirxml-pkgguid"));
+        assertEquals("PKGASSOC-1", gcv.meta.get("dirxml-pkgassociationid"));
+        assertEquals("12345", gcv.meta.get("dirxml-pkgchecksum"));
+        assertNull(gcv.meta.get("checksum"));
     }
 
     @Test
