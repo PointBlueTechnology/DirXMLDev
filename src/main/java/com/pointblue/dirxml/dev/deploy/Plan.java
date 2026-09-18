@@ -288,11 +288,22 @@ public final class Plan {
                 case DRIVER_LINKAGE:
                     driversNeedingLinkage.add(c.driver);
                     break;
-                case DRIVER_ICON:
-                    // a Designer-project asset: the vault has no icon attribute, so there is
-                    // nothing to deploy, nothing to touch and nothing to restart
-                    // (docs/designer-new-project.md §7.2c)
+                case DRIVER_ICON: {
+                    // the driver's DirXML-DriverImage: one attribute write, no restart — the
+                    // engine never reads it, iManager and Designer do (docs/designer-new-project.md §7.2e).
+                    // The diff never reports a removal, so the tree has an icon here.
+                    Driver d = to.driver(c.driver);
+                    if (d == null || d.icon == null || d.icon.length == 0) {
+                        break;
+                    }
+                    String dn = VaultMapping.driverDn(dsDn, c.driver);
+                    p.touchedDns.add(dn);
+                    Map<String, List<byte[]>> values = Map.of(VaultMapping.DRIVER_IMAGE, List.of(d.icon));
+                    driverAttrs.add(new Step(Op.MODIFY, dn, VaultMapping.DRIVER_IMAGE, null, values,
+                        dn + "  " + VaultMapping.DRIVER_IMAGE + " (" + d.icon.length + " bytes, "
+                            + com.pointblue.dirxml.dev.ascode.AsCodeWriter.iconExtension(d) + ")", c.path + "#icon", c.driver));
                     break;
+                }
                 case DRIVER_STAMPS: {
                     Driver d = to.driver(c.driver);
                     String dn = VaultMapping.driverDn(dsDn, c.driver);

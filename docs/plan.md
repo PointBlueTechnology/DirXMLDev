@@ -383,6 +383,14 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 
 ## Follow-ups (small, not scheduled)
 
+- **`export-project --new` from a live tree drops package stamps** (found
+  2026-09-18 while verifying driver icons, `docs/designer-new-project.md` §7.2e):
+  a project written from `import-live`'s tree of ig4 comes back through
+  `import-project` with 218 packaged artifacts missing `dirxml-pkgguid` /
+  `-pkgassociationid` / `-pkgchecksum` / `-pkglinkages`, while the same round
+  trip from the project-originated `tree-test11pf` is clean. Something in the
+  `--new` catalog/item path keys on meta only a project tree carries. This is
+  the Windows how-to's route (fresh project from an IDV), so it matters.
 - **EntitlementConfiguration resource** for hand-built drivers with
   entitlements (the applications warn without it; the role/resource catalog
   needs it). Jerry (2026-09-16): it is usually built by hand in Designer,

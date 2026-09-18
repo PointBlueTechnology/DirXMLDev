@@ -239,6 +239,21 @@ public final class ExportReader {
             d.config.put(Driver.ENGINE_CONTROL_VALUES, engineValues);
         }
 
+        // the driver's icon: DirXML-DriverImage as Designer serializes it — base64 text (or a
+        // CDATA section) in <driver-image>, or delete-value="true" for none
+        Element image = attrs != null ? directChild(attrs, "driver-image") : Xds.firstByName(scanRoot, "driver-image");
+        if (image != null && !"true".equalsIgnoreCase(image.getAttribute("delete-value"))) {
+            try {
+                byte[] bytes = java.util.Base64.getMimeDecoder().decode(Xds.text(image).strip());
+                if (bytes.length > 0) {
+                    d.icon = bytes;
+                    d.iconExtension = Driver.iconExtensionOf(bytes);
+                }
+            } catch (IllegalArgumentException notBase64) {
+                d.meta.put("unparsed.driver-image", Xds.text(image).strip());
+            }
+        }
+
         Element shimInfo = directChild(attrs, "shim-config-info-xml");
         if (shimInfo != null) {
             List<Element> kids = Xds.childElements(shimInfo);

@@ -61,9 +61,11 @@ public final class ModelDiff {
         }
 
         /**
-         * The driver's Designer icon: a project-only asset the vault has no attribute for.
-         * Nothing deploys it and nothing restarts for it — {@link Plan} produces no step at all
-         * (see {@code docs/designer-new-project.md} §7.2c).
+         * The driver's icon — the vault's {@code DirXML-DriverImage}, a Designer project's
+         * {@code icon} heavy data, a tree's {@code icon.<ext>}. {@link Plan} deploys it as one
+         * attribute write that never restarts the driver (the engine does not read it; iManager
+         * and Designer do). Reported as added or changed only: a {@code to} side without an icon
+         * leaves the other side's alone (see {@code docs/designer-new-project.md} §7.2e).
          */
         public boolean isIcon() {
             return this == DRIVER_ICON;
@@ -151,38 +153,39 @@ public final class ModelDiff {
 
     private final DriverSet from;
     private final DriverSet to;
-    private final boolean compareIcons;
     private final List<Change> changes = new ArrayList<>();
 
-    private ModelDiff(DriverSet from, DriverSet to, boolean compareIcons) {
+    private ModelDiff(DriverSet from, DriverSet to) {
         this.from = from;
         this.to = to;
-        this.compareIcons = compareIcons;
     }
 
     /**
-     * Computes the diff of {@code from} (current state) against {@code to} (desired state),
-     * leaving driver icons out — the right choice whenever one side comes from a vault, an
-     * export or an LDIF, none of which hold an icon: comparing them would report every
-     * driver's icon as "added" on every deploy.
+     * Computes the diff of {@code from} (current state) against {@code to} (desired state).
+     * Driver icons are compared like everything else — the vault holds one
+     * ({@code DirXML-DriverImage}), as do a tree, a Designer project and an export — with one
+     * rule: a {@code to} side without an icon has no opinion, so an icon is reported added or
+     * changed, never removed (a tree written before icons were carried must not strip every
+     * driver's icon on its next deploy). See {@link Kind#DRIVER_ICON}.
      */
     public static ModelDiff of(DriverSet from, DriverSet to) {
-        return of(from, to, false);
-    }
-
-    /**
-     * The same, comparing driver icons when {@code compareIcons} — for the two sides that can
-     * both hold one, a tree and a Designer project ({@code export-project}), or two trees
-     * ({@code tree.diff}, {@code docs --since}). See {@link Kind#DRIVER_ICON}.
-     */
-    public static ModelDiff of(DriverSet from, DriverSet to, boolean compareIcons) {
-        ModelDiff d = new ModelDiff(Objects.requireNonNull(from, "from"), Objects.requireNonNull(to, "to"), compareIcons);
+        ModelDiff d = new ModelDiff(Objects.requireNonNull(from, "from"), Objects.requireNonNull(to, "to"));
         d.compute();
         return d;
     }
 
     public boolean isEmpty() {
         return changes.isEmpty();
+    }
+
+    /** True when every change is a driver icon — nothing the engine would notice. */
+    public boolean isEmptyButForIcons() {
+        for (Change c : changes) {
+            if (!c.kind.isIcon()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public List<Change> changes() {
@@ -782,25 +785,29 @@ public final class ModelDiff {
     }
 
     /**
-     * The driver's icon (a project-only asset, see {@link Kind#DRIVER_ICON}). The change text
+     * The driver's icon (see {@link Kind#DRIVER_ICON}). A {@code to} side without one has no
+     * opinion; equal bytes are the same icon unless both sides name a format and they differ
+     * (a project's {@code gif} against {@code png} renames the file). The change text
      * says the size and the format and never the bytes: an icon is a binary blob, and dumping
      * it into a diff — or a git-committed docs page — helps nobody.
      */
     private void diffDriverIcon(Driver a, Driver b) {
-        if (!compareIcons) {
+        if (b.icon == null) {
             return;
         }
-        boolean sameBytes = Arrays.equals(a.icon, b.icon);
-        if (sameBytes && (a.icon == null || Objects.equals(a.iconExtension, b.iconExtension))) {
+        if (a.icon != null && Arrays.equals(a.icon, b.icon) && sameIconFormat(a.iconExtension, b.iconExtension)) {
             return;
         }
         String summary = a.icon == null ? "+ icon added (" + describeIcon(b) + ")"
-            : b.icon == null ? "- icon removed (was " + describeIcon(a) + ")"
             : "~ icon changed (" + describeIcon(a) + " -> " + describeIcon(b) + ")";
         changes.add(new Change(Kind.DRIVER_ICON, a.name, "drivers/" + a.name, "icon", summary, null));
     }
 
     /** {@code "1234 bytes, gif"} — never the bytes themselves. */
+    private static boolean sameIconFormat(String a, String b) {
+        return a == null || b == null || a.strip().equalsIgnoreCase(b.strip());
+    }
+
     private static String describeIcon(Driver d) {
         return d.icon == null ? "(none)"
             : d.icon.length + " bytes, " + (d.iconExtension == null ? "?" : d.iconExtension);

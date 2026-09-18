@@ -50,17 +50,27 @@ public final class VaultDiff {
             throw new IllegalArgumentException("driver set " + driverSetDn + " not found");
         }
         entries.add(toSourceEntry(root));
+        // the one binary attribute the model carries: kept as bytes beside the text entries
+        // (a source entry holds text only — see LdifReader.fromEntries)
+        java.util.Map<String, byte[]> driverImages = new java.util.HashMap<>();
         for (Vault.Entry e : v.search(driverSetDn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
             if (!e.dn.equalsIgnoreCase(root.dn)) {
                 entries.add(toSourceEntry(e));
             }
+            byte[] image = e.hasClass("DirXML-Driver") ? e.bytes(VaultMapping.DRIVER_IMAGE) : null;
+            if (image != null && image.length > 0) {
+                driverImages.put(e.dn.toLowerCase(), image);
+            }
         }
-        return LdifReader.fromEntries(entries, sourceName);
+        return LdifReader.fromEntries(entries, sourceName, driverImages);
     }
 
     static com.pointblue.dirxml.sim.LdifDriverSource.Entry toSourceEntry(Vault.Entry e) {
         java.util.Map<String, List<String>> attrs = new java.util.LinkedHashMap<>();
         for (java.util.Map.Entry<String, List<byte[]>> a : e.attrs.entrySet()) {
+            if (a.getKey().equalsIgnoreCase(VaultMapping.DRIVER_IMAGE)) {
+                continue;   // binary — carried separately, never as (mangled) text
+            }
             List<String> vals = new java.util.ArrayList<>();
             for (byte[] b : a.getValue()) {
                 vals.add(new String(b, java.nio.charset.StandardCharsets.UTF_8));
