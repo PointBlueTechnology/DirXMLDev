@@ -121,6 +121,7 @@ public class ProjectReaderTest {
             "<filter><filter-class class-name=\"User\" publisher=\"ignore\" subscriber=\"sync\"/></filter>");
         write(ds1.resolve("GCVID.GlobalConfig_"), cobject("JFW-AD_GCVs", "GlobalConfig",
             cstring("Idm:PackageGuid", "PKG-1") + cstring("Idm:PackageAssocGuid", "PKGASSOC-1")
+            + cstring("Idm:InstalledLinkages", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><policy-linkage>\n\t<policy-set Driver=\"DRV1ID\" name=\"gcv\" order=\"Weight\" package-id=\"PKG-1\" value=\"120\"/>\n</policy-linkage>")
             + "<attributes xsi:type=\"com.novell.designer.model:CLong\" attrName=\"Idm:ContentChecksum\" value=\"12345\"/>", ""));
         write(ds1.resolve("GCVID_SRV1_DirXML-ConfigValues.xml"),
             "<?xml version=\"1.0\"?><configuration-values><definitions>"
@@ -311,6 +312,9 @@ public class ProjectReaderTest {
         assertEquals("PKGASSOC-1", gcv.meta.get("dirxml-pkgassociationid"));
         assertEquals("12345", gcv.meta.get("dirxml-pkgchecksum"));
         assertNull(gcv.meta.get("checksum"));
+        // the package's record of the link, exactly as the vault holds it in DirXML-pkgLinkages
+        assertTrue(gcv.meta.get("dirxml-pkglinkages"), gcv.meta.get("dirxml-pkglinkages")
+            .contains("<policy-set Driver=\"DRV1ID\" name=\"gcv\" order=\"Weight\" package-id=\"PKG-1\" value=\"120\"/>"));
     }
 
     @Test

@@ -37,7 +37,8 @@ public final class Validator {
             new FilterCheck(),
             new FormCheck(),
             new FlowCheck(),
-            new EntitlementCheck()));
+            new EntitlementCheck(),
+            new PackageLinkageCheck()));
     }
 
     public Report validate(DriverSet ds) {

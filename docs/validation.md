@@ -164,6 +164,26 @@ The driver filter and the schema map.
 | `schema-map-duplicate` | I | the same `nds-name` mapped twice at the same level, or the same `app-name` mapped to two nds names at the same level. Legal and common in stock packages (the AD map sends `CN` to both `cn` and `sAMAccountName`) — the engine uses the first mapping in each direction — so it's informational, there to make an *unintended* duplicate visible |
 | `schema-map-unfiltered-class` | I | a class in the schema map that isn't in the filter (harmless; usually a leftover) |
 
+### `package-linkage` — PackageLinkageCheck
+
+A packaged artifact that a policy set links should carry the package's own record of that
+link, `dirxml-pkglinkages` (the vault's `DirXML-pkgLinkages`). Nothing at run time reads
+it, but every later `package.install` / `package.upgrade` into that set does: Designer's
+weight rule places a new package policy before the first existing link whose recorded
+weight is greater, and a link with no record counts as hand-made (weight −1) and is never
+displaced — so new package policies land after it regardless of weight
+([packages.md](packages.md), "Link by weight"). A tree from the vault, one the package
+installer built, and one read from a Designer project (`Idm:InstalledLinkages`, since
+2026-09-18) carry the records; a tree from an export never does, nor does a project tree
+imported before that date — re-import it. Designer records the link for policies and
+ECMAScript resources but, on the vaults and projects sampled, for only some GCV objects,
+so those are information.
+
+| code | sev | meaning |
+|---|---|---|
+| `package-linkage-missing` | W | a packaged artifact is linked (any set but 14) and carries no `dirxml-pkglinkages` record |
+| `package-linkage-missing-gcv` | I | a packaged GCV object is linked in set 14 (`gcv`) and carries no record |
+
 ### `check-failed` (E)
 
 A check threw — a bug in the validator, never in the driver set. The message

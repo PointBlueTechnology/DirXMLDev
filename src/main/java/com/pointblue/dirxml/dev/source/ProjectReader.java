@@ -902,6 +902,9 @@ public final class ProjectReader {
         }
         putIfPresent(el, "Idm:PackageAssocGuid", meta, PackageStamps.ASSOC);
         putIfPresent(el, "Idm:ContentChecksum", meta, PackageStamps.CHECKSUM);
+        // the package's record of the object's linkage — the same <policy-linkage> XML the vault
+        // holds as DirXML-pkgLinkages, which later package installs read for the weight rule
+        putIfPresent(el, "Idm:InstalledLinkages", meta, PackageStamps.LINKAGES);
         putIfPresent(el, "Idm:DirectiveChecksum", meta, "directive-checksum");
     }
 
