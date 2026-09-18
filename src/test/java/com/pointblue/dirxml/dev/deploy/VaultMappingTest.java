@@ -184,4 +184,30 @@ public class VaultMappingTest {
         org.junit.Assert.assertArrayEquals(com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest.TINY_GIF,
             m.get(VaultMapping.DRIVER_IMAGE).get(0));
     }
+
+    /**
+     * A tree that names a package by id alone (an old project tree, an export) deploys the full
+     * five-field record when either side of the plan knows it — here the vault's own stamp on
+     * another object of the same package.
+     */
+    @Test
+    public void partialPackageRecordIsCompletedFromTheIndex() {
+        DriverSet vault = model();
+        vault.driver("AD").policies.get(0).meta.put("dirxml-pkgguid",
+            "PKG-1;com.netiqcorporation.novladbase;4.1.2;Active Directory Base;NOVLADBASE");
+        DriverSet tree = model();
+        Artifact a = (Artifact) tree.resolve("drivers/AD/subscriber/sub-ctp");
+        a.meta.put("package-id", "PKG-1");
+        a.meta.put("pkg-assoc-id", "ASSOC-2");
+        a.meta.put("checksum", "333");
+
+        com.pointblue.dirxml.dev.model.PackageStamps.Index idx = com.pointblue.dirxml.dev.model.PackageStamps.Index.of(vault, tree);
+        Map<String, List<String>> m = strings(VaultMapping.packageAttributes(null, a, idx));
+        org.junit.Assert.assertEquals(List.of("PKG-1;com.netiqcorporation.novladbase;4.1.2;Active Directory Base;NOVLADBASE"), m.get(VaultMapping.PKG_GUID));
+        org.junit.Assert.assertEquals(List.of("ASSOC-2"), m.get(VaultMapping.PKG_ASSOC));
+        org.junit.Assert.assertEquals(List.of("333"), m.get(VaultMapping.PKG_CHECKSUM));
+        org.junit.Assert.assertFalse(m.containsKey(VaultMapping.PKG_LINKAGES));
+        // and without any fuller record, what the tree knows
+        org.junit.Assert.assertEquals(List.of("PKG-1"), strings(VaultMapping.packageAttributes(null, a)).get(VaultMapping.PKG_GUID));
+    }
 }

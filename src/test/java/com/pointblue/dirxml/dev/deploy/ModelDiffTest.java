@@ -4,6 +4,7 @@ import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.deploy.ModelDiff.Change;
 import com.pointblue.dirxml.dev.deploy.ModelDiff.Kind;
+import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
@@ -573,5 +574,44 @@ public class ModelDiffTest {
             modifiedXml = xmlText.replaceFirst("/>\\s*$", ">") + "<!--model-diff-test-modification--></" + tag + ">\n";
         }
         return CanonicalXml.parse(modifiedXml).getDocumentElement();
+    }
+
+    /**
+     * Package stamps compare across vocabularies: an export's or old project tree's id-only
+     * record agrees with the vault's five-field one, and the linkage record a project never
+     * carries is not reported as removed. A checksum that really differs still is.
+     */
+    @Test
+    public void partialPackageRecordsAgreeWithTheVaultsFullOnes() throws IOException {
+        DriverSet vault = ValidatorTest.clean();
+        Artifact v = vault.driver("AD").policies.get(0);
+        v.meta.put("dirxml-pkgguid", "PKG-1;com.netiqcorporation.novladbase;4.1.2;Active Directory Base;NOVLADBASE");
+        v.meta.put("dirxml-pkgassociationid", "ASSOC-1");
+        v.meta.put("dirxml-pkgchecksum", "111");
+        v.meta.put("dirxml-pkglinkages", "<policy-linkage/>");
+
+        DriverSet tree = ValidatorTest.clean();
+        Artifact t = tree.driver("AD").policies.get(0);
+        t.meta.put("package-id", "PKG-1");                       // an old project tree
+        t.meta.put("pkg-assoc-id", "ASSOC-1");
+        t.meta.put("checksum", "111");
+        assertTrue(ModelDiff.of(vault, tree).text(), ModelDiff.of(vault, tree).isEmpty());
+
+        t.meta.clear();
+        t.meta.put("dirxml-pkgguid", "PKG-1;;4.1.2");            // an export: id and version
+        t.meta.put("dirxml-pkgassociationid", "ASSOC-1");
+        t.meta.put("dirxml-pkgchecksum", "111");
+        assertTrue(ModelDiff.of(vault, tree).text(), ModelDiff.of(vault, tree).isEmpty());
+
+        t.meta.put("dirxml-pkgchecksum", "222");
+        List<Change> stamps = of(ModelDiff.of(vault, tree), Kind.ARTIFACT_CHANGED);
+        assertEquals(1, stamps.size());
+        assertEquals("package-stamps", stamps.get(0).what);
+        assertTrue(stamps.get(0).detail, stamps.get(0).detail.contains("- dirxml-pkgchecksum: 111"));
+        assertFalse(stamps.get(0).detail, stamps.get(0).detail.contains("pkglinkages"));
+
+        t.meta.put("dirxml-pkgchecksum", "111");
+        t.meta.put("dirxml-pkgguid", "PKG-1;;9.9.9");            // a version that really differs
+        assertEquals(1, of(ModelDiff.of(vault, tree), Kind.ARTIFACT_CHANGED).size());
     }
 }

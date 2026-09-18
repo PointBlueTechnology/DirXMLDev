@@ -2,6 +2,7 @@ package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.PackageStamps;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
@@ -194,8 +195,12 @@ public final class ExportReader {
         String name = attr(driverEl, "name", "driver");
         Driver d = new Driver(name);
         d.dn = driverEl.getAttribute("dn");
-        copyAttr(driverEl, "package-id", d.meta, "package-id");
-        copyAttr(driverEl, "package-version", d.meta, "package-version");
+        // the driver's package record: an export names the id and the version only
+        String pkgId = nullIfEmpty(driverEl.getAttribute("package-id"));
+        if (pkgId != null) {
+            d.meta.put(PackageStamps.GUID, new PackageStamps.Guid(pkgId, null,
+                nullIfEmpty(driverEl.getAttribute("package-version")), null, null, false).format());
+        }
         copyAttr(driverEl, "modified", d.meta, "modified");
 
         Element attrs = directChild(driverEl, "attributes");
@@ -385,10 +390,18 @@ public final class ExportReader {
         return r;
     }
 
+    /**
+     * An item's package stamps, in the tree's (the vault's) vocabulary: the export names the
+     * package by id alone, so the record is partial ({@code id}) until a deploy or a diff
+     * completes it from the vault's or the catalog's fuller record ({@link PackageStamps.Index}).
+     */
     private static void copyArtifactMeta(Element el, Map<String, String> meta) {
-        copyAttr(el, "package-id", meta, "package-id");
-        copyAttr(el, "pkg-assoc-id", meta, "pkg-assoc-id");
-        copyAttr(el, "checksum", meta, "checksum");
+        String pkgId = nullIfEmpty(el.getAttribute("package-id"));
+        if (pkgId != null) {
+            meta.put(PackageStamps.GUID, pkgId);
+        }
+        copyAttr(el, "pkg-assoc-id", meta, PackageStamps.ASSOC);
+        copyAttr(el, "checksum", meta, PackageStamps.CHECKSUM);
         copyAttr(el, "modified", meta, "modified");
     }
 

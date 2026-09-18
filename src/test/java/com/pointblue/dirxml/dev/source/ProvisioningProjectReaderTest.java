@@ -128,7 +128,9 @@ public class ProvisioningProjectReaderTest {
         assertEquals("en~A test PRD", prd.property("localized-descrs"));
         assertEquals("A test PRD", prd.property("description"));
         assertEquals("Normal", prd.property("process-type"));
-        assertEquals("PKG1", prd.meta.get("project.package-id"));
+        assertEquals("PKG1", com.pointblue.dirxml.dev.model.PackageStamps.packageId(prd.meta));
+        assertEquals("PKG1", prd.meta.get("dirxml-pkgguid"));   // no IdmPackage_ of that guid in this fixture: the id alone
+        assertNull(prd.meta.get("project.package-id"));
         assertEquals("true", prd.meta.get("project.protected"));
         assertEquals(1, prd.bindings().size());
         assertEquals("My Form", prd.bindings().get(0).formId);

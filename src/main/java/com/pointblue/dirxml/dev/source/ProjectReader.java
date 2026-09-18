@@ -2,6 +2,7 @@ package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.PackageStamps;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
@@ -179,10 +180,7 @@ public final class ProjectReader {
 
         ds.configValues = idx.configValuesFor(dsId);
 
-        List<String> pkgs = relationKeys(m, "Idm:InstalledPackages");
-        if (!pkgs.isEmpty()) {
-            ds.meta.put("packages.count", String.valueOf(pkgs.size()));
-        }
+        copyInstalledPackages(m, ds.meta, false, idx);
         List<String> jobs = relationKeys(m, "Idm:Jobs");
         if (!jobs.isEmpty()) {
             ds.meta.put("jobs.count", String.valueOf(jobs.size()));
@@ -277,8 +275,8 @@ public final class ProjectReader {
             if (appConfigVersion != null && !appConfigVersion.isEmpty()) {
                 p.meta.put("project.appconfig-version", appConfigVersion);
             }
-            readFormsDir(dir.resolve("WorkflowForms"), p);
-            readPrdsDir(dir.resolve("RequestDefs"), p);
+            readFormsDir(dir.resolve("WorkflowForms"), p, idx);
+            readPrdsDir(dir.resolve("RequestDefs"), p, idx);
             target.provisioning = p;
         }
     }
@@ -311,7 +309,7 @@ public final class ProjectReader {
         return only;
     }
 
-    private static void readFormsDir(Path workflowFormsDir, Provisioning p) {
+    private static void readFormsDir(Path workflowFormsDir, Provisioning p, Index idx) {
         if (!Files.isDirectory(workflowFormsDir)) {
             return;
         }
@@ -340,7 +338,7 @@ public final class ProjectReader {
                 Path digestFile = dir.resolve(name + ".digest");
                 if (Files.exists(digestFile)) {
                     try {
-                        readItemDigestMeta(Xds.parseFile(digestFile).getDocumentElement(), form.meta);
+                        readItemDigestMeta(Xds.parseFile(digestFile).getDocumentElement(), form.meta, idx);
                     } catch (Exception e) {
                         // no digest meta; content already captured
                     }
@@ -350,7 +348,7 @@ public final class ProjectReader {
         }
     }
 
-    private static void readPrdsDir(Path requestDefsDir, Provisioning p) {
+    private static void readPrdsDir(Path requestDefsDir, Provisioning p, Index idx) {
         if (!Files.isDirectory(requestDefsDir)) {
             return;
         }
@@ -362,7 +360,7 @@ public final class ProjectReader {
         }
         for (Path f : files) {
             try {
-                p.prds.add(readPrdFile(f, requestDefsDir));
+                p.prds.add(readPrdFile(f, requestDefsDir, idx));
             } catch (Exception e) {
                 // an unreadable PRD is skipped rather than failing the whole project
             }
@@ -376,7 +374,7 @@ public final class ProjectReader {
      * {@code <provision-request>} child; {@link Prd#process}, like the vault, stays
      * a child of {@link Prd#definition} too (see {@link Prd} class doc).
      */
-    private static Prd readPrdFile(Path prdFile, Path dir) throws IOException {
+    private static Prd readPrdFile(Path prdFile, Path dir, Index idx) throws IOException {
         // Xds/XmlDocument (the engine's own DOM) does not normalize \r\n line endings
         // in text content the way a conformant parser does; CanonicalXml.normalize
         // re-parses through our own pipeline so a PRD's content is already in the
@@ -445,7 +443,7 @@ public final class ProjectReader {
         }
 
         if (digest != null) {
-            readItemDigestMeta(digest, prd.meta);
+            readItemDigestMeta(digest, prd.meta, idx);
         }
         return prd;
     }
@@ -500,16 +498,25 @@ public final class ProjectReader {
         return c.isEmpty() ? null : Xds.text(c.get(0));
     }
 
-    /** Digest {@code <item .../>} attributes/children -&gt; {@code project.*} meta keys (docs/forms.md §3). */
-    private static void readItemDigestMeta(Element digest, Map<String, String> meta) {
+    /**
+     * Digest {@code <item .../>} attributes/children -&gt; meta (docs/forms.md §3): the project-only
+     * extras as {@code project.*}, and the three package fields in the tree's (the vault's)
+     * vocabulary — the record as Designer writes it on a provisioning item, three fields
+     * ({@code id;symbolicName;version}), from the project's {@code IdmPackage_} of that guid.
+     */
+    private static void readItemDigestMeta(Element digest, Map<String, String> meta, Index idx) {
         putAttrMeta(digest, "protected", meta, "project.protected");
         putAttrMeta(digest, "readonly", meta, "project.readonly");
         putChildTextMeta(digest, "guid", meta, "project.guid");
         putChildTextMeta(digest, "dirguid", meta, "project.dirguid");
         putChildTextMeta(digest, "dirrev", meta, "project.dirrev");
-        putChildTextMeta(digest, "package-id", meta, "project.package-id");
-        putChildTextMeta(digest, "pkg-assoc-id", meta, "project.pkg-assoc-id");
-        putChildTextMeta(digest, "pkg-checksum", meta, "project.pkg-checksum");
+        String pkgId = firstChildText(digest, "package-id");
+        if (pkgId != null && !pkgId.isBlank()) {
+            PackageStamps.Guid g = idx.packageRecord(pkgId.trim());
+            meta.put(PackageStamps.GUID, new PackageStamps.Guid(g.id, g.symbolicName, g.version, null, null, false).format());
+        }
+        putChildTextMeta(digest, "pkg-assoc-id", meta, PackageStamps.ASSOC);
+        putChildTextMeta(digest, "pkg-checksum", meta, PackageStamps.CHECKSUM);
     }
 
     private static void putAttrMeta(Element el, String attrName, Map<String, String> meta, String key) {
@@ -624,15 +631,12 @@ public final class ProjectReader {
             }
         }
 
-        copyPackageMeta(m, d.meta);
+        copyPackageMeta(m, d.meta, idx);
         String version = attrValue(m, "DirXML-DriverVersion");
         if (version != null) {
             d.meta.put("version", version);
         }
-        List<String> pkgs = relationKeys(m, "Idm:InstalledPackages");
-        if (!pkgs.isEmpty()) {
-            d.meta.put("packages.count", String.valueOf(pkgs.size()));
-        }
+        copyInstalledPackages(m, d.meta, true, idx);
         List<String> ents = relationKeys(m, "Idm:Entitlements");
         if (!ents.isEmpty()) {
             d.meta.put("entitlements.count", String.valueOf(ents.size()));
@@ -788,7 +792,7 @@ public final class ProjectReader {
         Policy p = new Policy(name, scope, driverName, content);
         p.meta.put("designer.id", id);
         p.meta.put("designer.type", idx.typeById.getOrDefault(id, "Policy"));
-        copyPackageMeta(m, p.meta);
+        copyPackageMeta(m, p.meta, idx);
         idx.register(id, scope, driverName, name);
         return p;
     }
@@ -820,7 +824,7 @@ public final class ProjectReader {
         Entitlement ent = new Entitlement(name, content);
         ent.meta.put("designer.id", id);
         ent.meta.put("designer.type", idx.typeById.getOrDefault(id, "Entitlement"));
-        copyPackageMeta(m, ent.meta);
+        copyPackageMeta(m, ent.meta, idx);
         return ent;
     }
 
@@ -855,7 +859,7 @@ public final class ProjectReader {
         }
         r.meta.put("designer.id", id);
         r.meta.put("designer.type", idx.typeById.getOrDefault(id, "Resource"));
-        copyPackageMeta(m, r.meta);
+        copyPackageMeta(m, r.meta, idx);
         idx.register(id, scope, driverName, name);
         return r;
     }
@@ -878,17 +882,51 @@ public final class ProjectReader {
         r.meta.put("designer.id", id);
         r.meta.put("designer.type", "GlobalConfig");
         if (m != null) {
-            copyPackageMeta(m, r.meta);
+            copyPackageMeta(m, r.meta, idx);
         }
         idx.register(id, scope, driverName, name);
         return r;
     }
 
-    private static void copyPackageMeta(Element el, Map<String, String> meta) {
-        putIfPresent(el, "Idm:PackageGuid", meta, "package-id");
-        putIfPresent(el, "Idm:PackageAssocGuid", meta, "pkg-assoc-id");
-        putIfPresent(el, "Idm:ContentChecksum", meta, "checksum");
+    /**
+     * An object's package stamps, in the tree's (the vault's) vocabulary: {@code dirxml-pkgguid}
+     * is the full five-field record — the project stores only the package's guid on the object,
+     * and the rest ({@code com.<vendor>.<short>} the way Designer derives it, version, name,
+     * short name) comes from the project's own {@code IdmPackage_} object of that guid;
+     * {@code dirxml-pkgassociationid} and {@code dirxml-pkgchecksum} are the object's own.
+     */
+    private static void copyPackageMeta(Element el, Map<String, String> meta, Index idx) {
+        String guid = attrValue(el, "Idm:PackageGuid");
+        if (guid != null && !guid.isEmpty()) {
+            meta.put(PackageStamps.GUID, idx.packageRecord(guid).format());
+        }
+        putIfPresent(el, "Idm:PackageAssocGuid", meta, PackageStamps.ASSOC);
+        putIfPresent(el, "Idm:ContentChecksum", meta, PackageStamps.CHECKSUM);
         putIfPresent(el, "Idm:DirectiveChecksum", meta, "directive-checksum");
+    }
+
+    /**
+     * The driver's or driver set's installed packages ({@code Idm:InstalledPackages} → the
+     * project's {@code IdmPackage_} objects) as {@code package.installed.<SHORT>} records — what
+     * the package installer writes — and, for a driver, its base package as the driver's own
+     * {@code dirxml-pkgguid}, the record Designer deploys as {@code DirXML-pkgGUID}.
+     */
+    private static void copyInstalledPackages(Element m, Map<String, String> meta, boolean driver, Index idx) {
+        List<String> pkgs = relationKeys(m, "Idm:InstalledPackages");
+        if (pkgs.isEmpty()) {
+            return;
+        }
+        meta.put("packages.count", String.valueOf(pkgs.size()));
+        for (String key : pkgs) {
+            PackageStamps.Guid g = idx.packageById(idOf(key));
+            if (g == null) {
+                continue;
+            }
+            meta.put(PackageStamps.INSTALLED_PREFIX + (g.shortName != null ? g.shortName : "id:" + g.id), g.formatInstalled());
+            if (driver && g.base) {
+                meta.put(PackageStamps.GUID, g.format());
+            }
+        }
     }
 
     private static void putIfPresent(Element el, String attrName, Map<String, String> meta, String key) {
@@ -1065,6 +1103,54 @@ public final class ProjectReader {
                 return null;
             }
             return metaCache.computeIfAbsent(id, k -> Xds.parseFile(p).getDocumentElement());
+        }
+
+        /** package guid -> its record, from every {@code IdmPackage_} in the project (built on first use). */
+        private Map<String, PackageStamps.Guid> packagesByGuid;
+        /** designer object id -> the same record. */
+        private Map<String, PackageStamps.Guid> packagesById;
+
+        private void scanPackages() {
+            if (packagesByGuid != null) {
+                return;
+            }
+            packagesByGuid = new LinkedHashMap<>();
+            packagesById = new LinkedHashMap<>();
+            for (Map.Entry<String, String> e : typeById.entrySet()) {
+                if (!"IdmPackage".equals(e.getValue())) {
+                    continue;
+                }
+                Element m;
+                try {
+                    m = parseMeta(e.getKey());
+                } catch (RuntimeException unreadable) {
+                    continue;
+                }
+                String guid = attrValue(m, "Idm:PackageGuid");
+                if (m == null || guid == null || guid.isEmpty()) {
+                    continue;
+                }
+                String shortName = attrValue(m, "Idm:shortName");
+                PackageStamps.Guid g = new PackageStamps.Guid(guid,
+                    PackageStamps.symbolicName(attrValue(m, "Idm:vendorName"), shortName),
+                    attrValue(m, "Idm:PackageVersion"), m.getAttribute("name"), shortName,
+                    "true".equalsIgnoreCase(attrValue(m, "Idm:BasePackage")));
+                packagesByGuid.putIfAbsent(guid, g);
+                packagesById.put(e.getKey(), g);
+            }
+        }
+
+        /** The full record of the package with this guid, or an id-only record when the project has no such package object. */
+        PackageStamps.Guid packageRecord(String guid) {
+            scanPackages();
+            PackageStamps.Guid g = packagesByGuid.get(guid);
+            return g != null ? g : new PackageStamps.Guid(guid, null, null, null, null, false);
+        }
+
+        /** The record of the {@code IdmPackage_} with this designer id, or null. */
+        PackageStamps.Guid packageById(String id) {
+            scanPackages();
+            return packagesById.get(id);
         }
 
         /** The first {@code <id>_<serverId>_DirXML-ConfigValues.xml}, parsed, or null. */

@@ -71,6 +71,8 @@ public final class Plan {
     }
 
     public final List<Step> steps = new ArrayList<>();
+    /** The package records known on either side of this plan (see {@code PackageStamps.Index}). */
+    public com.pointblue.dirxml.dev.model.PackageStamps.Index packageIndex = com.pointblue.dirxml.dev.model.PackageStamps.Index.EMPTY;
     public final List<String> notes = new ArrayList<>();
     public final List<String> missingSecrets = new ArrayList<>();
     public final Set<String> restart = new LinkedHashSet<>();       // driver names that will be restarted
@@ -152,6 +154,9 @@ public final class Plan {
                           List<String> deleteDrivers, VaultAccess vault, List<String> deleteAllKinds) {
         Plan p = new Plan();
         p.deleteAllKinds.addAll(deleteAllKinds);
+        // every package either side names, so a partial record in the tree (an old project
+        // tree's id-only package-id, an export's) is written to the vault as the full one
+        p.packageIndex = com.pointblue.dirxml.dev.model.PackageStamps.Index.of(diff.from(), to);
         // driver -> kind -> the guard (docs/vault-deploy.md, "Deploy never empties a kind"); a REMOVED
         // change here has its DELETE step held back (one note instead) unless --delete-all covers the kind
         Map<String, Map<String, ModelDiff.EmptyKind>> emptyKinds = new LinkedHashMap<>();
@@ -205,10 +210,13 @@ public final class Plan {
                     p.touchedDns.add(dn);
                     Map<String, List<byte[]>> attrs = "package-stamps".equals(c.what)
                         ? new LinkedHashMap<>() : VaultMapping.attributes(a);
-                    Map<String, List<byte[]>> stamps = VaultMapping.packageAttributes(tree, a);
+                    Map<String, List<byte[]>> stamps = VaultMapping.packageAttributes(tree, a, p.packageIndex);
                     if (!stamps.isEmpty()) {
                         attrs.putAll(stamps);   // an installed object: Designer's stamps, the installed checksum included
-                    } else if (Packages.isPackaged(a) && Packages.isCustomized(a)) {
+                    }
+                    if (Packages.isPackaged(a) && Packages.isCustomized(a) && !attrs.containsKey(VaultMapping.PKG_CHECKSUM)) {
+                        // customized, and no checksum recorded (a tree that named the package but never
+                        // refreshed its stamp): a content-derived one, so the vault's pair differs from the baseline
                         byte[] content = VaultMapping.contentBytes(a);
                         if (content != null) {
                             attrs.put(VaultMapping.PKG_CHECKSUM, Vault.value(VaultMapping.customizedChecksum(content)));
@@ -308,7 +316,7 @@ public final class Plan {
                     Driver d = to.driver(c.driver);
                     String dn = VaultMapping.driverDn(dsDn, c.driver);
                     p.touchedDns.add(dn);
-                    Map<String, List<byte[]>> dstamps = VaultMapping.driverPackageAttributes(d);
+                    Map<String, List<byte[]>> dstamps = VaultMapping.driverPackageAttributes(d, p.packageIndex);
                     List<String> aux = driverClasses(dstamps).subList(2, driverClasses(dstamps).size());
                     if (!aux.isEmpty()) {
                         driverAttrs.add(new Step(Op.AUX_CLASS, dn, null, aux, null, dn + "  objectClass += " + String.join(", ", aux), c.path + "#stamps", c.driver));
@@ -326,7 +334,7 @@ public final class Plan {
                     p.newDrivers.add(c.driver);
                     p.touchedDns.add(dn);
                     Map<String, List<byte[]>> attrs = VaultMapping.driverAttributes(d);
-                    Map<String, List<byte[]>> dstamps = VaultMapping.driverPackageAttributes(d);
+                    Map<String, List<byte[]>> dstamps = VaultMapping.driverPackageAttributes(d, p.packageIndex);
                     attrs.putAll(dstamps);
                     containers.add(new Step(Op.ADD, dn, null, driverClasses(dstamps), attrs,
                         dn + "  DirXML-Driver (new driver, created stopped)", c.path, c.driver));
@@ -341,7 +349,7 @@ public final class Plan {
                         String adn = VaultMapping.artifactDn(dsDn, a);
                         p.touchedDns.add(adn);
                         Map<String, List<byte[]>> aa = VaultMapping.attributes(a);
-                        Map<String, List<byte[]>> astamps = VaultMapping.packageAttributes(tree, a);
+                        Map<String, List<byte[]>> astamps = VaultMapping.packageAttributes(tree, a, p.packageIndex);
                         aa.putAll(astamps);
                         (a.scope == Scope.DRIVER ? driverScope : channel).add(new Step(Op.ADD, adn, null,
                             astamps.isEmpty() ? List.of("Top", VaultMapping.objectClass(a)) : List.of("Top", VaultMapping.objectClass(a), VaultMapping.PKG_ITEM_AUX), aa,
@@ -351,7 +359,7 @@ public final class Plan {
                         String edn = VaultMapping.entitlementDn(dsDn, c.driver, e);
                         p.touchedDns.add(edn);
                         Map<String, List<byte[]>> ea = VaultMapping.entitlementAttributes(e);
-                        Map<String, List<byte[]>> estamps = VaultMapping.provisioningPackageAttributes(e.meta, null);
+                        Map<String, List<byte[]>> estamps = VaultMapping.provisioningPackageAttributes(e.meta, null, p.packageIndex);
                         ea.putAll(estamps);
                         driverScope.add(new Step(Op.ADD, edn, null,
                             estamps.isEmpty() ? List.of("Top", VaultMapping.OC_ENTITLEMENT) : List.of("Top", VaultMapping.OC_ENTITLEMENT, VaultMapping.PKG_ITEM_AUX),
@@ -599,7 +607,7 @@ public final class Plan {
                     // keep as is
                 }
             }
-            stamps = VaultMapping.provisioningPackageAttributes(f.meta, baseline);   // a customized form's checksum is already content-derived in meta
+            stamps = VaultMapping.provisioningPackageAttributes(f.meta, baseline, p.packageIndex);   // a customized form's checksum is already content-derived in meta
             if (added) {
                 ensureContainer(bucket, ensured, VaultMapping.workflowFormsDn(dsDn, driver), VaultMapping.OC_JSON_FORMS, c, driver);
                 ensureContainer(bucket, ensured, VaultMapping.formContainerDn(dsDn, driver, f.kind), VaultMapping.OC_JSON_FORMS, c, driver);
@@ -617,7 +625,7 @@ public final class Plan {
             List<byte[]> xml = attrs.get(VaultMapping.XML_DATA);
             content = xml == null || xml.isEmpty() ? new byte[0] : xml.get(0);
             String baseline = readBaseline(tree, com.pointblue.dirxml.dev.edit.FormOps.prdPath(d, prd) + "/definition.xml");
-            stamps = VaultMapping.provisioningPackageAttributes(prd.meta, baseline);
+            stamps = VaultMapping.provisioningPackageAttributes(prd.meta, baseline, p.packageIndex);
             // trim to what ModelDiff found actually changed (follow-up 1, docs/vault-deploy.md): an added
             // PRD and a package-stamps-only change have no parts recorded (Change.parts null, or exactly
             // {"stamps"}) and are unaffected; a content change writes only its changed XML parts and
@@ -704,7 +712,7 @@ public final class Plan {
         Map<String, List<byte[]>> attrs = stampsOnly ? new LinkedHashMap<>() : VaultMapping.entitlementAttributes(e);
         String baseline = readBaseline(tree, "drivers/" + com.pointblue.dirxml.dev.ascode.AsCodeWriter.fileSafe(d.name)
             + "/entitlements/" + com.pointblue.dirxml.dev.ascode.AsCodeWriter.fileSafe(e.name) + ".xml");
-        Map<String, List<byte[]>> stamps = VaultMapping.provisioningPackageAttributes(e.meta, baseline);
+        Map<String, List<byte[]>> stamps = VaultMapping.provisioningPackageAttributes(e.meta, baseline, p.packageIndex);
         p.touchedDns.add(dn);
         attrs.putAll(stamps);
         if (added) {

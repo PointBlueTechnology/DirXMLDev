@@ -204,26 +204,13 @@ public final class DocsGenerator {
     }
 
     private static String packageId(Map<String, String> meta) {
-        if (meta.containsKey("package-id")) {
-            return meta.get("package-id");
-        }
-        for (Map.Entry<String, String> e : meta.entrySet()) {
-            String k = e.getKey().toLowerCase();
-            if (k.startsWith("dirxml-pkg") && k.contains("assoc")) {
-                return e.getValue();
-            }
-        }
-        for (Map.Entry<String, String> e : meta.entrySet()) {
-            if (e.getKey().toLowerCase().startsWith("dirxml-pkg")) {
-                return e.getValue();
-            }
-        }
-        return null;
+        return com.pointblue.dirxml.dev.model.PackageStamps.packageId(meta);
     }
 
     private static String packageVersion(Map<String, String> meta) {
-        if (meta.containsKey("package-version")) {
-            return meta.get("package-version");
+        String v = com.pointblue.dirxml.dev.model.PackageStamps.version(meta);
+        if (v != null) {
+            return v;
         }
         for (Map.Entry<String, String> e : meta.entrySet()) {
             if (e.getKey().toLowerCase().contains("version")) {

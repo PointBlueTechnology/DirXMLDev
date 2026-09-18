@@ -738,7 +738,7 @@ public final class ReadCli {
     }
 
     private static String formPkgMark(Map<String, String> meta) {
-        boolean packaged = meta.containsKey("dirxml-pkgguid") || meta.containsKey("project.package-id");
+        boolean packaged = com.pointblue.dirxml.dev.model.PackageStamps.isPackaged(meta);
         return packaged ? "  [packaged]" : "";
     }
 

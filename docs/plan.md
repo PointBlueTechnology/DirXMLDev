@@ -383,8 +383,10 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 
 ## Follow-ups (small, not scheduled)
 
-- **Two package-stamp vocabularies, and the deploy side reads only one** (found
-  2026-09-18 while verifying driver icons, `docs/designer-new-project.md` §7.2e).
+- ~~**Two package-stamp vocabularies, and the deploy side reads only one**~~ — **done
+  2026-09-18** (`docs/designer-new-project.md` §7.2f, `docs/model.md` "Package stamps"):
+  the tree's vocabulary is the vault's, every reader writes it, `PackageStamps` reads
+  either. Kept for the record (found 2026-09-18 while verifying driver icons, §7.2e).
   A tree from the vault carries `dirxml-pkgguid` (`id;symbolicName;version;name;short`),
   `dirxml-pkgassociationid`, `dirxml-pkgchecksum`, `dirxml-pkglinkages`; a tree
   from a Designer project or an export carries `package-id`, `pkg-assoc-id`,

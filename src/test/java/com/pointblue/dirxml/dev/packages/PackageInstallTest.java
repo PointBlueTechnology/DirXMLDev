@@ -129,20 +129,20 @@ public class PackageInstallTest {
         // every packaged object Designer installed exists here with the same installed checksum
         Map<String, Artifact> oursByAssoc = new LinkedHashMap<>();
         for (Artifact a : ours.artifacts()) {
-            if (a.meta.get("pkg-assoc-id") != null) {
-                oursByAssoc.put(a.meta.get("pkg-assoc-id"), a);
+            if (com.pointblue.dirxml.dev.model.PackageStamps.assocId(a.meta) != null) {
+                oursByAssoc.put(com.pointblue.dirxml.dev.model.PackageStamps.assocId(a.meta), a);
             }
         }
         int compared = 0;
         for (Artifact a : designer.artifacts()) {
-            String assoc = a.meta.get("pkg-assoc-id");
+            String assoc = com.pointblue.dirxml.dev.model.PackageStamps.assocId(a.meta);
             if (assoc == null) {
                 continue;   // hand-made policies in the reference driver
             }
             Artifact o = oursByAssoc.get(assoc);
             assertNotNull("missing " + a.path(), o);
             assertEquals("scope of " + a.name, a.scope, o.scope);
-            assertEquals("checksum of " + a.name, a.meta.get("checksum"), o.meta.get(PackageInstall.META_CHECKSUM));
+            assertEquals("checksum of " + a.name, com.pointblue.dirxml.dev.model.PackageStamps.checksum(a.meta), o.meta.get(PackageInstall.META_CHECKSUM));
             compared++;
         }
         assertEquals(18, compared);
@@ -151,7 +151,7 @@ public class PackageInstallTest {
             List<String> want = new ArrayList<>();
             for (PolicyLink l : designer.links(set)) {
                 Artifact a = ref.resolve(l.ref);
-                if (a != null && a.meta.get("pkg-assoc-id") != null) {
+                if (a != null && com.pointblue.dirxml.dev.model.PackageStamps.assocId(a.meta) != null) {
                     want.add(a.name);
                 }
             }

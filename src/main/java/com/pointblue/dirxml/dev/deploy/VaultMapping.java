@@ -2,6 +2,7 @@ package com.pointblue.dirxml.dev.deploy;
 
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.PackageStamps;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
@@ -168,11 +169,22 @@ public final class VaultMapping {
      * tree's package baseline. Empty for a non-packaged artifact.
      */
     public static Map<String, List<byte[]>> packageAttributes(java.nio.file.Path tree, Artifact a) {
+        return packageAttributes(tree, a, PackageStamps.Index.EMPTY);
+    }
+
+    /**
+     * The same, with the package record completed through {@code index} (the fullest record of
+     * that package either side of the deploy knows) when the tree's own is partial — an old
+     * project tree's id-only {@code package-id}, an export's — so the vault gets the five-field
+     * record Designer writes.
+     */
+    public static Map<String, List<byte[]>> packageAttributes(java.nio.file.Path tree, Artifact a, PackageStamps.Index index) {
         Map<String, List<byte[]>> m = new LinkedHashMap<>();
-        put(m, PKG_GUID, a.meta.get("dirxml-pkgguid"));
-        put(m, PKG_ASSOC, a.meta.get("dirxml-pkgassociationid"));
-        put(m, PKG_CHECKSUM, a.meta.get("dirxml-pkgchecksum"));
-        put(m, PKG_LINKAGES, a.meta.get("dirxml-pkglinkages"));
+        Map<String, String> stamps = PackageStamps.vaultStamps(a.meta, index);
+        put(m, PKG_GUID, stamps.get(PackageStamps.GUID));
+        put(m, PKG_ASSOC, stamps.get(PackageStamps.ASSOC));
+        put(m, PKG_CHECKSUM, stamps.get(PackageStamps.CHECKSUM));
+        put(m, PKG_LINKAGES, stamps.get(PackageStamps.LINKAGES));
         if (!m.isEmpty() && tree != null) {
             try {
                 String baseline = com.pointblue.dirxml.dev.edit.Packages.baseline(tree, a);
@@ -188,14 +200,19 @@ public final class VaultMapping {
 
     /** True if the artifact carries package stamps (so its object needs {@code DirXML-PkgItemAux}). */
     public static boolean isStamped(Artifact a) {
-        return a.meta.get("dirxml-pkgguid") != null || a.meta.get("dirxml-pkgassociationid") != null;
+        return PackageStamps.isPackaged(a.meta);
     }
 
     /** The driver's package stamps ({@code DirXML-PkgTargetAux}): base package record and filter-extension cache. */
     public static Map<String, List<byte[]>> driverPackageAttributes(Driver d) {
+        return driverPackageAttributes(d, PackageStamps.Index.EMPTY);
+    }
+
+    public static Map<String, List<byte[]>> driverPackageAttributes(Driver d, PackageStamps.Index index) {
         Map<String, List<byte[]>> m = new LinkedHashMap<>();
-        put(m, PKG_GUID, d.meta.get("dirxml-pkgguid"));
-        put(m, PKG_EXTENSIONS, d.meta.get("dirxml-pkgextensions"));
+        PackageStamps.Guid g = PackageStamps.guid(d.meta);
+        put(m, PKG_GUID, g == null ? null : (index == null ? g : index.complete(g)).format());
+        put(m, PKG_EXTENSIONS, d.meta.get(PackageStamps.EXTENSIONS));
         return m;
     }
 
@@ -411,11 +428,16 @@ public final class VaultMapping {
 
     /** Package stamps of a form or PRD from its meta (same keys as artifacts) plus an optional baseline as the initial state. */
     public static Map<String, List<byte[]>> provisioningPackageAttributes(Map<String, String> meta, String baseline) {
+        return provisioningPackageAttributes(meta, baseline, PackageStamps.Index.EMPTY);
+    }
+
+    public static Map<String, List<byte[]>> provisioningPackageAttributes(Map<String, String> meta, String baseline, PackageStamps.Index index) {
         Map<String, List<byte[]>> m = new LinkedHashMap<>();
-        put(m, PKG_GUID, meta.get("dirxml-pkgguid"));
-        put(m, PKG_ASSOC, meta.get("dirxml-pkgassociationid"));
-        put(m, PKG_CHECKSUM, meta.get("dirxml-pkgchecksum"));
-        put(m, PKG_LINKAGES, meta.get("dirxml-pkglinkages"));
+        Map<String, String> stamps = PackageStamps.vaultStamps(meta, index);
+        put(m, PKG_GUID, stamps.get(PackageStamps.GUID));
+        put(m, PKG_ASSOC, stamps.get(PackageStamps.ASSOC));
+        put(m, PKG_CHECKSUM, stamps.get(PackageStamps.CHECKSUM));
+        put(m, PKG_LINKAGES, stamps.get(PackageStamps.LINKAGES));
         if (!m.isEmpty() && baseline != null) {
             m.put(PKG_INITIAL_STATE, List.of(baseline.getBytes(StandardCharsets.UTF_8)));
         }

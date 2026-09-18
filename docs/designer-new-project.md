@@ -483,14 +483,66 @@ restart(s)`, `--yes` wrote it (verify: vault matches the tree), and deploying th
 tree back restored the original bytes exactly — ig4 left as found. Tests: 618, 0
 failures.
 
-**Left as a follow-up (found on the way).** `import-live` → `export-project --new`
-→ `import-project` re-keys every packaged item's stamps from the vault vocabulary
-(`dirxml-pkgguid` …) into the project one (`package-id`, `pkg-assoc-id`, `checksum`),
-and `tree.diff` reports that as 221 "package stamps" changes although nothing was
-lost; the same round trip from the project-originated `tree-test11pf` was clean only
-because both sides spoke the project vocabulary. The real defect underneath is that
-the diff and the deploy mapping read only the vault vocabulary — see the plan's
-follow-ups. Not an icon matter.
+**Found on the way, fixed the same day (§7.2f).** `import-live` → `export-project --new`
+→ `import-project` re-keyed every packaged item's stamps from the vault vocabulary
+(`dirxml-pkgguid` …) into a second, project one (`package-id`, `pkg-assoc-id`,
+`checksum`), which the diff and the deploy mapping could not read.
+
+### 7.2f Package stamps — one vocabulary (2026-09-18)
+
+**The defect.** A tree from the vault named a packaged object's package as
+`dirxml-pkgguid` = `id;symbolicName;version;name;SHORT` (plus `-pkgassociationid`,
+`-pkgchecksum`, `-pkglinkages`); a tree from a Designer project or an export named it
+`package-id` (the id alone), `pkg-assoc-id`, `checksum`, and a provisioning digest
+`project.package-id` …. The edit layer accepted both, the package installer wrote the
+vault's, but `ModelDiff` and `VaultMapping` read only the vault's. So `vault.diff` of the
+test11pf tree against ig4 reported 236 changes, most of them "package stamps → (none)"
+on every packaged item, a deploy from a project-imported tree would have created
+packaged objects **unstamped**, and the vault → tree → `--new` project → tree round
+trip showed 221 spurious stamp changes.
+
+**Why the project could not simply be read as the vault.** The project stores only the
+package's guid on an object; the rest of the record lives on the project's `IdmPackage_`
+(`Idm:PackageVersion`, `Idm:shortName`, `Idm:vendorName`, the CObject name) — and the
+symbolic name is stored nowhere: Designer derives it, `com.` + the vendor name stripped
+of everything but letters and digits, lower-cased + `.` + the short name lower-cased
+(`IdmPackageImpl.getSymbolicName`, decompiled; `NetIQ Corporation`/`NOVLUABASE` →
+`com.netiqcorporation.novluabase`, `Novell, Inc.` → `com.novellinc.…`). Composed that
+way, 29 of the 30 records the test11pf project yields are byte-identical to ig4's own;
+the 30th is Designer's own placeholder on workflow-wizard PRDs, `id;unknown;0.0.0`.
+
+**The fix.** One vocabulary in the tree — the vault's — and one reader of it:
+
+- `model/PackageStamps`: the record (`Guid`: parse, format, `unknown`/`0.0.0` count as
+  blank), Designer's symbolic-name rule, accessors that read the vault's names first and
+  the older ones second, `sameGuid` (field by field where both sides know the field, so an
+  export's id-only record agrees with the vault's full one), and an `Index` over the
+  models at hand — every `package.installed.*` record and every stamp — that completes a
+  partial record with the fullest one seen.
+- `ProjectReader` writes `dirxml-pkgguid` as the full record composed from the project's
+  `IdmPackage_` of that guid (three fields, `id;symbolicName;version`, on forms and PRDs
+  — Designer's own shape there), `dirxml-pkgassociationid`, `dirxml-pkgchecksum`, and
+  the driver's / driver set's `Idm:InstalledPackages` as `package.installed.<SHORT>`
+  records — the base one also as the driver's own `dirxml-pkgguid`, the record Designer
+  deploys. `ExportReader` writes the partial record an export can name. Nothing writes
+  the old names any more; trees that carry them keep working through `PackageStamps`.
+- `ModelDiff` compares stamps through `PackageStamps`: the record field by field, the
+  association id and checksum exactly, the linkage record and the driver's filter-extension
+  cache only when the `to` side carries one (a project never does; not a removal).
+- `Plan` builds a `PackageStamps.Index` over both sides and hands it to `VaultMapping`,
+  so a partial record deploys as the full one when either side knows it. A customized
+  packaged artifact whose stamps carry no checksum still gets a content-derived one.
+- `ProjectWriter` takes a form's or PRD's digest stamps from either vocabulary (it
+  already did for artifacts); `DocsGenerator` and `ReadCli` read through the helper.
+
+**Verified (2026-09-18).** `tree-test11pf` re-imported: 208 `dirxml-pkgguid`, 29
+`package.installed.*`, no old keys. `vault.diff tree-test11pf --env ig4`: 236 → **63**
+changes, the 10 stamp lines left are real (the project has no stamps on MIT Inactivity's
+NOVLDTXTBASE items and no base-package record on two drivers; the vault has them).
+`import-live` → `--new` → `import-project` → `tree.diff`: **no differences**, and that
+round-tripped tree against the vault: **no differences**. `tree-test11pf` → `--new` →
+`import-project` → `tree.diff`: no differences (29 packages / 195 items in the project
+catalog now — the installed records name packages that own no item). Tests: 625.
 
 ### 7.2 What the Designer check must look at (the code cannot)
 
