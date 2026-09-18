@@ -483,11 +483,14 @@ restart(s)`, `--yes` wrote it (verify: vault matches the tree), and deploying th
 tree back restored the original bytes exactly — ig4 left as found. Tests: 618, 0
 failures.
 
-**Left as a follow-up (found on the way).** `export-project --new` from a *live*
-tree writes the packaged artifacts **without their package stamps** (218 items in
-ig4: `dirxml-pkgguid` / `-pkgassociationid` / `-pkgchecksum` / `-pkglinkages` gone
-after `import-project` of the new project), while the same round trip from the
-project-originated `tree-test11pf` was clean. Not an icon matter; on the plan's list.
+**Left as a follow-up (found on the way).** `import-live` → `export-project --new`
+→ `import-project` re-keys every packaged item's stamps from the vault vocabulary
+(`dirxml-pkgguid` …) into the project one (`package-id`, `pkg-assoc-id`, `checksum`),
+and `tree.diff` reports that as 221 "package stamps" changes although nothing was
+lost; the same round trip from the project-originated `tree-test11pf` was clean only
+because both sides spoke the project vocabulary. The real defect underneath is that
+the diff and the deploy mapping read only the vault vocabulary — see the plan's
+follow-ups. Not an icon matter.
 
 ### 7.2 What the Designer check must look at (the code cannot)
 

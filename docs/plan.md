@@ -383,14 +383,21 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 
 ## Follow-ups (small, not scheduled)
 
-- **`export-project --new` from a live tree drops package stamps** (found
-  2026-09-18 while verifying driver icons, `docs/designer-new-project.md` §7.2e):
-  a project written from `import-live`'s tree of ig4 comes back through
-  `import-project` with 218 packaged artifacts missing `dirxml-pkgguid` /
-  `-pkgassociationid` / `-pkgchecksum` / `-pkglinkages`, while the same round
-  trip from the project-originated `tree-test11pf` is clean. Something in the
-  `--new` catalog/item path keys on meta only a project tree carries. This is
-  the Windows how-to's route (fresh project from an IDV), so it matters.
+- **Two package-stamp vocabularies, and the deploy side reads only one** (found
+  2026-09-18 while verifying driver icons, `docs/designer-new-project.md` §7.2e).
+  A tree from the vault carries `dirxml-pkgguid` (`id;symbolicName;version;name;short`),
+  `dirxml-pkgassociationid`, `dirxml-pkgchecksum`, `dirxml-pkglinkages`; a tree
+  from a Designer project or an export carries `package-id`, `pkg-assoc-id`,
+  `checksum`. The edit layer accepts both (`Packages.isPackaged`), but
+  `VaultMapping.packageAttributes` and `ModelDiff`'s `STAMP_KEYS` know only the
+  vault's. Consequences: `vault.diff` of a project-imported tree (test11pf vs ig4)
+  reports "package stamps changed → (none)" on every packaged item, and a deploy
+  from such a tree would create packaged artifacts **unstamped** (Designer would
+  then see them as unpackaged). Nothing is lost on the way — `import-live` →
+  `export-project --new` → `import-project` re-keys 218 items into the project
+  vocabulary, which is why that round trip shows 221 stamp "changes" against the
+  live tree. Fix: one normalization (project keys + the tree's package catalog →
+  the vault's full `dirxml-pkgguid`) used by both the diff and the mapping.
 - **EntitlementConfiguration resource** for hand-built drivers with
   entitlements (the applications warn without it; the role/resource catalog
   needs it). Jerry (2026-09-16): it is usually built by hand in Designer,
