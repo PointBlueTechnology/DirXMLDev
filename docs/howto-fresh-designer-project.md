@@ -154,12 +154,16 @@ was written:
 Fetch them (`bin\idm package.fetch --catalog packages --package NOVLADBASE`) or,
 for a package the customer built, `package.build`, and run again.
 
-**Driver icons** come from a Designer install on the same machine — the tool
+**Driver icons** come from the vault: `import-live` reads each driver's
+`DirXML-DriverImage` — the custom icon someone set in Designer, or Designer's stock
+icon for the driver type, whichever was deployed — into `drivers\<name>\icon.gif`
+(or `.png`), and the project gets exactly those bytes. Only a driver with no image
+in the vault falls back to a Designer install on the same machine, where the tool
 copies `plugins\com.novell.core_*\icons\iManager\<ApplicationType>.gif` the way
-Designer's own importer does. It looks at `IDM_DESIGNER`, then the `designer`
-system property, then the usual install locations; `--designer DIR` overrides
-all three. With no install found it writes no icon and says so once; Designer
-draws its own once the project is open.
+Designer's own importer does (`IDM_DESIGNER`, then the `designer` system property,
+then the usual install locations; `--designer DIR` overrides all three). With
+neither it writes no icon and says so once; Designer draws its own once the
+project is open.
 
 Then in Designer: **File → Open Projects from File System…** (or *Import →
 Existing Projects into Workspace*) and pick the folder. Check a driver's

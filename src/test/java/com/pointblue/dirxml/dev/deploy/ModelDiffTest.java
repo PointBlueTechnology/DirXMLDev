@@ -198,26 +198,30 @@ public class ModelDiffTest {
     private static final byte[] ICON_A = com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest.TINY_GIF;
     private static final byte[] ICON_B = "GIF89a-different".getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
-    /** Icons are compared only when both sides can hold one — {@code of(from, to)} never reports them. */
+    /**
+     * Icons are compared like everything else (the vault holds one: DirXML-DriverImage), with
+     * one rule — a {@code to} side without an icon has no opinion, so nothing is ever "removed":
+     * a tree written before icons were carried must not strip every driver's on its next deploy.
+     */
     @Test
-    public void iconsAreNotComparedAgainstAVaultSideModel() throws IOException {
-        DriverSet from = ValidatorTest.clean();            // a vault/export model: no icon anywhere
+    public void aSideWithoutAnIconHasNoOpinion() throws IOException {
+        DriverSet from = ValidatorTest.clean();
         DriverSet to = copy(from);
         to.driver("AD").icon = ICON_A;
         to.driver("AD").iconExtension = "gif";
+        assertEquals(1, of(ModelDiff.of(from, to), Kind.DRIVER_ICON).size());   // added
 
-        assertTrue(ModelDiff.of(from, to).text(), ModelDiff.of(from, to).isEmpty());
-        assertEquals(1, of(ModelDiff.of(from, to, true), Kind.DRIVER_ICON).size());
+        assertTrue(ModelDiff.of(to, from).text(), ModelDiff.of(to, from).isEmpty());   // never removed
     }
 
     @Test
-    public void iconAddedChangedAndRemoved() throws IOException {
+    public void iconAddedAndChanged() throws IOException {
         DriverSet from = ValidatorTest.clean();
         DriverSet to = copy(from);
         to.driver("AD").icon = ICON_A;
         to.driver("AD").iconExtension = "gif";
 
-        Change added = of(ModelDiff.of(from, to, true), Kind.DRIVER_ICON).get(0);
+        Change added = of(ModelDiff.of(from, to), Kind.DRIVER_ICON).get(0);
         assertEquals("AD", added.driver);
         assertEquals("drivers/AD", added.path);
         assertEquals("icon", added.what);
@@ -226,17 +230,12 @@ public class ModelDiffTest {
 
         from.driver("AD").icon = ICON_B;
         from.driver("AD").iconExtension = "gif";
-        Change changed = of(ModelDiff.of(from, to, true), Kind.DRIVER_ICON).get(0);
+        Change changed = of(ModelDiff.of(from, to), Kind.DRIVER_ICON).get(0);
         assertTrue(changed.summary, changed.summary.startsWith("~ icon changed ("));
         assertFalse(changed.summary, changed.summary.contains("GIF89a"));
-
-        to.driver("AD").icon = null;
-        to.driver("AD").iconExtension = null;
-        Change removed = of(ModelDiff.of(from, to, true), Kind.DRIVER_ICON).get(0);
-        assertTrue(removed.summary, removed.summary.startsWith("- icon removed ("));
     }
 
-    /** Same bytes, different format: still a change (the file's name changes). */
+    /** Same bytes, different format: still a change (the project file's name changes). */
     @Test
     public void iconFormatAloneIsAChange() throws IOException {
         DriverSet from = ValidatorTest.clean();
@@ -244,18 +243,36 @@ public class ModelDiffTest {
         from.driver("AD").iconExtension = "gif";
         DriverSet to = copy(from);
         to.driver("AD").iconExtension = "png";
-        assertEquals(1, of(ModelDiff.of(from, to, true), Kind.DRIVER_ICON).size());
+        assertEquals(1, of(ModelDiff.of(from, to), Kind.DRIVER_ICON).size());
     }
 
-    /** An icon change never restarts the driver — nothing in the vault changed. */
+    /**
+     * A vault-side icon names its format from the bytes' magic ({@code gif}); a project-side one
+     * names whatever Designer wrote ({@code GIF}, or nothing). Same bytes = same icon across that.
+     */
+    @Test
+    public void sameBytesAcrossFormatSpellingsAreTheSameIcon() throws IOException {
+        DriverSet from = ValidatorTest.clean();
+        from.driver("AD").icon = ICON_A;
+        from.driver("AD").iconExtension = "gif";
+        DriverSet to = copy(from);
+        to.driver("AD").iconExtension = "GIF";
+        assertTrue(ModelDiff.of(from, to).text(), ModelDiff.of(from, to).isEmpty());
+        to.driver("AD").iconExtension = null;
+        assertTrue(ModelDiff.of(from, to).text(), ModelDiff.of(from, to).isEmpty());
+        assertTrue(ModelDiff.of(to, from).text(), ModelDiff.of(to, from).isEmpty());
+    }
+
+    /** An icon change never restarts the driver — the engine does not read it. */
     @Test
     public void anIconChangeAffectsNoDriver() throws IOException {
         DriverSet from = ValidatorTest.clean();
         DriverSet to = copy(from);
         to.driver("AD").icon = ICON_A;
         to.driver("AD").iconExtension = "gif";
-        ModelDiff diff = ModelDiff.of(from, to, true);
+        ModelDiff diff = ModelDiff.of(from, to);
         assertFalse(diff.isEmpty());
+        assertTrue(diff.isEmptyButForIcons());
         assertTrue(Kind.DRIVER_ICON.noRestart());
         assertEquals(List.of(), diff.affectedDrivers());
     }

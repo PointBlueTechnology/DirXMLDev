@@ -159,4 +159,33 @@ public class LdifReaderTest {
         assertFalse(ds.index().isEmpty());
         System.out.println("IG4 LDIF: " + ds + "; unresolved links: " + ds.unresolvedLinks().size());
     }
+
+    /**
+     * An LDIF holds the icon base64-encoded (folded across lines); the simulator's reader would
+     * decode it as UTF-8 text, so the bytes are read again from the file — exactly.
+     */
+    @Test
+    public void driverImageIsReadFromTheLdifAsBytes() throws Exception {
+        byte[] gif = com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest.TINY_GIF;
+        String b64 = java.util.Base64.getEncoder().encodeToString(gif);
+        String folded = b64.substring(0, 20) + "\n " + b64.substring(20);
+        String ldif = "version: 1\n\n"
+            + "dn: " + DS + "\nobjectClass: Top\nobjectClass: DirXML-DriverSet\ncn: driverset1\n\n"
+            + "dn: cn=AD," + DS + "\nobjectClass: Top\nobjectClass: DirXML-Driver\ncn: AD\n"
+            + "DirXML-JavaModule: com.example.Shim\nDirXML-DriverImage:: " + folded + "\n\n"
+            + "dn: cn=Plain," + DS + "\nobjectClass: Top\nobjectClass: DirXML-Driver\ncn: Plain\n"
+            + "DirXML-JavaModule: com.example.Shim\n";
+        Path f = Files.createTempFile("icon", ".ldif");
+        Files.writeString(f, ldif, java.nio.charset.StandardCharsets.UTF_8);
+        try {
+            DriverSet ds = LdifReader.read(f);
+            Driver ad = ds.driver("AD");
+            assertArrayEquals(gif, ad.icon);
+            assertEquals("gif", ad.iconExtension);
+            assertNull(ds.driver("Plain").icon);
+            assertFalse("never as (mangled) text in meta", ad.meta.containsKey("dirxml-driverimage"));
+        } finally {
+            Files.deleteIfExists(f);
+        }
+    }
 }

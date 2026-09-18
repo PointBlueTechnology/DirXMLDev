@@ -381,4 +381,31 @@ public class ExportWriterTest {
             }
         }
     }
+
+    /** The icon travels in the export as Designer serializes it: base64 text in {@code <driver-image>}. */
+    @Test
+    public void driverImageRoundTripsThroughTheExport() throws Exception {
+        byte[] gif = com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest.TINY_GIF;
+        DriverSet ds = ValidatorTest.clean();
+        ds.driver("AD").icon = gif;
+        ds.driver("AD").iconExtension = "gif";
+
+        String xml = ExportWriter.toXml(ds);
+        org.junit.Assert.assertTrue(xml, xml.contains("<driver-image>" + java.util.Base64.getEncoder().encodeToString(gif) + "</driver-image>"));
+
+        Path dir = Files.createTempDirectory("export-icon");
+        Path written = dir.resolve("ad.xml");
+        Files.writeString(written, xml, java.nio.charset.StandardCharsets.UTF_8);
+        Driver back = ExportReader.read(written).driver("AD");
+        org.junit.Assert.assertArrayEquals(gif, back.icon);
+        org.junit.Assert.assertEquals("gif", back.iconExtension);
+
+        // Designer's own shape: a CDATA section, and delete-value="true" for none
+        String cdata = xml.replace("<driver-image>", "<driver-image><![CDATA[").replace("</driver-image>", "]]></driver-image>");
+        Files.writeString(written, cdata, java.nio.charset.StandardCharsets.UTF_8);
+        org.junit.Assert.assertArrayEquals(gif, ExportReader.read(written).driver("AD").icon);
+        String none = xml.replaceAll("<driver-image>[^<]*</driver-image>", "<driver-image delete-value=\"true\"/>");
+        Files.writeString(written, none, java.nio.charset.StandardCharsets.UTF_8);
+        org.junit.Assert.assertNull(ExportReader.read(written).driver("AD").icon);
+    }
 }
