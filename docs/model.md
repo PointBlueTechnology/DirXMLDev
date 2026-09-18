@@ -99,8 +99,9 @@ Sources feed the same model: driver / driver-set **export** (`ExportReader`), **
   (the same record, `;base` for the base package) on a driver or the driver set. Every reader
   writes it: the vault readers verbatim, `import-project` by composing the record from the
   project's own `IdmPackage_` objects (the symbolic name the way Designer derives it,
-  `com.<vendor>.<short>`), `import` of an export with what the export names (the id, and a
-  version on the driver — a *partial* record). `PackageStamps` is the one reader of them:
+  `com.<vendor>.<short>`) and copying the object's `Idm:InstalledLinkages` — the same
+  `<policy-linkage>` XML the vault holds — as `dirxml-pkglinkages`, `import` of an export
+  with what the export names (the id, and a version on the driver — a *partial* record). `PackageStamps` is the one reader of them:
   it also accepts the older `package-id` / `pkg-assoc-id` / `checksum` (and the digests'
   `project.package-id`…) that trees written before 2026-09-18 carry, compares records field
   by field where both sides know the field (Designer's `unknown;0.0.0` placeholders count as
