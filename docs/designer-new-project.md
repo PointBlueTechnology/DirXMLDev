@@ -544,6 +544,19 @@ round-tripped tree against the vault: **no differences**. `tree-test11pf` → `-
 `import-project` → `tree.diff`: no differences (29 packages / 195 items in the project
 catalog now — the installed records name packages that own no item). Tests: 625.
 
+**Addendum, the linkage record (same day).** Jerry asked what policy weights mean for
+the tool: nothing at run time, everything at the next `package.install` / `upgrade`,
+whose weight rule reads each existing link's `dirxml-pkglinkages` record and treats a
+link without one as hand-made (weight −1, never displaced). A new validate check,
+`package-linkage` (`package-linkage-missing` W, `package-linkage-missing-gcv` I —
+Designer itself records only some GCV objects' links), flags a linked packaged artifact
+without the record. It found 123 on the test11pf tree, because the project reader had
+never carried the record — although the project stores it, on each item, as
+`Idm:InstalledLinkages`, byte for byte the vault's `DirXML-pkgLinkages`. The reader now
+copies it; re-imported, the project tree carries 132 records, the warnings are gone, and
+the remaining 13 GCV infos match ig4's own 10 (Designer's inconsistency, not ours).
+Tests: 629.
+
 ### 7.2 What the Designer check must look at (the code cannot)
 
 1. **The project opens at all** and the System Model, developer view and
