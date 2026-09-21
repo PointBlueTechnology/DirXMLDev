@@ -126,7 +126,12 @@ public final class AppObject {
     }
 
     public void put(String attr, List<String> values) {
-        attrs.put(AppConfigPolicy.canonicalAttribute(attr), new ArrayList<>(values));
+        String name = AppConfigPolicy.canonicalAttribute(attr);
+        List<String> vs = new ArrayList<>();
+        for (String v : values) {
+            vs.add(AppConfigPolicy.normalizeValue(name, v));
+        }
+        attrs.put(name, vs);
     }
 
     /** A display name: the English localized name when the object has one, else the cn. */

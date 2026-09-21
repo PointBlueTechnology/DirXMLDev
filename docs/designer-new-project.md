@@ -234,7 +234,8 @@ writer.
 
 ## 5. Decisions for Jerry
 
-1. **Scope of `AppConfig`.** Forms, PRDs and entitlements only (what the
+1. **Scope of `AppConfig`.** *(Superseded 2026-09-21: the whole AppConfig is
+   carried — docs/appconfig.md §8.)* Forms, PRDs and entitlements only (what the
    tree models; the rest of `AppConfig` — DirectoryModel, UIConfig,
    RoleConfig, TeamDefs, AppDefs, AuthTypes — stays out and comes from a
    later *Live → Import* of just those containers), **or** model the rest of

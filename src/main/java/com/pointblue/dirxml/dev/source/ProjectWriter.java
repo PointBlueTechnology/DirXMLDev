@@ -5,6 +5,7 @@ import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.deploy.ModelDiff;
 import com.pointblue.dirxml.dev.deploy.VaultMapping;
 import com.pointblue.dirxml.dev.edit.Packages;
+import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -407,6 +408,30 @@ public final class ProjectWriter {
                     }
                     break;
                 }
+                case OBJECT_ADDED: {
+                    AppObject o = resolveObjectFromPath(treeDs, c.path);
+                    Driver td = treeDs.driver(c.driver);
+                    if (o != null && td != null) {
+                        ctx.applyObjectAdded(td, o);
+                    }
+                    break;
+                }
+                case OBJECT_REMOVED: {
+                    AppObject o = resolveObjectFromPath(project, c.path);
+                    if (o != null) {
+                        ctx.applyObjectRemoved(c.driver, o);
+                    }
+                    break;
+                }
+                case OBJECT_CHANGED: {
+                    AppObject o = resolveObjectFromPath(treeDs, c.path);
+                    AppObject old = resolveObjectFromPath(project, c.path);
+                    Driver td = treeDs.driver(c.driver);
+                    if (o != null && td != null) {
+                        ctx.applyObjectChanged(td, o, old, c.parts);
+                    }
+                    break;
+                }
                 case ENTITLEMENT_ADDED: {
                     Entitlement e = resolveEntitlementFromPath(treeDs, c.path);
                     Driver td = treeDs.driver(c.driver);
@@ -667,6 +692,17 @@ public final class ProjectWriter {
         ProvPath pp = parsePrdPath(path);
         Driver d = ds.driver(pp.driver);
         return (d == null || d.provisioning == null) ? null : d.provisioning.prd(pp.name);
+    }
+
+    /** {@code drivers/<d>/provisioning/objects/<path>} -&gt; the object, or null. */
+    private static AppObject resolveObjectFromPath(DriverSet ds, String path) {
+        String rest = path.substring("drivers/".length());
+        int i = rest.indexOf("/provisioning/objects/");
+        if (i < 0) {
+            return null;
+        }
+        Driver d = ds.driver(rest.substring(0, i));
+        return (d == null || d.provisioning == null) ? null : d.provisioning.object(rest.substring(i + "/provisioning/objects/".length()));
     }
 
     /** {@code drivers/<d>/entitlements/<name>} -&gt; (d, name). */
@@ -1273,6 +1309,7 @@ public final class ProjectWriter {
         }
 
         void flush() throws IOException {
+            flushAppConfigs();
             for (String id : dirtyIds) {
                 Path p = metaFileById.get(id);
                 Document doc = allDocs.get(id);
@@ -1688,6 +1725,233 @@ public final class ProjectWriter {
                 .append("\" type=\"").append(f.kind.digestType).append("\" visible=\"true\">");
             sb.append("<guid>").append(CObjectXml.esc(guid)).append("</guid>");
             appendDirStamps(sb, f.meta);
+            if (pkgId != null) {
+                sb.append("<package-id>").append(CObjectXml.esc(pkgId)).append("</package-id>");
+            }
+            if (pkgAssocId != null) {
+                sb.append("<pkg-assoc-id>").append(CObjectXml.esc(pkgAssocId)).append("</pkg-assoc-id>");
+            }
+            if (pkgChecksum != null) {
+                sb.append("<pkg-checksum>").append(CObjectXml.esc(pkgChecksum)).append("</pkg-checksum>");
+            }
+            sb.append("</item>");
+            return DIGEST_DECL + "\n" + sb + "\n";
+        }
+
+        // ---- provisioning: the rest of AppConfig (docs/appconfig.md §8) ----
+
+        /** Per driver, the parsed {@code .appconfig} once an inline object is touched; flushed by {@link #flushAppConfigs()}. */
+        final Map<String, Document> appConfigDocs = new LinkedHashMap<>();
+        final Set<String> dirtyAppConfigs = new LinkedHashSet<>();
+
+        Document appConfigDoc(String driverName) throws IOException {
+            Document doc = appConfigDocs.get(driverName);
+            if (doc != null) {
+                return doc;
+            }
+            Path f = provisioningDir(driverName).resolve(".appconfig");
+            String xml = Files.isRegularFile(f) ? Files.readString(f, StandardCharsets.UTF_8)
+                : appConfigTemplate(treeDs.driver(driverName) != null && treeDs.driver(driverName).provisioning != null
+                    ? treeDs.driver(driverName).provisioning.meta.getOrDefault(APPCONFIG_VERSION_META, DEFAULT_APPCONFIG_VERSION)
+                    : DEFAULT_APPCONFIG_VERSION);
+            doc = CanonicalXml.parse(xml);
+            appConfigDocs.put(driverName, doc);
+            return doc;
+        }
+
+        void flushAppConfigs() throws IOException {
+            for (String driverName : dirtyAppConfigs) {
+                Path f = provisioningDir(driverName).resolve(".appconfig");
+                boolean created = !Files.isRegularFile(f) && !result.createdFiles.contains(relative(f));
+                writeFile(f, CanonicalXml.serialize(appConfigDocs.get(driverName)), created);
+            }
+            dirtyAppConfigs.clear();
+        }
+
+        private List<AppObject> treeObjects(String driverName) {
+            Driver d = treeDs.driver(driverName);
+            return d == null || d.provisioning == null ? List.of() : d.provisioning.objects;
+        }
+
+        /** The directory of an object's container in the project, creating the container directories and digests on the way. */
+        private Path objectDir(String driverName, AppObject o) throws IOException {
+            Path dir = provisioningDir(driverName);
+            List<String> parents = o.segments.subList(0, o.segments.size() - 1);
+            List<String> sofar = new ArrayList<>();
+            for (String seg : parents) {
+                sofar.add(seg);
+                dir = dir.resolve(seg);
+                Path digest = dir.resolve(seg + ".digest");
+                if (!Files.isRegularFile(digest) && !result.createdFiles.contains(relative(digest))) {
+                    AppObject container = null;
+                    for (AppObject c : treeObjects(driverName)) {
+                        if (c.segments.equals(sofar)) {
+                            container = c;
+                            break;
+                        }
+                    }
+                    String type = container == null ? "Top" : DesignerAppConfig.containerType(container);
+                    writeFile(digest, containerDigest(seg, type, mintId(), seg, null), true);
+                }
+            }
+            return dir;
+        }
+
+        /**
+         * The {@code .appconfig} template lays out Designer's standard containers; a tree that carries
+         * AppConfig objects knows exactly which containers its vault has, so the template's extras go
+         * (a tree without objects keeps the whole skeleton — Designer needs one).
+         */
+        private void pruneSkeleton(String driverName, List<AppObject> treeObjects) throws IOException {
+            Document doc = appConfigDoc(driverName);
+            Element root = doc.getDocumentElement();
+            Element appConfig = root.getNodeName().equals("ds-object") ? root : com.pointblue.dirxml.sim.Xds.firstByName(root, "ds-object");
+            if (appConfig == null) {
+                return;
+            }
+            Set<String> known = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            for (AppObject o : treeObjects) {
+                known.add(o.path());
+            }
+            if (pruneInline(appConfig, "", known)) {
+                dirtyAppConfigs.add(driverName);
+            }
+        }
+
+        private static boolean pruneInline(Element parent, String parentPath, Set<String> known) {
+            boolean changed = false;
+            for (Element child : new ArrayList<>(com.pointblue.dirxml.sim.Xds.childrenByName(parent, "ds-object"))) {
+                String cls = child.getAttribute("ds-object-class");
+                if (DesignerAppConfig.isFormsMachinery(cls)) {
+                    continue;   // the form/PRD containers are the form writer's
+                }
+                String path = parentPath.isEmpty() ? child.getAttribute("ds-object-name") : parentPath + "/" + child.getAttribute("ds-object-name");
+                if (!known.contains(path)) {
+                    parent.removeChild(child);
+                    changed = true;
+                    continue;
+                }
+                changed |= pruneInline(child, path, known);
+            }
+            return changed;
+        }
+
+        void applyObjectAdded(Driver treeDriver, AppObject o) throws IOException {
+            if (!requireProvisioningDir(treeDriver.name)) {
+                return;
+            }
+            String ext = DesignerAppConfig.fileExtension(o);
+            if (ext == null) {
+                // inline: reports, nav items, auth types, other web-app configs, and every container
+                Document doc = appConfigDoc(treeDriver.name);
+                Element el = DesignerAppConfig.inlineElement(doc, o.segments, true, treeObjects(treeDriver.name));
+                DesignerAppConfig.writeInline(doc, el, o);
+                dirtyAppConfigs.add(treeDriver.name);
+                return;
+            }
+            Path dir = objectDir(treeDriver.name, o);
+            Files.createDirectories(dir);
+            String guid = mintId();
+            writeFile(dir.resolve(o.name() + "." + ext), DesignerAppConfig.writeItem(o), true);
+            writeFile(dir.resolve(o.name() + ".digest"), objectDigestXml(o, ext, guid), true);
+            result.mintedIds.put(ModelDiff.objectPath(treeDriver, o), guid);
+        }
+
+        void applyObjectRemoved(String driverName, AppObject projectObject) throws IOException {
+            if (!requireProvisioningDir(driverName)) {
+                return;
+            }
+            if ("file".equals(projectObject.meta.get("project.storage"))) {
+                String ext = DesignerAppConfig.fileExtension(projectObject);
+                Path dir = provisioningDir(driverName);
+                for (String seg : projectObject.segments.subList(0, projectObject.segments.size() - 1)) {
+                    dir = dir.resolve(seg);
+                }
+                if (ext != null) {
+                    deleteFile(dir.resolve(projectObject.name() + "." + ext));
+                }
+                deleteFile(dir.resolve(projectObject.name() + ".digest"));
+                return;
+            }
+            Document doc = appConfigDoc(driverName);
+            Element el = DesignerAppConfig.inlineElement(doc, projectObject.segments, false, null);
+            if (el == null) {
+                return;
+            }
+            if (!com.pointblue.dirxml.sim.Xds.childrenByName(el, "ds-object").isEmpty()) {
+                result.notes.add("container '" + projectObject.path() + "' still holds objects in the project; not removed from .appconfig");
+                return;
+            }
+            el.getParentNode().removeChild(el);
+            dirtyAppConfigs.add(driverName);
+            if ("true".equals(projectObject.meta.get("project.container-digest"))) {
+                Path dir = provisioningDir(driverName);
+                for (String seg : projectObject.segments) {
+                    dir = dir.resolve(seg);
+                }
+                deleteFile(dir.resolve(projectObject.name() + ".digest"));
+            }
+        }
+
+        void applyObjectChanged(Driver treeDriver, AppObject o, AppObject projectObject, Set<String> parts) throws IOException {
+            if (!requireProvisioningDir(treeDriver.name)) {
+                return;
+            }
+            if (parts != null && parts.equals(Set.of("stamps"))) {
+                result.notes.add(o.kind().key + " '" + o.path() + "' package stamps changed but its content did not; "
+                    + "not rewritten (see ProjectWriter's class doc)");
+                return;
+            }
+            boolean file = projectObject != null ? "file".equals(projectObject.meta.get("project.storage"))
+                : DesignerAppConfig.fileExtension(o) != null;
+            if (!file) {
+                Document doc = appConfigDoc(treeDriver.name);
+                Element el = DesignerAppConfig.inlineElement(doc, o.segments, true, treeObjects(treeDriver.name));
+                DesignerAppConfig.writeInline(doc, el, o);
+                dirtyAppConfigs.add(treeDriver.name);
+                return;
+            }
+            String ext = DesignerAppConfig.fileExtension(o);
+            if (ext == null) {
+                result.notes.add(o.kind().key + " '" + o.path() + "' is a file in the project but its kind has no file form; left unchanged");
+                return;
+            }
+            Path dir = objectDir(treeDriver.name, o);
+            writeFile(dir.resolve(o.name() + "." + ext), DesignerAppConfig.writeItem(o), false);
+            String guid = projectObject == null ? null : projectObject.meta.get("project.guid");
+            if (guid != null) {
+                // the digest carries the display names: keep it in step, same guid
+                AppObject withProjectMeta = o;
+                if (projectObject != null) {
+                    for (Map.Entry<String, String> m : projectObject.meta.entrySet()) {
+                        if (m.getKey().startsWith("project.")) {
+                            o.meta.putIfAbsent(m.getKey(), m.getValue());
+                        }
+                    }
+                }
+                writeFile(dir.resolve(o.name() + ".digest"), objectDigestXml(withProjectMeta, ext, guid), false);
+            }
+        }
+
+        /** Designer's item digest for a file-kind object: type per {@link DesignerAppConfig#itemType}, names/descrs, stamps. */
+        private String objectDigestXml(AppObject o, String ext, String guid) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("<item cn=\"cn=").append(CObjectXml.esc(o.name())).append("\" filename=\"")
+                .append(CObjectXml.esc(o.name())).append('.').append(ext)
+                .append("\" hasContainment=\"false\" modstamp=\"0\" protected=\"").append(flag(o.meta, "protected"))
+                .append("\" readonly=\"").append(flag(o.meta, "readonly"))
+                .append("\" type=\"").append(CObjectXml.esc(DesignerAppConfig.itemType(o))).append("\" visible=\"true\">");
+            sb.append("<guid>").append(CObjectXml.esc(guid)).append("</guid>");
+            for (Map.Entry<String, String> d : DesignerAppConfig.displayNames(o).entrySet()) {
+                sb.append("<display xml:lang=\"").append(CObjectXml.esc(d.getKey())).append("\">").append(CObjectXml.esc(d.getValue())).append("</display>");
+            }
+            for (Map.Entry<String, String> d : DesignerAppConfig.descriptions(o).entrySet()) {
+                sb.append("<descr xml:lang=\"").append(CObjectXml.esc(d.getKey())).append("\">").append(CObjectXml.esc(d.getValue())).append("</descr>");
+            }
+            appendDirStamps(sb, o.meta);
+            String pkgId = provPkgMeta(o.meta, "package-id");
+            String pkgAssocId = provPkgMeta(o.meta, "pkg-assoc-id");
+            String pkgChecksum = provPkgMeta(o.meta, "pkg-checksum");
             if (pkgId != null) {
                 sb.append("<package-id>").append(CObjectXml.esc(pkgId)).append("</package-id>");
             }
@@ -2210,6 +2474,14 @@ public final class ProjectWriter {
                 for (Prd p : treeDriver.provisioning.prds) {
                     applyPrdAdded(treeDriver, p);
                 }
+                List<AppObject> objects = new ArrayList<>(treeDriver.provisioning.objects);
+                objects.sort(java.util.Comparator.comparingInt((AppObject x) -> x.segments.size()));
+                for (AppObject o : objects) {
+                    applyObjectAdded(treeDriver, o);
+                }
+                if (!objects.isEmpty()) {
+                    pruneSkeleton(treeDriver.name, objects);
+                }
             } else if (treeDriver.provisioning != null) {
                 requireProvisioningDir(treeDriver.name);
             }
@@ -2297,6 +2569,7 @@ public final class ProjectWriter {
                 version = DEFAULT_APPCONFIG_VERSION;
             }
             writeFile(dir.resolve(".appconfig"), appConfigTemplate(version), true);
+            appConfigDocs.put(treeDriver.name, CanonicalXml.parse(appConfigTemplate(version)));
             // the container's cn is always the vault's (cn=AppConfig); only the folder is numbered
             writeFile(dir.resolve(folder + ".digest"),
                 containerDigest("AppConfig", "srvprvAppConfig", applicationId, treeDriver.name, version), true);
