@@ -378,9 +378,15 @@ public final class Cli {
         System.err.println("  import-project <projectDir> <outDir>  read a Designer project, write IDM-as-code");
         System.err.println("  import-ldif <dump.ldif> <outDir>      read an LDIF of the driver-set subtree, write IDM-as-code");
         System.err.println("  import-live <outDir> --env E          read the live vault named in environments.properties (its driverSet; a DN before <outDir> overrides)");
+        System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
+        System.err.println("  vault.diff <tree> --env E [--driver D…] [--json]     the tree vs the live vault (exit 1 if they differ; docs/vault-deploy.md)");
+        System.err.println("  vault.verify <tree> --env E [--driver D…] [--json]   same diff, read after a deploy");
+        System.err.println("  vault.deploy <tree> --env E [--driver D…] --dry-run|--yes|--step [--confirm E] [--no-restart] [--secrets none|missing|all]");
+        System.err.println("               [--allow-missing-secrets] [--capture-drift] [--delete-driver D…] [--delete-all entitlements|forms|prds…] [--json]");
+        System.err.println("                                        plan → snapshot → write → restart → verify → audit line; never deletes a driver without --delete-driver");
+        System.err.println("  vault.rollback --env E --snapshot <file.ldif> [--yes] [--json]   restore a deploy's snapshot");
         System.err.println("  vault.export-clone --env E --out DIR [--rbs] [--keep-driver-state] [--data C,…] [--pseudonymise]   read a vault into a clone bundle (docs/vault-clone.md)");
         System.err.println("  vault.import-clone --env E --from DIR [--server DN] [--map src=dst] [--driver-server d=srv] [--user-password KEY] [--replace-driverset] [--yes]   create it in a lab tree");
-        System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
         System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
         System.err.println("  export-project <tree> <projectDir> [--dry-run] [--json]  update an existing Designer project to match a tree");
         System.err.println("  export-project <tree> <newProjectDir> --new [--vault-name NAME] [--vault-host HOST] [--vault-user DN]");
@@ -420,6 +426,10 @@ public final class Cli {
         System.err.println("  package.show    --catalog DIR SHORT[_ver] [--json]");
         System.err.println("  package.diff    --catalog DIR SHORT_v1 SHORT_v2 [--json]");
         System.err.println("  package.resolve --catalog DIR --base SHORT[_ver] [--feature SHORT…] [--driver-set-has SHORT_ver…] [--vault-has SHORT_ver…] [--json]");
+        System.err.println("  package.build   --catalog DIR <tree> --driver D --short SHORT --name N --vendor V --version M.m.r [--include PATH…] [--new-version-of SHORT_ver|jar]");
+        System.err.println("                  [--depends SHORT…] [--gcvs referenced|all|none] [--customized keep] [--base] [--json]   build a package jar from a driver's artifacts");
+        System.err.println("  package.site    --catalog DIR --out DIR [--description …]   render the catalog as an Eclipse update site Designer can read");
+        System.err.println("  package.status  <tree> [--driver D] [--catalog DIR] [--json]   installed packages per driver vs the catalog (upgrades available)");
         System.err.println("operate (docs/operate.md; environments.properties, tiers, deploy-log audit):");
         System.err.println("  driverset.status --env E [--json]");
         System.err.println("  driver.status --env E --driver D [--json] [--tree DIR]");
@@ -429,7 +439,8 @@ public final class Cli {
         System.err.println("  driver.migrate --env E --driver D --xds FILE --yes [--confirm E]");
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
-        System.err.println("  driver.trace show|set|reset --env E --driver D [--level N] [--file F]");
+        System.err.println("  driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow]");
+        System.err.println("  driver.submit --env E --driver D --xds <file> --yes [--tree DIR]   SubmitCommand into the running driver; with --tree, the simulator canary first");
         System.err.println("  engine.version --env E");
         System.err.println("  engine.stats --env E [--driver D…] [--json]");
         System.err.println("edit operations (each: load → apply → validate → write unless a new error; --dry-run, --force, --json):");
