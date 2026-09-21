@@ -447,12 +447,17 @@ public final class CloneImporter {
 
         // 2b. the drivers' start option: where the target's schema lets only the server write the
         //     attribute (eDirectory 9.3), it is set the way deploy sets it — through the engine's
-        //     DirXML extended operation — which needs an engine on the lab server to answer
-        if (unwritable.contains(ClonePolicy.START_OPTION_ATTR)) {
+        //     DirXML extended operation. That answers only once the engine on the lab server has
+        //     loaded the driver set, which needs the association written above and then a restart
+        //     or module load — so this runs on every cloned driver on every run, and a re-run
+        //     after the restart finishes what the first run could not.
+        boolean startOptionServerOwned = targetSchema.isOperational(ClonePolicy.START_OPTION_ATTR);
+        if (startOptionServerOwned) {
+            unwritable.add(ClonePolicy.START_OPTION_ATTR);
             int set = 0;
             String engineError = null;
             for (Vault.Entry e : all) {
-                if (!e.hasClass("DirXML-Driver") || !written.contains(e.dn)) {
+                if (!e.hasClass("DirXML-Driver") || !exists(e.dn)) {
                     continue;
                 }
                 try {
@@ -464,8 +469,9 @@ public final class CloneImporter {
                 }
             }
             if (engineError != null) {
-                r.notes.add("start option: the attribute is server-owned on the target and no engine answered the DirXML extended operation ("
-                    + engineError + ") — the drivers keep the engine's default; set them to manual (driver.set / Designer) before an engine runs this driver set");
+                r.notes.add("start option: the attribute is server-owned on the target, and the engine's DirXML extended operation did not answer ("
+                    + engineError + "). The driver set is associated with the lab server now; restart the engine there (or load the IDM module), "
+                    + "then run this import again — it sets every cloned driver to manual start through the engine. Until then the drivers keep the engine's default.");
             } else if (set > 0) {
                 r.notes.add("start option set to manual on " + set + " driver(s) through the engine (the attribute is server-owned on the target)");
                 unwritable.remove(ClonePolicy.START_OPTION_ATTR);

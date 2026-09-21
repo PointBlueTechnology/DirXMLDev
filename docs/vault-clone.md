@@ -298,9 +298,14 @@ to add, OK. What eDirectory taught on the way, all handled and reported by the i
 - **Server-owned attributes differ by version**: eDirectory 9.3.3 defines
   `DirXML-DriverStartOption` `NO-USER-MODIFICATION`, 9.2.8 does not. The import reads
   the *target's* schema and never writes what it marks server-owned; the start option is
-  then set the way deploy sets it, through the engine's DirXML extended operation — and
-  when no engine answers (this lab has none), it says so and asks for the option to be
-  set before an engine runs the drivers.
+  then set the way deploy sets it, through the engine's DirXML extended operation. That
+  operation answers only once the engine on the lab server has loaded the driver set,
+  which needs the association (`DirXML-ServerList`, written in the entry phase) and then
+  a restart of the engine or a load of the IDM module (Jerry). So the import tries it on
+  every cloned driver on every run, and the way to finish a clone on such a target is:
+  import, restart the engine on the lab server, run the same import again — it adds
+  nothing and sets every driver to manual start through the engine. On this lab, which
+  has no engine, the note says exactly that.
 - **Re-runs converge**: an existing entry is skipped, its references and ACLs get only
   the values it lacks, and the clone's own driver set from an earlier run is recognised
   (a driver set holding drivers the clone does not carry is refused unless
