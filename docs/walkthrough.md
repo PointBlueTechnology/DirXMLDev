@@ -298,3 +298,13 @@ produces a driver-set export Designer can import as well.
   the same day; a lab's diff should read "no differences" when you leave.
 - Never put a password, a snapshot or a client's policy content into a chat
   or into this repository; client trees live in the client's repository.
+
+## Cloning a customer's vault into a lab
+
+When the tree you must develop against is not one you can develop *on*, clone it:
+`bin/idm vault.export-clone --env prod --out clone/acme` writes an inspectable bundle
+(schema, configuration objects, no secrets, no passwords, no identity data), and
+`bin/idm vault.import-clone --env lab --from clone/acme --yes` recreates it in an empty
+lab tree, tied to the lab's server. The two can run on different workstations. Then
+`import-live --env lab` and the ordinary loop above. See [vault-clone.md](vault-clone.md).
+
