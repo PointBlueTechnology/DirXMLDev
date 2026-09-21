@@ -76,7 +76,7 @@ public final class DsObjectXml {
                 }
                 if (name.equalsIgnoreCase("objectClass")) {
                     o.classes.addAll(values);
-                } else {
+                } else if (!name.equalsIgnoreCase("cn") && !name.equalsIgnoreCase("CN")) {
                     o.put(name, values);
                 }
             }

@@ -42,7 +42,7 @@ public class AppConfigLdifReaderTest {
             entry("cn=DirectoryModel," + APPCFG, "srvprvDirectoryModel", "srvprvModified", "20240101"),
             entry("cn=EntityDefs,cn=DirectoryModel," + APPCFG, "srvprvEntityDefs"),
             entry("cn=user,cn=EntityDefs,cn=DirectoryModel," + APPCFG, "srvprvEntity",
-                "objectClass", "DirXML-PkgItemAux", "XmlData", ENTITY_XML, "srvprvEntityType", "1", "description", "User",
+                "objectClass", "DirXML-PkgItemAux", "XmlData", ENTITY_XML, "srvprvEntityType", "P", "description", "User",
                 "DirXML-pkgGUID", "PKGID;com.x.y;1.0.0", "DirXML-pkgAssociationId", "ASSOC1", "DirXML-pkgChecksum", "123"),
             entry("cn=RoleConfig," + APPCFG, "nrfConfig", "Version", "2.0"),
             entry("cn=RoleDefs,cn=RoleConfig," + APPCFG, "nrfRoleDefs"),
@@ -94,7 +94,7 @@ public class AppConfigLdifReaderTest {
         AppObject user = p.object("DirectoryModel/EntityDefs/user");
         assertEquals(AppObject.Kind.ENTITY, user.kind());
         assertEquals(List.of("DirXML-PkgItemAux", "srvprvEntity", "Top"), user.classes);
-        assertEquals("1", user.first("srvprvEntityType"));
+        assertEquals("P", user.first("srvprvEntityType"));
         String xml = user.first("XmlData");
         assertTrue(xml.startsWith("<?xml"));
         assertTrue("CRLF folded", !xml.contains("\r"));

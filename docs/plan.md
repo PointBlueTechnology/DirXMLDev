@@ -388,11 +388,14 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   laxity. Driver set tied to the lab server by `DirXML-ServerList`. Awaiting Jerry's
   decisions (§8: a target tree above all).
 
-- **AppConfig fully supported — A1 + A2 BUILT 2026-09-21** (`docs/appconfig.md` §6–§7: `AppObject`
+- **AppConfig fully supported — A1–A3 BUILT 2026-09-21** (`docs/appconfig.md` §6–§8: `AppObject`
   model, LDIF/live reader, ds-object files under `provisioning/objects/`, `appconfig.list/show`,
   `AppConfigCheck`, package jar provisioning blob + catalog unpack; diff/deploy with the guard per
-  kind, parents-first/deepest-first, customized checksums; live on idm254: add/change/delete a role
-  and customize/revert a packaged one, all verified; 669 tests). Next A3 Designer project, then typed ops.
+  kind, parents-first/deepest-first, customized checksums, verified live on idm254; Designer project
+  in and out for every kind — inline `.appconfig`, XmlData files, `.role20`/`.rsrc` XMI,
+  `.roleconfig`, `.attestation` — proved against test11pf and by new-project/update round trips
+  from the idm254 tree; 677 tests). Open: Designer opening the written project (Jerry). Next:
+  typed operations (`appconfig.set`, `entity.*`, `role.*`).
   Design note 2026-09-21:
   one generic `AppObject` (ds-object form, the format Designer, its digests and the UA
   base package already share) for the 200-odd objects the tree does not model

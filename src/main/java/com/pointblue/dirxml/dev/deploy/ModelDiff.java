@@ -704,8 +704,8 @@ public final class ModelDiff {
         names.addAll(x.attrs.keySet());
         names.addAll(y.attrs.keySet());
         for (String n : names) {
-            if (AppConfigPolicy.isOperational(n)) {
-                continue;
+            if (AppConfigPolicy.isOperational(n) || AppConfigPolicy.isAbsent(x.meta, n) || AppConfigPolicy.isAbsent(y.meta, n)) {
+                continue;   // operational, or one side (a Designer project) cannot carry it: no opinion
             }
             List<String> vx = normalizedValues(n, x.attrs.get(n));
             List<String> vy = normalizedValues(n, y.attrs.get(n));
@@ -765,7 +765,7 @@ public final class ModelDiff {
         List<String> out = new ArrayList<>();
         for (String v : values) {
             String xml = AppConfigPolicy.isXmlAttribute(attr) ? com.pointblue.dirxml.dev.ascode.DsObjectXml.asXml(v) : null;
-            out.add(xml != null ? xml : v);
+            out.add(xml != null ? xml : AppConfigPolicy.isLocalizedAttribute(attr) ? AppConfigPolicy.sortedLocalized(v) : v);
         }
         if (out.size() > 1) {
             out.sort(null);

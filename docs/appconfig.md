@@ -1,4 +1,4 @@
-# AppConfig as code — design note (2026-09-21); A1 and A2 built the same day (§6, §7)
+# AppConfig as code — design note (2026-09-21); A1–A3 built the same day (§6–§8)
 
 The User Application driver's `cn=AppConfig` subtree is the Identity Applications'
 configuration: the directory abstraction layer, request definitions and forms,
@@ -277,6 +277,69 @@ one step each, `verify: vault matches the tree` every time, the vault back to
 content + derived checksum out, content + package checksum back, both
 verified. 669 tests.
 
-Next: **A3** the Designer project (reader/writer for every kind, the
-`.role20` spike), then **B** typed operations (`appconfig.set`, `entity.*`,
-`role.*`).
+## 8. A3 — the Designer project, built 2026-09-21
+
+`source/DesignerAppConfig` holds Designer's shapes for every kind, both ways;
+`ProjectReader` and `ProjectWriter` use it (read, update, `--new`).
+
+**Where Designer keeps what.** Inline in `.appconfig` (nested `ds-object`s,
+XML-valued attributes as bare base64): the stock system entities and choices
+(`srvprvEntityType` **S**), reports, nav items, auth types, the web-app
+configs other than the locale one, and every container. As files with a
+digest: entities and choices typed **P** (`.entity`, `.choice`),
+relationships, the directory-model configuration and the locale configuration
+(`.relation`, `.configuration`, `.locale` — the `XmlData` document verbatim),
+attestations (`.attestation`, a ds-object document), roles and resources
+(`.role20`, `.rsrc` — Designer's XMI dialect), the role configuration
+(`.roleconfig`). The digest `type` is the class except the role catalog's
+pseudo types (`nrfRoleLevel20`, `nrfRoleDefsLevel20`,
+`nrfRoleDefsLevel20-System`, `nrfResourceDefs-System`) and `srvprvLocales`.
+A file item wins over an inline object of the same path; a container
+directory's digest completes the inline container.
+
+**The XMI mappings** (checked against every project on this Mac: 599 roles,
+617 resources). Role: `id="cn=X"`, `roleLevel="Level20"` → `nrfRoleLevel`,
+`localizedName/Description(label, locale)` → the `lang~text|…` strings,
+`categoryKey` → `nrfRoleCategoryKey`, `owner`, `implicitGroup`,
+`implicitContainer`, `approver`, `childRole`, `quorum` → their attributes,
+`trustee dn="T#nrfAccess…"` ↔ the ACL value `4#entry#T#nrfAccess…` (a subtree
+ACL has no XMI form). Resource: `allowMultipleAssignment` → `nrfAllowMulti`,
+`categoryKey`, `owner`, `approver`, `resourceParameter(binding, codeMapKey,
+key, type, localizedDisplay)` ↔ the `nrfResourceParms` document,
+`entitlement(dn, referenceXML)` ↔ `nrfEntitlementRef` (`dn#0#<ref>`).
+Role configuration: one `configuration:` element per attribute; role levels
+`containerDN/roleLevel/localizedXML(display-name, description)` ↔
+`dn#level#<xml>…</xml>\n`; the entitlement default's
+`refresh-rate/query-timeout/concat/codemap-display-result-element` ↔ the
+`<xml><query-config>` document. Defaults the files do not carry, uniform on
+idm254 and ig4: role `nrfStatus` 50, resource `nrfActive` and
+`nrfAllowAprOveride` FALSE. Booleans are read as the vault spells them
+(`TRUE`/`FALSE`); localized strings compare by language, not segment order.
+
+**What a project cannot say.** The vault's `description` of an `XmlData`
+file item, a choice's `srvprvEntityType`, and the ACLs on anything but a role
+are not in Designer's files; the reader records them as
+`source.absent-attrs` and the diff gives neither side an opinion on them (the
+same rule as a tree without icons). `srvprvModified` is operational now.
+
+**Writer.** An added object goes where Designer would keep it (file + digest
+with minted guid, display names from the localized attribute or the XmlData
+labels, package stamps; or inline); a changed one is rewritten in place
+(digest kept, same guid); a removed one is deleted (an inline container only
+when empty). Container directories and their digests are created on the way.
+`--new` writes every object after the forms and PRDs and prunes the
+template's containers the tree does not have. `.appconfig` is parsed once
+per driver, edited in place and re-serialized on flush.
+
+**Proof (2026-09-21).** test11pf (a Designer-made project, UA base 4.8.0) read
+against the idm254 tree (4.10.1): every remaining difference is version drift
+(Hebrew strings, checksums, three nav items) — the mapping itself is exact.
+`export-project --new` from the idm254 tree: 194 provisioning files, read back
+= 0 object differences; a mutated tree (new category + role, a renamed nav
+item, a removed packaged entity) updated into that project: three files
+created, two deleted, `.appconfig` changed, read back = 0 differences, a
+second update touches nothing. 677 tests. Designer opening the written
+project is Jerry's check (§9's `ig4new` look is still pending too).
+
+Next: **B** typed operations (`appconfig.set`, `entity.*`, `role.*`,
+`resource.*`) on the same storage.

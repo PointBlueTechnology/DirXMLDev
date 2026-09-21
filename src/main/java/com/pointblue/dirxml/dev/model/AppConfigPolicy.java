@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.model;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -40,7 +41,58 @@ public final class AppConfigPolicy {
     private static final Set<String> OPERATIONAL_ATTRS = caseInsensitive(
         "equivalentToMe", "DirXML-Associations", "GUID", "revision", "modifiersName", "creatorsName",
         "createTimestamp", "modifyTimestamp", "structuralObjectClass", "subordinateCount", "entryFlags",
-        "localEntryID", "federationBoundary", "subschemaSubentry", "entryDN", "ACL-Read", "nrfLastUpdated");
+        "localEntryID", "federationBoundary", "subschemaSubentry", "entryDN", "ACL-Read", "nrfLastUpdated", "srvprvModified");
+    /** Boolean-syntax attributes: the vault spells them {@code TRUE}/{@code FALSE}; Designer's files say {@code true}/{@code false}. */
+    private static final Set<String> BOOLEAN_ATTRS = caseInsensitive("nrfAttestationDefault", "nrfDefault", "nrfVisible",
+        "nrfActive", "nrfAllowMulti", "nrfAllowAprOveride", "nrfRevokeApprovalRequired", "nrfIsExpirationRequired");
+
+    /** A value as the vault holds it: booleans upper-cased; everything else as given. */
+    public static String normalizeValue(String attr, String value) {
+        if (value != null && BOOLEAN_ATTRS.contains(attr)) {
+            String t = value.trim();
+            if (t.equalsIgnoreCase("true") || t.equalsIgnoreCase("false")) {
+                return t.toUpperCase(Locale.ROOT);
+            }
+        }
+        return value;
+    }
+
+    /** True for the {@code lang~text|…} localized attributes, whose segment order carries no meaning. */
+    public static boolean isLocalizedAttribute(String attr) {
+        return attr.endsWith("LocalizedNames") || attr.endsWith("LocalizedDescrs");
+    }
+
+    /** A localized string with its segments sorted by language, for comparison. */
+    public static String sortedLocalized(String value) {
+        if (value == null) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        for (String part : value.split("\\|")) {
+            if (!part.isEmpty()) {
+                parts.add(part);
+            }
+        }
+        parts.sort(null);
+        return String.join("|", parts);
+    }
+
+    /** Meta key: attributes a source cannot carry ({@code a,b,c}); neither side of a diff has an opinion on them. */
+    public static final String ABSENT_ATTRS_META = "source.absent-attrs";
+
+    /** True when {@code meta} says the source could not carry {@code attr}. */
+    public static boolean isAbsent(Map<String, String> meta, String attr) {
+        String v = meta.get(ABSENT_ATTRS_META);
+        if (v == null) {
+            return false;
+        }
+        for (String a : v.split(",")) {
+            if (a.trim().equalsIgnoreCase(attr)) {
+                return true;
+            }
+        }
+        return false;
+    }
     /** Attributes whose value is an XML document. */
     private static final Set<String> XML_ATTRS = caseInsensitive("XmlData", "nrfResourceParms", "nrfEntitlementConfigDefault");
     /** Attributes that are not the object's design content in any source (identity, stamps carried in meta). */
