@@ -43,6 +43,8 @@ public final class CloneExporter {
         public boolean keepDriverState;
         /** Containers whose identity data (users, groups) is cloned too; empty = configuration only. */
         public List<String> dataContainers = List.of();
+        /** Replace people's names and mail local parts with consistent fakes on the way into the bundle. */
+        public boolean pseudonymise;
         public String sourceName;     // environment name / URL for the manifest
         /** Source server DN -> LDAP URL, for servers the tree does not describe reachably; derived otherwise. */
         public Map<String, String> serverUrls = new LinkedHashMap<>();
@@ -58,6 +60,8 @@ public final class CloneExporter {
         public int readEntries;
         public int skippedEntries;
         public int driversForcedManual;
+        public int dataEntries;
+        public int pseudonymised;
 
         public String text() {
             StringBuilder sb = new StringBuilder();
@@ -75,6 +79,9 @@ public final class CloneExporter {
                 sb.append("  skipped (never cloned): ").append(String.join(", ", skippedSubtrees)).append('\n');
             }
             sb.append("  skipped entries: ").append(skippedEntries).append("; drivers forced to manual start: ").append(driversForcedManual).append('\n');
+            if (dataEntries > 0) {
+                sb.append("  identity data: ").append(dataEntries).append(" entries").append(pseudonymised > 0 ? ", " + pseudonymised + " people pseudonymised (names and mail local parts)" : "").append('\n');
+            }
             if (!excludedAttributes.isEmpty()) {
                 sb.append("  excluded attributes (values): ");
                 List<String> parts = new ArrayList<>();
@@ -168,8 +175,17 @@ public final class CloneExporter {
         }
         Map<String, Map<String, List<byte[]>>> primaryValues = new LinkedHashMap<>();
         Map<String, Map<String, Map<String, Object>>> placement = new LinkedHashMap<>();   // driver -> server -> {state, startOption}
+        Pseudonymiser pseudonymiser = options.pseudonymise ? new Pseudonymiser() : null;
 
         for (Vault.Entry e : cloned) {
+            if (ClonePolicy.isData(e)) {
+                r.dataEntries++;
+                if (pseudonymiser != null) {
+                    int before = pseudonymiser.people();
+                    pseudonymiser.apply(e);
+                    r.pseudonymised += pseudonymiser.people() - before;
+                }
+            }
             Vault.Entry out = new Vault.Entry(e.dn);
             Map<String, List<byte[]>> refs = new LinkedHashMap<>();
             Map<String, List<byte[]>> acls = new LinkedHashMap<>();
@@ -306,6 +322,9 @@ public final class CloneExporter {
         b.manifest.put("withRbs", options.withRbs);
         b.manifest.put("keepDriverState", options.keepDriverState);
         b.manifest.put("dataContainers", options.dataContainers);
+        b.manifest.put("dataEntries", r.dataEntries);
+        b.manifest.put("pseudonymised", options.pseudonymise);
+        b.manifest.put("pseudonymisedPeople", r.pseudonymised);
         b.manifest.put("driversForcedManual", r.driversForcedManual);
         b.manifest.put("skippedSubtrees", r.skippedSubtrees);
         Map<String, Object> excluded = new LinkedHashMap<>();
@@ -340,7 +359,7 @@ public final class CloneExporter {
             count(r.excludedAttributes, name, values.size());
             return new Placed(Where.DROP, values);
         }
-        if (ClonePolicy.excludedAttribute(name, options.keepDriverState) || schema.isOperational(name)) {
+        if (ClonePolicy.excludedAttribute(name, options.keepDriverState, !options.dataContainers.isEmpty()) || schema.isOperational(name)) {
             count(r.excludedAttributes, name, values.size());
             return new Placed(Where.DROP, values);
         }

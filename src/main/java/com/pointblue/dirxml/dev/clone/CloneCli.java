@@ -12,9 +12,10 @@ import javax.naming.directory.SearchControls;
 
 /**
  * <pre>
- *   vault.export-clone --env <src> --out <dir> [--rbs] [--keep-driver-state]
+ *   vault.export-clone --env <src> --out <dir> [--rbs] [--keep-driver-state] [--data <container>[,…]] [--pseudonymise]
  *   vault.import-clone --env <lab> --from <dir> [--server <dn>] [--map <srcDn>=<dstDn> …]
- *                      [--driver-server <driver>=<srcServerDn> …] [--replace] [--replace-driverset] [--yes] [--json]
+ *                      [--driver-server <driver>=<srcServerDn> …] [--user-password <secretKey>]
+ *                      [--replace] [--replace-driverset] [--yes] [--json]
  * </pre>
  * Other servers of a tree (source or lab) are reached with the environment's credentials at
  * the URL the tree describes, or at {@code <env>.servers=<serverDn>=<url>;…} when it does not.
@@ -43,6 +44,16 @@ public final class CloneCli {
                 CloneExporter.Options o = new CloneExporter.Options();
                 o.withRbs = opts.containsKey("rbs");
                 o.keepDriverState = opts.containsKey("keep-driver-state");
+                o.pseudonymise = opts.containsKey("pseudonymise") || opts.containsKey("pseudonymize");
+                List<String> data = new java.util.ArrayList<>();
+                for (String d : opts.getOrDefault("data", List.of())) {
+                    for (String part : d.split(",")) {
+                        if (!part.isBlank()) {
+                            data.add(part.trim());
+                        }
+                    }
+                }
+                o.dataContainers = data;
                 o.sourceName = env.name + " (" + env.url + ")";
                 o.serverUrls.putAll(serverUrls(env));
                 final Vault.Config cfg = c;
@@ -95,6 +106,14 @@ public final class CloneCli {
                 final Vault.Config cfg = c;
                 o.targetConnector = url -> Vault.connect(cfg.withUrl(url));
                 o.serverDn = first(opts, "server");
+                String pwKey = first(opts, "user-password");
+                if (pwKey != null) {
+                    if (env.secretsFile == null) {
+                        System.err.println("--user-password needs the environment's secrets file (" + env.name + ".secrets=…)");
+                        return 2;
+                    }
+                    o.userPassword = com.pointblue.dirxml.dev.deploy.Secrets.load(env.secretsFile).get(pwKey);
+                }
                 CloneImporter.Result r;
                 try (Vault v = Vault.connect(c)) {
                     if (o.serverDn == null) {

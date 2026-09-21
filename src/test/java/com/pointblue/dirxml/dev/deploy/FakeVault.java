@@ -23,6 +23,10 @@ public final class FakeVault implements VaultAccess {
     final List<String> deleted = new ArrayList<>();
     final Map<String, List<String>> namedPasswords = new HashMap<>();
     boolean closed;
+    /** When set, any write of {@code userPassword} fails with this message (the tree's password policy saying no). */
+    public String refuseUserPasswords;
+    /** When set, every added entry gets this ACL value from the "server", as eDirectory grants users their default rights. */
+    public String defaultAclOnAdd;
 
     /** Seeds an entry as-is (its {@code objectClass} attribute must already be set). */
     public void seed(Vault.Entry e) {
@@ -62,6 +66,9 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public void add(String dn, List<String> objectClasses, Map<String, List<byte[]>> attrs) {
+        if (refuseUserPasswords != null && attrs.keySet().stream().anyMatch(k -> k.equalsIgnoreCase("userPassword"))) {
+            throw new Vault.VaultException("add " + dn + ": " + refuseUserPasswords, null);
+        }
         Vault.Entry e = new Vault.Entry(dn);
         List<byte[]> oc = new ArrayList<>();
         for (String c : objectClasses) {
@@ -69,7 +76,30 @@ public final class FakeVault implements VaultAccess {
         }
         e.attrs.put("objectClass", oc);
         e.attrs.putAll(attrs);
+        if (defaultAclOnAdd != null) {
+            List<byte[]> acl = new ArrayList<>(e.attrs.getOrDefault("ACL", List.of()));
+            acl.add(defaultAclOnAdd.getBytes(StandardCharsets.UTF_8));
+            e.attrs.put("ACL", acl);
+        }
         byDn.put(key(dn), e);
+    }
+
+    @Override
+    public void addValues(String dn, String attr, List<byte[]> values) {
+        Vault.Entry e = byDn.get(key(dn));
+        if (e == null) {
+            throw new Vault.VaultException("modify-add " + dn + " " + attr + ": no such object", null);
+        }
+        List<byte[]> cur = new ArrayList<>(e.attrs.getOrDefault(attr, List.of()));
+        for (byte[] v : values) {
+            for (byte[] have : cur) {
+                if (java.util.Arrays.equals(have, v)) {
+                    throw new Vault.VaultException("modify-add " + dn + " " + attr + ": [LDAP: error code 20 - NDS error: duplicate value (-614)]", null);
+                }
+            }
+            cur.add(v);
+        }
+        e.attrs.put(attr, cur);
     }
 
     @Override
@@ -89,6 +119,9 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public void replace(String dn, String attr, List<byte[]> values) {
+        if (refuseUserPasswords != null && attr.equalsIgnoreCase("userPassword")) {
+            throw new Vault.VaultException("modify " + dn + " " + attr + ": " + refuseUserPasswords, null);
+        }
         Vault.Entry e = byDn.get(key(dn));
         if (e == null) {
             throw new Vault.VaultException("modify " + dn + " " + attr + ": no such object", null);
@@ -100,16 +133,6 @@ public final class FakeVault implements VaultAccess {
         }
     }
 
-    @Override
-    public void addValues(String dn, String attr, List<byte[]> values) {
-        Vault.Entry e = byDn.get(key(dn));
-        if (e == null) {
-            throw new Vault.VaultException("modify-add " + dn + " " + attr + ": no such object", null);
-        }
-        List<byte[]> cur = new ArrayList<>(e.attrs.getOrDefault(attr, List.of()));
-        cur.addAll(values);
-        e.attrs.put(attr, cur);
-    }
 
     @Override
     public void delete(String dn) {
