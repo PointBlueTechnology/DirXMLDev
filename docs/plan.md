@@ -388,6 +388,15 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   laxity. Driver set tied to the lab server by `DirXML-ServerList`. Awaiting Jerry's
   decisions (§8: a target tree above all).
 
+- **AppConfig fully supported — design note written 2026-09-21**, `docs/appconfig.md`:
+  one generic `AppObject` (ds-object form, the format Designer, its digests and the UA
+  base package already share) for the 200-odd objects the tree does not model
+  (entities, choices, relationships, roles, resources, attestations, reports, nav items,
+  auth types, web-app configs, the two configurations), runtime containers excluded,
+  as-code under `provisioning/objects/`, diff/deploy attribute-wise, Designer project
+  in/out. Decisions in its §3 (roles/resources in scope, operational attributes, layout,
+  Designer's XMI role files, package-jar fix). Build order A1–A3 then typed ops.
+
 - **A fresh Designer project from a tree** — `export-project --new`:
   skeleton, drivers, the UA driver's `AppConfig` with forms/PRDs/entitlements,
   and the packaged drivers' `IdmPackage_` catalog entries from the git
@@ -396,6 +405,16 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   decisions in its §5).
 
 ## Follow-ups (small, not scheduled)
+
+- **`validate`: DirXML-Script required attributes.** ig4's `Send expiration email`
+  (AcctExpNotif, Publisher) has `do-send-email-from-template` with `notification-dn`
+  but no `template-dn`; our validator passes it, Designer's importer NPEs and drops the
+  policy (found 2026-09-21 importing the clone). A check against the DirXML-Script
+  DTD's required attributes (start with the send-email actions and `token-map`'s
+  `src`/`dest`) would have named it. Also the schema note Designer prints
+  ("cannot specify a leaf as a containment class: srvprvJSONForm") is stock.
+- **`PackageJar` misses the package's AppConfig** (`children/provisioning` blob, not
+  `provisioning-data`) — fixed as part of AppConfig A1 (docs/appconfig.md §5).
 
 - ~~**Two package-stamp vocabularies, and the deploy side reads only one**~~ — **done
   2026-09-18** (`docs/designer-new-project.md` §7.2f, `docs/model.md` "Package stamps"):
