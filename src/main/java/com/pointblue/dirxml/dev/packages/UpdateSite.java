@@ -48,7 +48,7 @@ public final class UpdateSite {
         try {
             siteXml = get(client, base + "site.xml");
         } catch (Exception e) {
-            r.error = "could not read " + base + "site.xml: " + e.getMessage();
+            r.error = "could not read " + base + "site.xml: " + describe(e);
             return r;
         }
         Map<String, List<Entry>> byShort = new LinkedHashMap<>();
@@ -103,7 +103,7 @@ public final class UpdateSite {
                 r.skipped.add(ar.shortName + "_" + ar.version + " (already in catalog)");
             }
         } catch (Exception ex) {
-            r.refused.add(e.shortName + "_" + e.version + ": " + ex.getMessage());
+            r.refused.add(e.shortName + "_" + e.version + ": " + describe(ex));
         } finally {
             if (tmp != null) {
                 try {
@@ -122,6 +122,23 @@ public final class UpdateSite {
         } catch (Exception ignore) {
             // no deprecation list published, or unreachable — recorded, not required
         }
+    }
+
+    /** A failure's message with its class, and the root cause when the message is missing (never a bare "null"). */
+    static String describe(Throwable t) {
+        Throwable root = t;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String msg = t.getMessage();
+        if (msg == null || msg.isBlank()) {
+            msg = root.getMessage();
+        }
+        String head = t.getClass().getSimpleName();
+        if (root != t) {
+            head += " caused by " + root.getClass().getSimpleName();
+        }
+        return msg == null || msg.isBlank() ? head : head + ": " + msg;
     }
 
     private static List<Entry> parseSite(String xml) {
@@ -148,8 +165,10 @@ public final class UpdateSite {
 
     private static void downloadTo(HttpClient client, String url, Path out) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(60)).GET().build();
+        // WRITE is mandatory once any option is given: the no-option overload adds it, this one does not,
+        // and without it every download died with a message-less IOException (NonWritableChannelException).
         HttpResponse<Path> resp = client.send(req, HttpResponse.BodyHandlers.ofFile(out,
-            StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING));
+            StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE));
         if (resp.statusCode() != 200) {
             throw new IOException(url + ": HTTP " + resp.statusCode());
         }
