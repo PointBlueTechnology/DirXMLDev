@@ -378,6 +378,8 @@ public final class Cli {
         System.err.println("  import-project <projectDir> <outDir>  read a Designer project, write IDM-as-code");
         System.err.println("  import-ldif <dump.ldif> <outDir>      read an LDIF of the driver-set subtree, write IDM-as-code");
         System.err.println("  import-live <outDir> --env E          read the live vault named in environments.properties (its driverSet; a DN before <outDir> overrides)");
+        System.err.println("  vault.export-clone --env E --out DIR [--rbs] [--keep-driver-state]   read a vault into a clone bundle (docs/vault-clone.md)");
+        System.err.println("  vault.import-clone --env E --from DIR [--server DN] [--map src=dst] [--replace] [--replace-driverset] [--yes]   create it in a lab tree");
         System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
         System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
         System.err.println("  export-project <tree> <projectDir> [--dry-run] [--json]  update an existing Designer project to match a tree");

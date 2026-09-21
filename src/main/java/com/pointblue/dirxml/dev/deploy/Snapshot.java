@@ -181,81 +181,17 @@ public final class Snapshot {
     }
 
     private static String ldifLine(String name, byte[] value) {
-        String raw = isSafe(value)
-            ? name + ": " + new String(value, StandardCharsets.UTF_8)
-            : name + ":: " + Base64.getEncoder().encodeToString(value);
-        return fold(raw);
-    }
-
-    /** RFC 2849 "safe string": printable ASCII, not starting with space/colon/less-than. */
-    private static boolean isSafe(byte[] v) {
-        if (v.length == 0) {
-            return true;
-        }
-        if (v[0] == ' ' || v[0] == ':' || v[0] == '<') {
-            return false;
-        }
-        for (byte b : v) {
-            int c = b & 0xFF;
-            if (c < 0x20 || c > 0x7E) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static String fold(String line) {
-        if (line.length() <= 76) {
-            return line;
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append(line, 0, 76);
-        int i = 76;
-        while (i < line.length()) {
-            int end = Math.min(i + 75, line.length());
-            sb.append('\n').append(' ').append(line, i, end);
-            i = end;
-        }
-        return sb.toString();
+        return Ldif.line(name, value);
     }
 
     // ---- LDIF parsing -------------------------------------------------------------------
 
-    /** Merge continuation lines (a single leading space) back into the logical line they fold. */
     private static List<String> unfold(String text) {
-        String[] raw = text.split("\n", -1);
-        List<String> logical = new ArrayList<>();
-        for (String line : raw) {
-            if (line.endsWith("\r")) {
-                line = line.substring(0, line.length() - 1);
-            }
-            if (line.startsWith(" ") && !logical.isEmpty() && !logical.get(logical.size() - 1).isEmpty()) {
-                int last = logical.size() - 1;
-                logical.set(last, logical.get(last) + line.substring(1));
-            } else {
-                logical.add(line);
-            }
-        }
-        return logical;
+        return Ldif.unfold(text);
     }
 
     private static List<List<String>> blocks(List<String> logicalLines) {
-        List<List<String>> out = new ArrayList<>();
-        List<String> cur = new ArrayList<>();
-        for (String line : logicalLines) {
-            if (line.isEmpty()) {
-                if (!cur.isEmpty()) {
-                    out.add(cur);
-                    cur = new ArrayList<>();
-                }
-            } else {
-                cur.add(line);
-            }
-        }
-        if (!cur.isEmpty()) {
-            out.add(cur);
-        }
-        return out;
+        return Ldif.blocks(logicalLines);
     }
 
     private static CapturedEntry parseBlock(List<String> block) {
@@ -263,43 +199,21 @@ public final class Snapshot {
         if (first.startsWith("# absent: ")) {
             return new CapturedEntry(first.substring("# absent: ".length()), true, null);
         }
-        AttrLine dnLine = parseAttrLine(first);
+        Ldif.AttrLine dnLine = parseAttrLine(first);
         if (!dnLine.name.equalsIgnoreCase("dn")) {
             throw new IllegalArgumentException("expected 'dn:' line, got: " + first);
         }
         String dn = new String(dnLine.value, StandardCharsets.UTF_8);
         Vault.Entry entry = new Vault.Entry(dn);
         for (int i = 1; i < block.size(); i++) {
-            AttrLine a = parseAttrLine(block.get(i));
+            Ldif.AttrLine a = parseAttrLine(block.get(i));
             entry.attrs.computeIfAbsent(a.name, k -> new ArrayList<>()).add(a.value);
         }
         return new CapturedEntry(dn, false, entry);
     }
 
-    private static final class AttrLine {
-        final String name;
-        final byte[] value;
-        AttrLine(String name, byte[] value) {
-            this.name = name;
-            this.value = value;
-        }
-    }
-
-    private static AttrLine parseAttrLine(String line) {
-        int c = line.indexOf(':');
-        if (c < 0) {
-            throw new IllegalArgumentException("bad LDIF line: " + line);
-        }
-        String name = line.substring(0, c);
-        if (c + 1 < line.length() && line.charAt(c + 1) == ':') {
-            String b64 = line.substring(c + 2).trim();
-            return new AttrLine(name, b64.isEmpty() ? new byte[0] : Base64.getDecoder().decode(b64));
-        }
-        String rest = c + 1 < line.length() ? line.substring(c + 1) : "";
-        if (rest.startsWith(" ")) {
-            rest = rest.substring(1);
-        }
-        return new AttrLine(name, rest.getBytes(StandardCharsets.UTF_8));
+    private static Ldif.AttrLine parseAttrLine(String line) {
+        return Ldif.parseAttrLine(line);
     }
 
     // ---- manifest (JSON) ----------------------------------------------------------------
@@ -364,7 +278,7 @@ public final class Snapshot {
         if (isSecret(name)) {
             return "<secret, " + v.length + " bytes>";
         }
-        if (isSafe(v)) {
+        if (Ldif.isSafe(v)) {
             return new String(v, StandardCharsets.UTF_8);
         }
         return "<" + v.length + " bytes>";

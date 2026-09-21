@@ -12,9 +12,12 @@ import java.util.Map;
  * {@link Vault} implements this directly; nothing about its public API
  * changes.
  */
-interface VaultAccess extends AutoCloseable {
+public interface VaultAccess extends AutoCloseable {
 
     Vault.Entry read(String dn);
+
+    /** The entry with exactly these attributes requested (operational ones such as a subschema's {@code attributeTypes} included). */
+    Vault.Entry read(String dn, String... attrs);
 
     boolean exists(String dn);
 
@@ -26,6 +29,9 @@ interface VaultAccess extends AutoCloseable {
     void addObjectClasses(String dn, List<String> classes);
 
     void replace(String dn, String attr, List<byte[]> values);
+
+    /** Add values to an attribute (LDAP modify-add), creating the attribute when absent. */
+    void addValues(String dn, String attr, List<byte[]> values);
 
     void delete(String dn);
 
