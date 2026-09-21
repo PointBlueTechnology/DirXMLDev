@@ -434,18 +434,16 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   Cursor fishbone viewer (`extensions/dirxmldev-visual/`, PR #1) builds itself from `driver.xml`; serving it from the CLI keeps
   one reader of the manifest and lets the viewer follow model changes
   (`docs/vscode-extension-v1.md` proposes it).
-- **`package.fetch` refuses every download with `REFUSED <short>_<ver>: null`**
-  (2026-09-17, both update sites, `--dry-run` lists the versions fine, `curl`
-  downloads the same URL): the download step throws with a null message that
-  the CLI swallows. Print the exception class, and find the cause (Java HTTPS
-  from this Mac, or the site's redirect). Workaround: `curl` the jar and
-  `package.import` it.
-- **`bin/idm` usage omits `vault.*`, `driver.submit` and `driver.trace tail`**
-  (they run, and each prints its own usage when called wrong); add them to
-  the top-level listing. Found 2026-09-16 while writing the walkthrough.
-- **`form.field.add --json '{…}'`** is swallowed by the global `--json`
-  output flag ("unexpected argument"); rename the field's extra-properties
-  flag (e.g. `--props`) and keep `--json` for output. Found 2026-09-16.
+- ~~**`package.fetch` refuses every download with `REFUSED <short>_<ver>: null`**~~ — **fixed
+  2026-09-21**: `HttpResponse.BodyHandlers.ofFile(path, options…)` drops the implicit
+  `WRITE` once any option is passed, so every download died in a message-less
+  `IOException` (root cause `NonWritableChannelException`) that the refusal printed as
+  `null`. `WRITE` is passed now, and a fetch failure names the exception class and root
+  cause (`UpdateSite.describe`). Verified live: `--short NOVLLDAPBASE` adds the jar.
+- ~~**`bin/idm` usage omits `vault.*`, `driver.submit` and `driver.trace tail`**~~ — fixed
+  2026-09-21 (also `package.build`, `package.site`, `package.status` were missing).
+- ~~**`form.field.add --json '{…}'` is swallowed by the global `--json` output flag**~~ — fixed
+  2026-09-21: the extra-properties flag is `--props`; `--json` is output everywhere.
 - **A live run of a W3 integration activity** (REST, role, resource,
   entity) — the grammar is decompiled from `workflow.jar`'s binding classes
   and checked, but never executed on a lab; needs a REST endpoint or a role

@@ -156,13 +156,13 @@ public final class Registry {
         register("form.field.add", "add a new component to a form",
             a -> new FormOps.FieldAdd(a.get("driver"), a.get("form"), a.get("key"), a.get("type"), a.get("label"),
                 a.containsKey("required"), a.containsKey("hidden"), a.containsKey("multiple"), a.containsKey("minimal"),
-                a.get("after"), a.get("before"), a.containsKey("first"), a.get("in"), a.get("json")),
+                a.get("after"), a.get("before"), a.containsKey("first"), a.get("in"), a.get("props")),
             formRef, req("key", "the new component's key"), req("type", "component type (a captured template name, or any Form.io type)"),
             opt("label", "label text"), opt("required", "flag: validate.required = true"), opt("hidden", "flag: hidden = true"),
             opt("multiple", "flag: multiple = true"), opt("minimal", "flag: force the minimal {label,key,type,input} shape"),
             opt("after", "place after this key"), opt("before", "place before this key"), opt("first", "flag: place first"),
             opt("in", "place inside this container/panel/columns component (its first column, if columns)"),
-            opt("json", "extra properties as a JSON object, deep-merged in last"), formDriver);
+            opt("props", "extra properties as a JSON object, deep-merged in last (--json is the output flag)"), formDriver);
 
         register("form.field.set", "change an existing component's properties",
             a -> new FormOps.FieldSet(a.get("driver"), a.get("form"), a.get("key"), a.get("label"),
