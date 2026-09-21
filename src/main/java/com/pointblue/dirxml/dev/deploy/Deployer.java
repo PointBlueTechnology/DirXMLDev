@@ -28,7 +28,18 @@ import java.util.Map;
  */
 public final class Deployer {
 
-    private static final List<String> VALID_DELETE_ALL_KINDS = List.of("entitlements", "forms", "prds");
+    /** {@code --delete-all} kinds: the three typed ones plus every AppConfig object kind in the plural (roles, entities, nav-items …). */
+    static final List<String> VALID_DELETE_ALL_KINDS = validDeleteAllKinds();
+
+    private static List<String> validDeleteAllKinds() {
+        List<String> out = new ArrayList<>(List.of("entitlements", "forms", "prds"));
+        for (com.pointblue.dirxml.dev.model.AppObject.Kind k : com.pointblue.dirxml.dev.model.AppObject.Kind.values()) {
+            if (k != com.pointblue.dirxml.dev.model.AppObject.Kind.PRD && k != com.pointblue.dirxml.dev.model.AppObject.Kind.FORM) {
+                out.add(k.plural());
+            }
+        }
+        return out;
+    }
 
     public static final class Options {
         public Path tree;
@@ -152,7 +163,7 @@ public final class Deployer {
         }
         for (String k : o.deleteAllKinds) {
             if (!VALID_DELETE_ALL_KINDS.contains(k)) {
-                r.refusal = "--delete-all " + k + ": unknown kind (entitlements, forms, prds)";
+                r.refusal = "--delete-all " + k + ": unknown kind (" + String.join(", ", VALID_DELETE_ALL_KINDS) + ")";
                 return r;
             }
         }
@@ -443,7 +454,7 @@ public final class Deployer {
             }
             for (int i = 0; i < live.size(); i++) {
                 if (!Arrays.equals(live.get(i), a.getValue().get(i))) {
-                    if (a.getKey().equalsIgnoreCase(VaultMapping.POLICIES)) {
+                    if (live.size() > 1) {
                         // multi-valued: order isn't guaranteed by LDAP; compare as sets
                         List<String> x = strings(live);
                         List<String> y = strings(a.getValue());

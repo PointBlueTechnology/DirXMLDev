@@ -388,7 +388,7 @@ public final class Cli {
         System.err.println("  vault.diff <tree> --env E [--driver D…] [--json]     the tree vs the live vault (exit 1 if they differ; docs/vault-deploy.md)");
         System.err.println("  vault.verify <tree> --env E [--driver D…] [--json]   same diff, read after a deploy");
         System.err.println("  vault.deploy <tree> --env E [--driver D…] --dry-run|--yes|--step [--confirm E] [--no-restart] [--secrets none|missing|all]");
-        System.err.println("               [--allow-missing-secrets] [--capture-drift] [--delete-driver D…] [--delete-all entitlements|forms|prds…] [--json]");
+        System.err.println("               [--allow-missing-secrets] [--capture-drift] [--delete-driver D…] [--delete-all entitlements|forms|prds|roles|entities|<object kind>s…] [--json]");
         System.err.println("                                        plan → snapshot → write → restart → verify → audit line; never deletes a driver without --delete-driver");
         System.err.println("  vault.rollback --env E --snapshot <file.ldif> [--yes] [--json]   restore a deploy's snapshot");
         System.err.println("  vault.export-clone --env E --out DIR [--rbs] [--keep-driver-state] [--data C,…] [--pseudonymise]   read a vault into a clone bundle (docs/vault-clone.md)");

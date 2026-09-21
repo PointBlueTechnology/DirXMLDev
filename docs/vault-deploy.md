@@ -224,6 +224,16 @@ instead of leaving it alone:
   <name>` as any other production change, and the `DELETE_SUBTREE` step shows
   in the plan text printed before that confirmation, same as every other step.
 
+### AppConfig objects (2026-09-21)
+
+The rest of the User Application driver's AppConfig — entities, roles,
+resources, reports, nav items, auth types, the configurations, containers
+(`docs/appconfig.md`) — diffs and deploys like forms and PRDs: no restart,
+attribute-wise writes of exactly what changed, adds parents-first, deletes
+deepest-first, the guard per object kind (`--delete-all roles|entities|…`),
+the applications' runtime containers never deleted. Operational attributes
+(`equivalentToMe`, `DirXML-Associations`) are never written.
+
 ### Deploy never empties a kind
 
 **The incident (2026-09-16, lab vault ig4).** A tree had been imported by

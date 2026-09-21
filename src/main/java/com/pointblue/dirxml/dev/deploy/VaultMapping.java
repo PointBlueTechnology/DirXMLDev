@@ -444,6 +444,68 @@ public final class VaultMapping {
         return m;
     }
 
+    // ---- the rest of AppConfig (AppObject: entities, roles, resources, reports, nav items, containers …) ----
+
+    /** The DN of an AppConfig object: its path segments as {@code cn=} RDNs, innermost first, under {@code cn=AppConfig}. */
+    public static String objectDn(String dsDn, String driver, List<String> segments) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = segments.size() - 1; i >= 0; i--) {
+            sb.append("cn=").append(escapeRdn(segments.get(i))).append(',');
+        }
+        return sb.append(appConfigDn(dsDn, driver)).toString();
+    }
+
+    /** The DN for an object diff path ({@code drivers/<d>/provisioning/objects/<Container>/…/<name>}). */
+    public static String objectPathDn(String dsDn, String path) {
+        String rest = path.substring("drivers/".length());
+        int i = rest.indexOf("/provisioning/objects/");
+        String driver = rest.substring(0, i);
+        String tail = rest.substring(i + "/provisioning/objects/".length());
+        return objectDn(dsDn, driver, List.of(tail.split("/")));
+    }
+
+    /**
+     * Every attribute an add of an AppConfig object writes: each design attribute as UTF-8 text
+     * (XML-valued ones in their canonical serialization, which is what the model holds); never the
+     * operational ones ({@code equivalentToMe}, {@code DirXML-Associations} …) the applications own.
+     */
+    public static Map<String, List<byte[]>> objectAttributes(com.pointblue.dirxml.dev.model.AppObject o) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> e : o.attrs.entrySet()) {
+            if (com.pointblue.dirxml.dev.model.AppConfigPolicy.isOperational(e.getKey())) {
+                continue;
+            }
+            List<byte[]> bytes = new ArrayList<>();
+            for (String v : e.getValue()) {
+                bytes.add(v.getBytes(StandardCharsets.UTF_8));
+            }
+            m.put(e.getKey(), bytes);
+        }
+        return m;
+    }
+
+    /**
+     * The bytes a content-derived checksum of an AppConfig object covers: {@code XmlData} when the
+     * object has one (entities, choices, relationships, reports, attestations, the two configurations),
+     * else every design attribute in name order — deterministic, so a customized object's checksum
+     * differs from the package's and Designer's modified test trips.
+     */
+    public static byte[] objectContentBytes(com.pointblue.dirxml.dev.model.AppObject o) {
+        String xml = o.first("XmlData");
+        if (xml != null) {
+            return xml.getBytes(StandardCharsets.UTF_8);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, List<byte[]>> e : objectAttributes(o).entrySet()) {
+            sb.append(e.getKey()).append('=');
+            for (byte[] b : e.getValue()) {
+                sb.append(new String(b, StandardCharsets.UTF_8)).append('\u0000');
+            }
+            sb.append('\n');
+        }
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
     // ---- entitlements (DirXML-Entitlement objects hanging directly off a driver) ----
 
     public static final String OC_ENTITLEMENT = "DirXML-Entitlement";
