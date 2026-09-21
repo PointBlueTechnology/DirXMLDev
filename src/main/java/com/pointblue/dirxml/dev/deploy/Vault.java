@@ -94,6 +94,19 @@ public final class Vault implements VaultAccess {
         public String bindDn;
         public String password;
         public boolean trustAll = true;
+        /** Attributes beyond {@link #BINARY_ATTRS} to read as bytes (a clone marks every octet-string attribute of the source schema). */
+        public java.util.Collection<String> binaryAttrs = List.of();
+
+        /** The same credentials and trust for another URL (another server of the same tree). */
+        public Config withUrl(String otherUrl) {
+            Config c = new Config();
+            c.url = otherUrl;
+            c.bindDn = bindDn;
+            c.password = password;
+            c.trustAll = trustAll;
+            c.binaryAttrs = binaryAttrs;
+            return c;
+        }
     }
 
     /** One LDAP entry: DN, object classes, and every attribute as byte values. */
@@ -101,7 +114,7 @@ public final class Vault implements VaultAccess {
         public final String dn;
         public final Map<String, List<byte[]>> attrs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
-        Entry(String dn) {
+        public Entry(String dn) {
             this.dn = dn;
         }
 
@@ -163,7 +176,9 @@ public final class Vault implements VaultAccess {
             env.put(Context.PROVIDER_URL, c.url);
             env.put(Context.SECURITY_PRINCIPAL, c.bindDn);
             env.put(Context.SECURITY_CREDENTIALS, c.password);
-            env.put("java.naming.ldap.attributes.binary", String.join(" ", BINARY_ATTRS));
+            List<String> binary = new ArrayList<>(BINARY_ATTRS);
+            binary.addAll(c.binaryAttrs);
+            env.put("java.naming.ldap.attributes.binary", String.join(" ", binary));
             if (c.url.startsWith("ldaps") && c.trustAll) {
                 env.put("java.naming.ldap.factory.socket", "com.pointblue.dirxml.sim.TrustAllSocketFactory");
             }
@@ -195,6 +210,18 @@ public final class Vault implements VaultAccess {
     public Entry read(String dn) {
         try {
             Attributes a = ldap.getAttributes(dn);
+            return toEntry(dn, a);
+        } catch (NameNotFoundException e) {
+            return null;
+        } catch (Exception e) {
+            throw new VaultException("read " + dn + ": " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public Entry read(String dn, String... attrs) {
+        try {
+            Attributes a = ldap.getAttributes(dn, attrs);
             return toEntry(dn, a);
         } catch (NameNotFoundException e) {
             return null;
@@ -313,6 +340,23 @@ public final class Vault implements VaultAccess {
         }
     }
 
+    /** Add values to an attribute (modify-add): the attribute is created when absent, existing values stay. */
+    @Override
+    public void addValues(String dn, String attr, List<byte[]> values) {
+        if (values.isEmpty()) {
+            return;
+        }
+        try {
+            BasicAttribute b = new BasicAttribute(attr);
+            for (byte[] v : values) {
+                b.add(isBinary(attr) ? v : new String(v, StandardCharsets.UTF_8));
+            }
+            ldap.modifyAttributes(dn, new ModificationItem[] {new ModificationItem(DirContext.ADD_ATTRIBUTE, b)});
+        } catch (Exception e) {
+            throw new VaultException("modify-add " + dn + " " + attr + ": " + e.getMessage(), e);
+        }
+    }
+
     public void replace(String dn, String attr, String value) {
         replace(dn, attr, List.of(value.getBytes(StandardCharsets.UTF_8)));
     }
@@ -334,8 +378,13 @@ public final class Vault implements VaultAccess {
         }
     }
 
-    static boolean isBinary(String attr) {
+    boolean isBinary(String attr) {
         for (String b : BINARY_ATTRS) {
+            if (b.equalsIgnoreCase(attr)) {
+                return true;
+            }
+        }
+        for (String b : config.binaryAttrs) {
             if (b.equalsIgnoreCase(attr)) {
                 return true;
             }
