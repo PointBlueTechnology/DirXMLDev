@@ -374,6 +374,16 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 
 ## Proposed next track (design note written, awaiting decisions)
 
+- **Clone an Identity Vault into a lab tree** — `docs/vault-clone.md` (2026-09-21):
+  generic, attribute-faithful copy of schema + Security (password policies,
+  notification templates) + containers + the driver set (+ optional data slice)
+  into an inspectable LDIF bundle, imported in four phases (schema, entries without
+  DN attributes parents-first, DN attributes, ACLs) because eDirectory rejects a
+  DN-valued attribute whose target does not exist (proved on idm254, −613) and
+  ICE's forward references cover only missing parents; LBURP is transport, not
+  laxity. Driver set tied to the lab server by `DirXML-ServerList`. Awaiting Jerry's
+  decisions (§8: a target tree above all).
+
 - **A fresh Designer project from a tree** — `export-project --new`:
   skeleton, drivers, the UA driver's `AppConfig` with forms/PRDs/entitlements,
   and the packaged drivers' `IdmPackage_` catalog entries from the git
