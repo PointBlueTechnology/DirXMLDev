@@ -145,7 +145,7 @@ re-inserted before `<process>`) plus a digest with localized display/descr,
 category key and one `digest-dependency` per form binding. This follows the
 same rules as everything above — only the files the diff calls for, an
 unchanged object's bytes untouched — with one addition: creating a whole new
-AppConfig is out of scope, so a driver the project has no AppConfig for
+the rest of AppConfig is carried since 2026-09-21 (docs/appconfig.md §8); a driver the project has no AppConfig for
 refuses only its own provisioning changes, not the rest of the update.
 Verified the same way as the artifact writer: round-trip equality on a
 synthetic project skeleton and, guarded, on `test11`

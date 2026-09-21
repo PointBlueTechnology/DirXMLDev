@@ -1,6 +1,7 @@
 package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.model.Artifact;
+import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.PackageStamps;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -277,6 +278,7 @@ public final class ProjectReader {
             }
             readFormsDir(dir.resolve("WorkflowForms"), p, idx);
             readPrdsDir(dir.resolve("RequestDefs"), p, idx);
+            readObjects(dir, p, idx);
             target.provisioning = p;
         }
     }
@@ -307,6 +309,131 @@ public final class ProjectReader {
             }
         }
         return only;
+    }
+
+    /**
+     * The rest of AppConfig ({@code docs/appconfig.md} §8): every ds-object nested in {@code .appconfig}
+     * (the stock entities, reports, nav items, auth types, web-app configs, containers) plus every file
+     * item with a digest in the container directories ({@code .entity}, {@code .role20}, {@code .rsrc},
+     * {@code .attestation}, {@code .roleconfig} …), mapped through {@link DesignerAppConfig}. A file item
+     * wins over an inline object of the same path; a container directory's digest completes the inline
+     * container. {@code WorkflowForms} and {@code RequestDefs} belong to the form/PRD readers.
+     */
+    private static void readObjects(Path appDir, Provisioning p, Index idx) {
+        Map<String, AppObject> byPath = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Path appconfig = appDir.resolve(".appconfig");
+        if (Files.isRegularFile(appconfig)) {
+            try {
+                for (AppObject o : DesignerAppConfig.readInline(CanonicalXml.parse(Files.readString(appconfig, StandardCharsets.UTF_8)))) {
+                    byPath.put(o.path(), o);
+                }
+            } catch (Exception e) {
+                p.meta.put("provisioning.appconfig-unreadable", e.getMessage() == null ? e.toString() : e.getMessage());
+            }
+        }
+        walkObjectDir(appDir, new ArrayList<>(), byPath, idx);
+        List<AppObject> all = new ArrayList<>(byPath.values());
+        // a bare skeleton — only containers, as the writer's .appconfig template lays them out for a tree
+        // that carried no AppConfig objects — is structure, not content: nothing to model
+        boolean bare = true;
+        for (AppObject o : all) {
+            if (!o.isContainer()) {
+                bare = false;
+                break;
+            }
+        }
+        if (bare) {
+            return;
+        }
+        for (AppObject o : all) {
+            DesignerAppConfig.completeClasses(o);
+        }
+        all.sort(java.util.Comparator.comparing(AppObject::path, String.CASE_INSENSITIVE_ORDER));
+        p.objects.addAll(all);
+    }
+
+    private static void walkObjectDir(Path dir, List<String> segments, Map<String, AppObject> byPath, Index idx) {
+        List<Path> entries = new ArrayList<>();
+        try (Stream<Path> s = Files.list(dir)) {
+            s.sorted().forEach(entries::add);
+        } catch (IOException e) {
+            return;
+        }
+        for (Path f : entries) {
+            String fn = f.getFileName().toString();
+            if (Files.isDirectory(f)) {
+                if (segments.isEmpty() && (fn.equals("WorkflowForms") || fn.equals("RequestDefs"))) {
+                    continue;
+                }
+                List<String> segs = new ArrayList<>(segments);
+                segs.add(fn);
+                Path digestFile = f.resolve(fn + ".digest");
+                if (Files.isRegularFile(digestFile)) {
+                    try {
+                        Element digest = Xds.parseFile(digestFile).getDocumentElement();
+                        String cn = digest.getAttribute("cn");
+                        if (cn.startsWith("cn=")) {
+                            segs.set(segs.size() - 1, cn.substring(3));
+                        }
+                        String path = String.join("/", segs);
+                        AppObject c = byPath.get(path);
+                        if (c == null) {
+                            c = new AppObject(segs);
+                            c.classes.add("Top");
+                            String cls = DesignerAppConfig.classOfContainerType(digest.getAttribute("type"));
+                            c.classes.add(cls == null || cls.isEmpty() ? "Top" : cls);
+                            c.meta.put("objectClass", c.structuralClass());
+                            c.meta.put("project.storage", "inline");
+                            byPath.put(path, c);
+                        }
+                        readItemDigestMeta(digest, c.meta, idx);
+                        c.meta.put("project.container-digest", "true");
+                    } catch (Exception e) {
+                        // an unreadable container digest: the directory is still walked
+                    }
+                }
+                walkObjectDir(f, segs, byPath, idx);
+                continue;
+            }
+            int dot = fn.lastIndexOf('.');
+            if (dot <= 0) {
+                continue;
+            }
+            String ext = fn.substring(dot + 1);
+            if (!DesignerAppConfig.FILE_EXTENSIONS.contains(ext)) {
+                continue;
+            }
+            String name = fn.substring(0, dot);
+            Element digest = null;
+            String type = null;
+            Path digestFile = dir.resolve(name + ".digest");
+            if (Files.isRegularFile(digestFile)) {
+                try {
+                    digest = Xds.parseFile(digestFile).getDocumentElement();
+                    type = digest.getAttribute("type");
+                    String cn = digest.getAttribute("cn");
+                    if (cn.startsWith("cn=")) {
+                        name = cn.substring(3);
+                    }
+                } catch (Exception e) {
+                    digest = null;
+                }
+            }
+            List<String> segs = new ArrayList<>(segments);
+            segs.add(name);
+            try {
+                AppObject o = DesignerAppConfig.readItem(ext, Files.readString(f, StandardCharsets.UTF_8), type, segs, digest);
+                if (o == null) {
+                    continue;
+                }
+                if (digest != null) {
+                    readItemDigestMeta(digest, o.meta, idx);
+                }
+                byPath.put(o.path(), o);
+            } catch (Exception e) {
+                // an unreadable item is skipped rather than failing the whole project
+            }
+        }
     }
 
     private static void readFormsDir(Path workflowFormsDir, Provisioning p, Index idx) {
