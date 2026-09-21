@@ -435,5 +435,12 @@ public class CloneTest {
         assertEquals(Vault.START_MANUAL, lab.driverStartOption("cn=Old,cn=driverset1,o=system"));
         assertTrue(r.notes.toString(), r.notes.stream().anyMatch(n -> n.contains("through the engine")));
         assertEquals(0, r.verifyMismatches);
+
+        // the engine answers only after a restart: a re-run sets every cloned driver, written or not
+        lab.setDriverStartOption("cn=AD,cn=driverset1,o=system", Vault.START_AUTO);
+        CloneImporter.Result again = new CloneImporter(b, lab, o).run();
+        assertTrue(again.text(), again.ok);
+        assertEquals(0, again.added);
+        assertEquals(Vault.START_MANUAL, lab.driverStartOption("cn=AD,cn=driverset1,o=system"));
     }
 }
