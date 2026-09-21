@@ -113,9 +113,13 @@ public class ProvisioningLdifReaderTest {
     }
 
     @Test
-    public void otherAppConfigObjectsAreCounted() {
+    public void otherAppConfigObjectsBecomeAppObjects() {
         Provisioning p = LdifReader.fromEntries(sampleEntries(), "synthetic").driver("UA").provisioning;
-        assertEquals("1", p.meta.get("provisioning.other-objects"));
+        assertNull(p.meta.get("provisioning.other-objects"));
+        assertEquals(1, p.objects.size());
+        assertEquals("SomeOtherThing", p.objects.get(0).path());
+        assertEquals("srvprvChoiceDefs", p.objects.get(0).structuralClass());
+        assertTrue(p.objects.get(0).isContainer());
     }
 
     @Test
