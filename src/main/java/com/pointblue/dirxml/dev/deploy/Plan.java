@@ -9,6 +9,7 @@ import com.pointblue.dirxml.dev.model.Scope;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -176,11 +177,13 @@ public final class Plan {
         List<Step> deletes = new ArrayList<>();
         List<Step> secretSteps = new ArrayList<>();
         List<Step> provisioning = new ArrayList<>();
+        List<Step> objectAdds = new ArrayList<>();      // AppConfig objects: parents before children
+        List<Step> objectDeletes = new ArrayList<>();   // AppConfig objects: children before parents
         Set<String> ensuredContainers = new LinkedHashSet<>();
         Set<String> driversNeedingLinkage = new LinkedHashSet<>();
 
         for (ModelDiff.Change c : diff.changes()) {
-            String guardKind = ModelDiff.removalKind(c.kind);
+            String guardKind = ModelDiff.removalKind(c);
             if (guardKind != null) {
                 ModelDiff.EmptyKind ek = emptyKinds.getOrDefault(c.driver, Map.of()).get(guardKind);
                 if (ek != null && !p.deleteAllKinds.contains(guardKind)) {
@@ -189,6 +192,10 @@ public final class Plan {
                     }
                     continue;   // hold back this delete step; the note above explains why
                 }
+            }
+            if (c.kind.isObject()) {
+                objectSteps(p, c, to, diff.from(), dsDn, provisioning, objectAdds, objectDeletes);
+                continue;
             }
             if (c.kind.isProvisioning()) {
                 provisioningSteps(p, c, to, dsDn, tree, provisioning, deletes, ensuredContainers);
@@ -482,10 +489,16 @@ public final class Plan {
         p.steps.addAll(library);
         p.steps.addAll(driverScope);
         p.steps.addAll(channel);
+        // AppConfig containers before what they hold (a stable sort by depth keeps the diff's path order otherwise)
+        objectAdds.sort(Comparator.comparingInt(st -> depth(st.dn)));
+        p.steps.addAll(objectAdds);
         p.steps.addAll(provisioning);
         p.steps.addAll(driverAttrs);
         p.steps.addAll(driverSet);
         p.steps.addAll(deletes);
+        // and deleted deepest first, so a removed container goes after everything it held
+        objectDeletes.sort(Comparator.comparingInt((Step st) -> depth(st.dn)).reversed());
+        p.steps.addAll(objectDeletes);
         p.steps.addAll(secretSteps);
         p.steps.addAll(deleteDriverSteps);   // --delete-driver: after every other step
         if (restartRunning) {
@@ -651,6 +664,147 @@ public final class Plan {
                     dn + "  objectClass += " + VaultMapping.PKG_ITEM_AUX, c.path, driver));
             }
             for (Map.Entry<String, List<byte[]>> e : attrs.entrySet()) {
+                bucket.add(new Step(Op.MODIFY, dn, e.getKey(), null, Map.of(e.getKey(), e.getValue()),
+                    dn + "  " + e.getKey() + " (" + size(Map.of(e.getKey(), e.getValue())) + ")", c.path, driver));
+            }
+        }
+    }
+
+    private static boolean sameBytes(List<byte[]> a, List<byte[]> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (!java.util.Arrays.equals(a.get(i), b.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** RDN count of a DN (unescaped commas only). */
+    private static int depth(String dn) {
+        int n = 1;
+        for (int i = 0; i < dn.length(); i++) {
+            char ch = dn.charAt(i);
+            if (ch == '\\') {
+                i++;
+            } else if (ch == ',') {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /**
+     * Steps for one of the generic AppConfig objects ({@code docs/appconfig.md} §7): an add writes the
+     * object's classes and every design attribute (never an operational one), a change writes exactly
+     * the attributes {@code ModelDiff} found changed (an emptied attribute is removed; a new auxiliary
+     * class is added; a changed structural class cannot be modified in place and is noted), a removal is
+     * a DELETE. The applications' runtime containers are never deleted, whatever the flags. A changed
+     * packaged object whose tree checksum still equals the vault's gets a content-derived checksum so
+     * Designer's modified test trips.
+     */
+    private static void objectSteps(Plan p, ModelDiff.Change c, DriverSet to, DriverSet from, String dsDn,
+                                    List<Step> bucket, List<Step> adds, List<Step> deletes) {
+        String driver = c.driver;
+        if (c.kind == ModelDiff.Kind.OBJECT_REMOVED) {
+            String dn = VaultMapping.objectPathDn(dsDn, c.path);
+            String rel = c.path.substring(c.path.indexOf("/provisioning/objects/") + "/provisioning/objects/".length());
+            for (String runtime : com.pointblue.dirxml.dev.model.AppConfigPolicy.RUNTIME_CONTAINERS) {
+                if (rel.equalsIgnoreCase(runtime)) {
+                    p.notes.add(c.path + ": the Identity Applications' runtime container is never deleted by deploy; import-live to adopt it");
+                    return;
+                }
+            }
+            p.touchedDns.add(dn);
+            deletes.add(new Step(Op.DELETE, dn, null, null, null, dn, c.path, driver));
+            return;
+        }
+        Driver d = to.driver(driver);
+        String rel = c.path.substring(c.path.indexOf("/provisioning/objects/") + "/provisioning/objects/".length());
+        com.pointblue.dirxml.dev.model.AppObject o = d == null || d.provisioning == null ? null : d.provisioning.object(rel);
+        if (o == null) {
+            p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
+            return;
+        }
+        String dn = VaultMapping.objectDn(dsDn, driver, o.segments);
+        p.touchedDns.add(dn);
+        Map<String, List<byte[]>> attrs = VaultMapping.objectAttributes(o);
+        Map<String, List<byte[]>> stamps = VaultMapping.provisioningPackageAttributes(o.meta, null, p.packageIndex);
+        String oc = o.structuralClass();
+        if (c.kind == ModelDiff.Kind.OBJECT_ADDED) {
+            List<String> classes = new ArrayList<>();
+            if (o.classes.stream().noneMatch(x -> x.equalsIgnoreCase("Top"))) {
+                classes.add("Top");
+            }
+            classes.addAll(o.classes);
+            if (!stamps.isEmpty() && classes.stream().noneMatch(x -> x.equalsIgnoreCase(VaultMapping.PKG_ITEM_AUX))) {
+                classes.add(VaultMapping.PKG_ITEM_AUX);
+            }
+            attrs.putAll(stamps);
+            adds.add(new Step(Op.ADD, dn, null, classes, attrs, dn + "  " + oc + " (" + size(attrs) + ")", c.path, driver));
+            return;
+        }
+        // OBJECT_CHANGED: only what changed
+        Set<String> parts = c.parts == null ? Set.of() : c.parts;
+        boolean stampsOnly = parts.equals(Set.of("stamps"));
+        if (parts.contains("classes")) {
+            Driver fd = from.driver(driver);
+            com.pointblue.dirxml.dev.model.AppObject before = fd == null || fd.provisioning == null ? null : fd.provisioning.object(rel);
+            List<String> added = new ArrayList<>();
+            for (String cls : o.classes) {
+                if (before == null || before.classes.stream().noneMatch(x -> x.equalsIgnoreCase(cls))) {
+                    added.add(cls);
+                }
+            }
+            if (before != null && !before.structuralClass().equalsIgnoreCase(oc)) {
+                p.notes.add(c.path + ": structural class " + before.structuralClass() + " → " + oc
+                    + " cannot be changed in place (delete the object and add it again)");
+            } else if (!added.isEmpty()) {
+                bucket.add(new Step(Op.AUX_CLASS, dn, null, added, null, dn + "  objectClass += " + String.join(", ", added), c.path, driver));
+            }
+        }
+        boolean contentChanged = false;
+        if (!stampsOnly) {
+            for (String part : parts) {
+                if (part.equals("classes") || part.equals("stamps")) {
+                    continue;
+                }
+                contentChanged = true;
+                List<byte[]> values = attrs.getOrDefault(part, Collections.emptyList());
+                bucket.add(new Step(Op.MODIFY, dn, part, null, Map.of(part, values),
+                    dn + "  " + part + (values.isEmpty() ? " (remove)" : " (" + size(Map.of(part, values)) + ")"), c.path, driver));
+            }
+        }
+        if (contentChanged && !stamps.isEmpty()) {
+            // customized packaged object: a content-derived checksum unless the tree already refreshed it
+            Driver fd = from.driver(driver);
+            com.pointblue.dirxml.dev.model.AppObject before = fd == null || fd.provisioning == null ? null : fd.provisioning.object(rel);
+            String treeChecksum = com.pointblue.dirxml.dev.model.PackageStamps.checksum(o.meta);
+            String vaultChecksum = before == null ? null : com.pointblue.dirxml.dev.model.PackageStamps.checksum(before.meta);
+            if (treeChecksum != null && treeChecksum.equals(vaultChecksum)) {
+                String derived = VaultMapping.customizedChecksum(VaultMapping.objectContentBytes(o));
+                bucket.add(new Step(Op.MODIFY, dn, VaultMapping.PKG_CHECKSUM, null, Map.of(VaultMapping.PKG_CHECKSUM, Vault.value(derived)),
+                    dn + "  " + VaultMapping.PKG_CHECKSUM + " = " + derived + " (customized packaged " + o.kind().key + ")", c.path, driver));
+                p.notes.add(c.path + ": a packaged " + o.kind().key + " customized in the tree; its checksum is recomputed from the content so Designer shows it as modified");
+            }
+        }
+        if (parts.contains("stamps")) {
+            if (!stamps.isEmpty() && o.classes.stream().noneMatch(x -> x.equalsIgnoreCase(VaultMapping.PKG_ITEM_AUX))) {
+                bucket.add(new Step(Op.AUX_CLASS, dn, null, List.of(VaultMapping.PKG_ITEM_AUX), null,
+                    dn + "  objectClass += " + VaultMapping.PKG_ITEM_AUX, c.path, driver));
+            }
+            // only the stamps that differ from the vault's (a reverted customization changes the checksum alone)
+            Driver fd = from.driver(driver);
+            com.pointblue.dirxml.dev.model.AppObject before = fd == null || fd.provisioning == null ? null : fd.provisioning.object(rel);
+            Map<String, List<byte[]>> liveStamps = before == null ? Map.of()
+                : VaultMapping.provisioningPackageAttributes(before.meta, null, p.packageIndex);
+            for (Map.Entry<String, List<byte[]>> e : stamps.entrySet()) {
+                List<byte[]> live = liveStamps.get(e.getKey());
+                if (live != null && sameBytes(live, e.getValue())) {
+                    continue;
+                }
                 bucket.add(new Step(Op.MODIFY, dn, e.getKey(), null, Map.of(e.getKey(), e.getValue()),
                     dn + "  " + e.getKey() + " (" + size(Map.of(e.getKey(), e.getValue())) + ")", c.path, driver));
             }
