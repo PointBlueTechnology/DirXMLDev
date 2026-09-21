@@ -1,4 +1,4 @@
-# AppConfig as code — design note (2026-09-21); A1 built the same day (§6)
+# AppConfig as code — design note (2026-09-21); A1 and A2 built the same day (§6, §7)
 
 The User Application driver's `cn=AppConfig` subtree is the Identity Applications'
 configuration: the directory abstraction layer, request definitions and forms,
@@ -238,6 +238,45 @@ counts them by kind.
 10 roles, 6 resources, 23 reports, 52 nav items, 11 auth types, 35 containers …).
 `validate` on both trees: no AppConfig findings. 663 tests.
 
-Next: **A2** diff + deploy (`ModelDiff`/`Plan` for objects, containers
-parents-first, DN rewriting, delete guard per kind, runtime untouchable,
-customized/baseline against the catalog's provisioning objects).
+## 7. A2 — diff and deploy, built 2026-09-21
+
+**Diff.** `ModelDiff` gains `OBJECT_ADDED / OBJECT_REMOVED / OBJECT_CHANGED`
+(no driver restart, like forms). Objects pair by path (case-insensitive) and
+compare their classes and every design attribute — operational attributes
+never count, XML values canonically (a hand-edited file need not be
+canonical), multi-values as sorted lists. `Change.what` is the object's kind,
+`Change.parts` the changed attribute names plus `classes` / `stamps`, so the
+plan writes exactly what changed. A fresh `import-live` of idm254 diffs
+"no differences" against the vault with the 206 objects in play.
+
+**Guard.** The mass-deletion guard covers every object kind in the plural
+(`roles`, `entities`, `nav-items`, `containers` …): when the tree has none of
+a kind the vault has, the deletes are held back with the usual note, and
+`--delete-all <kind>` overrides it. The applications' four runtime containers
+are never deleted, whatever the flags.
+
+**Plan.** An add writes the object's classes and design attributes (plus
+package stamps and the `DirXML-PkgItemAux` class when stamped); a change
+writes only the changed attributes (an emptied one is removed, a new auxiliary
+class is added, a changed structural class is noted — delete and add instead);
+a removal is a DELETE. Adds go parents-first and deletes deepest-first, so a
+new category container precedes its role and a removed container follows what
+it held. Snapshot, verify and audit are the existing ones.
+
+**Customized packaged objects.** When a packaged object's content changes and
+the tree still records the package's checksum, the plan writes a
+content-derived `DirXML-pkgChecksum` (`XmlData` when the object has one, else
+every design attribute in name order) so Designer shows it as modified — and
+the diff treats "vault holds the derived checksum of the tree's content" as
+the same state, not drift. Reverting the content writes the content and the
+package checksum back, nothing else.
+
+**Live (idm254, 2026-09-21).** A scratch role added, changed and removed:
+one step each, `verify: vault matches the tree` every time, the vault back to
+"no differences". A packaged role (`provManager`) customized and reverted:
+content + derived checksum out, content + package checksum back, both
+verified. 669 tests.
+
+Next: **A3** the Designer project (reader/writer for every kind, the
+`.role20` spike), then **B** typed operations (`appconfig.set`, `entity.*`,
+`role.*`).

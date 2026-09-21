@@ -39,6 +39,24 @@ public final class AppObject {
             this.key = key;
         }
 
+        /** The plural {@code --delete-all} takes and the mass-deletion guard reports ({@code roles}, {@code nav-items} …). */
+        public String plural() {
+            switch (this) {
+                case ENTITY: return "entities";
+                case PRD: return "prds";
+                default: return key + "s";
+            }
+        }
+
+        public static Kind byPlural(String plural) {
+            for (Kind k : values()) {
+                if (k.plural().equals(plural)) {
+                    return k;
+                }
+            }
+            return null;
+        }
+
         public static Kind byKey(String key) {
             for (Kind k : values()) {
                 if (k.key.equals(key)) {

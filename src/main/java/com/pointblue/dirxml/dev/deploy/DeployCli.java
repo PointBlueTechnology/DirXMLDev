@@ -13,7 +13,7 @@ import java.util.Map;
  *   vault.diff     <tree> --env <name> [--driver D…] [--json]
  *   vault.deploy   <tree> --env <name> [--driver D…] [--dry-run | --yes | --step] [--confirm <name>]
  *                  [--no-restart] [--secrets none|missing|all] [--allow-missing-secrets] [--capture-drift] [--json]
- *                  [--delete-driver D…] [--delete-all entitlements|forms|prds …]
+ *                  [--delete-driver D…] [--delete-all entitlements|forms|prds|roles|entities|… …]
  *   vault.verify   <tree> --env <name> [--driver D…] [--json]
  *   vault.rollback --env <name> --snapshot <file> [--yes] [--json]
  *   vault.secrets  --env <name> --driver D --set <key> …

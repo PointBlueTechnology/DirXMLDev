@@ -1,6 +1,8 @@
 package com.pointblue.dirxml.dev.deploy;
 
 import com.pointblue.dirxml.dev.json.Json;
+import com.pointblue.dirxml.dev.model.AppConfigPolicy;
+import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.PackageStamps;
@@ -48,12 +50,19 @@ public final class ModelDiff {
         DRIVER_ICON,
         DRIVERSET_GCVS, DRIVERSET_LINKAGE,
         FORM_ADDED, FORM_REMOVED, FORM_CHANGED, PRD_ADDED, PRD_REMOVED, PRD_CHANGED,
+        OBJECT_ADDED, OBJECT_REMOVED, OBJECT_CHANGED,
         ENTITLEMENT_ADDED, ENTITLEMENT_REMOVED, ENTITLEMENT_CHANGED;
 
-        /** Provisioning objects (JSON forms, PRDs) are read by the Identity Applications, not the engine: no driver restart. */
+        /** Provisioning objects (JSON forms, PRDs, the rest of AppConfig) are read by the Identity Applications, not the engine: no driver restart. */
         public boolean isProvisioning() {
             return this == FORM_ADDED || this == FORM_REMOVED || this == FORM_CHANGED
-                || this == PRD_ADDED || this == PRD_REMOVED || this == PRD_CHANGED;
+                || this == PRD_ADDED || this == PRD_REMOVED || this == PRD_CHANGED
+                || isObject();
+        }
+
+        /** The generic AppConfig objects ({@code AppObject}: entities, roles, resources, reports, nav items, containers …). */
+        public boolean isObject() {
+            return this == OBJECT_ADDED || this == OBJECT_REMOVED || this == OBJECT_CHANGED;
         }
 
         /** An entitlement is read from the vault by the Identity Applications at grant time, not by the engine: no driver restart either. */
@@ -212,7 +221,7 @@ public final class ModelDiff {
     public List<EmptyKind> emptyKinds() {
         Map<String, Map<String, Integer>> counts = new TreeMap<>();   // driver -> kind -> count
         for (Change c : changes) {
-            String kind = removalKind(c.kind);
+            String kind = removalKind(c);
             if (kind != null) {
                 counts.computeIfAbsent(c.driver, k -> new TreeMap<>()).merge(kind, 1, Integer::sum);
             }
@@ -247,6 +256,19 @@ public final class ModelDiff {
         return null;
     }
 
+    /**
+     * The guard kind of a change: as {@link #removalKind(Kind)}, plus an {@link Kind#OBJECT_REMOVED}
+     * change's own object kind in the plural ({@code roles}, {@code entities}, {@code nav-items} …,
+     * carried in {@link Change#what}).
+     */
+    static String removalKind(Change c) {
+        if (c.kind == Kind.OBJECT_REMOVED) {
+            AppObject.Kind k = c.what == null ? null : AppObject.Kind.byKey(c.what);
+            return k == null ? "objects" : k.plural();
+        }
+        return removalKind(c.kind);
+    }
+
     private boolean treeHasNoneOfKind(String driver, String kind) {
         Driver d = to.driver(driver);
         if (d == null) {
@@ -259,8 +281,18 @@ public final class ModelDiff {
                 return d.provisioning == null || d.provisioning.forms.isEmpty();
             case "prds":
                 return d.provisioning == null || d.provisioning.prds.isEmpty();
-            default:
-                return false;
+            default: {
+                AppObject.Kind ok = AppObject.Kind.byPlural(kind);
+                if (ok == null || d.provisioning == null) {
+                    return ok != null;
+                }
+                for (AppObject o : d.provisioning.objects) {
+                    if (o.kind() == ok) {
+                        return false;
+                    }
+                }
+                return true;
+            }
         }
     }
 
@@ -616,6 +648,129 @@ public final class ModelDiff {
                 prdMaybeChanged(a, x, y);
             }
         }
+        Map<String, AppObject> fromObjects = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, AppObject> toObjects = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (pa != null) {
+            for (AppObject o : pa.objects) {
+                fromObjects.put(o.path(), o);
+            }
+        }
+        if (pb != null) {
+            for (AppObject o : pb.objects) {
+                toObjects.put(o.path(), o);
+            }
+        }
+        Set<String> paths = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        paths.addAll(fromObjects.keySet());
+        paths.addAll(toObjects.keySet());
+        for (String path : paths) {
+            AppObject x = fromObjects.get(path);
+            AppObject y = toObjects.get(path);
+            if (x == null) {
+                changes.add(new Change(Kind.OBJECT_ADDED, b.name, objectPath(b, y), y.kind().key,
+                    "+ added " + y.kind().key + " " + objectPath(b, y), null));
+            } else if (y == null) {
+                changes.add(new Change(Kind.OBJECT_REMOVED, a.name, objectPath(a, x), x.kind().key,
+                    "- removed " + x.kind().key + " " + objectPath(a, x), null));
+            } else {
+                objectMaybeChanged(a, x, y);
+            }
+        }
+    }
+
+    /** Path: {@code drivers/<d>/provisioning/objects/<Container>/…/<name>}. */
+    public static String objectPath(Driver d, AppObject o) {
+        return "drivers/" + d.name + "/provisioning/objects/" + o.path();
+    }
+
+    /**
+     * AppConfig objects compare their classes and every design attribute — the operational ones
+     * ({@code AppConfigPolicy.isOperational}) never count, XML values canonically, multi-values as
+     * sorted lists. {@link Change#parts} names what differs: each attribute, {@code "classes"}, and
+     * {@code "stamps"}; a stamps-only difference has exactly {@code {"stamps"}}, so {@link Plan} writes
+     * only the changed attributes, as it does for PRDs.
+     */
+    private void objectMaybeChanged(Driver d, AppObject x, AppObject y) {
+        List<String> lines = new ArrayList<>();
+        Set<String> changedParts = new LinkedHashSet<>();
+        List<String> cx = sortedClasses(x);
+        List<String> cy = sortedClasses(y);
+        if (!cx.equals(cy)) {
+            changedParts.add("classes");
+            lines.add("- objectClass: " + String.join(", ", cx));
+            lines.add("+ objectClass: " + String.join(", ", cy));
+        }
+        Set<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        names.addAll(x.attrs.keySet());
+        names.addAll(y.attrs.keySet());
+        for (String n : names) {
+            if (AppConfigPolicy.isOperational(n)) {
+                continue;
+            }
+            List<String> vx = normalizedValues(n, x.attrs.get(n));
+            List<String> vy = normalizedValues(n, y.attrs.get(n));
+            if (!Objects.equals(vx, vy)) {
+                changedParts.add(AppConfigPolicy.canonicalAttribute(n));
+                if (AppConfigPolicy.isXmlAttribute(n) && vx.size() <= 1 && vy.size() <= 1) {
+                    lines.add("## " + n);
+                    lines.add(textDiff(vx.isEmpty() ? "" : vx.get(0), vy.isEmpty() ? "" : vy.get(0)));
+                } else {
+                    lines.add("- " + n + ": " + display(vx.isEmpty() ? null : String.join(" | ", vx)));
+                    lines.add("+ " + n + ": " + display(vy.isEmpty() ? null : String.join(" | ", vy)));
+                }
+            }
+        }
+        List<String> stamps = stampLines(x.meta, y.meta);
+        if (!stamps.isEmpty() && lines.isEmpty() && vaultHoldsDerivedChecksum(x, y)) {
+            // a customized packaged object: the vault's checksum is the one the deploy derives from the
+            // content the tree holds, while the tree still records the package's — the same state, not drift
+            stamps = Collections.emptyList();
+        }
+        if (!stamps.isEmpty()) {
+            changedParts.add("stamps");
+        }
+        String kind = y.kind().key;
+        if (!lines.isEmpty()) {
+            changes.add(new Change(Kind.OBJECT_CHANGED, d.name, objectPath(d, y), kind,
+                "~ changed " + kind + " " + objectPath(d, y), String.join("\n", lines), changedParts));
+            return;
+        }
+        if (!stamps.isEmpty()) {
+            changes.add(new Change(Kind.OBJECT_CHANGED, d.name, objectPath(d, y), kind,
+                "~ package stamps " + kind + " " + objectPath(d, y), String.join("\n", stamps), changedParts));
+        }
+    }
+
+    /** True when the only stamp that differs is the checksum and the vault's is {@code customizedChecksum} of the tree's content. */
+    private static boolean vaultHoldsDerivedChecksum(AppObject vault, AppObject tree) {
+        if (!PackageStamps.sameGuid(PackageStamps.guid(vault.meta), PackageStamps.guid(tree.meta))
+            || !Objects.equals(PackageStamps.assocId(vault.meta), PackageStamps.assocId(tree.meta))) {
+            return false;
+        }
+        String live = PackageStamps.checksum(vault.meta);
+        return live != null && live.equals(VaultMapping.customizedChecksum(VaultMapping.objectContentBytes(tree)));
+    }
+
+    private static List<String> sortedClasses(AppObject o) {
+        List<String> c = new ArrayList<>(o.classes);
+        c.sort(String.CASE_INSENSITIVE_ORDER);
+        return c;
+    }
+
+    /** Values as compared: XML canonicalized (a hand-edited file may not be canonical), multi-values sorted. */
+    private static List<String> normalizedValues(String attr, List<String> values) {
+        if (values == null) {
+            return Collections.emptyList();
+        }
+        List<String> out = new ArrayList<>();
+        for (String v : values) {
+            String xml = AppConfigPolicy.isXmlAttribute(attr) ? com.pointblue.dirxml.dev.ascode.DsObjectXml.asXml(v) : null;
+            out.add(xml != null ? xml : v);
+        }
+        if (out.size() > 1) {
+            out.sort(null);
+        }
+        return out;
     }
 
     /** Forms compare as parsed JSON (the tree is pretty, the vault compact); stamps when the document is the same. */
