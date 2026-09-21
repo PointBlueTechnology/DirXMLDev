@@ -17,6 +17,8 @@ public final class Provisioning {
     public String dn;
     public final List<Form> forms = new ArrayList<>();
     public final List<Prd> prds = new ArrayList<>();
+    /** Everything else under AppConfig ({@link AppObject}: entities, roles, resources, reports, nav items, containers …). */
+    public final List<AppObject> objects = new ArrayList<>();
     public final Map<String, String> meta = new LinkedHashMap<>();
 
     public Form form(Form.Kind kind, String name) {
@@ -47,8 +49,29 @@ public final class Provisioning {
         return null;
     }
 
+    /** The object at this path under AppConfig ({@code DirectoryModel/EntityDefs/user}), or null. */
+    public AppObject object(String path) {
+        for (AppObject o : objects) {
+            if (o.path().equalsIgnoreCase(path)) {
+                return o;
+            }
+        }
+        return null;
+    }
+
+    /** Objects whose own name matches (any container), for lookups by name alone. */
+    public List<AppObject> objectsNamed(String name) {
+        List<AppObject> out = new ArrayList<>();
+        for (AppObject o : objects) {
+            if (o.name().equalsIgnoreCase(name)) {
+                out.add(o);
+            }
+        }
+        return out;
+    }
+
     @Override
     public String toString() {
-        return "provisioning (" + forms.size() + " forms, " + prds.size() + " PRDs)";
+        return "provisioning (" + forms.size() + " forms, " + prds.size() + " PRDs, " + objects.size() + " objects)";
     }
 }

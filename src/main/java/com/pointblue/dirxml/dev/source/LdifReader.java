@@ -1,5 +1,7 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.model.AppConfigPolicy;
+import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Entitlement;
@@ -26,6 +28,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -279,10 +282,17 @@ public final class LdifReader {
         Provisioning p = new Provisioning();
         p.dn = appConfigDn;
         int unplaced = 0;
-        int other = 0;
+        int runtime = 0;
         for (Entry e : subtree) {
             if (e.dn.equalsIgnoreCase(appConfigDn)) {
                 copyMeta(e, p.meta, "srvprvAppConfig");
+                // the container's own attributes (Version, srvprvPlugins): what an AppConfig is created with
+                for (String a : e.attributeNames()) {
+                    String name = AppConfigPolicy.canonicalAttribute(a);
+                    if (!AppConfigPolicy.isNotContent(name) && !AppConfigPolicy.isOperational(name)) {
+                        p.meta.put("appconfig." + name, String.join("\n", e.all(a)));
+                    }
+                }
                 continue;
             }
             if (e.hasClass("srvprvJSONForm")) {
@@ -300,13 +310,70 @@ public final class LdifReader {
                 p.prds.add(readPrd(e));
             } else if (!e.hasClass("srvprvJSONForms") && !e.hasClass("srvprvRequestDefs")
                        && !e.hasClass("srvprvAppConfig")) {
-                other++;
+                AppObject o = readAppObject(e, appConfigDn);
+                if (o == null) {
+                    runtime++;
+                } else {
+                    p.objects.add(o);
+                }
             }
         }
-        if (other > 0) {
-            p.meta.put("provisioning.other-objects", String.valueOf(other));
+        if (runtime > 0) {
+            p.meta.put("provisioning.runtime-objects", String.valueOf(runtime));
         }
+        p.objects.sort(Comparator.comparing(AppObject::path, String.CASE_INSENSITIVE_ORDER));
         return p;
+    }
+
+    /**
+     * Any other AppConfig entry as an {@link AppObject} — every attribute as text, XML
+     * attributes canonicalized, names in the schema's spelling, values sorted — or null
+     * for one of the applications' runtime records ({@link AppConfigPolicy}).
+     */
+    static AppObject readAppObject(Entry e, String appConfigDn) {
+        List<String> below = components(e.dn);
+        List<String> base = components(appConfigDn);
+        List<String> segments = new ArrayList<>();
+        for (int i = below.size() - base.size() - 1; i >= 0; i--) {
+            segments.add(unescape(valueOf(below.get(i))));
+        }
+        if (segments.isEmpty()) {
+            return null;
+        }
+        AppObject o = new AppObject(segments);
+        List<String> classes = new ArrayList<>(e.all("objectClass"));
+        classes.sort(String.CASE_INSENSITIVE_ORDER);
+        o.classes.addAll(classes);
+        if (AppConfigPolicy.isRuntimeClass(o.structuralClass()) || AppConfigPolicy.isRuntimePath(o.path())) {
+            return null;
+        }
+        List<String> names = new ArrayList<>(e.attributeNames());
+        names.sort(String.CASE_INSENSITIVE_ORDER);
+        for (String a : names) {
+            String name = AppConfigPolicy.canonicalAttribute(a);
+            if (AppConfigPolicy.isNotContent(name)) {
+                continue;
+            }
+            List<String> values = new ArrayList<>();
+            for (String v : e.all(a)) {
+                String xml = AppConfigPolicy.isXmlAttribute(name) ? com.pointblue.dirxml.dev.ascode.DsObjectXml.asXml(v) : null;
+                // an XML parser folds \r\n to \n in text, so a text value must be folded before it is
+                // written, or the first write and every write after a read would differ
+                values.add(xml != null ? xml : v.replace("\r\n", "\n").replace('\r', '\n'));
+            }
+            if (values.size() > 1) {
+                values.sort(null);
+            }
+            o.put(name, values);
+        }
+        o.meta.put("dn", e.dn);
+        copyMeta(e, o.meta, o.structuralClass());
+        return o;
+    }
+
+    private static String valueOf(String component) {
+        int eq = component.indexOf('=');
+        return eq < 0 ? component : component.substring(eq + 1);
     }
 
     private static Prd readPrd(Entry e) {

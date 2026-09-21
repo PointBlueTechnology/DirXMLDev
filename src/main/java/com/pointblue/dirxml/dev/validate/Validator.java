@@ -38,6 +38,7 @@ public final class Validator {
             new FormCheck(),
             new FlowCheck(),
             new EntitlementCheck(),
+            new AppConfigCheck(),
             new PackageLinkageCheck()));
     }
 

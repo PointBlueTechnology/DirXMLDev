@@ -1,5 +1,7 @@
 package com.pointblue.dirxml.dev.packages;
 
+import com.pointblue.dirxml.dev.model.AppObject;
+
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -266,6 +268,26 @@ public final class Catalog {
             Files.createDirectories(targetDir);
             Path file = targetDir.resolve(sanitize(it.name) + ".xml");
             Files.writeString(file, NxslCanonical.serialize(d), StandardCharsets.UTF_8);
+        }
+
+        // objects/<folderId>-Provisioning/<path>.xml: the package's AppConfig objects, one ds-object file each
+        if (!p.provisioningObjects.isEmpty()) {
+            int provFolder = 5;
+            for (Map.Entry<Integer, String> f : p.folderNames.entrySet()) {
+                if (p.folderProvisioningData.containsKey(f.getKey())) {
+                    provFolder = f.getKey();
+                }
+            }
+            Path provDir = objectsDir.resolve(sanitize(provFolder + "-" + p.folderNames.getOrDefault(provFolder, "Provisioning")));
+            for (AppObject o : p.provisioningObjects) {
+                Path target = provDir;
+                for (String seg : o.segments.subList(0, o.segments.size() - 1)) {
+                    target = target.resolve(sanitize(seg));
+                }
+                Files.createDirectories(target);
+                Files.writeString(target.resolve(sanitize(o.name()) + ".xml"),
+                    com.pointblue.dirxml.dev.ascode.DsObjectXml.write(o), StandardCharsets.UTF_8);
+            }
         }
 
         // README.md: decoded readme + license

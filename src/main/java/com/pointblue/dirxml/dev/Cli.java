@@ -187,6 +187,12 @@ public final class Cli {
             if (args.length >= 1 && args[0].equals("prd.show")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.prdShow(args));
             }
+            if (args.length >= 1 && args[0].equals("appconfig.list")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.appConfigList(args));
+            }
+            if (args.length >= 1 && args[0].equals("appconfig.show")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.appConfigShow(args));
+            }
             if (args.length >= 1 && args[0].equals("entitlement.list")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.entitlementList(args));
             }
@@ -416,6 +422,9 @@ public final class Cli {
         System.err.println("                                          open the form in the vendor form builder; on save, store it and re-sync its PRD bindings");
         System.err.println("  form.preview <asCodeDir> <form> [--driver D] [--out page.html] [--lang en]");
         System.err.println("                                          self-contained HTML preview (open-source Form.io renderer + placeholders for NetIQ components)");
+        System.err.println("AppConfig objects (docs/appconfig.md; entities, roles, resources, reports, nav items … under the UA driver's AppConfig):");
+        System.err.println("  appconfig.list <asCodeDir> [--driver D] [--kind entity|role|resource|…] [--containers] [--json]");
+        System.err.println("  appconfig.show <asCodeDir> <path-or-name> [--driver D] [--attr A] [--json]   an object's classes and attributes");
         System.err.println("entitlements (docs/entitlements.md; DirXML-Entitlement objects hanging off a driver):");
         System.err.println("  entitlement.list <asCodeDir> [--driver D]                    every entitlement: conflict, multi-valued, display-name, packaged mark");
         System.err.println("  entitlement.show <asCodeDir> --driver D --name N [--json]    an entitlement's document + which PRDs reference it");

@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.ascode;
 
+import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -202,6 +203,22 @@ public final class AsCodeWriter {
                 }
             }
             pm.meta(prd.meta);
+        }
+        Set<String> usedObjectFiles = new HashSet<>();
+        List<AppObject> objects = new ArrayList<>(p.objects);
+        objects.sort(Comparator.comparing(AppObject::path, String.CASE_INSENSITIVE_ORDER));
+        for (AppObject o : objects) {
+            StringBuilder rel = new StringBuilder("objects");
+            for (String seg : o.segments.subList(0, o.segments.size() - 1)) {
+                rel.append('/').append(fileSafe(seg));
+            }
+            Path objDir = dir.resolve(rel.toString());
+            Files.createDirectories(objDir);
+            String file = uniqueFile(fileSafe(o.name()) + ".xml", usedObjectFiles);
+            rel.append('/').append(file);
+            writeText(dir.resolve(rel.toString()), DsObjectXml.write(o));
+            Manifest om = m.child("object").attr("kind", o.kind().key).attr("path", o.path()).attr("file", rel.toString());
+            om.meta(o.meta);
         }
         writeText(dir.resolve("provisioning.xml"), m.toXml());
     }
