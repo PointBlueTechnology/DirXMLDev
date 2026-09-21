@@ -35,6 +35,14 @@ DriverSet  name, dn, configValues (GCVs, XML), library, drivers[], meta
   `config-values`, `driver-filter`, `engine-control-values` — plus `shimClass`,
   `shimAuthServer`, `shimAuthId`. The model doesn't interpret them in Phase 1 (the
   simulator already knows how); it preserves them losslessly.
+- **Provisioning** (`Driver.provisioning`, the UA driver's `cn=AppConfig`): typed `Form`s and
+  `Prd`s (docs/forms.md), and every other object of the subtree as a generic **`AppObject`**
+  — path below AppConfig, object classes, attributes as text (XML attributes canonical),
+  kind from the structural class (entity, choice, relationship, role, resource, attestation,
+  report, nav-item, auth-type, web-app-config, the two configurations, containers). The
+  applications' runtime records (requests, assignments) are never read; operational
+  attributes (`equivalentToMe`, `DirXML-Associations`) are kept but never deployed —
+  `AppConfigPolicy`, docs/appconfig.md.
 - **meta** (`Map<String,String>`) on the driver set, drivers and artifacts carries
   source-specific extras we don't model yet (package GUIDs/versions, Designer ids,
   DN) so no import is lossy.

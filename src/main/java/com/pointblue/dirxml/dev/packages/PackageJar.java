@@ -1,6 +1,7 @@
 package com.pointblue.dirxml.dev.packages;
 
 import org.w3c.dom.Document;
+import com.pointblue.dirxml.dev.model.AppObject;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
@@ -56,6 +57,14 @@ public final class PackageJar {
     public Map<String, Map<String, String>> properties = new LinkedHashMap<>();
     public Map<Integer, String> folderProvisioningData = new LinkedHashMap<>();
     public List<Item> items = new ArrayList<>();
+    /**
+     * The package's AppConfig (User Application packages): the decoded {@code <provisioning>} document
+     * a Provisioning folder carries under {@code children/provisioning} as base64 — one ds-object tree
+     * rooted at {@code srvprvAppConfig}, the same shape Designer's {@code .appconfig} has. Null when the
+     * package has none. {@link #provisioningObjects} is it flattened, paths below AppConfig.
+     */
+    public Element provisioning;
+    public List<AppObject> provisioningObjects = new ArrayList<>();
 
     public static PackageJar read(Path jar) throws IOException {
         PackageJar p = new PackageJar();
@@ -112,6 +121,26 @@ public final class PackageJar {
                 p.folderProvisioningData.put(fid, text(prov));
             }
             Element ch = PackageChecksum.child(folder, "children");
+            Element provBlob = ch == null ? null : PackageChecksum.child(ch, "provisioning");
+            if (provBlob != null) {
+                String b64 = text(provBlob);
+                if (b64 != null && !b64.isBlank()) {
+                    String xml = new String(Base64.getDecoder().decode(b64.replaceAll("\\s", "")), StandardCharsets.UTF_8);
+                    // Designer's folder checksum covers the decoded document (proved against NOVLUABASE 4.10.1's
+                    // stored package checksum: decoded matches, the base64 text and "absent" do not)
+                    p.folderProvisioningData.put(fid, xml);
+                    try {
+                        Element root = NxslCanonical.parse(xml).getDocumentElement();
+                        Element appConfig = root.getNodeName().equals("ds-object") ? root : PackageChecksum.child(root, "ds-object");
+                        if (appConfig != null) {
+                            p.provisioning = appConfig;
+                            flattenProvisioning(appConfig, new ArrayList<>(), p.provisioningObjects);
+                        }
+                    } catch (RuntimeException e) {
+                        // an undecodable provisioning blob: the package still loads; nothing to unpack
+                    }
+                }
+            }
             for (Element obj : PackageChecksum.children(ch, "ds-object")) {
                 Item it = new Item();
                 it.folderId = fid;
@@ -208,6 +237,28 @@ public final class PackageJar {
             return Integer.parseInt(s.trim());
         } catch (Exception e) {
             return -1;
+        }
+    }
+
+    /**
+     * Every ds-object below the AppConfig root as an {@link AppObject} whose path is its ds-object-name
+     * chain; the root itself is skipped (it is the container the vault already has). Designer's stamps
+     * on the element ({@code package-id}, {@code pkg-assoc-id}, {@code checksum}, {@code guid}) go to meta.
+     */
+    static void flattenProvisioning(Element dsObject, List<String> parentSegments, List<AppObject> out) {
+        for (Element child : PackageChecksum.children(dsObject, "ds-object")) {
+            List<String> segments = new ArrayList<>(parentSegments);
+            segments.add(child.getAttribute("ds-object-name"));
+            AppObject o = com.pointblue.dirxml.dev.ascode.DsObjectXml.read(child, segments);
+            for (String stamp : new String[] {"package-id", "pkg-assoc-id", "checksum", "guid"}) {
+                String v = child.getAttribute(stamp);
+                if (!v.isEmpty()) {
+                    o.meta.put(stamp.equals("guid") ? "designer.guid" : stamp, v);
+                }
+            }
+            o.meta.put("objectClass", child.getAttribute("ds-object-class"));
+            out.add(o);
+            flattenProvisioning(child, segments, out);
         }
     }
 }

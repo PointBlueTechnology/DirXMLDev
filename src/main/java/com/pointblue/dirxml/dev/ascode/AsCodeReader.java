@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.ascode;
 
+import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -149,6 +150,15 @@ public final class AsCodeReader {
             }
             readMeta(pe, prd.meta);
             p.prds.add(prd);
+        }
+        for (Element oe : children(m, "object")) {
+            Path file = dir.resolve(attr(oe, "file"));
+            if (!Files.exists(file)) {
+                continue;
+            }
+            AppObject o = DsObjectXml.read(Files.readString(file, StandardCharsets.UTF_8), List.of(attr(oe, "path").split("/")));
+            readMeta(oe, o.meta);
+            p.objects.add(o);
         }
         return p;
     }

@@ -1,4 +1,4 @@
-# AppConfig as code — design note (2026-09-21, awaiting Jerry's decisions)
+# AppConfig as code — design note (2026-09-21); A1 built the same day (§6)
 
 The User Application driver's `cn=AppConfig` subtree is the Identity Applications'
 configuration: the directory abstraction layer, request definitions and forms,
@@ -126,7 +126,17 @@ parse.
 operation; typed `entity.*`, `role.*`, `resource.*` operations are a later
 layer on the same storage (§4, B).
 
-## 3. Decisions for Jerry
+## 3. Decisions for Jerry — taken 2026-09-21
+
+Jerry: roles in; proposals 2–5 as written. So: roles and resources are design
+objects (assignments stay runtime); `equivalentToMe`, `DirXML-Associations` and
+eDirectory's housekeeping attributes are operational (read, never compared or
+deployed) while ACLs are design (on both labs every AppConfig ACL is an
+application permission — a role or container trustee with an `nrfAccess*`
+right; none is an eDirectory default); the layout is `provisioning/objects/`
+beside `forms/` and `prds/`; Designer's role files are decided by the A3 spike;
+the package jar fix is part of A1.
+
 
 1. **Roles and resources in scope.** Earlier (docs/workflows.md) they were out
    because the applications manage them. "Fully supported" puts them in as
@@ -176,3 +186,58 @@ layer on the same storage (§4, B).
   Designer could not find are simply not in that Designer's catalog, and the
   `srvprvJSONForm` schema note is identical on both trees. Follow-up: a
   `validate` check for DirXML-Script required attributes (plan.md).
+
+## 6. A1 — built 2026-09-21
+
+**Model.** `model/AppObject` (path segments below AppConfig, classes, attributes
+in schema spelling, meta with `dn` + package stamps in the vault vocabulary,
+`kind()` from the structural class) and `model/AppConfigPolicy` (kinds,
+container classes, runtime containers `RoleConfig/Requests|ResourceRequests|
+ResourceAssociations|CprsRequests` and runtime classes, operational attributes,
+XML-valued attributes `XmlData`/`nrfResourceParms`/`nrfEntitlementConfigDefault`,
+canonical attribute names, the `lang~text|…` parser). `Provisioning.objects`
+holds them beside `forms` and `prds`; the AppConfig container's own attributes
+are `appconfig.<name>` metas on the provisioning manifest.
+
+**Readers.** `LdifReader` (LDIF and live, the same path) turns every AppConfig
+entry that is not a form or PRD into an `AppObject`: attribute names canonical,
+multi-values sorted, XML values canonicalized, CRLF folded (the same reason as
+PRDs), `cn`/`objectClass`/stamps to meta; the runtime records are skipped and
+counted (`provisioning.runtime-objects`). The `WorkflowForms` and `RequestDefs`
+containers stay with the forms/PRD machinery that creates them.
+
+**As-code.** `provisioning/objects/<Container>/…/<cn>.xml`, one **ds-object**
+document per object (`ascode/DsObjectXml`) — exactly the shape Designer's
+`.appconfig`, its digest items and the package carry; XML-valued attributes are
+written as XML inside `ds-value`, never re-indented (a multi-line text node such
+as a certificate would otherwise gain the indent on re-read). The manifest gains
+`<object kind= path= file=>` entries with the meta. Round trips: LDIF → tree →
+tree byte-identical (`ProvisioningGuardedTest`), and the live idm254 tree read
+and written again is byte-identical (356 XML files).
+
+**CLI.** `appconfig.list <tree> [--driver D] [--kind K] [--containers] [--json]`,
+`appconfig.show <tree> <path-or-name> [--attr A] [--json]` (localized strings
+split per language; long values summarized, `--attr` prints one whole).
+
+**Validation.** `AppConfigCheck`: `appconfig-xml-invalid`, `appconfig-entity-key-duplicate`,
+`appconfig-role-level-mismatch`, `appconfig-ref-missing` (DN attributes of the
+role configuration and attestations resolve to objects or PRDs in the tree),
+`appconfig-ref-outside` (I), `appconfig-localized-unparsable` (W).
+
+**Package catalog.** `PackageJar` reads `package-folder/children/provisioning`
+(base64 of the `<provisioning>` ds-object document), flattens it into
+`provisioningObjects` with Designer's stamps (`package-id`, `pkg-assoc-id`,
+`checksum`, `designer.guid`) and — proved against NOVLUABASE 4.10.1's stored
+package checksum: the **decoded** document matches, the base64 text and
+"absent" do not — feeds the decoded document to the folder checksum. The
+catalog unpacks them to `objects/5-Provisioning/<path>.xml`; `package.show`
+counts them by kind.
+
+**Numbers (2026-09-21).** idm254: 206 objects (175 non-container, 32 packaged,
+0 runtime); ig4: 208; NOVLUABASE 4.10.1: 250 (54 entities, 30 PRDs, 11 forms,
+10 roles, 6 resources, 23 reports, 52 nav items, 11 auth types, 35 containers …).
+`validate` on both trees: no AppConfig findings. 663 tests.
+
+Next: **A2** diff + deploy (`ModelDiff`/`Plan` for objects, containers
+parents-first, DN rewriting, delete guard per kind, runtime untouchable,
+customized/baseline against the catalog's provisioning objects).

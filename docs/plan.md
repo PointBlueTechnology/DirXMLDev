@@ -388,7 +388,11 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   laxity. Driver set tied to the lab server by `DirXML-ServerList`. Awaiting Jerry's
   decisions (§8: a target tree above all).
 
-- **AppConfig fully supported — design note written 2026-09-21**, `docs/appconfig.md`:
+- **AppConfig fully supported — A1 BUILT 2026-09-21** (`docs/appconfig.md` §6: `AppObject`
+  model, LDIF/live reader, ds-object files under `provisioning/objects/`, `appconfig.list/show`,
+  `AppConfigCheck`, package jar provisioning blob + catalog unpack; idm254 206 objects, ig4 208,
+  NOVLUABASE 250; round trips byte-identical; 663 tests). Next A2 diff + deploy, A3 Designer.
+  Design note 2026-09-21:
   one generic `AppObject` (ds-object form, the format Designer, its digests and the UA
   base package already share) for the 200-odd objects the tree does not model
   (entities, choices, relationships, roles, resources, attestations, reports, nav items,
@@ -413,8 +417,8 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   DTD's required attributes (start with the send-email actions and `token-map`'s
   `src`/`dest`) would have named it. Also the schema note Designer prints
   ("cannot specify a leaf as a containment class: srvprvJSONForm") is stock.
-- **`PackageJar` misses the package's AppConfig** (`children/provisioning` blob, not
-  `provisioning-data`) — fixed as part of AppConfig A1 (docs/appconfig.md §5).
+- ~~**`PackageJar` misses the package's AppConfig**~~ — fixed 2026-09-21 in AppConfig A1
+  (docs/appconfig.md §6; the decoded document is what Designer's folder checksum covers).
 
 - ~~**Two package-stamp vocabularies, and the deploy side reads only one**~~ — **done
   2026-09-18** (`docs/designer-new-project.md` §7.2f, `docs/model.md` "Package stamps"):

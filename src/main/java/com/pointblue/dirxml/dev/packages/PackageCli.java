@@ -1,5 +1,7 @@
 package com.pointblue.dirxml.dev.packages;
 
+import com.pointblue.dirxml.dev.model.AppObject;
+
 import org.w3c.dom.Element;
 
 import java.io.IOException;
@@ -275,7 +277,7 @@ public final class PackageCli {
         }
 
         if (json) {
-            System.out.println(showJson(e, version, ve, idToShort, sorted));
+            System.out.println(showJson(e, version, ve, idToShort, sorted, p.provisioningObjects.size()));
             return 0;
         }
         StringBuilder sb = new StringBuilder();
@@ -312,6 +314,18 @@ public final class PackageCli {
         for (String l : objectLines) {
             sb.append(l).append('\n');
         }
+        if (!p.provisioningObjects.isEmpty()) {
+            Map<String, Integer> byKind = new java.util.TreeMap<>();
+            for (AppObject o : p.provisioningObjects) {
+                byKind.merge(o.kind().key, 1, Integer::sum);
+            }
+            sb.append("  provisioning (AppConfig) objects: ").append(p.provisioningObjects.size()).append("  ");
+            List<String> parts = new ArrayList<>();
+            for (Map.Entry<String, Integer> k : byKind.entrySet()) {
+                parts.add(k.getValue() + " " + k.getKey());
+            }
+            sb.append(String.join(", ", parts)).append("   (objects/<n>-Provisioning/ in the catalog)\n");
+        }
         System.out.print(sb);
         return 0;
     }
@@ -331,7 +345,7 @@ public final class PackageCli {
     }
 
     private static String showJson(Catalog.PackageEntry e, String version, Catalog.VersionEntry ve,
-                                    Map<String, String> idToShort, List<PackageJar.Item> items) {
+                                    Map<String, String> idToShort, List<PackageJar.Item> items, int provisioningObjectCount) {
         StringBuilder sb = new StringBuilder("{");
         sb.append("\"short\":").append(q(e.shortName)).append(",\"version\":").append(q(version));
         sb.append(",\"id\":").append(q(e.id)).append(",\"symbolicName\":").append(q(e.symbolicName));
@@ -363,6 +377,7 @@ public final class PackageCli {
                 + ",\"name\":" + q(it.name) + "}");
         }
         sb.append(",\"objects\":[").append(String.join(",", objs)).append("]");
+        sb.append(",\"provisioningObjects\":").append(provisioningObjectCount);
         return sb.append('}').toString();
     }
 

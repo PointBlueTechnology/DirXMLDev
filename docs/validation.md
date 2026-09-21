@@ -204,3 +204,14 @@ check:
   fires on a vault that starts and runs, the check is wrong.
 - Tests: a synthetic driver set built in code (see `ValidatorTest`) — one good
   case that must produce no finding, one bad case per code.
+
+## AppConfig objects (`AppConfigCheck`, docs/appconfig.md)
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `appconfig-xml-invalid` | E | an XML-valued attribute (`XmlData`, `nrfResourceParms`, `nrfEntitlementConfigDefault`) does not parse |
+| `appconfig-entity-key-duplicate` | E | two `<attribute key>` of one entity definition share a key |
+| `appconfig-role-level-mismatch` | E | a role's `nrfRoleLevel` disagrees with the `Level<n>` container it sits in |
+| `appconfig-ref-missing` | E | a DN-valued attribute (`nrfRequestDef`, the role configuration's `nrf*RequestDef`/`nrf*Container`) names an object the tree does not have |
+| `appconfig-ref-outside` | I | such a DN points outside this driver's AppConfig (the driver itself, for `nrfUADContainer`); not checked |
+| `appconfig-localized-unparsable` | W | a `*LocalizedNames`/`*LocalizedDescrs` value is not `lang~text|…` |

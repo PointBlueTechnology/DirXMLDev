@@ -60,6 +60,8 @@ public final class TestPackageJars {
         // embedded inline in package_import.xml (not a separately-decoded document, unlike an item's directive) — no XML declaration
         public String installDirectiveXml = "<installation-directive><ds-attributes/></installation-directive>";
         public List<Obj> objects = new ArrayList<>();
+        /** A {@code <provisioning>} ds-object document (the AppConfig tree) to carry base64 in a Provisioning folder (id 5), or null. */
+        public String provisioningXml;
     }
 
     /** Builds the jar bytes and writes them under {@code dir}, returning the path. */
@@ -85,7 +87,16 @@ public final class TestPackageJars {
                 .append("</ds-attributes></ds-object>");
         }
         long folderChecksum = PackageChecksum.folder(assocToChecksum, null);
-        long pkgChecksum = PackageChecksum.pkg(Map.of(1, folderChecksum));
+        Map<Integer, Long> folderChecksums = new LinkedHashMap<>();
+        folderChecksums.put(1, folderChecksum);
+        String provisioningFolder = "";
+        if (s.provisioningXml != null) {
+            folderChecksums.put(5, PackageChecksum.folder(Map.of(), s.provisioningXml));
+            provisioningFolder = "<package-folder id=\"5\" name=\"Provisioning\"><description></description><children><provisioning>"
+                + Base64.getEncoder().encodeToString(s.provisioningXml.getBytes(StandardCharsets.UTF_8))
+                + "</provisioning></children></package-folder>";
+        }
+        long pkgChecksum = PackageChecksum.pkg(folderChecksums);
         long dirChecksum = PackageChecksum.directive(NxslCanonical.canonical(s.installDirectiveXml));
         String readmeB64 = Base64.getEncoder().encodeToString("a test package".getBytes(StandardCharsets.UTF_8));
 
@@ -98,6 +109,7 @@ public final class TestPackageJars {
             + "<idm-installationdirective>" + s.installDirectiveXml + "</idm-installationdirective>"
             + "<readme>" + readmeB64 + "</readme>"
             + "<package-folder id=\"1\" name=\"Policies\"><description></description><children>" + children + "</children></package-folder>"
+            + provisioningFolder
             + "</package>";
 
         Path jar = dir.resolve(s.shortName + "_" + s.version + ".jar");

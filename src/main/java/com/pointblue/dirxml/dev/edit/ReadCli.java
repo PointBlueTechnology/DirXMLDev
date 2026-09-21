@@ -3,6 +3,7 @@ package com.pointblue.dirxml.dev.edit;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.json.Json;
 import com.pointblue.dirxml.dev.model.Artifact;
+import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Form;
@@ -541,6 +542,180 @@ public final class ReadCli {
     }
 
     // ---- entitlements (docs/entitlements.md) ---------------------------------------
+
+    // ---- appconfig.list / appconfig.show (docs/appconfig.md) ----------------------------
+
+    public static int appConfigList(String[] argv) throws Exception {
+        if (argv.length < 2) {
+            System.err.println("usage: appconfig.list <tree> [--driver D] [--kind K] [--containers] [--json]");
+            return 2;
+        }
+        Path tree = Paths.get(argv[1]);
+        String driverName = flag(argv, "--driver");
+        String kindKey = flag(argv, "--kind");
+        boolean containers = hasFlag(argv, "--containers");
+        boolean json = hasFlag(argv, "--json");
+        AppObject.Kind kind = kindKey == null ? null : AppObject.Kind.byKey(kindKey);
+        if (kindKey != null && kind == null) {
+            System.err.println("unknown kind '" + kindKey + "'; one of " + kindKeys());
+            return 2;
+        }
+        DriverSet ds = AsCodeReader.read(tree);
+        List<Driver> drivers = driversOf(ds, driverName);
+        if (driverName != null && drivers.isEmpty()) {
+            System.err.println("no driver '" + driverName + "'");
+            return 1;
+        }
+        List<Object> rows = new ArrayList<>();
+        int n = 0;
+        for (Driver d : drivers) {
+            if (d.provisioning == null) {
+                continue;
+            }
+            for (AppObject o : d.provisioning.objects) {
+                if (kind != null && o.kind() != kind) {
+                    continue;
+                }
+                if (kind == null && !containers && o.isContainer()) {
+                    continue;
+                }
+                n++;
+                if (json) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("driver", d.name);
+                    row.put("kind", o.kind().key);
+                    row.put("path", o.path());
+                    row.put("class", o.structuralClass());
+                    row.put("display", o.displayName());
+                    row.put("packaged", com.pointblue.dirxml.dev.model.PackageStamps.isPackaged(o.meta));
+                    rows.add(row);
+                } else {
+                    System.out.printf("%-14s %-60s %-28s%s%n", o.kind().key, d.name + "/" + o.path(),
+                        o.displayName().equals(o.name()) ? "" : o.displayName(), formPkgMark(o.meta));
+                }
+            }
+        }
+        if (json) {
+            System.out.println(Json.pretty(rows));
+        } else {
+            System.out.println(n + " object(s)" + (kind == null && !containers ? " (containers hidden; --containers shows them)" : ""));
+        }
+        return 0;
+    }
+
+    public static int appConfigShow(String[] argv) throws Exception {
+        if (argv.length < 3) {
+            System.err.println("usage: appconfig.show <tree> <path-or-name> [--driver D] [--attr A] [--json]");
+            return 2;
+        }
+        Path tree = Paths.get(argv[1]);
+        String ref = argv[2];
+        String driverName = flag(argv, "--driver");
+        String onlyAttr = flag(argv, "--attr");
+        boolean json = hasFlag(argv, "--json");
+        DriverSet ds = AsCodeReader.read(tree);
+        Driver owner = null;
+        AppObject found = null;
+        List<String> candidates = new ArrayList<>();
+        for (Driver d : driversOf(ds, driverName)) {
+            if (d.provisioning == null) {
+                continue;
+            }
+            AppObject byPath = d.provisioning.object(ref);
+            if (byPath != null) {
+                owner = d;
+                found = byPath;
+                break;
+            }
+            for (AppObject o : d.provisioning.objectsNamed(ref)) {
+                candidates.add(d.name + "/" + o.path());
+                owner = d;
+                found = o;
+            }
+        }
+        if (found == null) {
+            System.err.println("no AppConfig object at or named '" + ref + "'");
+            return 1;
+        }
+        if (candidates.size() > 1) {
+            System.err.println("'" + ref + "' is ambiguous; give a path:");
+            for (String c : candidates) {
+                System.err.println("  " + c);
+            }
+            return 1;
+        }
+        if (onlyAttr != null) {
+            List<String> values = found.all(onlyAttr);
+            if (values.isEmpty()) {
+                System.err.println("no attribute '" + onlyAttr + "' on " + found.path());
+                return 1;
+            }
+            for (String v : values) {
+                System.out.println(v);
+            }
+            return 0;
+        }
+        if (json) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("driver", owner.name);
+            out.put("kind", found.kind().key);
+            out.put("path", found.path());
+            out.put("name", found.name());
+            out.put("display", found.displayName());
+            out.put("classes", found.classes);
+            Map<String, Object> attrs = new LinkedHashMap<>();
+            for (Map.Entry<String, List<String>> e : found.attrs.entrySet()) {
+                attrs.put(e.getKey(), e.getValue());
+            }
+            out.put("attributes", attrs);
+            out.put("meta", found.meta);
+            System.out.println(Json.pretty(out));
+            return 0;
+        }
+        System.out.println(found.kind().key + "  " + owner.name + "/" + found.path());
+        System.out.println("  classes: " + String.join(", ", found.classes));
+        if (!found.displayName().equals(found.name())) {
+            System.out.println("  display: " + found.displayName());
+        }
+        String dn = found.meta.get("dn");
+        if (dn != null) {
+            System.out.println("  dn:      " + dn);
+        }
+        if (com.pointblue.dirxml.dev.model.PackageStamps.isPackaged(found.meta)) {
+            System.out.println("  package: " + found.meta.get(com.pointblue.dirxml.dev.model.PackageStamps.GUID));
+        }
+        for (Map.Entry<String, List<String>> e : found.attrs.entrySet()) {
+            String name = e.getKey();
+            List<String> values = e.getValue();
+            boolean localized = name.endsWith("LocalizedNames") || name.endsWith("LocalizedDescrs");
+            boolean operational = com.pointblue.dirxml.dev.model.AppConfigPolicy.isOperational(name);
+            if (localized && values.size() == 1) {
+                System.out.println("  " + name + ":");
+                for (Map.Entry<String, String> l : com.pointblue.dirxml.dev.model.AppConfigPolicy.localized(values.get(0)).entrySet()) {
+                    System.out.println("      " + l.getKey() + "  " + l.getValue());
+                }
+                continue;
+            }
+            for (String v : values) {
+                String shown = v;
+                if (v.indexOf('\n') >= 0 || v.length() > 120) {
+                    int lines = v.split("\n").length;
+                    shown = v.substring(0, Math.min(100, v.length())).replace("\n", " ") + "…  (" + v.length()
+                        + " chars, " + lines + " line(s); --attr " + name + " prints it)";
+                }
+                System.out.println("  " + name + ": " + shown + (operational ? "   [operational, not deployed]" : ""));
+            }
+        }
+        return 0;
+    }
+
+    private static String kindKeys() {
+        List<String> keys = new ArrayList<>();
+        for (AppObject.Kind k : AppObject.Kind.values()) {
+            keys.add(k.key);
+        }
+        return String.join("|", keys);
+    }
 
     public static int entitlementList(String[] argv) throws Exception {
         if (argv.length < 2) {
