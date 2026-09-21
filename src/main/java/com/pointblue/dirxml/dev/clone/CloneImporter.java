@@ -55,6 +55,8 @@ public final class CloneImporter {
         public boolean dryRun = true;
         public Path logDir;                               // where the before-LDIF and the import log go (optional)
         public String envName;
+        /** One lab password for every cloned person (the clone carries none); null = no password set. */
+        public char[] userPassword;
     }
 
     public static final class Result {
@@ -76,6 +78,9 @@ public final class CloneImporter {
         public int aclValues;
         public int droppedAclValues;
         public int serverValuesWritten;
+        public int passwordsSet;
+        public String passwordRefused;      // the server's first answer when the lab password broke a password policy
+        public int passwordsRefused;
         public int verified;
         public int verifyMismatches;
         public String plan = "";
@@ -112,6 +117,8 @@ public final class CloneImporter {
             m.put("references", Map.of("values", referenceValues, "dropped", droppedReferenceValues));
             m.put("acls", Map.of("values", aclValues, "dropped", droppedAclValues));
             m.put("serverValuesWritten", serverValuesWritten);
+            m.put("passwordsSet", passwordsSet);
+            m.put("passwordsRefused", passwordsRefused);
             m.put("verify", Map.of("entries", verified, "mismatches", verifyMismatches, "lines", verification));
             m.put("failures", failures);
             m.put("notes", notes);
@@ -301,6 +308,12 @@ public final class CloneImporter {
                 plan.append("    ").append(e.getKey()).append(" -> ").append(e.getValue()).append('\n');
             }
         }
+        Object dataEntries = bundle.manifest.get("dataEntries");
+        if (dataEntries != null && Json.asInt(dataEntries, 0) > 0) {
+            plan.append("  identity data: ").append(dataEntries).append(" entries")
+                .append(Boolean.TRUE.equals(bundle.manifest.get("pseudonymised")) ? ", pseudonymised" : ", real names")
+                .append(o.userPassword != null ? ", one lab password for every person" : ", no passwords").append('\n');
+        }
         if (!bundle.secretsNeeded.isEmpty()) {
             plan.append("  secrets to set afterwards: ").append(bundle.secretsNeeded.size()).append(" (see secrets-needed.txt)\n");
         }
@@ -435,13 +448,62 @@ public final class CloneImporter {
                     r.replaced++;
                 }
                 Map<String, List<byte[]>> attrs = entryAttributes(e, source, map, r);
-                target.add(e.dn, e.objectClasses(), attrs);
+                boolean withPassword = o.userPassword != null && isPerson(e) && (r.passwordsSet > 0 || r.passwordsRefused < 3);
+                if (withPassword) {
+                    attrs.put("userPassword", List.of(new String(o.userPassword).getBytes(StandardCharsets.UTF_8)));
+                }
+                try {
+                    target.add(e.dn, e.objectClasses(), attrs);
+                } catch (RuntimeException ex) {
+                    if (!withPassword || !isPasswordRefusal(ex)) {
+                        throw ex;
+                    }
+                    // a password policy (cloned with the tree) refuses the lab password: create the person
+                    // without one and go on — policies differ by container, so others may accept it; after
+                    // three refusals and no success, stop trying. A re-run with a compliant password sets them.
+                    if (r.passwordRefused == null) {
+                        r.passwordRefused = ex.getMessage();
+                    }
+                    r.passwordsRefused++;
+                    withPassword = false;
+                    attrs.remove("userPassword");
+                    target.add(e.dn, e.objectClasses(), attrs);
+                }
+                if (withPassword) {
+                    r.passwordsSet++;
+                }
                 existsCache.put(e.dn.toLowerCase(Locale.ROOT), Boolean.TRUE);
                 written.add(e.dn);
                 r.added++;
             } catch (RuntimeException ex) {
                 failedDns.add(e.dn);
                 r.failures.add("add " + e.dn + ": " + ex.getMessage());
+            }
+        }
+
+        // 2a. the lab password on people that already existed (a re-run after a refused password, or a
+        //     clone imported before a password was chosen): set, not skipped — passwords never verify
+        if (o.userPassword != null) {
+            for (Vault.Entry e : all) {
+                if (!isPerson(e) || written.contains(e.dn) || failedDns.contains(e.dn) || !exists(e.dn)) {
+                    continue;
+                }
+                if (r.passwordsSet == 0 && r.passwordsRefused >= 3) {
+                    break;                          // nobody takes it: the policy, not the person
+                }
+                try {
+                    target.replace(e.dn, "userPassword", List.of(new String(o.userPassword).getBytes(StandardCharsets.UTF_8)));
+                    r.passwordsSet++;
+                } catch (RuntimeException ex) {
+                    if (isPasswordRefusal(ex)) {
+                        if (r.passwordRefused == null) {
+                            r.passwordRefused = ex.getMessage();
+                        }
+                        r.passwordsRefused++;
+                        continue;
+                    }
+                    r.failures.add("password " + e.dn + ": " + ex.getMessage());
+                }
             }
         }
 
@@ -479,13 +541,14 @@ public final class CloneImporter {
         }
 
         // 3. references — on every entry of the clone that exists now, adding only what is missing
-        //    (a re-run converges; an entry the lab already had keeps what it has and gains the rest)
+        //    (a re-run converges; an entry the lab already had keeps what it has and gains the rest;
+        //    and the server itself may have added values on creation, so a new entry is read too)
         for (Map.Entry<String, Map<String, List<byte[]>>> e : bundle.references.entrySet()) {
             String dn = e.getKey();
             if (failedDns.contains(dn) || !exists(dn)) {
                 continue;
             }
-            Vault.Entry current = written.contains(dn) ? null : target.read(dn);
+            Vault.Entry current = target.read(dn);
             for (Map.Entry<String, List<byte[]>> a : e.getValue().entrySet()) {
                 if (targetSchema.isOperational(a.getKey())) {
                     unwritable.add(a.getKey());
@@ -505,13 +568,14 @@ public final class CloneImporter {
             }
         }
 
-        // 4. ACLs, the same way
+        // 4. ACLs, the same way — eDirectory grants every new user its default ACLs on creation, and
+        //    the clone carries those same values from the source, so only what is missing is added
         for (Map.Entry<String, Map<String, List<byte[]>>> e : bundle.acls.entrySet()) {
             String dn = e.getKey();
             if (failedDns.contains(dn) || !exists(dn)) {
                 continue;
             }
-            Vault.Entry current = written.contains(dn) ? null : target.read(dn);
+            Vault.Entry current = target.read(dn, "ACL");
             for (Map.Entry<String, List<byte[]>> a : e.getValue().entrySet()) {
                 List<byte[]> values = new ArrayList<>();
                 for (byte[] v : a.getValue()) {
@@ -610,6 +674,14 @@ public final class CloneImporter {
                 r.verification.add(e.dn + ": " + String.join("; ", diffs));
             }
         }
+        if (r.passwordsSet > 0) {
+            r.notes.add("the lab password was set on " + r.passwordsSet + " cloned person(s)");
+        }
+        if (r.passwordRefused != null) {
+            r.notes.add("the lab password was refused for " + r.passwordsRefused + " person(s) by a password policy — the clone carries the source's policies "
+                + "and their assignments (check nspmMaximumLength and the character rules on the cloned policy) — first answer: " + r.passwordRefused
+                + ". Those people have no password. Choose one the cloned policy accepts and run the import again: it sets it on every cloned person");
+        }
         if (!unwritable.isEmpty()) {
             r.notes.add("not written — the target's schema lets only the server set these: " + String.join(", ", unwritable)
                 + (unwritable.contains(ClonePolicy.START_OPTION_ATTR) ? " (so the drivers' start option is the engine's default there; check it before an engine runs this driver set)" : ""));
@@ -705,6 +777,21 @@ public final class CloneImporter {
             }
         }
         return out;
+    }
+
+    /** NMAS refusing a password (−16000 and neighbours) rather than the object being wrong. */
+    private static boolean isPasswordRefusal(RuntimeException ex) {
+        String m = ex.getMessage() == null ? "" : ex.getMessage();
+        return m.contains("-16000") || m.contains("-1696") || m.contains("-1697") || m.contains("password");
+    }
+
+    private static boolean isPerson(Vault.Entry e) {
+        for (String oc : e.objectClasses()) {
+            if (oc.equalsIgnoreCase("Person")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean containsIgnoreCase(java.util.Collection<String> values, String x) {
