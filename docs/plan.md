@@ -374,10 +374,11 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 
 ## Proposed next track (design note written, awaiting decisions)
 
-- **Clone an Identity Vault into a lab tree — BUILT (first cut) 2026-09-21**, `docs/vault-clone.md`
-  §9–§10: `vault.export-clone` / `vault.import-clone`, ig4 cloned into `EDIR_TEST2_TREE`
-  and read back with no differences; multi-server driver sets merged onto one lab server
-  or mapped one to one. Open: identity data (`--data`), pseudonymisation. Design as proposed:
+- **Clone an Identity Vault into a lab tree — BUILT 2026-09-21**, `docs/vault-clone.md`
+  §9–§11: `vault.export-clone` / `vault.import-clone`, ig4 cloned into `EDIR_TEST2_TREE`
+  (configuration read back with no differences; 13,154 people pseudonymised, one lab
+  password); multi-server driver sets merged onto one lab server or mapped one to one.
+  Open: scrubbing identifiers (`cn`/`uid`) that carry surnames — Jerry's call. Design as proposed:
   generic, attribute-faithful copy of schema + Security (password policies,
   notification templates) + containers + the driver set (+ optional data slice)
   into an inspectable LDIF bundle, imported in four phases (schema, entries without

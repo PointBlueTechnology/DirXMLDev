@@ -15,6 +15,7 @@ import java.util.Map;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -442,5 +443,128 @@ public class CloneTest {
         assertTrue(again.text(), again.ok);
         assertEquals(0, again.added);
         assertEquals(Vault.START_MANUAL, lab.driverStartOption("cn=AD,cn=driverset1,o=system"));
+    }
+
+    // ---- identity data ----
+
+    private static FakeVault sourceWithPeople() {
+        FakeVault v = source();
+        v.seed(entry("ou=users,o=data", List.of("organizationalUnit", "Top"), "ou", "users"));
+        Vault.Entry u = entry("cn=jsmith,ou=users,o=data", List.of("inetOrgPerson", "organizationalPerson", "Person", "Top"),
+            "cn", "jsmith", "givenName", "John", "sn", "Smith", "fullName", "John Smith", "mail", "john.smith@acme.example",
+            "userPassword", "{SSHA}xyz", "loginDisabled", "FALSE", "manager", "cn=mjones,ou=users,o=data",
+            "ACL", "2#entry#[Self]#loginScript", "ACL", "2#entry#[Self]#printJobConfiguration",
+            "DirXML-Associations", "cn=AD,cn=driverset1,o=system#1#S-1-5-21-123", "GUID", "g1");
+        v.seed(u);
+        v.seed(entry("cn=mjones,ou=users,o=data", List.of("inetOrgPerson", "organizationalPerson", "Person", "Top"),
+            "cn", "mjones", "givenName", "Mary", "sn", "Jones", "fullName", "Mary Jones", "mail", "mary.jones@acme.example"));
+        v.seed(entry("cn=Sales,ou=users,o=data", List.of("groupOfNames", "Top"), "cn", "Sales",
+            "member", "cn=jsmith,ou=users,o=data", "member", "cn=mjones,ou=users,o=data", "member", "cn=admin,ou=sa,o=system"));
+        v.seed(entry("cn=outside,o=system", List.of("inetOrgPerson", "Person", "Top"), "cn", "outside", "sn", "Out"));
+        return v;
+    }
+
+    @Test
+    public void identityDataUnderTheNamedContainersIsClonedPseudonymisedAndPasswordsNever() throws Exception {
+        CloneExporter.Options eo = new CloneExporter.Options();
+        eo.sourceName = "fake";
+        eo.dataContainers = List.of("o=data");
+        eo.pseudonymise = true;
+        CloneExporter.Report r = new CloneExporter(sourceWithPeople(), eo).run();
+        CloneBundle b = r.bundle;
+        List<Vault.Entry> all = new ArrayList<>(b.containers);
+        all.addAll(b.objects);
+        Vault.Entry u = find(all, "cn=jsmith,ou=users,o=data");
+        assertNotNull(u);
+        assertNotNull(find(all, "cn=Sales,ou=users,o=data"));
+        assertNull("data outside the named containers stays out", find(all, "cn=outside,o=system"));
+        assertEquals(4, r.dataEntries);                                  // two people, two groups (g1 from the base fixture)
+        assertEquals(2, r.pseudonymised);
+        assertFalse(u.attrs.containsKey("userPassword"));
+        assertFalse(u.attrs.containsKey("GUID"));
+        assertEquals("FALSE", u.string("loginDisabled"));
+        assertNotEquals("John", u.string("givenName"));
+        assertNotEquals("Smith", u.string("sn"));
+        assertEquals(u.string("givenName") + " " + u.string("sn"), u.string("fullName"));
+        assertTrue(u.string("mail"), u.string("mail").endsWith("@acme.example") && !u.string("mail").contains("john"));
+        assertEquals("jsmith", u.string("cn"));
+        // the person's references and associations travel as references, phase 3
+        Map<String, List<byte[]>> refs = b.references.get("cn=jsmith,ou=users,o=data");
+        assertEquals("cn=mjones,ou=users,o=data", new String(refs.get("manager").get(0), StandardCharsets.UTF_8));
+        assertEquals("cn=AD,cn=driverset1,o=system#1#S-1-5-21-123", new String(refs.get("DirXML-Associations").get(0), StandardCharsets.UTF_8));
+        assertEquals(3, b.references.get("cn=Sales,ou=users,o=data").get("member").size());
+        // the bundle on disk carries the fake names only
+        Path dir = tmp.newFolder("bundle4").toPath();
+        b.write(dir);
+        String objects = java.nio.file.Files.readString(dir.resolve(CloneBundle.OBJECTS), StandardCharsets.UTF_8);
+        assertFalse(objects, objects.contains("John") || objects.contains("Smith") || objects.contains("john.smith"));
+        assertEquals(Boolean.TRUE, CloneBundle.read(dir).manifest.get("pseudonymised"));
+
+        // import: every person gets the one lab password, groups and associations resolve; the lab's
+        // server grants each new entry the same default ACL the source had, and that is no duplicate
+        FakeVault lab = lab();
+        lab.defaultAclOnAdd = "2#entry#[Self]#loginScript";
+        CloneImporter.Options o = new CloneImporter.Options();
+        o.envName = "lab";
+        o.serverDn = "cn=lab1,ou=servers,o=system";
+        o.dryRun = false;
+        o.userPassword = "Lab-Pass-1".toCharArray();
+        CloneImporter.Result ir = new CloneImporter(CloneBundle.read(dir), lab, o).run();
+        assertTrue(ir.text(), ir.ok);
+        assertEquals(2, ir.passwordsSet);
+        assertEquals("Lab-Pass-1", lab.read("cn=jsmith,ou=users,o=data").string("userPassword"));
+        assertNull(lab.read("cn=Sales,ou=users,o=data").string("userPassword"));
+        assertEquals(3, lab.read("cn=Sales,ou=users,o=data").strings("member").size());
+        assertEquals("cn=AD,cn=driverset1,o=system#1#S-1-5-21-123", lab.read("cn=jsmith,ou=users,o=data").string("DirXML-Associations"));
+        assertEquals(2, lab.read("cn=jsmith,ou=users,o=data").strings("ACL").size());     // the server's default plus the one it lacked, no duplicate
+        assertTrue(ir.failures.toString(), ir.failures.isEmpty());
+        assertEquals(0, ir.verifyMismatches);
+        assertTrue(ir.plan, ir.plan.contains("identity data: 4 entries, pseudonymised, one lab password"));
+    }
+
+    @Test
+    public void withoutDataAssociationsAndPeopleStayOut() throws Exception {
+        CloneExporter.Options eo = new CloneExporter.Options();
+        eo.sourceName = "fake";
+        CloneExporter.Report r = new CloneExporter(sourceWithPeople(), eo).run();
+        List<Vault.Entry> all = new ArrayList<>(r.bundle.containers);
+        all.addAll(r.bundle.objects);
+        assertNull(find(all, "cn=jsmith,ou=users,o=data"));
+        assertNull(find(all, "cn=Sales,ou=users,o=data"));
+        assertNotNull(find(all, "ou=users,o=data"));
+        assertEquals(0, r.dataEntries);
+    }
+
+    /** The cloned password policy refuses the lab password: people are still created, and a re-run sets a compliant one. */
+    @Test
+    public void aRefusedLabPasswordDoesNotStopTheImport() throws Exception {
+        CloneExporter.Options eo = new CloneExporter.Options();
+        eo.sourceName = "fake";
+        eo.dataContainers = List.of("o=data");
+        CloneBundle b = new CloneExporter(sourceWithPeople(), eo).run().bundle;
+        FakeVault lab = lab();
+        lab.refuseUserPasswords = "[LDAP: error code 19 - NDS error: no additional information available (-16000)]";
+        CloneImporter.Options o = new CloneImporter.Options();
+        o.envName = "lab";
+        o.serverDn = "cn=lab1,ou=servers,o=system";
+        o.dryRun = false;
+        o.userPassword = "bad-pass!".toCharArray();
+        CloneImporter.Result r = new CloneImporter(b, lab, o).run();
+        assertTrue(r.text(), r.ok);
+        assertNotNull(r.passwordRefused);
+        assertEquals(0, r.passwordsSet);
+        assertEquals(2, r.passwordsRefused);
+        assertNotNull(lab.read("cn=jsmith,ou=users,o=data"));
+        assertNull(lab.read("cn=jsmith,ou=users,o=data").string("userPassword"));
+        assertTrue(r.notes.toString(), r.notes.stream().anyMatch(n -> n.contains("refused for 2 person(s)")));
+
+        lab.refuseUserPasswords = null;
+        o.userPassword = "GoodPass1234".toCharArray();
+        CloneImporter.Result again = new CloneImporter(b, lab, o).run();
+        assertTrue(again.text(), again.ok);
+        assertEquals(0, again.added);
+        assertEquals(2, again.passwordsSet);
+        assertEquals("GoodPass1234", lab.read("cn=jsmith,ou=users,o=data").string("userPassword"));
+        assertEquals("GoodPass1234", lab.read("cn=mjones,ou=users,o=data").string("userPassword"));
     }
 }

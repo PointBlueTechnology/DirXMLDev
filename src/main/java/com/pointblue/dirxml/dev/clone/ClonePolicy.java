@@ -47,7 +47,7 @@ public final class ClonePolicy {
         "Reference", "Used By", "Bindery Property", "Bindery Object Restriction", "Bindery Type", "Cross Certificate Pair",
         "networkAddress", "lastLoginTime", "loginTime", "loginIntruderAddress", "loginIntruderAttempts", "loginIntruderResetTime",
         "Detect Intruder", "Intruder Attempt Reset Interval", "Intruder Lockout Reset Interval", "Lockout After Detection",
-        "Login Intruder Limit", "loginDisabled", "passwordExpirationTime", "pwdChangedTime", "pwdAccountLockedTime",
+        "Login Intruder Limit", "passwordExpirationTime", "pwdChangedTime", "pwdAccountLockedTime",
         "nspmPasswordHistory", "nspmDistributionPassword", "userPassword", "nspmPasswordKey", "sasNDSPasswordWindow",
         "publicKey", "privateKey", "sASSecretStore", "sasLoginSecret", "sasLoginSecretKey", "sasEncryptionType",
         "sasNMASProductOptions", "ndspkiKeyMaterialDN", "ndspkiTreeCADN", "ndspkiTrustedRootCertificate",
@@ -128,7 +128,12 @@ public final class ClonePolicy {
     }
 
     public static boolean excludedAttribute(String attr, boolean keepDriverState) {
-        return EXCLUDED_ATTRS.contains(attr) || INVERSE_ATTRS.contains(attr) || DATA_ATTRS.contains(attr)
+        return excludedAttribute(attr, keepDriverState, false);
+    }
+
+    /** With identity data cloned, {@code DirXML-Associations} travel too (the driver DNs they name are the same in the clone). */
+    public static boolean excludedAttribute(String attr, boolean keepDriverState, boolean withData) {
+        return EXCLUDED_ATTRS.contains(attr) || INVERSE_ATTRS.contains(attr) || (!withData && DATA_ATTRS.contains(attr))
             || (!keepDriverState && DRIVER_STATE_ATTRS.contains(attr));
     }
 

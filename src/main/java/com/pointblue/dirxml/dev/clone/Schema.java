@@ -83,9 +83,33 @@ public final class Schema {
             return names.isEmpty() ? oid : names.get(0);
         }
 
-        /** The definition with the same content compares equal regardless of spacing. */
+        /**
+         * What the definition means, independent of how eDirectory rendered it: the OID, the
+         * names, SUP, the syntax without its length bound, the flags that change behaviour
+         * (SINGLE-VALUE, NO-USER-MODIFICATION, USAGE, the class kind), MUST and MAY as sets.
+         * {@code X-NDS_*} rendering flags, bounds and spacing do not count.
+         */
         public String normalized() {
-            return raw.replaceAll("\\s+", " ").trim();
+            StringBuilder sb = new StringBuilder(oid);
+            sb.append(" names=").append(new TreeSet<>(lower(names)));
+            sb.append(" sup=").append(new TreeSet<>(lower(sups)));
+            if (attribute) {
+                sb.append(" syntax=").append(syntax);
+                sb.append(singleValue ? " single" : "").append(noUserModification ? " no-user-mod" : "").append(operational ? " operational" : "");
+            } else {
+                sb.append(raw.contains(" ABSTRACT") ? " abstract" : raw.contains(" AUXILIARY") ? " auxiliary" : " structural");
+                sb.append(" must=").append(new TreeSet<>(lower(must)));
+                sb.append(" may=").append(new TreeSet<>(lower(may)));
+            }
+            return sb.toString();
+        }
+
+        private static List<String> lower(java.util.Collection<String> in) {
+            List<String> out = new ArrayList<>();
+            for (String s : in) {
+                out.add(s.toLowerCase(Locale.ROOT));
+            }
+            return out;
         }
 
         @Override
@@ -158,10 +182,14 @@ public final class Schema {
         return SYNTAX_OBJECT_ACL.equals(syntaxOf(attr));
     }
 
-    /** True when the server would refuse a client writing this attribute, or maintains it itself. */
+    /**
+     * True when the server would refuse a client writing this attribute: {@code NO-USER-MODIFICATION},
+     * or a back link. {@code USAGE directoryOperation} alone does not count — NetIQ marks
+     * client-written attributes that way too ({@code DirXML-Associations}, for one).
+     */
     public boolean isOperational(String attr) {
         Def d = attributes.get(attr);
-        return d != null && (d.noUserModification || d.operational || SYNTAX_BACK_LINK.equals(d.syntax));
+        return d != null && (d.noUserModification || SYNTAX_BACK_LINK.equals(d.syntax));
     }
 
     /** True for a server-specific attribute: never replicated, read from — and written to — one server at a time. */

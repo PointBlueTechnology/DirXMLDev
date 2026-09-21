@@ -1,6 +1,6 @@
 # Design note: cloning an Identity Vault into a lab tree (`vault.clone`)
 
-*Status: decided and built 2026-09-21 (first cut, §10). Jerry's decisions: same container names; no identity data in the first cut; driver run-time state excluded; iManager RBS skipped; a second eDirectory instance (`EDIR_TEST2_TREE`, no engine) as the target.*
+*Status: built 2026-09-21 — configuration (§10), identity data with pseudonymisation and a lab password (§11). Jerry's decisions: same container names; driver run-time state excluded; iManager RBS skipped; pseudonymise first name, last name, full name and the local part of mail, on the export; a second eDirectory instance (`EDIR_TEST2_TREE`, no engine) as the target.*
 
 ## 1. What Jerry asked for
 
@@ -104,14 +104,15 @@ ordering, exclusions, DN rewriting), and the as-code tooling is used *afterwards
 on the clone (`import-live` → tree → develop → deploy), exactly as on any lab.
 
 ```
-bin/idm vault.export-clone --env ig4prd --out clone/acme-2026-09-21 [--rbs] [--keep-driver-state]
+bin/idm vault.export-clone --env ig4prd --out clone/acme-2026-09-21 [--rbs] [--keep-driver-state] \
+        [--data <container>[,…]] [--pseudonymise]
 bin/idm vault.import-clone --env lab1 --from clone/acme-2026-09-21 [--server <labServerDn>] \
         [--map <srcServerDn>=<labServerDn> …] [--driver-server <driver>=<srcServerDn> …] \
-        [--replace] [--replace-driverset] [--yes] [--json]
+        [--user-password <secretKey>] [--replace] [--replace-driverset] [--yes] [--json]
 ```
 
-(As built. `--include` and `--data` from the proposal are not in the first cut: it clones
-configuration only. `--yes` writes; without it the command plans and stops.)
+(As built. `--include` from the proposal is not: the policy decides. `--yes` writes;
+without it the command plans and stops.)
 
 `export-clone` reads the source (our `Vault`, every attribute as bytes, binary
 attributes marked) and writes a **bundle**: plain LDIF, ordered, reviewable,
@@ -313,4 +314,53 @@ to add, OK. What eDirectory taught on the way, all handled and reported by the i
 
 Not done, by decision or by scope: identity data (`--data`), pseudonymisation, base
 container renaming beyond the DN map, LBURP.
+
+## 11. Identity data, pseudonymised (2026-09-21, second cut)
+
+`--data <container>[,…]` clones the people, groups, aliases and roles under the named
+containers with the same machinery: their DN-bearing attributes (`member`, `manager`,
+`securityEquals`, `nrfAssignedRoles`…) in the references phase, their
+`DirXML-Associations` kept — they name the drivers, whose DNs are the same in the clone,
+so the lab's drivers see associated users — and never a password, never login history.
+`loginDisabled` travels: it is the person's setting, not the server's.
+
+`--pseudonymise` runs **on the export**, so the bundle on disk never holds a real name:
+given name, surname, full name and display name, and the local part of every mail
+address (the domain kept) are replaced by consistent fakes — the same real value always
+maps to the same fake within one export, two accounts of one person stay one person, a
+full name is rebuilt from the fake given name and surname in the shape it had, mail
+becomes `fake.given.fake.surname`, with a short suffix when two people would collide.
+The mapping is keyed with a random salt and kept nowhere. The login name (`cn`, the
+RDN) and the other identifiers are left alone: **in a tree whose logins are built from
+the surname, `cn`, `uid`, `workforceID` and `description` still carry it** (found on
+ig4: one real surname, five hits, all in those attributes). Widening the scrub to
+identifiers means renaming DNs, which the DN map can carry through every reference;
+that is a decision, not a default.
+
+`--user-password <secretKey>` on the import gives every cloned person one lab password
+from the lab environment's secrets file, on creation, and on a re-run to everyone
+created without one.
+
+**The run (ig4 → `EDIR_TEST2_TREE`).** Export: 14,332 entries read, 14,098 cloned,
+13,154 people pseudonymised, 3 seconds, 23 MB. Import: 13,151 people and their groups
+in under three minutes plus a converging pass; every person read back matches; a
+cloned person binds with the lab password; a sampled person shows fake names, a real
+domain and three associations to the cloned drivers. What the run taught:
+
+- **The clone carries the source's password policies and their assignments**, so the
+  lab password must satisfy them. ig4's "Sample Password Policy", assigned to `o=data`,
+  refused two generated passwords with NMAS −16000 before the reason surfaced:
+  `nspmMaximumLength: 12`. The import no longer fails a person over that: it creates the
+  person without a password, counts refusals, stops trying after three with no success,
+  and a re-run with a compliant password sets it on everyone; the note names the policy
+  attributes to look at.
+- **eDirectory grants every new user its default ACLs** (`[Self]` on `loginScript` and
+  `printJobConfiguration`), the same values the clone carries from the source. The ACL
+  and reference phases read the entry first and add only what is missing.
+- **`USAGE directoryOperation` is not "server-owned"**: NetIQ marks client-written
+  attributes that way too (`DirXML-Associations`). Only `NO-USER-MODIFICATION` and back
+  links are left unwritten now.
+- **Schema conflicts are compared by meaning** — OID, names, superior, syntax without
+  its length bound, the behavioural flags, MUST and MAY as sets — not by eDirectory's
+  rendering: 922 "differences" became the 79 real ones on this pair of versions.
 
