@@ -119,13 +119,15 @@ diffable, shippable from a customer site, and ICE-loadable as a fallback:
 
 ```
 clone/<name>/
-  manifest.json          source tree, base DNs, server DN, counts, excluded attributes, date
-  10-schema.ldif         attributeTypes then objectClasses the target lacks (computed at import time too)
-  20-containers.ldif     every non-leaf entry, parents first (DN depth), no DN-syntax attributes
-  30-objects.ldif        every other entry, parents first, no DN-syntax attributes
-  40-references.ldif     changetype: modify — the held-back DN-syntax attributes, one modify per entry
+  manifest.json          source tree, servers (which were read), driver placement, counts, exclusions, date
+  10-schema.ldif         the whole source subschema (the import computes the delta against any target)
+  20-containers.ldif     every entry with children, parents first (DN depth), without DN-bearing attributes
+  30-objects.ldif        every other entry, parents first, likewise
+  35-server-values/      one file per source server: its server-specific values (§9), replace records
+  40-references.ldif     changetype: modify — the held-back DN-bearing attributes, one record per entry
   50-acls.ldif           changetype: modify — ACL values, last (every trustee now exists)
-  secrets-needed.txt     driver / named-password secrets the target must be given (names only)
+  secrets-needed.txt     driver secrets the target must be given (names and servers only, never values)
+  imports/               written by import-clone: a before-LDIF of touched entries and a log per run
 ```
 
 Secrets never enter the bundle. Passwords never enter the bundle.
@@ -235,3 +237,75 @@ in between. Roughly the driver-icons and stamp-vocabulary work combined.
 
 Sources: [NetIQ ICE utility (eDirectory 9.2)](https://training.netiq.com/documentation/edirectory-92/edir_admin/data/a5hgmnu.html),
 [Improving bulkload performance](https://www.netiq.com/documentation/edir88/edir88/data/bqu6wcq.html).
+
+## 9. Several servers in a driver set (added 2026-09-21, Jerry's requirement)
+
+A driver set can name several servers in `DirXML-ServerList`, each running some of the
+drivers. IDM keeps a driver's server-specific settings — shim settings, GCVs, engine
+control values, start option, state, passwords — in eDirectory **never-sync attributes**
+(`X-NDS_NEVER_SYNC '1'` in the schema, 41 of them on ig4): each server holds its own
+values, and only that server's LDAP hands them out. So:
+
+- **Export** reads the whole tree through the environment's connection (the *primary*
+  server, the root DSE's `dsaName`) and, for every other server in the driver set's
+  list, opens a connection with the same credentials — at `<env>.servers=<serverDn>=<url>;…`
+  when the environment says so, else at the LDAPS URL derived from the server object
+  (the IP from its TCP `networkAddress`, the port from its LDAP Server object's
+  `ldapInterfaces`) — and reads the never-sync attributes of every entry under the
+  driver set. The bundle keeps them per server (`35-server-values/`), and records per
+  driver where it **ran**: the server where its `DirXML-State` was running or starting,
+  else where it was enabled, else the primary. A server that cannot be reached is listed
+  as such; drivers that ran there keep the primary's values, with a note.
+- **Import, merged** (the default, `--server <labServerDn>`): every source server maps
+  to the one lab server. A driver's server-specific values come from the server it ran
+  on — `--driver-server <driver>=<srcServerDn>` overrides — and the driver set's own
+  (its GCVs, Java environment) from the primary. `DirXML-ServerList` collapses to the
+  lab server.
+- **Import, one to one** (`--map <srcServerDn>=<labServerDn>` for *every* source server,
+  naming at least two distinct lab servers): the lab keeps the shape. The connection's
+  own server mirrors the source server mapped to it; every other lab server gets its
+  source server's values through its own connection (`<lab>.servers=<labServerDn>=<url>`).
+  `DirXML-ServerList` lists all the lab servers.
+
+## 10. The first real clone (2026-09-21): ig4 → `EDIR_TEST2_TREE`
+
+The target: a bare eDirectory 9.3.3 in a container beside idm254 (32 entries, no
+DirXML schema, no engine, no applications). The export of ig4 took under two seconds:
+1,149 entries read, 940 cloned (81 containers, 859 objects), 28 entries with held-back
+references, 70 with ACLs, 10 shim passwords listed by name, 19 drivers forced to manual
+start, 2,150 attributes / 279 classes of schema. The first import wrote 1,401 attributes
+and 170 classes, then every entry, in 24 seconds. Read back with `import-live` and
+diffed against the live ig4 tree as as-code trees: **no differences**. Re-run: nothing
+to add, OK. What eDirectory taught on the way, all handled and reported by the import:
+
+- **NetIQ "Unknown" syntax** (`2.16.840.1.113719.1.1.5.1.0`): the server publishes 45
+  such attributes (`DirXML-Access*`, `nrfAccess*` — IDM's rights pseudo-attributes,
+  never valued, named as protected attributes by 102 ACLs) but silently refuses to
+  define one over LDAP (`ldapmodify` reports success and creates nothing). They are
+  created as Octet String, with a note listing them. A later IDM engine install on
+  the lab will find them with a different syntax; that is the cost of keeping the ACLs.
+- **NetIQ "tagged data" syntax** (`…5.1.13`: `DirXML-Act3`, `DirXML-NamedPasswords`):
+  refused outright (−641). The clone never carries their values; the classes that list
+  them are created without them, noted.
+- **Transfer aliases** (`userCertificate;binary` and two more) are not attributes to
+  create; skipped.
+- **Class order**: a class needs its superclass *and* its containment classes
+  (`X-NDS_CONTAINMENT`) to exist; the import retries classes in rounds until nothing
+  moves.
+- **Dropped classes take their attributes with them**: `o=data` carried
+  `Convergence` and `lowConvergenceSyncInterval`, which only `Partition` allows; an
+  attribute none of the entry's remaining classes allow is not written.
+- **Server-owned attributes differ by version**: eDirectory 9.3.3 defines
+  `DirXML-DriverStartOption` `NO-USER-MODIFICATION`, 9.2.8 does not. The import reads
+  the *target's* schema and never writes what it marks server-owned; the start option is
+  then set the way deploy sets it, through the engine's DirXML extended operation — and
+  when no engine answers (this lab has none), it says so and asks for the option to be
+  set before an engine runs the drivers.
+- **Re-runs converge**: an existing entry is skipped, its references and ACLs get only
+  the values it lacks, and the clone's own driver set from an earlier run is recognised
+  (a driver set holding drivers the clone does not carry is refused unless
+  `--replace-driverset`).
+
+Not done, by decision or by scope: identity data (`--data`), pseudonymisation, base
+container renaming beyond the DN map, LBURP.
+
