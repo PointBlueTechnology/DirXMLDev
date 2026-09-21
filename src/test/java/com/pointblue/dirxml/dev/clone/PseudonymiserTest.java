@@ -53,7 +53,7 @@ public class PseudonymiserTest {
         assertNotEquals(mailA, b.string("mail"));                         // two accounts, two local parts
         assertTrue(b.string("mail"), b.string("mail").startsWith(mailA.substring(0, mailA.indexOf('@'))));
         assertNotEquals(a.string("givenName"), c.string("givenName").equals(g) && c.string("sn").equals(s) ? "" : a.string("givenName") + "x");
-        assertEquals(3, p.people());
+        assertEquals(4, p.people());
 
         // a different salt, a different mapping; the same salt, the same
         Pseudonymiser q = new Pseudonymiser(new byte[] {9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9});
