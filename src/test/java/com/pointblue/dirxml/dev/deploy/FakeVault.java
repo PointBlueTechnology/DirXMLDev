@@ -14,7 +14,7 @@ import java.util.Map;
  * subtree search at plan time) and {@link DeployerTest} (the whole {@link Deployer#run()} flow
  * without a live, final {@link Vault}). DNs are matched case-insensitively, like the real vault.
  */
-final class FakeVault implements VaultAccess {
+public final class FakeVault implements VaultAccess {
 
     final Map<String, Vault.Entry> byDn = new LinkedHashMap<>();
     final Map<String, Integer> driverStates = new HashMap<>();
@@ -25,7 +25,7 @@ final class FakeVault implements VaultAccess {
     boolean closed;
 
     /** Seeds an entry as-is (its {@code objectClass} attribute must already be set). */
-    void seed(Vault.Entry e) {
+    public void seed(Vault.Entry e) {
         byDn.put(key(e.dn), e);
     }
 
@@ -39,6 +39,11 @@ final class FakeVault implements VaultAccess {
     }
 
     @Override
+    public Vault.Entry read(String dn, String... attrs) {
+        return read(dn);
+    }
+
+    @Override
     public boolean exists(String dn) {
         return byDn.containsKey(key(dn));
     }
@@ -48,7 +53,7 @@ final class FakeVault implements VaultAccess {
         String b = key(base);
         List<Vault.Entry> out = new ArrayList<>();
         for (Map.Entry<String, Vault.Entry> e : byDn.entrySet()) {
-            if (e.getKey().equals(b) || e.getKey().endsWith("," + b)) {
+            if (b.isEmpty() || e.getKey().equals(b) || e.getKey().endsWith("," + b)) {
                 out.add(e.getValue());
             }
         }
@@ -93,6 +98,17 @@ final class FakeVault implements VaultAccess {
         } else {
             e.attrs.put(attr, values);
         }
+    }
+
+    @Override
+    public void addValues(String dn, String attr, List<byte[]> values) {
+        Vault.Entry e = byDn.get(key(dn));
+        if (e == null) {
+            throw new Vault.VaultException("modify-add " + dn + " " + attr + ": no such object", null);
+        }
+        List<byte[]> cur = new ArrayList<>(e.attrs.getOrDefault(attr, List.of()));
+        cur.addAll(values);
+        e.attrs.put(attr, cur);
     }
 
     @Override

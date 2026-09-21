@@ -1,6 +1,6 @@
 # Design note: cloning an Identity Vault into a lab tree (`vault.clone`)
 
-*Status: proposed 2026-09-21, awaiting Jerry's decisions (§8). Nothing built.*
+*Status: decided and built 2026-09-21 (first cut, §10). Jerry's decisions: same container names; no identity data in the first cut; driver run-time state excluded; iManager RBS skipped; a second eDirectory instance (`EDIR_TEST2_TREE`, no engine) as the target.*
 
 ## 1. What Jerry asked for
 
@@ -104,11 +104,14 @@ ordering, exclusions, DN rewriting), and the as-code tooling is used *afterwards
 on the clone (`import-live` → tree → develop → deploy), exactly as on any lab.
 
 ```
-bin/idm vault.export-clone --env ig4prd  --out clone/acme-2026-09-21 \
-        [--include schema,security,notifications,containers,driverset] [--data o=data[:limit=500]] [--rbs]
-bin/idm vault.import-clone  --env lab1   --from clone/acme-2026-09-21 \
-        --server "cn=lab1,ou=servers,o=system" [--map src=dst …] [--user-password KEY] [--dry-run] [--yes]
+bin/idm vault.export-clone --env ig4prd --out clone/acme-2026-09-21 [--rbs] [--keep-driver-state]
+bin/idm vault.import-clone --env lab1 --from clone/acme-2026-09-21 [--server <labServerDn>] \
+        [--map <srcServerDn>=<labServerDn> …] [--driver-server <driver>=<srcServerDn> …] \
+        [--replace] [--replace-driverset] [--yes] [--json]
 ```
+
+(As built. `--include` and `--data` from the proposal are not in the first cut: it clones
+configuration only. `--yes` writes; without it the command plans and stops.)
 
 `export-clone` reads the source (our `Vault`, every attribute as bytes, binary
 attributes marked) and writes a **bundle**: plain LDIF, ordered, reviewable,

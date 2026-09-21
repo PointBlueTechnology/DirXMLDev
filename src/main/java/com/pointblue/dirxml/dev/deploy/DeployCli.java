@@ -96,6 +96,9 @@ public final class DeployCli {
                 System.out.print(json ? r.json() + "\n" : r.text());
                 return r.ok ? 0 : 1;
             }
+            case "vault.export-clone":
+            case "vault.import-clone":
+                return com.pointblue.dirxml.dev.clone.CloneCli.run(cmd, env, opts, json);
             default:
                 System.err.println("unknown command " + cmd);
                 return 2;
