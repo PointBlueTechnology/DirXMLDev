@@ -260,6 +260,38 @@ users add under Package Manager → Online Updates — so a client's Designer ge
 our packages the normal way, and F9's requirement (the jar must be in every
 importing Designer's catalog) is met by pointing Designer at the site.
 
+### 3.7 Strip: make a driver fully custom
+
+**Built 2026-09-22.** `package.strip tree/ --driver D [--library]` is the opposite
+of adopting a package: it removes every package stamp from the driver and
+everything under it — the `dirxml-pkg*` metas (GUID record, association id,
+checksum, linkage record, the driver's filter-extension cache) and their
+project/export spellings, the installed-package records
+(`package.installed.*`), the `package.customized` mark with its recorded
+baseline checksum, and the `.package-baseline/` copies — and marks the driver
+`package.stripped`. Content is untouched: a customized policy keeps its
+customized text, which is now simply its text. A Designer project written from
+the tree then shows a plain hand-built driver (no package attributes, no
+package records in the digest) with no upgrade path; the object names keep
+their vendor prefixes unless renamed.
+
+The mark is what makes the deploy honour it. A project or an export never
+carries a linkage record, and a tree that merely lacks stamps is not read as a
+request to remove the vault's (docs/vault-deploy.md); on a marked driver it
+is: `vault.diff` reports every stamp the vault still holds, and `vault.deploy`
+deletes the five `DirXML-pkg*` attributes and the `DirXML-PkgItemAux` class
+from each object, then the driver's own record, `DirXML-pkgExtensions` and
+both package aux classes (`DirXML-PkgTargetAux`, `DirXML-PkgItemAux`) —
+attributes before the class that carries them, as eDirectory requires. Verified
+on idm254 2026-09-22 with a scratch copy of the DCS driver: 20 stamped objects,
+123 steps, nothing package-related left on 23 entries, `vault.verify` clean.
+
+Library items are shared by every driver in the set, so they are never
+implied: `--library` strips them and the driver set's own records too, and the
+deploy then removes the driver set's `DirXML-pkgGUID` / `DirXML-pkgExtensions`
+and aux classes as well. The next `package.install` on the driver (or the
+driver set) clears the mark.
+
 ## 4. Checksums (the load-bearing piece)
 
 `packages.PackageChecksum` implements F1–F5 exactly: CRC32 over UTF-8 of

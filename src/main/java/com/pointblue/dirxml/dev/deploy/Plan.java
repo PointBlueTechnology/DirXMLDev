@@ -32,7 +32,7 @@ import java.util.TreeSet;
  */
 public final class Plan {
 
-    public enum Op { ADD, MODIFY, DELETE, DELETE_SUBTREE, SET_SECRET, RESTART, START_OPTION, AUX_CLASS, ENSURE_CONTAINER }
+    public enum Op { ADD, MODIFY, DELETE, DELETE_SUBTREE, SET_SECRET, RESTART, START_OPTION, AUX_CLASS, DROP_AUX_CLASS, ENSURE_CONTAINER }
 
     /** One operation. {@code values} is what to write (null for DELETE/RESTART; secrets carry only the key). */
     public static final class Step {
@@ -198,11 +198,11 @@ public final class Plan {
                 continue;
             }
             if (c.kind.isProvisioning()) {
-                provisioningSteps(p, c, to, dsDn, tree, provisioning, deletes, ensuredContainers);
+                provisioningSteps(p, c, to, diff.from(), dsDn, tree, provisioning, deletes, ensuredContainers);
                 continue;
             }
             if (c.kind.isEntitlement()) {
-                entitlementSteps(p, c, to, dsDn, tree, provisioning, deletes);
+                entitlementSteps(p, c, to, diff.from(), dsDn, tree, provisioning, deletes);
                 continue;
             }
             switch (c.kind) {
@@ -243,6 +243,10 @@ public final class Plan {
                         for (Map.Entry<String, List<byte[]>> e : attrs.entrySet()) {
                             bucket.add(new Step(Op.MODIFY, dn, e.getKey(), null, Map.of(e.getKey(), e.getValue()),
                                 dn + "  " + e.getKey() + " (" + size(Map.of(e.getKey(), e.getValue())) + ")", c.path, a.driver));
+                        }
+                        Artifact was = diff.from().resolve(c.path);
+                        if (stamps.isEmpty() && was != null && stripSteps(p, to, bucket, dn, a.meta, was.meta, c.path, a.driver)) {
+                            p.notes.add(c.path + ": package stamps removed (the driver was stripped of its packages)");
                         }
                     }
                     break;
@@ -333,6 +337,23 @@ public final class Plan {
                         driverAttrs.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, values),
                             dn + "  " + attr + (values.isEmpty() ? " (remove)" : " (" + size(Map.of(attr, values)) + ")"), c.path + "#stamps", c.driver));
                     }
+                    if (dstamps.isEmpty() && com.pointblue.dirxml.dev.edit.PackageStrip.isStripped(to, c.driver)) {
+                        List<String> dropAux = List.of(VaultMapping.PKG_TARGET_AUX, VaultMapping.PKG_ITEM_AUX);
+                        driverAttrs.add(new Step(Op.DROP_AUX_CLASS, dn, null, dropAux, null,
+                            dn + "  objectClass -= " + String.join(", ", dropAux), c.path + "#stamps", c.driver));
+                        p.notes.add("drivers/" + c.driver + ": the driver was stripped of its packages; its record, extension cache and package aux classes are removed");
+                    }
+                    break;
+                }
+                case DRIVERSET_STAMPS: {
+                    p.touchedDns.add(dsDn);
+                    for (String attr : List.of(VaultMapping.PKG_GUID, VaultMapping.PKG_EXTENSIONS)) {
+                        driverSet.add(new Step(Op.MODIFY, dsDn, attr, null, Map.of(attr, Collections.emptyList()),
+                            dsDn + "  " + attr + " (remove)", "driverset#stamps", null));
+                    }
+                    List<String> dropAux = List.of(VaultMapping.PKG_TARGET_AUX, VaultMapping.PKG_ITEM_AUX);
+                    driverSet.add(new Step(Op.DROP_AUX_CLASS, dsDn, null, dropAux, null,
+                        dsDn + "  objectClass -= " + String.join(", ", dropAux), "driverset#stamps", null));
                     break;
                 }
                 case DRIVER_ADDED: {
@@ -574,7 +595,7 @@ public final class Plan {
      * Stamps as for artifacts; a customized packaged object gets a content-derived
      * {@code DirXML-pkgChecksum} so Designer's modified test trips.
      */
-    private static void provisioningSteps(Plan p, ModelDiff.Change c, DriverSet to, String dsDn, java.nio.file.Path tree,
+    private static void provisioningSteps(Plan p, ModelDiff.Change c, DriverSet to, DriverSet from, String dsDn, java.nio.file.Path tree,
                                           List<Step> bucket, List<Step> deletes, Set<String> ensured) {
         String driver = c.driver;
         Driver d = to.driver(driver);
@@ -600,6 +621,9 @@ public final class Plan {
         Map<String, List<byte[]>> attrs;
         Map<String, List<byte[]>> stamps;
         byte[] content;
+        Map<String, String> meta;
+        Map<String, String> wasMeta = null;
+        Driver fd = from.driver(driver);
         if (c.kind == ModelDiff.Kind.FORM_ADDED || c.kind == ModelDiff.Kind.FORM_CHANGED) {
             String tail = c.path.substring(c.path.indexOf("/provisioning/forms/") + "/provisioning/forms/".length());
             String[] parts = tail.split("/", 2);
@@ -610,6 +634,10 @@ public final class Plan {
             }
             dn = VaultMapping.formDn(dsDn, driver, f);
             oc = VaultMapping.OC_JSON_FORM;
+            meta = f.meta;
+            if (fd != null && fd.provisioning != null && fd.provisioning.form(f.kind, f.name) != null) {
+                wasMeta = fd.provisioning.form(f.kind, f.name).meta;
+            }
             content = VaultMapping.formBytes(f);
             attrs = stampsOnly ? new LinkedHashMap<>() : VaultMapping.formAttributes(f);
             String baseline = readBaseline(tree, com.pointblue.dirxml.dev.edit.FormOps.path(d, f) + ".form.json");
@@ -634,6 +662,10 @@ public final class Plan {
             }
             dn = VaultMapping.prdDn(dsDn, driver, prd);
             oc = VaultMapping.OC_REQUEST;
+            meta = prd.meta;
+            if (fd != null && fd.provisioning != null && fd.provisioning.prd(prd.name) != null) {
+                wasMeta = fd.provisioning.prd(prd.name).meta;
+            }
             attrs = stampsOnly ? new LinkedHashMap<>() : VaultMapping.prdAttributes(prd);
             List<byte[]> xml = attrs.get(VaultMapping.XML_DATA);
             content = xml == null || xml.isEmpty() ? new byte[0] : xml.get(0);
@@ -667,7 +699,32 @@ public final class Plan {
                 bucket.add(new Step(Op.MODIFY, dn, e.getKey(), null, Map.of(e.getKey(), e.getValue()),
                     dn + "  " + e.getKey() + " (" + size(Map.of(e.getKey(), e.getValue())) + ")", c.path, driver));
             }
+            if (stamps.isEmpty() && wasMeta != null && stripSteps(p, to, bucket, dn, meta, wasMeta, c.path, driver)) {
+                p.notes.add(c.path + ": package stamps removed (the driver was stripped of its packages)");
+            }
         }
+    }
+
+    /**
+     * A stripped driver ({@code package.strip}: {@code meta} carries no stamps, the driver is marked)
+     * whose vault object ({@code wasMeta}) still does: remove the five {@code DirXML-pkg*} attributes
+     * and the {@code DirXML-PkgItemAux} class. False (nothing added) in every other case.
+     */
+    private static boolean stripSteps(Plan p, DriverSet to, List<Step> bucket, String dn, Map<String, String> meta,
+                                      Map<String, String> wasMeta, String change, String driver) {
+        if (!com.pointblue.dirxml.dev.edit.PackageStrip.isStripped(to, driver)
+            || com.pointblue.dirxml.dev.model.PackageStamps.isPackaged(meta)
+            || !com.pointblue.dirxml.dev.model.PackageStamps.isPackaged(wasMeta)) {
+            return false;
+        }
+        for (String attr : List.of(VaultMapping.PKG_GUID, VaultMapping.PKG_ASSOC, VaultMapping.PKG_CHECKSUM,
+                VaultMapping.PKG_LINKAGES, VaultMapping.PKG_INITIAL_STATE)) {
+            bucket.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, Collections.emptyList()),
+                dn + "  " + attr + " (remove)", change, driver));
+        }
+        bucket.add(new Step(Op.DROP_AUX_CLASS, dn, null, List.of(VaultMapping.PKG_ITEM_AUX), null,
+            dn + "  objectClass -= " + VaultMapping.PKG_ITEM_AUX, change, driver));
+        return true;
     }
 
     private static boolean sameBytes(List<byte[]> a, List<byte[]> b) {
@@ -808,6 +865,9 @@ public final class Plan {
                 bucket.add(new Step(Op.MODIFY, dn, e.getKey(), null, Map.of(e.getKey(), e.getValue()),
                     dn + "  " + e.getKey() + " (" + size(Map.of(e.getKey(), e.getValue())) + ")", c.path, driver));
             }
+            if (stamps.isEmpty() && before != null && stripSteps(p, to, bucket, dn, o.meta, before.meta, c.path, driver)) {
+                p.notes.add(c.path + ": package stamps removed (the driver was stripped of its packages)");
+            }
         }
     }
 
@@ -840,7 +900,7 @@ public final class Plan {
      * no container to ensure): add/modify/delete, stamped like a provisioning object — a customized packaged
      * entitlement gets a content-derived {@code DirXML-pkgChecksum} the same way.
      */
-    private static void entitlementSteps(Plan p, ModelDiff.Change c, DriverSet to, String dsDn, java.nio.file.Path tree,
+    private static void entitlementSteps(Plan p, ModelDiff.Change c, DriverSet to, DriverSet from, String dsDn, java.nio.file.Path tree,
                                          List<Step> bucket, List<Step> deletes) {
         String driver = c.driver;
         if (c.kind == ModelDiff.Kind.ENTITLEMENT_REMOVED) {
@@ -881,6 +941,11 @@ public final class Plan {
             for (Map.Entry<String, List<byte[]>> en : attrs.entrySet()) {
                 bucket.add(new Step(Op.MODIFY, dn, en.getKey(), null, Map.of(en.getKey(), en.getValue()),
                     dn + "  " + en.getKey() + " (" + size(Map.of(en.getKey(), en.getValue())) + ")", c.path, driver));
+            }
+            Driver fd = from.driver(driver);
+            com.pointblue.dirxml.dev.model.Entitlement was = fd == null ? null : fd.entitlement(e.name);
+            if (stamps.isEmpty() && was != null && stripSteps(p, to, bucket, dn, e.meta, was.meta, c.path, driver)) {
+                p.notes.add(c.path + ": package stamps removed (the driver was stripped of its packages)");
             }
         }
     }

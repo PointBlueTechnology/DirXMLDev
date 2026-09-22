@@ -118,6 +118,22 @@ public final class FakeVault implements VaultAccess {
     }
 
     @Override
+    public void removeObjectClasses(String dn, List<String> classes) {
+        Vault.Entry e = byDn.get(key(dn));
+        if (e == null) {
+            throw new Vault.VaultException("remove object classes " + dn + ": no such object", null);
+        }
+        List<byte[]> oc = new ArrayList<>();
+        for (byte[] v : e.attrs.getOrDefault("objectClass", List.of())) {
+            String c = new String(v, StandardCharsets.UTF_8);
+            if (classes.stream().noneMatch(x -> x.equalsIgnoreCase(c))) {
+                oc.add(v);
+            }
+        }
+        e.attrs.put("objectClass", oc);
+    }
+
+    @Override
     public void replace(String dn, String attr, List<byte[]> values) {
         if (refuseUserPasswords != null && attr.equalsIgnoreCase("userPassword")) {
             throw new Vault.VaultException("modify " + dn + " " + attr + ": " + refuseUserPasswords, null);

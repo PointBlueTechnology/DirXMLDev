@@ -161,6 +161,18 @@ stamps, only when they themselves changed) instead of re-sending every
 attribute on every edit. An added PRD still writes everything, since there is
 nothing yet to diff against.
 
+**Package stamps are removed only on request.** A tree side without a
+linkage record has no opinion on the vault's (a Designer project or an export
+never carries one), and a tree object without any stamps still leaves the
+vault's in place — except on a driver marked `package.stripped` by
+`package.strip` (docs/packages.md §3.7). There every stamp the vault holds is
+a removal: the five `DirXML-pkg*` attributes and then the `DirXML-PkgItemAux`
+class on each object (`drop_aux_class` steps, after the attribute removals the
+class needs gone first), the driver's `DirXML-pkgGUID` and
+`DirXML-pkgExtensions` and both package aux classes, and with `--library` the
+driver set's own. `vault.verify` reads clean afterwards because both sides now
+carry nothing.
+
 `--dry-run` stops after the plan. Otherwise, in order:
 
 1. **Preconditions.** `validate` on the tree = 0 errors (the deployer runs it;

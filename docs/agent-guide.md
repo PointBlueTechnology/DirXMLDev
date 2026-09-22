@@ -289,6 +289,12 @@ form's does; `package.revert tree/ --path <tree path>` puts any customized
 packaged thing back (content, mark and the package's checksum). Deploy as always: `vault.diff` shows the objects, `vault.deploy`
 writes only the changed attributes.
 
+To make a driver fully custom — no package ever installed it, as far as the
+tree, the vault and Designer can tell — `package.strip tree/ --driver D`
+removes every stamp, mark and baseline under the driver and marks it stripped;
+the next `vault.deploy` then deletes the vault's stamps and package aux classes
+too (docs/packages.md §3.7). Library items are shared, so they need `--library`.
+
 ## Two kinds of change
 
 **Content** — the rules inside a policy, a stylesheet, a script, a table's rows:

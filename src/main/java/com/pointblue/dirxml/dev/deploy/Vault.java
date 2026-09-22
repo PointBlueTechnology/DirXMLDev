@@ -320,6 +320,30 @@ public final class Vault implements VaultAccess {
         }
     }
 
+    @Override
+    public void removeObjectClasses(String dn, List<String> classes) {
+        try {
+            Entry e = read(dn);
+            if (e == null) {
+                throw new VaultException("remove object classes " + dn + ": no such object", null);
+            }
+            BasicAttribute oc = new BasicAttribute("objectClass");
+            for (String c : classes) {
+                if (e.hasClass(c)) {
+                    oc.add(c);
+                }
+            }
+            if (oc.size() == 0) {
+                return;
+            }
+            ldap.modifyAttributes(dn, javax.naming.directory.DirContext.REMOVE_ATTRIBUTE, new BasicAttributes(true) {{ put(oc); }});
+        } catch (VaultException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new VaultException("remove object classes " + dn + ": " + e.getMessage(), e);
+        }
+    }
+
     /** Replace an attribute's values (an empty list removes the attribute). */
     public void replace(String dn, String attr, List<byte[]> values) {
         try {
