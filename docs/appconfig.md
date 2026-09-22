@@ -1,4 +1,4 @@
-# AppConfig as code — design note (2026-09-21); A1–A3 built the same day (§6–§8)
+# AppConfig as code — design note (2026-09-21); A1–A3 built 2026-09-21, B 2026-09-22 (§6–§9)
 
 The User Application driver's `cn=AppConfig` subtree is the Identity Applications'
 configuration: the directory abstraction layer, request definitions and forms,
@@ -341,5 +341,57 @@ created, two deleted, `.appconfig` changed, read back = 0 differences, a
 second update touches nothing. 677 tests. Designer opening the written
 project is Jerry's check (§9's `ig4new` look is still pending too).
 
-Next: **B** typed operations (`appconfig.set`, `entity.*`, `role.*`,
-`resource.*`) on the same storage.
+## 9. B — typed operations, built 2026-09-22
+
+`edit/AppConfigOps`, registered like every other edit operation (load → apply →
+validate → write unless a new error; `--dry-run`, `--force`, `--json`). A
+packaged object edited for the first time gets its baseline
+(`.package-baseline/…/objects/<path>.xml`) and a `package.customized` mark, and
+its checksum follows the content from then on (the deploy then writes it, and
+the diff knows the vault's derived checksum as the same state). Localized
+strings are given as `lang=text` (bare text = English) and merged per language.
+
+```
+appconfig.set    <tree> --path P --attr A --value V… | --file F | --remove     any attribute of any object
+appconfig.add    <tree> --path P --class C [--aux C,…] [--attr name=value …]   any object under an existing container
+appconfig.remove <tree> --path P                                              refuses: holds objects, referenced by DN, runtime container, packaged (unless --force)
+role.add         <tree> --name N --level 10|20|30 --category C [--display …] [--descr …] [--owner DN…] [--approver DN…] [--quorum Q]
+role.set         <tree> --name N [--display …] [--descr …] [--category a,b] [--owner DN|-] [--approver DN|-] [--quorum Q] [--status S]
+role.remove      <tree> --name N
+resource.add     <tree> --name N --category C [--display …] [--descr …] [--entitlement DN [--param P]] [--multi] [--owner …] [--approver …]
+resource.set     <tree> --name N [… as above; --entitlement - unbinds] [--multi true|false] [--active true|false]
+resource.remove  <tree> --name N
+entity.add       <tree> --key K --object-class OC [--aux-class …] [--display …] [--search-root R] [--naming-attribute cn] [--creatable|--editable|--removable|--viewable|--auto-query true|false]
+entity.set       <tree> --key K [--display …] [--search-root R] [flags]
+entity.remove    <tree> --key K                                              refuses a system entity ('S')
+entity.attr.add  <tree> --entity K --key A --ldap L [--nds N] [--type String] [--display …] [--required|--multivalue|--editable|--readable|--searchable|--viewable|--hideable|--enabled true|false]
+entity.attr.set  <tree> --entity K --key A [--ldap L] [--type T] [--display …] [flags]
+entity.attr.remove <tree> --entity K --key A
+```
+
+`role.add` and `resource.add` create the category container (`nrfRoleDefs`
+under `Level<n>`, `nrfResourceDefs` under `ResourceDefs`) when it is missing,
+and set the defaults the vault holds (role `nrfStatus` 50; resource
+`nrfActive`/`nrfAllowAprOveride` FALSE, `nrfAllowMulti` per `--multi`). A
+resource's entitlement binding is `dn#0#<ref><src>UA</src><id/><param>…</param></ref>`,
+the shape Designer's `.rsrc` maps to (unverified against a vault that has one —
+neither lab does). `entity.add` writes Designer's entity document (flags,
+display labels, object classes, search root, naming attribute, empty
+`<attributes>`) typed **P**; `entity.attr.add` an `<attribute>` in Designer's
+order (flags, key, ldap-name, nds-name, displays, type).
+
+**Live (idm254, 2026-09-22).** `role.add` (a new `Custom` category + role),
+`resource.add` (a new category + resource), `entity.attr.add roomNumber` on the
+packaged `user` entity, `appconfig.set` on a nav item's names: one deploy of
+seven steps, every write verified, the entity's checksum derived; the same four
+undone with `role.remove`, `appconfig.remove` (the two categories),
+`resource.remove`, `entity.attr.remove` and `appconfig.set --file`, deployed
+back to "no differences". The refusals fired as designed: an operational
+attribute, a runtime container, and — found on the way and added — a packaged
+object's removal without `--force`.
+
+**Follow-up.** Once a packaged object is customized, reverting its content by
+hand leaves the mark and the derived checksum (Designer keeps showing it
+modified); the same is true of forms and artifacts. A `package.revert <path>`
+that restores the baseline and drops the mark is the missing operation, for
+every kind.
