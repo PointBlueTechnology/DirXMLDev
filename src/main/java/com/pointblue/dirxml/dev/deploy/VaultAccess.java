@@ -28,6 +28,9 @@ public interface VaultAccess extends AutoCloseable {
 
     void addObjectClasses(String dn, List<String> classes);
 
+    /** Remove auxiliary classes the object carries (ones it lacks are skipped); their attributes must already be gone. */
+    void removeObjectClasses(String dn, List<String> classes);
+
     void replace(String dn, String attr, List<byte[]> values);
 
     /** Add values to an attribute (LDAP modify-add), creating the attribute when absent. */

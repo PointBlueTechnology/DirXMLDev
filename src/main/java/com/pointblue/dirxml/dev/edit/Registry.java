@@ -535,6 +535,10 @@ public final class Registry {
             a -> new PackageRevert(a.get("path"), catalogOf(a.get("catalog"))),
             req("path", "the tree path: library/<n>, drivers/<d>/<n>, drivers/<d>/provisioning/forms/<kind>/<n>, …/prds/<n>, …/objects/<path>, drivers/<d>/entitlements/<n>"),
             opt("catalog", "a package catalog, to look up the package's checksum when the tree did not record it"));
+        register("package.strip", "make a driver fully custom: remove every package stamp (driver, artifacts, entitlements, forms, PRDs, AppConfig objects), the customized marks and the baselines; the next deploy removes the vault's stamps and package aux classes too",
+            a -> new PackageStrip(a.get("driver"), a.containsKey("library")),
+            opt("driver", "the driver to strip"),
+            opt("library", "also strip the Library's items and the driver set's own records (flag; shared by every driver, so never implied)"));
         register("package.adopt", "write the installed-package records from the objects' package stamps (trees imported from a vault or a project)",
             a -> new com.pointblue.dirxml.dev.packages.PackageAdopt(a.get("driver"), catalogOf(a.get("catalog"))),
             opt("driver", "one driver (default: every driver and the Library)"),

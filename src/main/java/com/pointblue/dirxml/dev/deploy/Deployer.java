@@ -350,6 +350,9 @@ public final class Deployer {
             case AUX_CLASS:
                 vault.addObjectClasses(s.dn, s.objectClasses);
                 break;
+            case DROP_AUX_CLASS:
+                vault.removeObjectClasses(s.dn, s.objectClasses);
+                break;
             case ENSURE_CONTAINER:
                 if (!vault.exists(s.dn)) {
                     vault.add(s.dn, s.objectClasses, s.values);
@@ -420,6 +423,13 @@ public final class Deployer {
                     String problem = e == null ? "object missing after write" : mismatch(e, s);
                     if (problem != null) {
                         throw new IOException("verify " + s.dn + ": " + problem);
+                    }
+                } else if (s.op == Plan.Op.DROP_AUX_CLASS) {
+                    Vault.Entry e = vault.read(s.dn);
+                    for (String oc : s.objectClasses) {
+                        if (e != null && e.hasClass(oc)) {
+                            throw new IOException("verify " + s.dn + ": still carries " + oc);
+                        }
                     }
                 } else if (s.op == Plan.Op.DELETE && vault.exists(s.dn)) {
                     throw new IOException("verify " + s.dn + ": still exists after delete");
