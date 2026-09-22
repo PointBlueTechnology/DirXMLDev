@@ -422,6 +422,9 @@ public final class EntitlementOps {
             return;
         }
         boolean newly = !"true".equals(e.meta.get(Packages.CUSTOMIZED_KEY));
+        if (!"true".equals(e.meta.get(Packages.CUSTOMIZED_KEY)) && e.meta.get("dirxml-pkgchecksum") != null) {
+            e.meta.putIfAbsent(PackageRevert.BASELINE_CHECKSUM_KEY, e.meta.get("dirxml-pkgchecksum"));
+        }
         Path baseline = tx.tree().resolve(".package-baseline").resolve(path(d, e) + ".xml");
         if (!Files.exists(baseline) && e.definition != null) {
             tx.pendingBaseline(baseline, CanonicalXml.serialize(e.definition));

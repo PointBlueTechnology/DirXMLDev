@@ -531,6 +531,10 @@ public final class Registry {
             opt("driver", "the driver to install onto (omit for a driver-set package into the Library)"),
             opt("answers", "name=value file answering the package prompts (see package.prompts)"),
             opt("new-driver", "true when the driver was just created (prompts run in driver-creation mode)"));
+        register("package.revert", "put a customized packaged object (artifact, form, PRD, entitlement, AppConfig object) back to its package baseline and drop the customized mark",
+            a -> new PackageRevert(a.get("path"), catalogOf(a.get("catalog"))),
+            req("path", "the tree path: library/<n>, drivers/<d>/<n>, drivers/<d>/provisioning/forms/<kind>/<n>, …/prds/<n>, …/objects/<path>, drivers/<d>/entitlements/<n>"),
+            opt("catalog", "a package catalog, to look up the package's checksum when the tree did not record it"));
         register("package.adopt", "write the installed-package records from the objects' package stamps (trees imported from a vault or a project)",
             a -> new com.pointblue.dirxml.dev.packages.PackageAdopt(a.get("driver"), catalogOf(a.get("catalog"))),
             opt("driver", "one driver (default: every driver and the Library)"),
