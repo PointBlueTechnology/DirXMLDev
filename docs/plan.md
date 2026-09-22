@@ -396,7 +396,7 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   `.roleconfig`, `.attestation` — proved against test11pf and by new-project/update round trips
   from the idm254 tree; 677 tests). **B built 2026-09-22** (§9: `appconfig.set/add/remove`, `role.*`, `resource.*`,
   `entity.*`, `entity.attr.*`; live add/change/revert on idm254). Open: Designer opening the
-  written project (Jerry); a `package.revert` for customized objects of every kind.
+  written project (Jerry). `package.revert` built 2026-09-22.
   Design note 2026-09-21:
   one generic `AppObject` (ds-object form, the format Designer, its digests and the UA
   base package already share) for the 200-odd objects the tree does not model
@@ -415,10 +415,9 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 
 ## Follow-ups (small, not scheduled)
 
-- **`package.revert <path>`**: restore a customized packaged object (artifact, form, PRD,
-  AppConfig object) to its `.package-baseline` and drop the `package.customized` mark, so
-  a content revert by hand does not leave Designer showing it modified (2026-09-22,
-  docs/appconfig.md §9).
+- ~~**`package.revert <path>`**~~ — built 2026-09-22 for every kind (docs/appconfig.md §9):
+  baseline back, mark dropped, the package's checksum restored from the record every
+  customize helper now keeps (else Designer's recipe for artifacts, else `--catalog`).
 
 - **`validate`: DirXML-Script required attributes.** ig4's `Send expiration email`
   (AcctExpNotif, Publisher) has `do-send-email-from-template` with `notification-dn`

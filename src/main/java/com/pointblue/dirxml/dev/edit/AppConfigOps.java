@@ -100,6 +100,9 @@ public final class AppConfigOps {
             return;
         }
         boolean newly = !"true".equals(o.meta.get(Packages.CUSTOMIZED_KEY));
+        if (!"true".equals(o.meta.get(Packages.CUSTOMIZED_KEY)) && o.meta.get("dirxml-pkgchecksum") != null) {
+            o.meta.putIfAbsent(PackageRevert.BASELINE_CHECKSUM_KEY, o.meta.get("dirxml-pkgchecksum"));
+        }
         Path baseline = tx.tree().resolve(Packages.BASELINE_DIR).resolve(path(d, o) + ".xml");
         if (!Files.exists(baseline) && before != null) {
             tx.pendingBaseline(baseline, before);
