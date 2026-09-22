@@ -140,7 +140,7 @@ public final class DsObjectXml {
         return sb.toString();
     }
 
-    static String esc(String s) {
+    public static String esc(String s) {
         return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 }

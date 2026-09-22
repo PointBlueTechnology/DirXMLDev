@@ -402,6 +402,81 @@ public final class Registry {
             a -> new EntitlementOps.Remove(a.get("driver"), a.get("name")),
             entName, entDriver);
 
+        // AppConfig objects (docs/appconfig.md §9): generic, then roles, resources, entities
+        Arg acDriver = opt("driver", "the User Application driver (needed when several drivers have an AppConfig)");
+        Arg display = opt("display", "display name, lang=text or bare text for English (repeatable; merged per language)");
+        Arg descr = opt("descr", "description, lang=text or bare text (repeatable; merged per language)");
+        Arg owners = opt("owner", "owner DN (repeatable; '-' clears)");
+        Arg approvers = opt("approver", "approver DN (repeatable; '-' clears)");
+        register("appconfig.set", "set (replace all values of) or remove one attribute of any AppConfig object",
+            a -> new AppConfigOps.Set(a.get("driver"), a.get("path"), a.get("attr"), a.get("value"), a.get("file"), a.containsKey("remove")),
+            req("path", "object path under AppConfig (DirectoryModel/EntityDefs/user) or a unique name"),
+            req("attr", "attribute name"), opt("value", "a value (repeatable for a multi-valued attribute; a bare localized text merges as English)"),
+            opt("file", "read the value from this file (an XML attribute such as XmlData)"), opt("remove", "flag: remove the attribute"), acDriver);
+        register("appconfig.add", "create any AppConfig object under an existing container",
+            a -> new AppConfigOps.Add(a.get("driver"), a.get("path"), a.get("class"), a.get("aux"), a.get("attr")),
+            req("path", "the new object's path under AppConfig"), req("class", "structural class (nrfNavItem, nrfRoleDefs, srvprvChoice …)"),
+            opt("aux", "auxiliary classes, comma-separated"), opt("attr", "name=value (repeatable)"), acDriver);
+        register("appconfig.remove", "delete an AppConfig object; refuses while it holds objects or anything names its DN",
+            a -> new AppConfigOps.Remove(a.get("driver"), a.get("path")),
+            req("path", "object path under AppConfig or a unique name"), acDriver);
+        register("role.add", "create a role in the catalog (RoleConfig/RoleDefs/Level<n>/<category>), creating the category container",
+            a -> new AppConfigOps.RoleAdd(a.get("driver"), a.get("name"), a.get("level"), a.get("category"), a.get("display"),
+                a.get("descr"), a.get("owner"), a.get("approver"), a.get("quorum")),
+            req("name", "role name (cn)"), req("level", "10 (permission), 20 (IT) or 30 (business)"),
+            req("category", "category container under the level (System, Custom …); also the category key"),
+            display, descr, owners, approvers, opt("quorum", "approval quorum"), acDriver);
+        register("role.set", "change a role's names, descriptions, categories, owners, approvers, quorum or status",
+            a -> new AppConfigOps.RoleSet(a.get("driver"), a.get("name"), a.get("display"), a.get("descr"), a.get("category"),
+                a.get("owner"), a.get("approver"), a.get("quorum"), a.get("status")),
+            req("name", "role name or path"), display, descr, opt("category", "category keys, comma-separated (replaces)"),
+            owners, approvers, opt("quorum", "approval quorum"), opt("status", "nrfStatus (50 = active)"), acDriver);
+        register("role.remove", "delete a role; refuses while anything names its DN",
+            a -> new AppConfigOps.RoleRemove(a.get("driver"), a.get("name")), req("name", "role name or path"), acDriver);
+        register("resource.add", "create a resource (RoleConfig/ResourceDefs/<category>), optionally bound to an entitlement",
+            a -> new AppConfigOps.ResourceAdd(a.get("driver"), a.get("name"), a.get("category"), a.get("display"), a.get("descr"),
+                a.get("entitlement"), a.get("param"), a.containsKey("multi"), a.get("owner"), a.get("approver")),
+            req("name", "resource name (cn)"), req("category", "category container under ResourceDefs; also the category key"),
+            display, descr, opt("entitlement", "DirXML-Entitlement DN the resource grants"), opt("param", "the entitlement parameter value"),
+            opt("multi", "flag: allow multiple assignment"), owners, approvers, acDriver);
+        register("resource.set", "change a resource's names, descriptions, categories, entitlement binding, flags, owners or approvers",
+            a -> new AppConfigOps.ResourceSet(a.get("driver"), a.get("name"), a.get("display"), a.get("descr"), a.get("category"),
+                a.get("entitlement"), a.get("param"), boolOrNull(a.get("multi")), boolOrNull(a.get("active")), a.get("owner"), a.get("approver")),
+            req("name", "resource name or path"), display, descr, opt("category", "category keys, comma-separated (replaces)"),
+            opt("entitlement", "entitlement DN ('-' unbinds)"), opt("param", "entitlement parameter"), opt("multi", "true|false"),
+            opt("active", "true|false"), owners, approvers, acDriver);
+        register("resource.remove", "delete a resource; refuses while anything names its DN",
+            a -> new AppConfigOps.ResourceRemove(a.get("driver"), a.get("name")), req("name", "resource name or path"), acDriver);
+        register("entity.add", "create a directory-abstraction entity (DirectoryModel/EntityDefs) with no attributes yet",
+            a -> new AppConfigOps.EntityAdd(a.get("driver"), a.get("key"), a.get("object-class"), a.get("aux-class"), a.get("display"),
+                a.get("search-root"), a.get("naming-attribute"), flagMap(a, AppConfigOps.ENTITY_FLAGS)),
+            req("key", "entity key (cn)"), req("object-class", "LDAP object class"), opt("aux-class", "auxiliary classes, comma-separated"),
+            display, opt("search-root", "search root DN or %user-root%"), opt("naming-attribute", "default cn"),
+            opt("creatable", "true|false"), opt("editable", "true|false"), opt("removable", "true|false"), opt("viewable", "true|false"),
+            opt("auto-query", "true|false"), acDriver);
+        register("entity.set", "change an entity's display names, flags or search root",
+            a -> new AppConfigOps.EntitySet(a.get("driver"), a.get("key"), a.get("display"), a.get("search-root"), flagMap(a, AppConfigOps.ENTITY_FLAGS)),
+            req("key", "entity key"), display, opt("search-root", "search root"), opt("creatable", "true|false"), opt("editable", "true|false"),
+            opt("removable", "true|false"), opt("viewable", "true|false"), opt("auto-query", "true|false"), acDriver);
+        register("entity.remove", "delete an entity; refuses for a system entity or while anything names its DN",
+            a -> new AppConfigOps.EntityRemove(a.get("driver"), a.get("key")), req("key", "entity key"), acDriver);
+        register("entity.attr.add", "add an attribute to an entity definition",
+            a -> new AppConfigOps.EntityAttrAdd(a.get("driver"), a.get("entity"), a.get("key"), a.get("ldap"), a.get("nds"), a.get("type"),
+                a.get("display"), flagMap(a, AppConfigOps.ATTR_FLAGS)),
+            req("entity", "entity key"), req("key", "attribute key"), req("ldap", "LDAP attribute name"), opt("nds", "NDS name (default: the LDAP name)"),
+            opt("type", "String|Integer|Boolean|DN|Time|Binary|LocalizedString … (default String)"), display,
+            opt("required", "true|false"), opt("multivalue", "true|false"), opt("editable", "true|false"), opt("readable", "true|false"),
+            opt("searchable", "true|false"), opt("viewable", "true|false"), opt("hideable", "true|false"), opt("enabled", "true|false"), acDriver);
+        register("entity.attr.set", "change an entity attribute's flags, type, LDAP name or display labels",
+            a -> new AppConfigOps.EntityAttrSet(a.get("driver"), a.get("entity"), a.get("key"), a.get("ldap"), a.get("type"), a.get("display"),
+                flagMap(a, AppConfigOps.ATTR_FLAGS)),
+            req("entity", "entity key"), req("key", "attribute key"), opt("ldap", "LDAP attribute name"), opt("type", "type"), display,
+            opt("required", "true|false"), opt("multivalue", "true|false"), opt("editable", "true|false"), opt("readable", "true|false"),
+            opt("searchable", "true|false"), opt("viewable", "true|false"), opt("hideable", "true|false"), opt("enabled", "true|false"), acDriver);
+        register("entity.attr.remove", "remove an attribute from an entity definition",
+            a -> new AppConfigOps.EntityAttrRemove(a.get("driver"), a.get("entity"), a.get("key")),
+            req("entity", "entity key"), req("key", "attribute key"), acDriver);
+
         // GCVs
         register("gcv.set", "set a GCV's value where the driver's scope defines it (or create it with --define)",
             a -> new GcvOps.Set(a.get("driver"), a.get("name"), a.getOrDefault("value", ""),
@@ -535,6 +610,18 @@ public final class Registry {
     }
 
     /** {@code "true"}/{@code "false"} -> a boolean; anything else (including absent) -> null (unchanged). */
+    /** The {@code true|false} flags among {@code names} that were given, as a map. */
+    private static java.util.Map<String, String> flagMap(java.util.Map<String, String> a, List<String> names) {
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        for (String n : names) {
+            String v = a.get(n);
+            if (v != null && !v.isBlank()) {
+                out.put(n, v.trim().toLowerCase());
+            }
+        }
+        return out;
+    }
+
     private static Boolean boolOrNull(String v) {
         if (v == null) {
             return null;
