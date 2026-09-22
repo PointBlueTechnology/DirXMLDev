@@ -2,6 +2,7 @@ package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.PackageStamps;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
@@ -9,6 +10,7 @@ import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
+import com.pointblue.dirxml.dev.xml.CanonicalXml;
 import com.pointblue.dirxml.sim.Xds;
 
 import org.w3c.dom.Element;
@@ -337,6 +339,16 @@ public final class ExportReader {
                     // a real, linkable object (policy set 14) — model it so links resolve
                     d.resources.add(gcvDefResource(child, scope, d.name));
                     break;
+                case "entitlement-definition":
+                    // a DirXML-Entitlement object: <entitlement-definition name=…><entitlement …>the XmlData</entitlement>
+                    // (seen 2026-09-22 in a Designer export of an Active Directory driver: three of them)
+                    if (scope == Scope.DRIVER) {
+                        Entitlement ent = readEntitlement(child);
+                        if (ent != null) {
+                            d.entitlements.add(ent);
+                        }
+                    }
+                    break;
                 default:
                     // not modeled at this level (e.g. driver-image, pkg-initial-states)
             }
@@ -372,6 +384,17 @@ public final class ExportReader {
         Policy p = new Policy(name, scope, driverName, kids.get(0));
         copyArtifactMeta(wrapper, p.meta);
         return p;
+    }
+
+    private static Entitlement readEntitlement(Element defEl) {
+        String name = attr(defEl, "name", "");
+        if (name.isEmpty()) {
+            return null;
+        }
+        Element doc = directChild(defEl, "entitlement");
+        Entitlement ent = new Entitlement(name, doc == null ? null : CanonicalXml.normalize(doc));
+        copyArtifactMeta(defEl, ent.meta);
+        return ent;
     }
 
     private static Resource readResource(Element resEl, Scope scope, String driverName) {

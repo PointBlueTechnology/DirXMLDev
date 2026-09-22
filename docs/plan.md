@@ -480,8 +480,11 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   entity) — the grammar is decompiled from `workflow.jar`'s binding classes
   and checked, but never executed on a lab; needs a REST endpoint or a role
   on idm254.
-- **Entitlements in Designer's export format** (`ExportReader`/`ExportWriter`)
-  if a "Export to Configuration File" turns out to carry them — none seen so far.
+- ~~**Entitlements in Designer's export format**~~ — done 2026-09-22: a Designer export
+  carries them as `<entitlement-definition name=…>` under the driver's `children` (Jerry's
+  Active Directory driver export had three, silently dropped before). `ExportReader` maps
+  the element to the entitlement model (stamps included), `ExportWriter` emits it in both
+  the single-driver and the driver-set export.
 - ~~`PkgTest7` on ig4~~ — removed 2026-09-16 with `vault.deploy --delete-driver`
   (see the incident in [vault-deploy.md](vault-deploy.md)).
 

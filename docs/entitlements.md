@@ -145,3 +145,14 @@ existing operations needing no new code — Jerry's to run.
 Model + readers/writer (agent) → diff/deploy + checks (agent) → operations
 (agent) → live proof (me) → Designer check (Jerry: the Loopback driver with
 its entitlement imported from the vault).
+
+## Designer's export format (2026-09-22)
+
+"Export to Configuration File" carries a driver's entitlements as
+`<entitlement-definition name="…" [package-id pkg-assoc-id checksum]>` elements
+under the driver's `<children>`, each holding the `<entitlement>` document
+(the vault's `XmlData`). `bin/idm import` reads them into
+`drivers/<d>/entitlements/`; `bin/idm export` writes them back, in a
+single-driver and a driver-set export alike. Found on a real Active Directory
+driver export with three (`ExchangeMailbox`, `Group`, `UserAccount`), which the
+importer had dropped without a word until then.

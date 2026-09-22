@@ -2,6 +2,7 @@ package com.pointblue.dirxml.dev.source;
 
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
@@ -195,6 +196,9 @@ public final class ExportWriter {
         }
         for (Element e : driverIncludes) {
             children.appendChild(e);
+        }
+        for (Entitlement ent : d.entitlements) {
+            children.appendChild(entitlementElement(doc, ent));
         }
         children.appendChild(channelElement(doc, "publisher", "Publisher", d.publisher.policies,
             d.resources, Scope.PUBLISHER, publisherIncludes));
@@ -397,6 +401,9 @@ public final class ExportWriter {
                 children.appendChild(r.isGcvDef() ? gcvDefElement(doc, r) : resourceElement(doc, r));
             }
         }
+        for (Entitlement ent : d.entitlements) {
+            children.appendChild(entitlementElement(doc, ent));
+        }
         children.appendChild(channelElement(doc, "publisher", "Publisher", d.publisher.policies,
             d.resources, Scope.PUBLISHER));
         children.appendChild(channelElement(doc, "subscriber", "Subscriber", d.subscriber.policies,
@@ -525,6 +532,17 @@ public final class ExportWriter {
             }
         }
         e.appendChild(content);
+        return e;
+    }
+
+    /** {@code <entitlement-definition name=…>} holding the entitlement document, the way Designer's export carries one. */
+    private static Element entitlementElement(Document doc, Entitlement ent) {
+        Element e = doc.createElement("entitlement-definition");
+        e.setAttribute("name", ent.name);
+        copyArtifactMetaAttrs(e, ent.meta);
+        if (ent.definition != null) {
+            e.appendChild(doc.importNode(ent.definition, true));
+        }
         return e;
     }
 
