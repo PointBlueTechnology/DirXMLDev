@@ -148,6 +148,13 @@ public final class Transaction {
         pendingBaselineDeletes.add(Packages.baselineFile(tree, a));
     }
 
+    /** The same for a form, PRD, entitlement or AppConfig object's baseline file (a path that may not exist). */
+    public void dropBaseline(Path baselineFile) {
+        if (baselineFile != null) {
+            pendingBaselineDeletes.add(baselineFile);
+        }
+    }
+
     // ---- run ----
 
     /** Apply the operation and write (unless dryRun); never throws for a refusal or a new error. */

@@ -285,7 +285,8 @@ runtime containers are never touched, an object that holds objects or is
 named by another's DN is not removed, a packaged one needs `--force`, and the
 operational attributes (`equivalentToMe`, `DirXML-Associations`) are refused.
 A packaged object's first edit gets a baseline and the customized mark, as a
-form's does. Deploy as always: `vault.diff` shows the objects, `vault.deploy`
+form's does; `package.revert tree/ --path <tree path>` puts any customized
+packaged thing back (content, mark and the package's checksum). Deploy as always: `vault.diff` shows the objects, `vault.deploy`
 writes only the changed attributes.
 
 ## Two kinds of change

@@ -175,6 +175,9 @@ public final class Packages {
             return false;
         }
         boolean newlyMarked = !isCustomized(a);
+        if (!"true".equals(a.meta.get(Packages.CUSTOMIZED_KEY)) && a.meta.get("dirxml-pkgchecksum") != null) {
+            a.meta.putIfAbsent(PackageRevert.BASELINE_CHECKSUM_KEY, a.meta.get("dirxml-pkgchecksum"));
+        }
         Path baseline = baselineFile(tree, a);
         if (!Files.exists(baseline)) {
             String content = currentContent(a);

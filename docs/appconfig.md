@@ -390,8 +390,15 @@ back to "no differences". The refusals fired as designed: an operational
 attribute, a runtime container, and — found on the way and added — a packaged
 object's removal without `--force`.
 
-**Follow-up.** Once a packaged object is customized, reverting its content by
-hand leaves the mark and the derived checksum (Designer keeps showing it
-modified); the same is true of forms and artifacts. A `package.revert <path>`
-that restores the baseline and drops the mark is the missing operation, for
+**`package.revert`** (built 2026-09-22, every kind). `package.revert <tree>
+--path P [--catalog DIR]` puts a customized packaged artifact, form, PRD,
+entitlement or AppConfig object back to the content the tree kept in
+`.package-baseline/` at its first edit, drops the `package.customized` mark,
+deletes the baseline, and restores the package's checksum: from the
+`package.baseline-checksum` every customize helper now records at the first
+edit; for an artifact, Designer's installed-content recipe over the restored
+content; else the package item's stored checksum in the catalog; failing
+those the content-derived one stays, with a note. Live on idm254: `provManager`
+customized and deployed (checksum 3890998556 → 254754355), reverted and
+deployed (→ 3890998556), `vault.diff` "no differences".
 every kind.

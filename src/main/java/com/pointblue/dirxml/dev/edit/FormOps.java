@@ -1542,6 +1542,9 @@ public final class FormOps {
             return;
         }
         boolean newly = !"true".equals(f.meta.get(Packages.CUSTOMIZED_KEY));
+        if (!"true".equals(f.meta.get(Packages.CUSTOMIZED_KEY)) && f.meta.get("dirxml-pkgchecksum") != null) {
+            f.meta.putIfAbsent(PackageRevert.BASELINE_CHECKSUM_KEY, f.meta.get("dirxml-pkgchecksum"));
+        }
         Path baseline = tx.tree().resolve(".package-baseline").resolve(path(d, f) + ".form.json");
         if (!java.nio.file.Files.exists(baseline)) {
             tx.pendingBaseline(baseline, f.json);
@@ -1558,6 +1561,9 @@ public final class FormOps {
             return;
         }
         boolean newly = !"true".equals(p.meta.get(Packages.CUSTOMIZED_KEY));
+        if (!"true".equals(p.meta.get(Packages.CUSTOMIZED_KEY)) && p.meta.get("dirxml-pkgchecksum") != null) {
+            p.meta.putIfAbsent(PackageRevert.BASELINE_CHECKSUM_KEY, p.meta.get("dirxml-pkgchecksum"));
+        }
         Path dir = tx.tree().resolve(".package-baseline").resolve(prdPath(d, p));
         if (!java.nio.file.Files.exists(dir)) {
             // the fingerprint is definition + "\n----\n" + request, canonical, captured before the sync
