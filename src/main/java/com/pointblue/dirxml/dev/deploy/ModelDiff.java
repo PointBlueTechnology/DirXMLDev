@@ -48,7 +48,7 @@ public final class ModelDiff {
         ARTIFACT_ADDED, ARTIFACT_REMOVED, ARTIFACT_CHANGED, ARTIFACT_KIND_CHANGED,
         DRIVER_ADDED, DRIVER_REMOVED, DRIVER_SETTING, DRIVER_CONFIG, DRIVER_LINKAGE, DRIVER_STAMPS,
         DRIVER_ICON,
-        DRIVERSET_GCVS, DRIVERSET_LINKAGE,
+        DRIVERSET_GCVS, DRIVERSET_LINKAGE, DRIVERSET_STAMPS,
         FORM_ADDED, FORM_REMOVED, FORM_CHANGED, PRD_ADDED, PRD_REMOVED, PRD_CHANGED,
         OBJECT_ADDED, OBJECT_REMOVED, OBJECT_CHANGED,
         ENTITLEMENT_ADDED, ENTITLEMENT_REMOVED, ENTITLEMENT_CHANGED;
@@ -83,7 +83,7 @@ public final class ModelDiff {
 
         /** None of these kinds needs the owning driver restarted. */
         public boolean noRestart() {
-            return isProvisioning() || isEntitlement() || isIcon();
+            return isProvisioning() || isEntitlement() || isIcon() || this == DRIVERSET_STAMPS;
         }
     }
 
@@ -488,6 +488,7 @@ public final class ModelDiff {
 
         diffDriverSetGcvs();
         diffDriverSetLinkage();
+        diffDriverSetStamps();
     }
 
     private static Set<String> names(DriverSet ds) {
@@ -574,7 +575,7 @@ public final class ModelDiff {
 
     /** Package stamps (GUID, association id, installed checksum, linkage record) differ while the content is the same. */
     private void stampsMaybeChanged(Artifact a, Artifact b) {
-        List<String> lines = stampLines(a.meta, b.meta);
+        List<String> lines = stampLines(a.meta, b.meta, b.driver);
         if (!lines.isEmpty()) {
             changes.add(new Change(Kind.ARTIFACT_CHANGED, a.driver, a.path(), "package-stamps",
                 "~ package stamps " + describeKind(a) + " " + a.path(), String.join("\n", lines)));
@@ -720,7 +721,7 @@ public final class ModelDiff {
                 }
             }
         }
-        List<String> stamps = stampLines(x.meta, y.meta);
+        List<String> stamps = stampLines(x.meta, y.meta, d.name);
         if (!stamps.isEmpty() && lines.isEmpty() && vaultHoldsDerivedChecksum(x, y)) {
             // a customized packaged object: the vault's checksum is the one the deploy derives from the
             // content the tree holds, while the tree still records the package's — the same state, not drift
@@ -791,7 +792,7 @@ public final class ModelDiff {
                 "~ changed form " + formPath(d, y), textDiff(oldText, newText)));
             return;
         }
-        List<String> lines = stampLines(x.meta, y.meta);
+        List<String> lines = stampLines(x.meta, y.meta, d.name);
         if (!lines.isEmpty()) {
             changes.add(new Change(Kind.FORM_CHANGED, d.name, formPath(d, y), "package-stamps",
                 "~ package stamps form " + formPath(d, y), String.join("\n", lines)));
@@ -830,7 +831,7 @@ public final class ModelDiff {
                 lines.add("+ " + k + ": " + display(vy == null ? null : String.join(" | ", vy)));
             }
         }
-        List<String> stamps = stampLines(x.meta, y.meta);
+        List<String> stamps = stampLines(x.meta, y.meta, d.name);
         if (!stamps.isEmpty()) {
             changedParts.add("stamps");
         }
@@ -852,7 +853,15 @@ public final class ModelDiff {
      * checksum exactly, and the linkage record only when the {@code to} side carries one — a
      * project or an export never does, and that is not a request to remove the vault's.
      */
-    private static List<String> stampLines(Map<String, String> ma, Map<String, String> mb) {
+    private List<String> stampLines(Map<String, String> ma, Map<String, String> mb, String driver) {
+        return stampLines(ma, mb, com.pointblue.dirxml.dev.edit.PackageStrip.isStripped(to, driver));
+    }
+
+    /**
+     * The same, with {@code stripped} saying the {@code to} side deliberately carries no stamps
+     * ({@code package.strip}): then a missing linkage record is a removal too.
+     */
+    static List<String> stampLines(Map<String, String> ma, Map<String, String> mb, boolean stripped) {
         List<String> lines = new ArrayList<>();
         PackageStamps.Guid ga = PackageStamps.guid(ma);
         PackageStamps.Guid gb = PackageStamps.guid(mb);
@@ -862,7 +871,7 @@ public final class ModelDiff {
         }
         stampLine(lines, PackageStamps.ASSOC, PackageStamps.assocId(ma), PackageStamps.assocId(mb), false);
         stampLine(lines, PackageStamps.CHECKSUM, PackageStamps.checksum(ma), PackageStamps.checksum(mb), false);
-        stampLine(lines, PackageStamps.LINKAGES, PackageStamps.linkages(ma), PackageStamps.linkages(mb), true);
+        stampLine(lines, PackageStamps.LINKAGES, PackageStamps.linkages(ma), PackageStamps.linkages(mb), !stripped);
         return lines;
     }
 
@@ -918,7 +927,7 @@ public final class ModelDiff {
                 "~ changed entitlement " + entitlementPath(d, y), textDiff(oldXml, newXml)));
             return;
         }
-        List<String> lines = stampLines(x.meta, y.meta);
+        List<String> lines = stampLines(x.meta, y.meta, d.name);
         if (!lines.isEmpty()) {
             changes.add(new Change(Kind.ENTITLEMENT_CHANGED, d.name, entitlementPath(d, y), "package-stamps",
                 "~ package stamps entitlement " + entitlementPath(d, y), String.join("\n", lines)));
@@ -956,7 +965,11 @@ public final class ModelDiff {
         }
         String xe = a.meta.get(PackageStamps.EXTENSIONS);
         String ye = b.meta.get(PackageStamps.EXTENSIONS);
-        if (ye != null && !Objects.equals(xe, ye)) {
+        boolean stripped = com.pointblue.dirxml.dev.edit.PackageStrip.isStripped(to, b.name);
+        if (ye == null && xe != null && stripped) {
+            lines.add("- " + PackageStamps.EXTENSIONS + ": (" + xe.length() + " chars)");
+            lines.add("+ " + PackageStamps.EXTENSIONS + ": (none; the driver was stripped of its packages)");
+        } else if (ye != null && !Objects.equals(xe, ye)) {
             lines.add("- " + PackageStamps.EXTENSIONS + ": " + (xe == null ? "(none)" : "(" + xe.length() + " chars)"));
             lines.add("+ " + PackageStamps.EXTENSIONS + ": (" + ye.length() + " chars)");
         }
@@ -1090,6 +1103,33 @@ public final class ModelDiff {
         if (!Objects.equals(oldXml, newXml)) {
             changes.add(new Change(Kind.DRIVERSET_GCVS, null, "driverset", Driver.CONFIG_VALUES,
                 "~ driver-set GCVs changed", textDiff(oldXml, newXml)));
+        }
+    }
+
+    /**
+     * The driver set's own package record and extension cache ({@code DirXML-pkgGUID} of its
+     * driver-set packages, {@code DirXML-pkgExtensions}) are compared only when the tree's driver
+     * set was stripped ({@code package.strip --library}): then whatever the vault still carries
+     * is a removal. Otherwise a tree has no opinion on them (a project never records them).
+     */
+    private void diffDriverSetStamps() {
+        if (!com.pointblue.dirxml.dev.edit.PackageStrip.isStripped(to, null)) {
+            return;
+        }
+        List<String> lines = new ArrayList<>();
+        PackageStamps.Guid g = PackageStamps.guid(from.meta);
+        if (g != null && PackageStamps.guid(to.meta) == null) {
+            lines.add("- " + PackageStamps.GUID + ": " + g.format());
+            lines.add("+ " + PackageStamps.GUID + ": (none; the driver set was stripped of its packages)");
+        }
+        String xe = from.meta.get(PackageStamps.EXTENSIONS);
+        if (xe != null && to.meta.get(PackageStamps.EXTENSIONS) == null) {
+            lines.add("- " + PackageStamps.EXTENSIONS + ": (" + xe.length() + " chars)");
+            lines.add("+ " + PackageStamps.EXTENSIONS + ": (none)");
+        }
+        if (!lines.isEmpty()) {
+            changes.add(new Change(Kind.DRIVERSET_STAMPS, null, "driverset", "package-stamps",
+                "~ package stamps of the driver set", String.join("\n", lines)));
         }
     }
 

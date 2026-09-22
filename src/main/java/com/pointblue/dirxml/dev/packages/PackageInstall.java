@@ -280,6 +280,7 @@ public final class PackageInstall implements Operation {
             // 6. the installed-package record
             Map<String, String> meta = d != null ? d.meta : ds.meta;
             meta.put(META_INSTALLED_PREFIX + p.shortName, guid + (p.basePackage ? ";base" : ""));
+            meta.remove(com.pointblue.dirxml.dev.edit.PackageStrip.STRIPPED_KEY);   // packaged again
             if (d != null && p.basePackage) {
                 d.meta.put(META_GUID, guid);
             }

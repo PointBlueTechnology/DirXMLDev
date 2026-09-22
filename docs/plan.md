@@ -419,6 +419,12 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   baseline back, mark dropped, the package's checksum restored from the record every
   customize helper now keeps (else Designer's recipe for artifacts, else `--catalog`).
 
+- ~~**`package.strip --driver D [--library]`**~~ — built 2026-09-22 (docs/packages.md §3.7):
+  every stamp, mark and baseline removed from the driver and everything under it, the
+  driver marked `package.stripped`, and the deploy removing the vault's `DirXML-pkg*`
+  attributes and package aux classes (new `drop_aux_class` step). Verified live on
+  idm254 with a scratch copy of the DCS driver, then deleted.
+
 - **`validate`: DirXML-Script required attributes.** ig4's `Send expiration email`
   (AcctExpNotif, Publisher) has `do-send-email-from-template` with `notification-dn`
   but no `template-dn`; our validator passes it, Designer's importer NPEs and drops the
