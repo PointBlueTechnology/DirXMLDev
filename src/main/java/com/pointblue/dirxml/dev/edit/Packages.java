@@ -117,6 +117,15 @@ public final class Packages {
                             com.pointblue.dirxml.dev.deploy.VaultMapping.formBytes(f)));
                     }
                 }
+            } else if (tail.startsWith("objects/")) {
+                String objectPath = tail.substring("objects/".length());
+                for (com.pointblue.dirxml.dev.model.AppObject o : d.provisioning.objects) {
+                    if (o.path().equalsIgnoreCase(objectPath)
+                        && o.meta.get("dirxml-pkgguid") != null && "true".equals(o.meta.get(CUSTOMIZED_KEY))) {
+                        o.meta.put("dirxml-pkgchecksum", com.pointblue.dirxml.dev.deploy.VaultMapping.customizedChecksum(
+                            com.pointblue.dirxml.dev.deploy.VaultMapping.objectContentBytes(o)));
+                    }
+                }
             } else if (tail.startsWith("prds/")) {
                 String name = tail.substring("prds/".length());
                 for (com.pointblue.dirxml.dev.model.Prd p : d.provisioning.prds) {

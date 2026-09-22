@@ -266,6 +266,28 @@ the document itself (root element, `conflict-resolution`, `multi-valued`);
 `FlowCheck` cross-checks a provision activity's DN against the tree's
 drivers. See `commands.md` for the full flag list.
 
+### The rest of AppConfig (roles, resources, entities, nav items …)
+
+Everything else under the User Application driver's AppConfig is in the tree as
+`provisioning/objects/<path>.xml` (docs/appconfig.md). Read with
+`appconfig.list` / `appconfig.show`; edit with the typed operations:
+
+```
+bin/idm role.add tree/ --name Auditor --level 20 --category Custom --display "Auditor" --display "de=Prüfer" --descr "Audits access"
+bin/idm resource.add tree/ --name AuditGroup --category Custom --entitlement "cn=Groups,cn=AD,cn=driverset1,o=system" --param "cn=auditors,ou=groups,o=data"
+bin/idm entity.attr.add tree/ --entity user --key roomNumber --ldap roomNumber --display "Room" --required true
+bin/idm appconfig.set tree/ --path UIConfig/NavItems/AccessRptTool --attr nrfLocalizedNames --value "de=Zugriffsbericht"
+bin/idm role.remove tree/ --name Auditor
+```
+
+`appconfig.add/set/remove` work on any object; the guards are the vault's:
+runtime containers are never touched, an object that holds objects or is
+named by another's DN is not removed, a packaged one needs `--force`, and the
+operational attributes (`equivalentToMe`, `DirXML-Associations`) are refused.
+A packaged object's first edit gets a baseline and the customized mark, as a
+form's does. Deploy as always: `vault.diff` shows the objects, `vault.deploy`
+writes only the changed attributes.
+
 ## Two kinds of change
 
 **Content** — the rules inside a policy, a stylesheet, a script, a table's rows:
