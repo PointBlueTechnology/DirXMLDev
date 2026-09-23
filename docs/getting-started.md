@@ -68,6 +68,8 @@ Windows: `bin\idm.cmd` is the equivalent launcher (`IDM_JAVA_HOME` or
 `%USERPROFILE%\.m2`); `bin/idm` also works from Git Bash or WSL. For the common
 Windows task — a fresh Designer project from a vault without Designer touching
 the vault — see [howto-fresh-designer-project.md](howto-fresh-designer-project.md).
+To carry a customer's vault home as a zip and stand it up as a test vault, see
+[howto-clone-vault.md](howto-clone-vault.md).
 
 ### 2.3 Use it from an agent
 

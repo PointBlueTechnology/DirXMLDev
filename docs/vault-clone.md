@@ -1,5 +1,7 @@
 # Design note: cloning an Identity Vault into a lab tree (`vault.clone`)
 
+*To do it by hand, step by step, see [howto-clone-vault.md](howto-clone-vault.md).*
+
 *Status: built 2026-09-21 — configuration (§10), identity data with pseudonymisation and a lab password (§11). Jerry's decisions: same container names; driver run-time state excluded; iManager RBS skipped; pseudonymise first name, last name, full name and the local part of mail, on the export; a second eDirectory instance (`EDIR_TEST2_TREE`, no engine) as the target.*
 
 ## 1. What Jerry asked for
