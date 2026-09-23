@@ -397,6 +397,11 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   from the idm254 tree; 677 tests). **B built 2026-09-22** (§9: `appconfig.set/add/remove`, `role.*`, `resource.*`,
   `entity.*`, `entity.attr.*`; live add/change/revert on idm254). Open: Designer opening the
   written project (Jerry). `package.revert` built 2026-09-22.
+  **Lab-blocked items closed 2026-09-23 on edir-test3** (`docs/vault-clone.md` §10, "the second
+  real clone"): engine configured to completion first, ig4 cloned on top (14,081 entries, 0
+  failures), start options set to manual on all 19 drivers through the engine, IG Update
+  (Loopback) started, a linked policy deployed to it with restart and clean verify, the AD
+  driver's shim password and a DCS named password set through the tool.
   Design note 2026-09-21:
   one generic `AppObject` (ds-object form, the format Designer, its digests and the UA
   base package already share) for the 200-odd objects the tree does not model
