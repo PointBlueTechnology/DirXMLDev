@@ -268,6 +268,35 @@ values, and only that server's LDAP hands them out. So:
   source server's values through its own connection (`<lab>.servers=<labServerDn>=<url>`).
   `DirXML-ServerList` lists all the lab servers.
 
+## 10b. The second real clone (2026-09-23): ig4 → `EDIR_TEST3_TREE`, with an engine
+
+edir-test3 (DockerHost1, `identityengine:idm-4.10.2.0200-81`, ports 2389/2636/2524,
+env `edir3` through a tunnel on 6638). The first attempt landed on a tree whose engine
+configuration had been cut short, and taught the lesson recorded in §10 ("the engine
+must be configured before the clone arrives"): 19 drivers refused with −672, their
+associations then −613, `GetDriverStartOption` answering "No Such Attribute" forever.
+The tree was rebuilt from an empty configuration directory, the image's
+`idmconfigure` allowed to finish (schema from `vrschema.sch` and friends, `driverset1`
+created as a partition and associated, engine reporting build 3 instead of build 0),
+and the same bundle imported again:
+
+- 14,081 entries added, 17 already there, 0 failures; the engine-made driver set held no
+  foreign driver, so the clone continued into it. One verify mismatch: the dynamic
+  group's `memberQueryURL`, an attribute defined differently on 9.3.3.
+- Start option set to manual on all 19 drivers through the engine, on the first run —
+  no restart needed for that, though the container was restarted afterwards as asked.
+- `driverset.status` then listed every driver stopped/manual with its cache size.
+- `driver.start` brought the Loopback driver `IG Update` from stopped to running.
+- `policy.add` + `vault.deploy` put a linked publisher policy on the running driver: add,
+  linkage, restart (starting → running), verify clean; the reverse deploy removed it again.
+- `vault.deploy --secrets all --allow-missing-secrets` set the AD driver's shim password
+  (the inventory spans every cloned driver, hence the allowance); `driver.secrets set`
+  put a named password on the DCS driver and `list` showed it.
+
+edir-test2 is the mirror image: its engine configuration ran *after* the clone and failed
+with exit 254 on the schema conflict, so that engine answers `GetVersion` but will never
+serve the driver set. It stays as it is (Jerry, 2026-09-23); a rebuild the same way would fix it.
+
 ## 10. The first real clone (2026-09-21): ig4 → `EDIR_TEST2_TREE`
 
 The target: a bare eDirectory 9.3.3 in a container beside idm254 (32 entries, no
@@ -315,6 +344,19 @@ to add, OK. What eDirectory taught on the way, all handled and reported by the i
   import now probes the engine first (`GetVersion`); when it answers, the start option is
   never written as an attribute and goes through the extended operation, and an add the
   engine still refuses with −672 is retried without it.
+- **The engine must be configured before the clone arrives** (edir-test2 and edir-test3,
+  2026-09-23). The engine image's `idmconfigure` extends the IDM schema (`vrschema.sch`,
+  `dvr_ext.sch`, …) and creates the driver set as a partition *after* eDirectory is up; on
+  edir-test3 that step was cut short at the EBA restart and never re-ran (a container
+  start with a data layer present skips configuration), and on edir-test2 it ran after
+  the clone and failed with exit 254 on the schema conflict. On both, `GetVersion`
+  answers but the engine never loads the driver set: `Get/SetDriverStartOption` say
+  "No Such Attribute", no driver gets a state, no Java trace file appears. The clone's
+  own DirXML schema (rights pseudo-attributes as Octet String, no per-replica flags) is
+  not what the engine installs, and it cannot be undone. So: a lab engine is built to
+  completion first — `idmconfigure.log` must show the Identity Manager Engine section
+  finished, with the schema extended and the driver set created — and only then cloned;
+  the clone finds the driver set empty and continues into it.
 - **Re-runs converge**: an existing entry is skipped, its references and ACLs get only
   the values it lacks, and the clone's own driver set from an earlier run is recognised
   (a driver set holding drivers the clone does not carry is refused unless
