@@ -607,6 +607,7 @@ public final class Vault implements VaultAccess {
     }
 
     /** The engine version as the packed int the engine reports. */
+    @Override
     public int engineVersion() {
         try {
             return ((GetVersionResponse) ops().extendedOperation(new GetVersionRequest())).getVersion();

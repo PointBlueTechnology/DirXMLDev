@@ -25,6 +25,10 @@ public final class FakeVault implements VaultAccess {
     boolean closed;
     /** When set, any write of {@code userPassword} fails with this message (the tree's password policy saying no). */
     public String refuseUserPasswords;
+    /** The engine's packed version, or null when no engine answers ({@link #engineVersion()} throws). */
+    public Integer engineVersion;
+    /** When set, an add carrying {@code DirXML-DriverStartOption} is refused with this message (the engine's -672). */
+    public String refuseStartOptionWrites;
     /** When set, every added entry gets this ACL value from the "server", as eDirectory grants users their default rights. */
     public String defaultAclOnAdd;
 
@@ -68,6 +72,9 @@ public final class FakeVault implements VaultAccess {
     public void add(String dn, List<String> objectClasses, Map<String, List<byte[]>> attrs) {
         if (refuseUserPasswords != null && attrs.keySet().stream().anyMatch(k -> k.equalsIgnoreCase("userPassword"))) {
             throw new Vault.VaultException("add " + dn + ": " + refuseUserPasswords, null);
+        }
+        if (refuseStartOptionWrites != null && attrs.keySet().stream().anyMatch(k -> k.equalsIgnoreCase("DirXML-DriverStartOption"))) {
+            throw new Vault.VaultException("add " + dn + ": " + refuseStartOptionWrites, null);
         }
         Vault.Entry e = new Vault.Entry(dn);
         List<byte[]> oc = new ArrayList<>();
@@ -177,6 +184,14 @@ public final class FakeVault implements VaultAccess {
     @Override
     public void setDriverStartOption(String driverDn, int option) {
         driverStartOptions.put(key(driverDn), option);
+    }
+
+    @Override
+    public int engineVersion() {
+        if (engineVersion == null) {
+            throw new Vault.VaultException("GetVersion: no engine answers", null);
+        }
+        return engineVersion;
     }
 
     @Override
