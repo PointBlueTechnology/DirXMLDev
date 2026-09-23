@@ -445,6 +445,46 @@ public class CloneTest {
         assertEquals(Vault.START_MANUAL, lab.driverStartOption("cn=AD,cn=driverset1,o=system"));
     }
 
+    /** The schema says nothing (a 9.2.8 definition brought by the clone) but an engine answers: the start option still goes through it. */
+    @Test
+    public void anAnsweringEngineOwnsTheStartOptionWhateverTheSchemaSays() throws Exception {
+        CloneExporter.Options eo = new CloneExporter.Options();
+        eo.sourceName = "fake";
+        CloneBundle b = new CloneExporter(source(), eo).run().bundle;
+        FakeVault lab = lab();
+        lab.engineVersion = 0x040A0200;
+        CloneImporter.Options o = new CloneImporter.Options();
+        o.envName = "lab";
+        o.serverDn = "cn=lab1,ou=servers,o=system";
+        o.dryRun = false;
+        CloneImporter.Result r = new CloneImporter(b, lab, o).run();
+        assertTrue(r.text(), r.ok);
+        assertFalse(lab.read("cn=AD,cn=driverset1,o=system").attrs.containsKey("DirXML-DriverStartOption"));
+        assertEquals(Vault.START_MANUAL, lab.driverStartOption("cn=AD,cn=driverset1,o=system"));
+        assertTrue(r.notes.toString(), r.notes.stream().anyMatch(n -> n.contains("an engine answers on the target")));
+        assertEquals(0, r.verifyMismatches);
+    }
+
+    /** No answer to GetVersion yet, but the engine refuses the attribute on the add: the add is retried without it. */
+    @Test
+    public void aRefusedStartOptionWriteIsRetriedWithoutIt() throws Exception {
+        CloneExporter.Options eo = new CloneExporter.Options();
+        eo.sourceName = "fake";
+        CloneBundle b = new CloneExporter(source(), eo).run().bundle;
+        FakeVault lab = lab();
+        lab.refuseStartOptionWrites = "[LDAP: error code 50 - NDS error: no access (-672)]";
+        CloneImporter.Options o = new CloneImporter.Options();
+        o.envName = "lab";
+        o.serverDn = "cn=lab1,ou=servers,o=system";
+        o.dryRun = false;
+        CloneImporter.Result r = new CloneImporter(b, lab, o).run();
+        assertTrue(r.text(), r.ok);
+        assertTrue(r.text(), r.failures.isEmpty());
+        assertTrue(lab.exists("cn=AD,cn=driverset1,o=system"));
+        assertFalse(lab.read("cn=AD,cn=driverset1,o=system").attrs.containsKey("DirXML-DriverStartOption"));
+        assertEquals(0, r.verifyMismatches);
+    }
+
     // ---- identity data ----
 
     private static FakeVault sourceWithPeople() {

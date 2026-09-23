@@ -307,6 +307,14 @@ to add, OK. What eDirectory taught on the way, all handled and reported by the i
   import, restart the engine on the lab server, run the same import again — it adds
   nothing and sets every driver to manual start through the engine. On this lab, which
   has no engine, the note says exactly that.
+- **An engine that is already running owns the start option whatever the schema says**
+  (edir-test3, 2026-09-23): the engine image's tree had no IDM schema, the clone brought
+  ig4's 9.2.8 definition of `DirXML-DriverStartOption` without `NO-USER-MODIFICATION`,
+  and the loaded engine refused every driver add carrying the attribute with
+  `-672 no access` — 19 drivers missing, their associations then failing with −613. The
+  import now probes the engine first (`GetVersion`); when it answers, the start option is
+  never written as an attribute and goes through the extended operation, and an add the
+  engine still refuses with −672 is retried without it.
 - **Re-runs converge**: an existing entry is skipped, its references and ACLs get only
   the values it lacks, and the clone's own driver set from an earlier run is recognised
   (a driver set holding drivers the clone does not carry is refused unless

@@ -46,6 +46,9 @@ public interface VaultAccess extends AutoCloseable {
 
     void setDriverStartOption(String driverDn, int option);
 
+    /** The engine's packed version through its GetVersion extended operation; throws when no engine answers. */
+    int engineVersion();
+
     String waitForState(String driverDn, int wanted, int seconds);
 
     List<String> namedPasswords(String dn);

@@ -136,6 +136,16 @@ public final class CloneImporter {
     /** The target's schema — attributes it marks operational / NO-USER-MODIFICATION cannot be written by a client. */
     private Schema targetSchema = Schema.of(List.of(), List.of());
     private final Set<String> unwritable = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    /**
+     * The drivers' start option belongs to the engine: on eDirectory 9.3 the schema says so
+     * ({@code NO-USER-MODIFICATION}), and wherever an engine is loaded it refuses the attribute on
+     * an add with {@code -672 no access} whatever the schema says (edir-test3, 2026-09-23: the clone
+     * brought a 9.2.8 definition without the flag onto a tree whose engine was already running).
+     * So it is never written as an attribute when the engine answers, and set through the engine's
+     * extended operation instead.
+     */
+    private boolean startOptionEngineOwned;
+    private boolean engineAnswers;
 
     public CloneImporter(CloneBundle bundle, VaultAccess target, Options options) {
         this.bundle = bundle;
@@ -150,6 +160,8 @@ public final class CloneImporter {
         Vault.Entry targetSchemaEntry = target.read("cn=schema", "attributeTypes", "objectClasses");
         targetSchema = targetSchemaEntry == null ? Schema.of(List.of(), List.of())
             : Schema.of(targetSchemaEntry.strings("attributeTypes"), targetSchemaEntry.strings("objectClasses"));
+        engineAnswers = engineAnswers();
+        startOptionEngineOwned = targetSchema.isOperational(ClonePolicy.START_OPTION_ATTR) || engineAnswers;
         Schema.Delta delta = Schema.delta(source, targetSchema);
         r.schemaAttributes = delta.attributes.size();
         r.schemaClasses = delta.classes.size();
@@ -455,6 +467,36 @@ public final class CloneImporter {
                 try {
                     target.add(e.dn, e.objectClasses(), attrs);
                 } catch (RuntimeException ex) {
+                    if (attrs.containsKey(ClonePolicy.START_OPTION_ATTR) && isNoAccess(ex)) {
+                        // an engine that did not answer GetVersion still owns the start option: drop it and set it through the engine below
+                        startOptionEngineOwned = true;
+                        attrs.remove(ClonePolicy.START_OPTION_ATTR);
+                        if (!withPassword) {
+                            target.add(e.dn, e.objectClasses(), attrs);
+                        } else {
+                            try {
+                                target.add(e.dn, e.objectClasses(), attrs);
+                            } catch (RuntimeException ex2) {
+                                if (!isPasswordRefusal(ex2)) {
+                                    throw ex2;
+                                }
+                                if (r.passwordRefused == null) {
+                                    r.passwordRefused = ex2.getMessage();
+                                }
+                                r.passwordsRefused++;
+                                withPassword = false;
+                                attrs.remove("userPassword");
+                                target.add(e.dn, e.objectClasses(), attrs);
+                            }
+                        }
+                        existsCache.put(e.dn.toLowerCase(Locale.ROOT), Boolean.TRUE);
+                        written.add(e.dn);
+                        r.added++;
+                        if (withPassword) {
+                            r.passwordsSet++;
+                        }
+                        continue;
+                    }
                     if (!withPassword || !isPasswordRefusal(ex)) {
                         throw ex;
                     }
@@ -514,7 +556,8 @@ public final class CloneImporter {
         //     or module load — so this runs on every cloned driver on every run, and a re-run
         //     after the restart finishes what the first run could not.
         boolean startOptionServerOwned = targetSchema.isOperational(ClonePolicy.START_OPTION_ATTR);
-        if (startOptionServerOwned) {
+        String why = startOptionServerOwned ? "the attribute is server-owned on the target" : "an engine answers on the target and owns the attribute";
+        if (startOptionEngineOwned) {
             unwritable.add(ClonePolicy.START_OPTION_ATTR);
             int set = 0;
             String engineError = null;
@@ -531,11 +574,11 @@ public final class CloneImporter {
                 }
             }
             if (engineError != null) {
-                r.notes.add("start option: the attribute is server-owned on the target, and the engine's DirXML extended operation did not answer ("
+                r.notes.add("start option: " + why + ", and the engine's DirXML extended operation did not answer ("
                     + engineError + "). The driver set is associated with the lab server now; restart the engine there (or load the IDM module), "
                     + "then run this import again — it sets every cloned driver to manual start through the engine. Until then the drivers keep the engine's default.");
             } else if (set > 0) {
-                r.notes.add("start option set to manual on " + set + " driver(s) through the engine (the attribute is server-owned on the target)");
+                r.notes.add("start option set to manual on " + set + " driver(s) through the engine (" + why + ")");
                 unwritable.remove(ClonePolicy.START_OPTION_ATTR);
             }
         }
@@ -743,8 +786,9 @@ public final class CloneImporter {
         Set<String> allowed = source.allowedAttributes(e.objectClasses());
         Map<String, List<byte[]>> out = new LinkedHashMap<>();
         for (Map.Entry<String, List<byte[]>> a : attrs.entrySet()) {
-            if (targetSchema.isOperational(a.getKey())) {
-                unwritable.add(a.getKey());        // the target's server owns it (e.g. DirXML-DriverStartOption on eDirectory 9.3)
+            if (targetSchema.isOperational(a.getKey())
+                || (startOptionEngineOwned && a.getKey().equalsIgnoreCase(ClonePolicy.START_OPTION_ATTR))) {
+                unwritable.add(a.getKey());        // the target's server owns it (e.g. DirXML-DriverStartOption on eDirectory 9.3, or wherever an engine runs)
                 continue;
             }
             if (!allowed.isEmpty() && !allowed.contains(a.getKey())) {
@@ -780,6 +824,21 @@ public final class CloneImporter {
     }
 
     /** NMAS refusing a password (−16000 and neighbours) rather than the object being wrong. */
+    /** The engine's refusal of a write it owns: NDS -672 "no access". */
+    private static boolean isNoAccess(RuntimeException ex) {
+        String m = ex.getMessage();
+        return m != null && (m.contains("-672") || m.toLowerCase(Locale.ROOT).contains("no access"));
+    }
+
+    private boolean engineAnswers() {
+        try {
+            target.engineVersion();
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     private static boolean isPasswordRefusal(RuntimeException ex) {
         String m = ex.getMessage() == null ? "" : ex.getMessage();
         return m.contains("-16000") || m.contains("-1696") || m.contains("-1697") || m.contains("password");
