@@ -181,6 +181,10 @@ public final class Vault implements VaultAccess {
             env.put("java.naming.ldap.attributes.binary", String.join(" ", binary));
             if (c.url.startsWith("ldaps") && c.trustAll) {
                 env.put("java.naming.ldap.factory.socket", "com.pointblue.dirxml.sim.TrustAllSocketFactory");
+                // trust-all also means the certificate's name need not match the URL's host: a lab reached
+                // through an SSH tunnel (127.0.0.1:6637) presents its own hostname's certificate, and JNDI's
+                // LDAPS endpoint identification would otherwise turn that into "simple bind failed"
+                System.setProperty("com.sun.jndi.ldap.object.disableEndpointIdentification", "true");
             }
             return new Vault(c, new InitialDirContext(env));
         } catch (Exception e) {
