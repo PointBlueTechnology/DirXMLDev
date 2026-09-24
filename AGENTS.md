@@ -17,8 +17,8 @@ This file is for changing DirXMLDev itself.
   in the **test** vault and clean up after themselves.
 - **Package overrides are the supported customization method** — make them easy
   and always set the modified/customized flag; never edit packaged content silently.
-- The proprietary IDM jars live in `lib/` (gitignored) — `lib/` may be a directory
-  symlink to the simulator's `lib/`, or a real directory the jars are copied into.
+- The proprietary IDM jars live in `lib/` (gitignored) as regular files in a real
+  directory. A directory symlink or per-jar symlinks fail Maven's file check.
   Client artifacts, LDIFs, traces, and credentials are never
   committed.
 - **`bin/idm validate` after every edit to an as-code tree**, and read the errors

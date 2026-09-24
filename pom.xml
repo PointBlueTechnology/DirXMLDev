@@ -51,52 +51,42 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
             </plugin>
-            <!-- requireFilesExist compares a path to its canonical path and reports a jar
-                 reached through a symlink as missing (a directory symlink of lib/, or a
-                 per-jar symlink). File.isFile follows links, which is the layout in
-                 docs/install.md. bin/require-engine.sh checks the same names. -->
+            <!-- requireFilesExist compares a path with its canonical path and reports the
+                 file missing when they differ. A directory symlink of lib/, or a symlink of
+                 a jar, fails that check even though ls sees the file. Real copies pass.
+                 bin/require-engine.sh rejects the same layouts. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
                 <executions>
                     <execution>
                         <id>require-engine</id>
                         <phase>validate</phase>
                         <goals>
-                            <goal>run</goal>
+                            <goal>enforce</goal>
                         </goals>
                         <configuration>
                             <skip>${idm.skip.engine}</skip>
-                            <target>
-                                <available file="${idm.lib}/dirxml.jar" type="file" property="idm.ok.dirxml"/>
-                                <available file="${idm.lib}/dirxml_misc.jar" type="file" property="idm.ok.dirxml_misc"/>
-                                <available file="${idm.lib}/nxsl.jar" type="file" property="idm.ok.nxsl"/>
-                                <available file="${idm.lib}/xp.jar" type="file" property="idm.ok.xp"/>
-                                <available file="${idm.lib}/CommonDriverShim.jar" type="file" property="idm.ok.CommonDriverShim"/>
-                                <available file="${idm.lib}/jclient.jar" type="file" property="idm.ok.jclient"/>
-                                <available file="${idm.lib}/dhutil.jar" type="file" property="idm.ok.dhutil"/>
-                                <available file="${idm.lib}/XDS.jar" type="file" property="idm.ok.XDS"/>
-                                <available file="${idm.lib}/js.jar" type="file" property="idm.ok.js"/>
-                                <available file="${idm.lib}/ldap.jar" type="file" property="idm.ok.ldap"/>
-                                <available file="${user.home}/.m2/repository/com/pointblue/dirxml/dirxml-simulator/${simulator.version}/dirxml-simulator-${simulator.version}.jar" type="file" property="idm.ok.simulator"/>
-                                <condition property="idm.engine.present">
-                                    <and>
-                                        <isset property="idm.ok.dirxml"/>
-                                        <isset property="idm.ok.dirxml_misc"/>
-                                        <isset property="idm.ok.nxsl"/>
-                                        <isset property="idm.ok.xp"/>
-                                        <isset property="idm.ok.CommonDriverShim"/>
-                                        <isset property="idm.ok.jclient"/>
-                                        <isset property="idm.ok.dhutil"/>
-                                        <isset property="idm.ok.XDS"/>
-                                        <isset property="idm.ok.js"/>
-                                        <isset property="idm.ok.ldap"/>
-                                        <isset property="idm.ok.simulator"/>
-                                    </and>
-                                </condition>
-                                <fail unless="idm.engine.present" message="DirXMLDev needs the proprietary NetIQ/OpenText jars in lib/ and dirxml-simulator ${simulator.version} installed by 'mvn install' in the DirXMLSimulator repo. They are not committed and not on Maven Central. mvn test is the full suite and stops here when they are absent. bin/require-engine.sh names each missing path. Doctor and the write gate still run without them: mvn -B -Pidm.portable test. See docs/install.md section 2."/>
-                            </target>
+                            <fail>true</fail>
+                            <rules>
+                                <requireFilesExist>
+                                    <message>DirXMLDev needs the proprietary NetIQ/OpenText jars as regular files in a real lib/ directory, and dirxml-simulator ${simulator.version} installed by 'mvn install' in the DirXMLSimulator repo. They are not committed and not on Maven Central. A directory symlink of lib/, or a symlink of a jar, is not enough: requireFilesExist reports that path as missing. Copy the jars. `mvn test` is the full suite and stops here when they are absent or linked. Doctor and the write gate still run without them: mvn -B -Pidm.portable test. See docs/install.md section 2 and bin/require-engine.sh.</message>
+                                    <files>
+                                        <file>${idm.lib}/dirxml.jar</file>
+                                        <file>${idm.lib}/dirxml_misc.jar</file>
+                                        <file>${idm.lib}/nxsl.jar</file>
+                                        <file>${idm.lib}/xp.jar</file>
+                                        <file>${idm.lib}/CommonDriverShim.jar</file>
+                                        <file>${idm.lib}/jclient.jar</file>
+                                        <file>${idm.lib}/dhutil.jar</file>
+                                        <file>${idm.lib}/XDS.jar</file>
+                                        <file>${idm.lib}/js.jar</file>
+                                        <file>${idm.lib}/ldap.jar</file>
+                                        <file>${user.home}/.m2/repository/com/pointblue/dirxml/dirxml-simulator/${simulator.version}/dirxml-simulator-${simulator.version}.jar</file>
+                                    </files>
+                                </requireFilesExist>
+                            </rules>
                         </configuration>
                     </execution>
                 </executions>
@@ -104,11 +94,11 @@
         </plugins>
     </build>
 
-    <!-- Active when lib/dirxml.jar is present. File.exists follows a directory symlink
-         and a per-jar symlink, so `ln -s ../DirXMLSimulator/lib lib` activates this profile.
+    <!-- Active when lib/dirxml.jar exists. File.exists follows a symlink, so a linked
+         lib/ still turns this profile on; requireFilesExist then rejects the link.
          Maven resolves project dependencies before the lifecycle, so these stay out of the main
-         POM: without them, `mvn test` reaches the validate check and stops with the file list.
-         With them, the suite compiles. The profile does not make the jars optional —
+         POM: without them, `mvn test` reaches the enforcer and stops with the file list.
+         With real jar files, the suite compiles. The profile does not make the jars optional —
          the sources import the engine and the simulator. -->
     <profiles>
         <profile>
