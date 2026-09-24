@@ -4,6 +4,10 @@ Agent-driven IDM (DirXML) development on top of the DirXML Policy Simulator.
 Read `docs/plan.md` before working here; it holds the architecture, the phases,
 the decisions already made, and the **non-negotiable safeguards**.
 
+Operating a client driver set with `bin/idm` is [docs/agents.md](docs/agents.md)
+and [docs/agent-guide.md](docs/agent-guide.md). Those pages are for any agent.
+This file is for changing DirXMLDev itself.
+
 ## Ground rules
 
 - **Source of truth is IDM-as-code** (files in this repo / a client repo), never the
