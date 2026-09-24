@@ -63,3 +63,4 @@ Measured facts are
 [../.claude/skills/dirxml-dev/reference/facts.md](../.claude/skills/dirxml-dev/reference/facts.md).
 
 The DirXMLDev source is licensed under the [MIT License](../LICENSE).
+Release notes are [../CHANGELOG.md](../CHANGELOG.md).

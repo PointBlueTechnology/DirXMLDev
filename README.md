@@ -126,7 +126,8 @@ Building from source is [docs/install.md](docs/install.md).
 Phases 0–7, JSON provisioning forms, and workflow authoring (`flow.*`) are
 built. Vault deploy, driver operations, and Identity Applications proofs have
 been run on lab vaults. The phase-by-phase record, the architecture, and the
-decisions already made are in [docs/plan.md](docs/plan.md). Design notes under
+decisions already made are in [docs/plan.md](docs/plan.md). Release notes are
+[CHANGELOG.md](CHANGELOG.md). Design notes under
 `docs/` that still say "building" are historical; the commands in `bin/idm`
 are what shipped.
 
