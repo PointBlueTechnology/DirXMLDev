@@ -61,3 +61,5 @@ Code's loader for the same rules is
 [../.claude/skills/dirxml-dev/SKILL.md](../.claude/skills/dirxml-dev/SKILL.md).
 Measured facts are
 [../.claude/skills/dirxml-dev/reference/facts.md](../.claude/skills/dirxml-dev/reference/facts.md).
+
+The DirXMLDev source is licensed under the [MIT License](../LICENSE).
