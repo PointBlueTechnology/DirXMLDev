@@ -1,17 +1,187 @@
 #!/bin/sh
 # DirXML Dev launcher: bin/idm <command> [args]
-# Finds JDK 21 (IDM_JAVA_HOME, else java_home -v 21), builds the classpath from
-# target/classes + lib/*.jar + the simulator jar in ~/.m2, and runs the CLI.
+# Finds JDK 21 (IDM_JAVA_HOME, else SIM_JAVA_HOME, else java_home -v 21,
+# else a JAVA_HOME that is 21, else /usr/lib/jvm/*21*, else java on PATH when
+# that java is 21), builds the classpath from target/classes + lib/*.jar +
+# the simulator jar in ~/.m2, and runs the CLI.
 # JVM options (e.g. -Dldap.url=… for import-live) go in IDM_JAVA_OPTS.
+# `doctor` still runs when the simulator jar or a full build is missing, and
+# reports that itself. It never prints secrets.
 set -e
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-JH="${IDM_JAVA_HOME:-${SIM_JAVA_HOME:-$(/usr/libexec/java_home -v 21 2>/dev/null || true)}}"
-[ -n "$JH" ] || { echo "ERROR: JDK 21 not found (set IDM_JAVA_HOME)"; exit 1; }
 SIM_VER="${IDM_SIM_VERSION:-1.5.2}"
 SIM_JAR="$HOME/.m2/repository/com/pointblue/dirxml/dirxml-simulator/$SIM_VER/dirxml-simulator-$SIM_VER.jar"
-[ -f "$SIM_JAR" ] || { echo "ERROR: simulator jar $SIM_VER not installed; run 'mvn install' in the DirXMLSimulator repo"; exit 1; }
-[ -d "$HERE/target/classes" ] || (cd "$HERE" && JAVA_HOME="$JH" mvn -q -o compile)
-CP="$HERE/target/classes:$SIM_JAR"
-for j in "$HERE"/lib/*.jar; do CP="$CP:$j"; done
+CMD="${1:-}"
+
+# REQUIRED_JARS: dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar
+
+is_java21() {
+  [ -x "$1/bin/java" ] || return 1
+  ver=$("$1/bin/java" -version 2>&1 || true)
+  printf '%s\n' "$ver" | grep -Eq 'version "21([."])'
+}
+
+find_jdk21() {
+  if [ -n "${IDM_JAVA_HOME:-}" ] && [ -x "${IDM_JAVA_HOME}/bin/java" ]; then
+    echo "$IDM_JAVA_HOME"
+    return 0
+  fi
+  if [ -n "${SIM_JAVA_HOME:-}" ] && [ -x "${SIM_JAVA_HOME}/bin/java" ]; then
+    echo "$SIM_JAVA_HOME"
+    return 0
+  fi
+  if [ -x /usr/libexec/java_home ]; then
+    jh=$(/usr/libexec/java_home -v 21 2>/dev/null || true)
+    if [ -n "$jh" ] && [ -x "$jh/bin/java" ]; then
+      echo "$jh"
+      return 0
+    fi
+  fi
+  if [ -n "${JAVA_HOME:-}" ] && is_java21 "$JAVA_HOME"; then
+    echo "$JAVA_HOME"
+    return 0
+  fi
+  for c in /usr/lib/jvm/*21* /usr/lib/jvm/java-21* /usr/lib/jvm/java-21-openjdk*; do
+    if is_java21 "$c"; then
+      echo "$c"
+      return 0
+    fi
+  done
+  if command -v java >/dev/null 2>&1; then
+    jbin=$(command -v java)
+    if command -v readlink >/dev/null 2>&1; then
+      jbin=$(readlink -f "$jbin" 2>/dev/null || printf '%s' "$jbin")
+    fi
+    jh=$(cd "$(dirname "$jbin")/.." && pwd)
+    if is_java21 "$jh"; then
+      echo "$jh"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+# Printed when the Java CLI cannot start. Checks that need no classes only.
+doctor_shell() {
+  json_mode=0
+  for a in "$@"; do
+    if [ "$a" = "--json" ]; then
+      json_mode=1
+    fi
+  done
+
+  jdk_ok=0
+  jdk_detail="JDK 21 not found. Set IDM_JAVA_HOME to a JDK 21 home (the launcher also checks SIM_JAVA_HOME, /usr/libexec/java_home -v 21, JAVA_HOME when it is 21, /usr/lib/jvm/*21*, and java on PATH)."
+  jdk_version=""
+  jdk_home=""
+  if [ -n "${JH:-}" ] && [ -x "${JH}/bin/java" ]; then
+    jdk_home="$JH"
+    jdk_version=$("$JH/bin/java" -version 2>&1 | head -1 || true)
+    if is_java21 "$JH"; then
+      jdk_ok=1
+      jdk_detail="JDK 21 at $JH"
+    else
+      jdk_detail="JDK at $JH is not 21 ($jdk_version). DirXMLDev requires JDK 21. Set IDM_JAVA_HOME to a JDK 21 home."
+    fi
+  fi
+
+  sim_ok=0
+  sim_detail="Install the DirXML Simulator and run 'mvn install' in that repo so $SIM_JAR exists (version $SIM_VER, the pin in pom.xml). See docs/getting-started.md section 2."
+  if [ -f "$SIM_JAR" ]; then
+    sim_ok=1
+    sim_detail="dirxml-simulator $SIM_VER is on disk; the Java doctor reads its version once target/classes is built."
+  fi
+
+  missing=""
+  present=0
+  for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar; do
+    if [ -f "$HERE/lib/$j" ]; then
+      present=$((present + 1))
+    else
+      if [ -n "$missing" ]; then
+        missing="$missing, $j"
+      else
+        missing="$j"
+      fi
+    fi
+  done
+  lib_ok=0
+  if [ -z "$missing" ]; then
+    lib_ok=1
+    lib_detail="$present jars in $HERE/lib"
+  else
+    lib_detail="Missing $missing. Put the proprietary NetIQ/OpenText IDM jars in $HERE/lib (or symlink lib to the DirXML Simulator's lib/). See docs/getting-started.md section 2."
+  fi
+
+  cli_detail="The Java CLI is not built, so environments and the LDAPS probe were not checked. With JDK 21, the simulator jar, and lib/*.jar in place, run: mvn compile (or bin/idm doctor again)."
+
+  if [ "$json_mode" = 1 ]; then
+    printf '%s\n' "{\"ok\":false,\"checks\":[{\"name\":\"jdk\",\"ok\":$([ "$jdk_ok" = 1 ] && printf true || printf false),\"version\":$(json_escape "$jdk_version" | sed 's/^/"/; s/$/"/'),\"home\":$(json_escape "$jdk_home" | sed 's/^/"/; s/$/"/'),\"detail\":$(json_escape "$jdk_detail" | sed 's/^/"/; s/$/"/')},{\"name\":\"simulator\",\"ok\":$([ "$sim_ok" = 1 ] && printf true || printf false),\"expected\":$(json_escape "$SIM_VER" | sed 's/^/"/; s/$/"/'),\"path\":$(json_escape "$SIM_JAR" | sed 's/^/"/; s/$/"/'),\"detail\":$(json_escape "$sim_detail" | sed 's/^/"/; s/$/"/')},{\"name\":\"lib\",\"ok\":$([ "$lib_ok" = 1 ] && printf true || printf false),\"detail\":$(json_escape "$lib_detail" | sed 's/^/"/; s/$/"/')},{\"name\":\"cli\",\"ok\":false,\"detail\":$(json_escape "$cli_detail" | sed 's/^/"/; s/$/"/')}]}"
+  else
+    echo "DirXML Dev — doctor"
+    if [ "$jdk_ok" = 1 ]; then
+      echo "  jdk: OK  $jdk_detail"
+    else
+      echo "  jdk: FAIL  $jdk_detail"
+    fi
+    if [ "$sim_ok" = 1 ]; then
+      echo "  simulator: OK  $SIM_VER  ($SIM_JAR)"
+    else
+      echo "  simulator: FAIL  $SIM_VER missing"
+      echo "    $sim_detail"
+    fi
+    if [ "$lib_ok" = 1 ]; then
+      echo "  lib: OK  $lib_detail"
+    else
+      echo "  lib: FAIL  missing $missing"
+      echo "    $lib_detail"
+    fi
+    echo "  cli: FAIL  Java doctor did not start"
+    echo "    $cli_detail"
+    echo "DOCTOR: PROBLEMS FOUND"
+  fi
+}
+
+JH=$(find_jdk21 || true)
+if [ -z "$JH" ]; then
+  if [ "$CMD" = "doctor" ]; then
+    doctor_shell "$@"
+    exit 1
+  fi
+  echo "ERROR: JDK 21 not found (set IDM_JAVA_HOME)" >&2
+  exit 1
+fi
+
+if [ ! -f "$SIM_JAR" ] && [ "$CMD" != "doctor" ]; then
+  echo "ERROR: simulator jar $SIM_VER not installed; run 'mvn install' in the DirXMLSimulator repo" >&2
+  exit 1
+fi
+
+if [ ! -d "$HERE/target/classes" ]; then
+  if [ "$CMD" = "doctor" ] && { [ ! -f "$SIM_JAR" ] || ! is_java21 "$JH"; }; then
+    doctor_shell "$@"
+    exit 1
+  fi
+  (cd "$HERE" && JAVA_HOME="$JH" mvn -q -o compile)
+fi
+
+CP="$HERE/target/classes"
+if [ -f "$SIM_JAR" ]; then
+  CP="$CP:$SIM_JAR"
+fi
+for j in "$HERE"/lib/*.jar; do
+  [ -f "$j" ] || continue
+  CP="$CP:$j"
+done
+
 # shellcheck disable=SC2086  # IDM_JAVA_OPTS is intentionally word-split
-exec "$JH/bin/java" $IDM_JAVA_OPTS -cp "$CP" com.pointblue.dirxml.dev.Cli "$@"
+exec "$JH/bin/java" $IDM_JAVA_OPTS \
+  -Didm.home="$HERE" \
+  -Didm.sim.version="$SIM_VER" \
+  -Didm.sim.jar="$SIM_JAR" \
+  -Didm.launcher=1 \
+  -cp "$CP" com.pointblue.dirxml.dev.Cli "$@"
