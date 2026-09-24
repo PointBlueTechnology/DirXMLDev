@@ -10,6 +10,16 @@ operations. Designer stays an import/export target for teams that still use it.
 A human operator and an agent run the same commands. The tree in git is the
 source of truth. The vault is a deploy target.
 
+## Policy flow
+
+[DirXMLDev Visual](extensions/dirxmldev-visual/README.md) draws the
+Designer-style policy-flow fishbone in Cursor or VS Code, from
+`bin/idm query … fishbone`. Command Palette → **DirXMLDev: Show Policy Flow
+(Fishbone)**, or right-click `driver.xml` or `driverset.xml`. It does not
+write the tree or talk to a vault.
+
+![Policy Flow for an Active Directory driver in Cursor](docs/media/fishbone-ad-driver.png)
+
 ## Who it is for
 
 - An IDM engineer who wants policies, filters, GCVs, forms, and workflows in
@@ -39,10 +49,8 @@ import  →  edit  →  validate  →  simulate  →  vault.diff / vault.deploy 
 | Prove a workflow | `bin/apps` | Identity Applications REST: request, tasks, approve, history |
 | Hand it back | `export`, `export-project` | A Designer driver-set export, or an update of an existing project |
 
-A read-only VS Code / Cursor extension
-([extensions/dirxmldev-visual](extensions/dirxmldev-visual/README.md)) draws
-the classic policy-flow fishbone from `bin/idm query … fishbone`. It does not
-write the tree or talk to a vault.
+The VS Code / Cursor extension in [Policy flow](#policy-flow) draws that
+fishbone. It does not write the tree or talk to a vault.
 
 `bin/idm` with no arguments lists every command and flag. That text is the
 contract. Where an older design note disagrees with it, follow `bin/idm`.
