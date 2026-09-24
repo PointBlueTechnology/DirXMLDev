@@ -1,12 +1,16 @@
 #!/bin/sh
-# Names every proprietary IDM jar and the DirXML Simulator jar this build needs.
-# GitHub Actions runs this before `mvn -B test`. The jars are not in git and the
-# simulator is not on Maven Central, so a clean hosted runner fails here with
-# setup steps instead of a missing systemPath or an unresolved dependency.
-# See docs/getting-started.md section 2. This script never prints secrets.
+# Names every proprietary IDM jar and the DirXML Simulator jar a full `mvn test` needs.
+# Exit 0 when they are all present. Exit 1 when any is missing, with setup steps.
+# `--inform` prints the same list and exits 0: GitHub Actions uses that so a clean
+# runner is not a failed check. The jars are not in git and the simulator is not
+# on Maven Central. See docs/install.md section 2. This script never prints secrets.
 #
 # REQUIRED_JARS: dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar
 set -e
+inform=0
+if [ "${1:-}" = "--inform" ]; then
+  inform=1
+fi
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 SIM_VER="${IDM_SIM_VERSION:-1.5.2}"
 SIM_JAR="${HOME}/.m2/repository/com/pointblue/dirxml/dirxml-simulator/${SIM_VER}/dirxml-simulator-${SIM_VER}.jar"
@@ -26,19 +30,24 @@ if [ ! -f "$SIM_JAR" ]; then
 fi
 
 if [ -n "$missing" ] || [ -n "$sim_missing" ]; then
+  if [ "$inform" = 1 ]; then
+    headline="Engine not available on this machine (not a test failure). Full mvn test needs the jars below; doctor and the write gate do not."
+  else
+    headline="ERROR: DirXMLDev cannot run mvn test until the proprietary engine jars and the DirXML Simulator are installed."
+  fi
   cat >&2 <<EOF
-ERROR: DirXMLDev cannot run mvn test until the proprietary engine jars and the DirXML Simulator are installed.
+${headline}
 
 Missing:${missing}${sim_missing}
 
 The NetIQ/OpenText jars are proprietary and are not committed (lib/ is gitignored).
 dirxml-simulator is not on Maven Central. The sources import both, so the suite
 cannot pass without them. pom.xml keeps those dependencies in the engine profile
-(active when lib/dirxml.jar exists) so that `mvn test` on a machine without the
-jars stops in the enforcer's validate rule — the file list below — instead of an
+(active when lib/dirxml.jar exists) so that mvn test on a machine without the
+jars stops in the enforcer's validate rule — the file list above — instead of an
 unresolved-artifact error. A clean GitHub-hosted runner has neither.
 
-Setup (docs/getting-started.md, section 2):
+Setup (docs/install.md, section 2):
   1. Copy dirxml.jar, dirxml_misc.jar, nxsl.jar, xp.jar, CommonDriverShim.jar,
      jclient.jar, dhutil.jar, XDS.jar, js.jar, and ldap.jar into lib/
      (or: ln -s /path/to/DirXMLSimulator/lib lib).
@@ -49,8 +58,13 @@ Setup (docs/getting-started.md, section 2):
      Expected artifact: com.pointblue.dirxml:dirxml-simulator:${SIM_VER}
      (IDM_SIM_VERSION overrides that pin only when you mean to select another build).
   3. Re-run: mvn -B test
+     Without the jars, doctor and the write-gate tests still run:
+       mvn -B -Pidm.portable test
      Or check the same preconditions with: bin/idm doctor
 EOF
+  if [ "$inform" = 1 ]; then
+    exit 0
+  fi
   exit 1
 fi
 

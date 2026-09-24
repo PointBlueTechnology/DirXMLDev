@@ -26,10 +26,10 @@ if "%SIM_VER%"=="" set "SIM_VER=1.5.2"
 set "SIM_JAR=%USERPROFILE%\.m2\repository\com\pointblue\dirxml\dirxml-simulator\%SIM_VER%\dirxml-simulator-%SIM_VER%.jar"
 if not exist "%SIM_JAR%" (
   if /I "%CMD%"=="doctor" (
-    if not exist "%HERE%\target\classes" (
+    if not exist "%HERE%\target\classes\com\pointblue\dirxml\dev\Cli.class" (
       echo DirXML Dev — doctor
       echo   simulator: FAIL  %SIM_VER% missing
-      echo     Run "mvn install" in the DirXMLSimulator repo so %SIM_JAR% exists. See docs/getting-started.md section 2.
+      echo     Run "mvn install" in the DirXMLSimulator repo so %SIM_JAR% exists. See docs/install.md section 2.
       echo   cli: FAIL  Java doctor did not start
       echo DOCTOR: PROBLEMS FOUND
       exit /b 1
@@ -39,7 +39,7 @@ if not exist "%SIM_JAR%" (
     exit /b 1
   )
 )
-if not exist "%HERE%\target\classes" (
+if not exist "%HERE%\target\classes\com\pointblue\dirxml\dev\Cli.class" (
   pushd "%HERE%"
   set "JAVA_HOME=%JH%"
   call mvn -q -o compile
