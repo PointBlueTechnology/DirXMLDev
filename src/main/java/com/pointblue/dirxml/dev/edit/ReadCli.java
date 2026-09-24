@@ -73,13 +73,35 @@ public final class ReadCli {
 
     public static int query(String[] argv) throws Exception {
         if (argv.length < 3) {
-            System.err.println("usage: query <tree> artifacts [driver] | chain <driver> sub|pub | gcvs <driver> | tables <driver>");
+            System.err.println("usage: query <tree> artifacts [driver] | chain <driver> sub|pub | gcvs <driver> | tables <driver> | fishbone <driver> [--json] | drivers [--json]");
             return 2;
         }
         DriverSet ds = AsCodeReader.read(Paths.get(argv[1]));
         String what = argv[2];
-        String driver = argv.length > 3 ? argv[3] : null;
+        boolean json = hasFlag(argv, "--json");
+        String driver = argv.length > 3 && !argv[3].startsWith("--") ? argv[3] : null;
         switch (what) {
+            case "fishbone": {
+                Driver d = driver(ds, driver);
+                if (d == null) {
+                    return 1;
+                }
+                Map<String, Object> model = Fishbone.model(ds, Paths.get(argv[1]), d);
+                System.out.print(json ? Json.pretty(model) + "\n" : Fishbone.text(model));
+                return 0;
+            }
+            case "drivers": {
+                Map<String, Object> list = Fishbone.drivers(ds, Paths.get(argv[1]));
+                if (json) {
+                    System.out.println(Json.pretty(list));
+                } else {
+                    for (Object o : (List<?>) list.get("drivers")) {
+                        Map<?, ?> m = (Map<?, ?>) o;
+                        System.out.printf("%-40s %s%n", m.get("name"), m.get("dir"));
+                    }
+                }
+                return 0;
+            }
             case "artifacts":
                 return artifacts(ds, driver);
             case "chain":

@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -306,6 +307,32 @@ public final class AsCodeWriter {
             }
         }
         return sb.length() == 0 ? "gif" : sb.toString();
+    }
+
+    /**
+     * Every artifact's content file relative to the tree root, by artifact path — exactly the
+     * names {@link #write} gives them (per-scope order and collision suffixes included), so a
+     * reader of the model can name files without reading the manifests again.
+     */
+    public static Map<String, String> files(DriverSet ds) {
+        Map<String, String> out = new LinkedHashMap<>();
+        fileNames(out, "library/", sorted(ds.library.artifacts()), "");
+        for (Driver d : ds.drivers) {
+            String dir = "drivers/" + fileSafe(d.name) + "/";
+            List<Artifact> driverScope = new ArrayList<>(d.policies);
+            driverScope.addAll(d.resources);
+            fileNames(out, dir, sorted(driverScope), "");
+            fileNames(out, dir, sorted(new ArrayList<>(d.subscriber.policies)), "subscriber/");
+            fileNames(out, dir, sorted(new ArrayList<>(d.publisher.policies)), "publisher/");
+        }
+        return out;
+    }
+
+    private static void fileNames(Map<String, String> out, String dir, List<Artifact> artifacts, String prefix) {
+        Set<String> used = new HashSet<>();
+        for (Artifact a : artifacts) {
+            out.put(a.path(), dir + prefix + uniqueFile(fileSafe(a.name) + extension(a), used));
+        }
     }
 
     /** A filesystem-safe file/dir name; the manifest keeps the real name. */

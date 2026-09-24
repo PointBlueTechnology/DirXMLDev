@@ -1,8 +1,8 @@
 {
   "name": "dirxmldev-visual",
   "displayName": "DirXMLDev Visual",
-  "description": "Designer-style policy-flow fishbone for DirXMLDev IDM-as-code trees.",
-  "version": "0.1.1",
+  "description": "Designer-style policy-flow fishbone for DirXMLDev IDM-as-code trees, drawn from bin/idm query fishbone --json.",
+  "version": "0.1.2",
   "publisher": "pointblue",
   "license": "UNLICENSED",
   "engines": {
@@ -57,6 +57,16 @@
           "group": "navigation"
         }
       ]
+    },
+    "configuration": {
+      "title": "DirXMLDev",
+      "properties": {
+        "dirxmldev.idmPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path of the DirXMLDev launcher (bin/idm, or bin\\\\idm.cmd on Windows). Empty: IDM_HOME, then bin/idm found above the tree or a workspace folder, then 'idm' on the PATH."
+        }
+      }
     }
   },
   "scripts": {

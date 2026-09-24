@@ -1,11 +1,3 @@
-import * as path from "path";
-import {
-  AsCodeTree,
-  DriverInfo,
-  artifactFile,
-  indexArtifacts,
-} from "./ascode";
-
 /**
  * Policy-set keys from com.pointblue.dirxml.dev.model.PolicySet — do not invent
  * aliases. Labels are Designer's names (PackageInstall.DESIGNER_SET_NAMES /
@@ -106,69 +98,11 @@ export interface FishboneModel {
   filter?: FishboneFilter;
 }
 
-export function loadFishbone(tree: AsCodeTree, driver: DriverInfo): FishboneModel {
-  const idx = indexArtifacts(tree, driver);
-  const bone = (def: PolicySetDef): FishboneBone => {
-    const links = driver.links.filter((l) => l.setKey === def.key).sort((a, b) => a.order - b.order);
-    const policies: FishbonePolicy[] = links.map((l) => {
-      const hit = idx.get(l.ref);
-      let file: string | undefined;
-      let kind = "unresolved";
-      let name = leaf(l.ref);
-      if (hit) {
-        kind = hit.artifact.kind || "policy";
-        name = hit.artifact.name;
-        const abs = artifactFile(tree, hit.driver, hit.artifact);
-        if (abs) {
-          file = path.relative(tree.root, abs).replace(/\\/g, "/");
-        }
-      }
-      return {
-        id: `policy:${def.key}:${l.order}:${l.ref}`,
-        ref: l.ref,
-        name,
-        order: l.order,
-        kind,
-        file,
-        unresolved: !hit,
-      };
-    });
-    return {
-      id: `bone:${def.key}`,
-      key: def.key,
-      label: def.label,
-      channel: def.channel,
-      setId: def.id,
-      policies,
-    };
-  };
-
-  const filterCfg = driver.configs.find((c) => c.kind === "driver-filter");
-  let filter: FishboneFilter | undefined;
-  if (filterCfg?.file) {
-    filter = {
-      id: "config:driver-filter",
-      file: path.posix.join(driver.dir.replace(/\\/g, "/"), filterCfg.file),
-    };
-  }
-
-  return {
-    treeRoot: tree.root,
-    driverSet: { name: tree.driverSet.name, dn: tree.driverSet.dn },
-    driver: {
-      name: driver.name,
-      dn: driver.dn,
-      shimClass: driver.shimClass,
-      dir: driver.dir,
-    },
-    publisher: PUBLISHER_RIBS.map(bone),
-    subscriber: SUBSCRIBER_RIBS.map(bone),
-    spine: SPINE_SETS.map(bone),
-    resources: RESOURCE_SETS.map(bone),
-    filter,
-  };
-}
-
+/**
+ * The model comes from `bin/idm query <tree> fishbone <driver> --json`
+ * (com.pointblue.dirxml.dev.edit.Fishbone); this module only types it and
+ * resolves nodes to files. The tables above document the bones it carries.
+ */
 export function findBone(model: FishboneModel, id: string): FishboneBone | undefined {
   return allBones(model).find((b) => b.id === id);
 }

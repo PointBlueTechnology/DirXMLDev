@@ -1,20 +1,14 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import {
-  AsCodeTree,
-  DriverInfo,
-  TREE_MANIFEST,
-  driverContaining,
-  findTreeRoot,
-  loadTree,
-} from "./ascode";
-import { FishboneModel, filesForNode, loadFishbone } from "./fishbone";
+import { TREE_MANIFEST, driverDirContaining, findTreeRoot, isTreeRoot } from "./ascode";
+import { FishboneModel, filesForNode } from "./fishbone";
+import { DriverListing, IdmLocation, findIdm, listDrivers, loadFishbone } from "./idm";
 import { fishboneHtml } from "./webview";
 
 let extensionUri: vscode.Uri;
 let panel: vscode.WebviewPanel | undefined;
-let current: { tree: AsCodeTree; driver: DriverInfo; model: FishboneModel } | undefined;
+let current: { treeRoot: string; driver: string; idm: IdmLocation; model: FishboneModel } | undefined;
 let selectedNodeId: string | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -43,16 +37,27 @@ export function deactivate(): void {
   panel?.dispose();
 }
 
+function idmFor(treeRoot: string): IdmLocation {
+  const configured = vscode.workspace.getConfiguration("dirxmldev").get<string>("idmPath");
+  const folders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+  return findIdm(treeRoot, folders, configured);
+}
+
 async function showFishbone(): Promise<void> {
   const picked = await pickDriver();
   if (!picked) {
     return;
   }
-  current = picked;
-  selectedNodeId = undefined;
   const view = ensurePanel();
-  render(view, picked.model);
-  void vscode.commands.executeCommand("setContext", "dirxmldev.fishboneOpen", true);
+  try {
+    const model = await loadFishbone(picked.idm, picked.treeRoot, picked.driver);
+    current = { ...picked, model };
+    selectedNodeId = undefined;
+    render(view, model);
+    void vscode.commands.executeCommand("setContext", "dirxmldev.fishboneOpen", true);
+  } catch (e) {
+    void vscode.window.showErrorMessage("Fishbone: " + (e instanceof Error ? e.message : String(e)));
+  }
 }
 
 async function refreshFishbone(openIfMissing: boolean): Promise<void> {
@@ -63,19 +68,19 @@ async function refreshFishbone(openIfMissing: boolean): Promise<void> {
     return;
   }
   try {
-    const tree = loadTree(current.tree.root);
-    const driver = tree.drivers.find((d) => d.name === current!.driver.name);
-    if (!driver) {
+    const listing = await listDrivers(current.idm, current.treeRoot);
+    if (!listing.drivers.some((d) => d.name === current!.driver)) {
       void vscode.window.showWarningMessage(
-        `Driver '${current.driver.name}' is gone from ${path.basename(tree.root)}. Pick another.`,
+        `Driver '${current.driver}' is gone from ${path.basename(current.treeRoot)}. Pick another.`,
       );
       current = undefined;
       await showFishbone();
       return;
     }
-    current = { tree, driver, model: loadFishbone(tree, driver) };
+    const model = await loadFishbone(current.idm, current.treeRoot, current.driver);
+    current = { ...current, model };
     const view = panel ?? ensurePanel();
-    render(view, current.model);
+    render(view, model);
     void view.webview.postMessage({ type: "hint", text: "Reloaded from disk." });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -170,9 +175,9 @@ async function openNode(model: FishboneModel, nodeId: string, fromCommand: boole
   await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One, preview: true });
 }
 
-async function pickDriver(): Promise<{ tree: AsCodeTree; driver: DriverInfo; model: FishboneModel } | undefined> {
-  const trees = await discoverTrees();
-  if (trees.length === 0) {
+async function pickDriver(): Promise<{ treeRoot: string; driver: string; idm: IdmLocation } | undefined> {
+  const roots = await discoverTreeRoots();
+  if (roots.length === 0) {
     void vscode.window.showErrorMessage(
       "No IDM-as-code tree found (no driverset.xml). Open a tree, or the sample at extensions/dirxmldev-visual/sample-tree.",
     );
@@ -180,61 +185,71 @@ async function pickDriver(): Promise<{ tree: AsCodeTree; driver: DriverInfo; mod
   }
 
   const active = vscode.window.activeTextEditor?.document.uri.fsPath;
-  let tree = active
-    ? trees.find((t) => active === t.root || active.startsWith(t.root + path.sep))
-    : undefined;
-  if (!tree && trees.length === 1) {
-    tree = trees[0];
+  let treeRoot = active ? roots.find((r) => active === r || active.startsWith(r + path.sep)) : undefined;
+  if (!treeRoot && roots.length === 1) {
+    treeRoot = roots[0];
   }
-  if (!tree) {
+  if (!treeRoot) {
     const pick = await vscode.window.showQuickPick(
-      trees.map((t) => ({ label: t.driverSet.name || path.basename(t.root), description: t.root, t })),
+      roots.map((r) => ({ label: path.basename(r), description: r, r })),
       { title: "IDM-as-code tree" },
     );
     if (!pick) {
       return undefined;
     }
-    tree = pick.t;
+    treeRoot = pick.r;
   }
 
-  let driver: DriverInfo | undefined;
-  if (active && (active === tree.root || active.startsWith(tree.root + path.sep))) {
-    driver = driverContaining(tree, active);
+  const idm = idmFor(treeRoot);
+  let listing: DriverListing;
+  try {
+    listing = await listDrivers(idm, treeRoot);
+  } catch (e) {
+    void vscode.window.showErrorMessage(
+      "Fishbone: cannot run bin/idm (set dirxmldev.idmPath or IDM_HOME to the DirXMLDev checkout). " +
+        (e instanceof Error ? e.message : String(e)),
+    );
+    return undefined;
   }
-  if (!driver && tree.drivers.length === 1) {
-    driver = tree.drivers[0];
+  let driver: string | undefined;
+  if (active && (active === treeRoot || active.startsWith(treeRoot + path.sep))) {
+    const dir = driverDirContaining(treeRoot, listing.drivers.map((d) => d.dir), active);
+    driver = listing.drivers.find((d) => d.dir === dir)?.name;
+  }
+  if (!driver && listing.drivers.length === 1) {
+    driver = listing.drivers[0]!.name;
   }
   if (!driver) {
-    if (tree.drivers.length === 0) {
+    if (listing.drivers.length === 0) {
       void vscode.window.showErrorMessage("driverset.xml lists no readable drivers.");
       return undefined;
     }
     const pick = await vscode.window.showQuickPick(
-      tree.drivers.map((d) => ({ label: d.name, description: d.dir, d })),
+      listing.drivers.map((d) => ({ label: d.name, description: d.dir, d })),
       { title: "Driver" },
     );
     if (!pick) {
       return undefined;
     }
-    driver = pick.d;
+    driver = pick.d.name;
   }
-  return { tree, driver, model: loadFishbone(tree, driver) };
+  return { treeRoot, driver, idm };
 }
 
-async function discoverTrees(): Promise<AsCodeTree[]> {
-  const found = new Map<string, AsCodeTree>();
+async function discoverTreeRoots(): Promise<string[]> {
+  const found = new Set<string>();
   const active = vscode.window.activeTextEditor?.document.uri.fsPath;
   if (active) {
     const root = findTreeRoot(active);
     if (root) {
-      found.set(root, loadTree(root));
+      found.add(root);
     }
   }
   if (vscode.workspace.workspaceFolders) {
     for (const folder of vscode.workspace.workspaceFolders) {
       const local = findTreeRoot(folder.uri.fsPath);
-      if (local && !found.has(local)) {
-        found.set(local, loadTree(local));
+      if (local) {
+        found.add(local);
       }
       const matches = await vscode.workspace.findFiles(
         new vscode.RelativePattern(folder, `**/${TREE_MANIFEST}`),
@@ -243,11 +258,11 @@ async function discoverTrees(): Promise<AsCodeTree[]> {
       );
       for (const uri of matches) {
         const root = path.dirname(uri.fsPath);
-        if (!found.has(root)) {
-          found.set(root, loadTree(root));
+        if (isTreeRoot(root)) {
+          found.add(root);
         }
       }
     }
   }
-  return [...found.values()];
+  return [...found];
 }

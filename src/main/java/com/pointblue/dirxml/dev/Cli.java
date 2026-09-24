@@ -411,6 +411,7 @@ public final class Cli {
         System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact");
         System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
         System.err.println("  query <asCodeDir> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver]");
+        System.err.println("  query <asCodeDir> fishbone <driver> [--json] | drivers [--json]   the policy-flow fishbone the VS Code viewer draws; the drivers to pick from");
         System.err.println("  package.diff <asCodeDir> <artifactPath>  a customized packaged artifact vs its package baseline");
         System.err.println("provisioning (forms + PRDs; docs/forms.md):");
         System.err.println("  form.list <asCodeDir> [--driver D]              every JSON form: kind, name, title, #fields, packaged mark");

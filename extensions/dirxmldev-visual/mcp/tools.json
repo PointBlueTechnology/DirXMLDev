@@ -8,12 +8,20 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "tree": { "type": "string", "description": "Absolute path of the as-code tree root." },
-          "driver": { "type": "string", "description": "Driver name; omitted = first driver in driverset.xml." }
+          "tree": {
+            "type": "string",
+            "description": "Absolute path of the as-code tree root."
+          },
+          "driver": {
+            "type": "string",
+            "description": "Driver name; omitted = first driver in driverset.xml."
+          }
         },
-        "required": ["tree"]
+        "required": [
+          "tree"
+        ]
       },
-      "run": "node extensions/dirxmldev-visual/out/cli.js dump <tree> [driver]"
+      "run": "bin/idm query <tree> fishbone <driver> --json   (or node extensions/dirxmldev-visual/out/cli.js dump <tree> [driver])"
     },
     {
       "name": "fishbone.refresh",
@@ -21,10 +29,17 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "tree": { "type": "string", "description": "As-code tree root (sentinel is written here)." },
-          "driver": { "type": "string" }
+          "tree": {
+            "type": "string",
+            "description": "As-code tree root (sentinel is written here)."
+          },
+          "driver": {
+            "type": "string"
+          }
         },
-        "required": ["tree"]
+        "required": [
+          "tree"
+        ]
       },
       "run": "touch <tree>/.dirxmldev/fishbone.refresh   # or VS Code command dirxmldev.fishbone.refresh"
     },
@@ -34,11 +49,22 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "tree": { "type": "string" },
-          "driver": { "type": "string" },
-          "ref": { "type": "string", "description": "Artifact path (drivers/D/subscriber/…), bone key (subscriber-event), or node id." }
+          "tree": {
+            "type": "string"
+          },
+          "driver": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string",
+            "description": "Artifact path (drivers/D/subscriber/\u2026), bone key (subscriber-event), or node id."
+          }
         },
-        "required": ["tree", "driver", "ref"]
+        "required": [
+          "tree",
+          "driver",
+          "ref"
+        ]
       },
       "vscodeCommand": "dirxmldev.fishbone.reveal"
     }
