@@ -221,10 +221,16 @@ the extension parser:
 bin/idm query <tree> fishbone <driver> [--json]
 ```
 
-It would be the same payload as §4.2, built from `Driver.links(PolicySet)` —
-the data `query chain` already prints as text. v1 does not add it: the
-TypeScript dump is enough to ship, and `lib/` is not required to open the
-picture.
+**Built 2026-09-24.** `query <tree> fishbone <driver> [--json]` emits exactly the
+§4.2 payload from the model (`edit/Fishbone`, files named by
+`AsCodeWriter.files`), and `query <tree> drivers --json` the picker's list.
+Extension 0.1.2 calls them (`src/idm.ts`) and parses no XML any more: the
+manifests have one reader, the Java one, and the picture follows model
+changes — the `linkage.unknown` promotion, for instance, is now the reader's
+job and the extension's tests prove it through the CLI. The price is that the
+extension needs a built checkout (`dirxmldev.idmPath`, `IDM_HOME`, or
+`bin/idm` above the tree); the v1 promise that `lib/` was not required to open
+the picture is withdrawn.
 
 ### 6.4 What agents must not do through these hooks
 

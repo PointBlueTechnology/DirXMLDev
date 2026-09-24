@@ -42,14 +42,19 @@ or touching `.dirxmldev/fishbone.refresh`.
 
 ## Install / F5
 
-Needs Node 18+ (22 is fine). The Java harness / `lib/` jars are **not** required.
+Needs Node 18+ (22 is fine) **and a built DirXMLDev checkout**: since 0.1.2 the
+extension draws what `bin/idm query <tree> fishbone <driver> --json` returns and
+parses no manifest itself, so the tree's files have one reader (the Java model).
+The launcher is found from the `dirxmldev.idmPath` setting, `IDM_HOME`, a
+`bin/idm` above the tree or a workspace folder, or `idm` on the PATH; a tree
+outside the checkout needs one of the first two.
 
 ### VS Code — debug (F5)
 
 ```bash
 cd extensions/dirxmldev-visual
 npm install
-npm test          # parser + fishbone + SVG labels against sample-tree
+npm test          # fishbone JSON via bin/idm + SVG labels against sample-tree
 ```
 
 Open **this folder** (`extensions/dirxmldev-visual`) in VS Code, press **F5**.

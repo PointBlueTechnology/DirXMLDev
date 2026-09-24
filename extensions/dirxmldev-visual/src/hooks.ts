@@ -1,22 +1,25 @@
 /**
  * Agent-callable helpers a future MCP adapter would wrap.
- * Today: dump JSON, resolve a node to a file, and touch the refresh sentinel
- * the extension already watches (docs/vscode-extension-v1.md §6).
+ * Today: the fishbone JSON (from `bin/idm`), a node resolved to a file, and the
+ * refresh sentinel the extension already watches (docs/vscode-extension-v1.md §6).
  */
 import * as fs from "fs";
 import * as path from "path";
-import { REFRESH_SENTINEL, loadTree } from "./ascode";
-import { FishboneModel, allBones, filesForNode, loadFishbone } from "./fishbone";
+import { REFRESH_SENTINEL } from "./ascode";
+import { FishboneModel, allBones, filesForNode } from "./fishbone";
+import { findIdm, listDrivers, loadFishbone } from "./idm";
 
-export function fishboneGet(treeRoot: string, driverName?: string): FishboneModel {
-  const tree = loadTree(treeRoot);
-  const driver = driverName
-    ? tree.drivers.find((d) => d.name === driverName)
-    : tree.drivers[0];
-  if (!driver) {
-    throw new Error("no driver " + (driverName ?? "(first)") + " in " + treeRoot);
+export async function fishboneGet(treeRoot: string, driverName?: string): Promise<FishboneModel> {
+  const idm = findIdm(treeRoot);
+  let name = driverName;
+  if (!name) {
+    const listing = await listDrivers(idm, treeRoot);
+    name = listing.drivers[0]?.name;
+    if (!name) {
+      throw new Error("no driver in " + treeRoot);
+    }
   }
-  return loadFishbone(tree, driver);
+  return loadFishbone(idm, treeRoot, name);
 }
 
 /** Touch <tree>/.dirxmldev/fishbone.refresh so an open webview reloads. */
@@ -27,8 +30,8 @@ export function fishboneRefresh(treeRoot: string): string {
   return file;
 }
 
-export function fishboneReveal(treeRoot: string, driverName: string, nodeIdOrRef: string): string {
-  const model = fishboneGet(treeRoot, driverName);
+export async function fishboneReveal(treeRoot: string, driverName: string, nodeIdOrRef: string): Promise<string> {
+  const model = await fishboneGet(treeRoot, driverName);
   const byId = filesForNode(model, nodeIdOrRef);
   if (byId[0]) {
     return path.join(model.treeRoot, byId[0].file);

@@ -473,10 +473,9 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   [spikes/prd-rest-live.md](spikes/prd-rest-live.md). Open check: whether
   `POST /index/permissions ADD_OR_MODIFY` makes a just-deployed PRD
   requestable before the index's 10-minute interval.
-- **`bin/idm query <tree> fishbone <driver> --json`** — the JSON the VS Code /
-  Cursor fishbone viewer (`extensions/dirxmldev-visual/`, PR #1) builds itself from `driver.xml`; serving it from the CLI keeps
-  one reader of the manifest and lets the viewer follow model changes
-  (`docs/vscode-extension-v1.md` proposes it).
+- ~~**`bin/idm query <tree> fishbone <driver> --json`**~~ — built 2026-09-24
+  (`edit/Fishbone`, `query … drivers --json` for the picker); extension 0.1.2 draws
+  from it and its own manifest parser is gone (docs/vscode-extension-v1.md §6.3).
 - ~~**`package.fetch` refuses every download with `REFUSED <short>_<ver>: null`**~~ — **fixed
   2026-09-21**: `HttpResponse.BodyHandlers.ofFile(path, options…)` drops the implicit
   `WRITE` once any option is passed, so every download died in a message-less
