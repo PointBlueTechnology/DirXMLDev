@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.operate;
 
+import com.pointblue.dirxml.dev.deploy.AgentWriteGate;
 import com.pointblue.dirxml.dev.deploy.Environments;
 import com.pointblue.dirxml.dev.deploy.Secrets;
 import com.pointblue.dirxml.dev.deploy.Vault;
@@ -71,6 +72,14 @@ public final class OperateCli {
         if (envName == null) {
             System.err.println("--env <name> is required (environments.properties; see docs/vault-deploy.md)");
             return 2;
+        }
+        if (mutatesVault(cmd, sub)) {
+            String why = AgentWriteGate.refusal(envName, true, first(opts, "confirm"), System.getenv(AgentWriteGate.ENV));
+            if (why != null) {
+                Operate.Result refused = Operate.Result.refused(why);
+                System.out.print(json ? refused.json() + "\n" : refused.text());
+                return 1;
+            }
         }
         Environments.Environment env = Environments.load().get(envName);
         Path tree = Paths.get(opts.containsKey("tree") ? first(opts, "tree") : ".");
@@ -278,6 +287,27 @@ public final class OperateCli {
             }
         }
         return 0;
+    }
+
+    /** Operate commands that change the vault. Read-only status, cache view, secrets list, and trace show/tail do not. */
+    static boolean mutatesVault(String cmd, String sub) {
+        switch (cmd) {
+            case "driver.start":
+            case "driver.stop":
+            case "driver.restart":
+            case "driver.migrate":
+            case "driver.resync":
+            case "driver.submit":
+                return true;
+            case "driver.cache":
+                return "clear".equals(sub);
+            case "driver.secrets":
+                return "set".equals(sub) || "remove".equals(sub);
+            case "driver.trace":
+                return "set".equals(sub) || "reset".equals(sub);
+            default:
+                return false;
+        }
     }
 
     private static String first(Map<String, List<String>> opts, String key) {

@@ -125,6 +125,51 @@ public final class Environments {
         return new ArrayList<>(names);
     }
 
+    /**
+     * One environment as {@code doctor} reports it: names, tier, and whether the
+     * connection fields are configured. The password is never read or copied —
+     * {@link #passwordConfigured} is only "a literal or an indirect form is present".
+     */
+    public static final class Described {
+        public final String name;
+        public final String tier;
+        public final boolean tierRecognized;
+        public final boolean urlPresent;
+        public final boolean bindDnPresent;
+        public final boolean passwordConfigured;
+        public final boolean driverSetPresent;
+
+        Described(String name, String tier, boolean tierRecognized, boolean urlPresent,
+                  boolean bindDnPresent, boolean passwordConfigured, boolean driverSetPresent) {
+            this.name = name;
+            this.tier = tier;
+            this.tierRecognized = tierRecognized;
+            this.urlPresent = urlPresent;
+            this.bindDnPresent = bindDnPresent;
+            this.passwordConfigured = passwordConfigured;
+            this.driverSetPresent = driverSetPresent;
+        }
+    }
+
+    /** Every environment in the file, without resolving secrets. */
+    public List<Described> describe() {
+        List<Described> out = new ArrayList<>();
+        for (String name : names()) {
+            String tierRaw = props.getProperty(name + ".tier");
+            String tier = tierRaw == null || tierRaw.isBlank() ? "dev" : tierRaw.trim().toLowerCase();
+            boolean recognized = tier.equals("dev") || tier.equals("stg") || tier.equals("prd");
+            out.add(new Described(name, tier, recognized,
+                present(name, "url"), present(name, "bindDn"),
+                SecretSource.has(props, name + ".password"), present(name, "driverSet")));
+        }
+        return out;
+    }
+
+    private boolean present(String name, String key) {
+        String v = props.getProperty(name + "." + key);
+        return v != null && !v.isBlank();
+    }
+
     public Environment get(String name) throws IOException {
         String url = req(name, "url");
         String bindDn = req(name, "bindDn");
