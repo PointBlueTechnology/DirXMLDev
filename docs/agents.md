@@ -1,8 +1,12 @@
 # Using DirXMLDev from an agent
 
 Any agent that can read files and run a shell uses the same interface as a
-person: `bin/idm` and `bin/apps`. There is no agent-specific protocol and no
-MCP server. The product decision is one CLI.
+person: `bin/idm` and `bin/apps`. That CLI is the contract. `bin/idm` with no
+arguments is the command list.
+
+An optional MCP server wraps a subset of those commands for clients that call
+tools. It shells out to the CLI and does not add flags. See
+[MCP](#mcp-optional) and [mcp.md](mcp.md).
 
 The instructions are ordinary markdown. A vendor skill directory is only a
 loader for products that auto-read one. If your agent does not, point it at
@@ -67,6 +71,36 @@ In a client repo, copy or symlink that skill directory to the client's
 `.claude/skills/dirxml-dev/` if you want Claude Code to load it without
 opening the DirXMLDev checkout. Other agents ignore that directory. They use
 the client `AGENTS.md` instead.
+
+## MCP (optional)
+
+[`mcp/dirxmldev-mcp`](../mcp/dirxmldev-mcp) is a stdio server. It runs `bin/idm`
+(and a few read-only `bin/apps` commands). It does not reimplement the engine.
+Install, the Cursor `mcp.json` snippet, and the full tool list are in
+[mcp.md](mcp.md).
+
+Reads and dry-runs are available as soon as the server is running.
+`idm.vault.deploy.plan` is always `vault.deploy --dry-run`.
+
+Writes are a small set: `idm.vault.deploy`, `idm.vault.rollback`,
+`idm.driver.start`, `idm.driver.stop`, `idm.driver.restart`,
+`idm.driver.cache.clear`. Both gates have to be open or the server does not
+start `bin/idm`:
+
+1. `IDM_AGENT_ALLOW_WRITE=1` in the server process. Unset or any other value
+   leaves mutators off. Changing it means restarting the server.
+2. The tool call sets `confirm` to `true`.
+
+`deleteDriver` or `deleteAll` also needs `confirmDeletes: true`. Production
+still needs the CLI confirm: the call sets `confirmEnv` to the environment
+name, and the server passes `--confirm <env>`. The server never passes
+`--force`, `--step`, or `driver.trace --follow`.
+
+Tree edits (`policy.add`, `gcv.set`, and the rest), `driver.secrets`,
+`driver.migrate`, `driver.resync`, `driver.submit`, and `bin/apps` writes
+(`request`, `approve`, `deny`, …) are not tools. Run those with the CLI, with
+a person reading the dry-run. Tool results strip values from
+`environments.properties` and `secrets*.properties`.
 
 ## Cursor
 

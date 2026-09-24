@@ -156,6 +156,7 @@ Windows: `bin\idm.cmd`. Step-by-step, including the engine jars and a client
 | `src/` | Model, as-code, validate, edit, simulate, deploy, operate |
 | `docs/` | User guides, then design notes and spikes |
 | `docs/agents.md`, `docs/agent-guide.md` | How any agent runs the loop |
+| `mcp/dirxmldev-mcp/` | Optional MCP server over a subset of `bin/idm` ([docs/mcp.md](docs/mcp.md)) |
 | `.claude/skills/dirxml-dev/` | The same loop, as a Claude Code skill |
 | `extensions/dirxmldev-visual/` | Read-only policy-flow fishbone |
 | `lib/` | Engine jars (gitignored) |
@@ -175,6 +176,12 @@ Claude Code also auto-loads `.claude/skills/dirxml-dev/` when it runs in this
 checkout. That skill is a loader for the same instructions, not a second
 product. Copy or symlink it into a client repo's `.claude/skills/` only when
 the agent is Claude Code.
+
+Clients that call tools can run the optional MCP server in
+`mcp/dirxmldev-mcp`. It shells out to `bin/idm`. Reads and dry-runs are on by
+default. Vault deploy, rollback, and driver start/stop/cache clear stay off
+unless `IDM_AGENT_ALLOW_WRITE=1` and the call sets `confirm`. Tree edits stay
+on the CLI. Details: [docs/mcp.md](docs/mcp.md).
 
 Policy tests against sample events are the DirXML Policy Simulator. This
 repository is the loop around it.
