@@ -314,24 +314,48 @@ public final class Doctor {
         Path dir = req.libDir();
         List<String> missing = new ArrayList<>();
         List<String> present = new ArrayList<>();
-        for (String name : REQUIRED_JARS) {
-            if (Files.isRegularFile(dir.resolve(name))) {
-                present.add(name);
-            } else {
-                missing.add(name);
+        List<String> links = new ArrayList<>();
+        boolean directoryLink = Files.isSymbolicLink(dir);
+        if (!directoryLink) {
+            for (String name : REQUIRED_JARS) {
+                Path jar = dir.resolve(name);
+                if (Files.isSymbolicLink(jar)) {
+                    links.add(name);
+                } else if (Files.isRegularFile(jar)) {
+                    present.add(name);
+                } else {
+                    missing.add(name);
+                }
             }
         }
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("directory", dir.toString());
         fields.put("present", new ArrayList<Object>(present));
         fields.put("missing", new ArrayList<Object>(missing));
-        if (!missing.isEmpty()) {
-            String detail = "Missing " + String.join(", ", missing) + ". Put the proprietary NetIQ/OpenText IDM jars in "
-                + dir + " (or symlink lib to the DirXML Simulator's lib/). They come from an IDM engine "
-                + "(/opt/novell/eDirectory/lib/dirxml/classes/) or a Designer install, and they are gitignored. "
-                + "See docs/install.md section 2.";
-            fields.put("detail", detail);
-            return new Check("lib", false, "lib: FAIL  missing " + String.join(", ", missing), List.of(detail), fields);
+        fields.put("symlinks", new ArrayList<Object>(links));
+        if (directoryLink || !links.isEmpty() || !missing.isEmpty()) {
+            StringBuilder detail = new StringBuilder();
+            if (directoryLink) {
+                detail.append("lib is a directory symlink. ");
+            }
+            if (!links.isEmpty()) {
+                detail.append("Symlinked jars: ").append(String.join(", ", links)).append(". ");
+            }
+            if (!missing.isEmpty()) {
+                detail.append("Missing ").append(String.join(", ", missing)).append(". ");
+            }
+            detail.append("Maven's requireFilesExist check compares each path with its canonical path and ")
+                .append("reports a directory symlink of lib/, or a symlink of a jar, as missing. ")
+                .append("Copy the proprietary NetIQ/OpenText IDM jars into a real ").append(dir)
+                .append(" directory. They come from an IDM engine ")
+                .append("(/opt/novell/eDirectory/lib/dirxml/classes/) or a Designer install, and they are gitignored. ")
+                .append("See docs/install.md section 2.");
+            String text = detail.toString();
+            fields.put("detail", text);
+            String summary = directoryLink || !links.isEmpty()
+                ? "lib: FAIL  symlink is not a Maven file"
+                : "lib: FAIL  missing " + String.join(", ", missing);
+            return new Check("lib", false, summary, List.of(text), fields);
         }
         if (req.checkEngineClasses) {
             List<String> unloaded = new ArrayList<>();
