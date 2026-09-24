@@ -1,5 +1,9 @@
 # Phase 3 design — edit operations, the simulate gate, and the MCP server
 
+Historical design note. The shipped loop is [day-to-day.md](day-to-day.md) and
+[agent-guide.md](agent-guide.md). `simulate --against` takes another as-code
+directory. `policy.add` places a link with `--at after:<path>`, not `--after`.
+
 Status: **implemented** (2026-09-08; build-order section at the end records what
 landed). Follows [plan.md](plan.md) Phase 3; builds on the model
 ([model.md](model.md)) and the validator ([validation.md](validation.md)).
@@ -194,10 +198,10 @@ idm validate tree/                                  # 0 errors: the baseline is 
 idm harvest … cases/                                # (simulator) regression corpus, or reuse the client's
 
 idm policy.add tree/ --driver AD --scope subscriber --name sub-ctp-NormalizeTitle \
-    --link subscriber-command --after "drivers/AD/subscriber/sub-ctp-Transform"
+    --link subscriber-command --at "after:drivers/AD/subscriber/sub-ctp-Transform"
 # edit tree/drivers/AD/subscriber/sub-ctp-NormalizeTitle.policy.xml
 idm validate tree/
-idm simulate tree/ --cases cases/ --against tree@HEAD   # what changed, case by case
+idm simulate tree/ --cases cases/ --against /path/to/tree-before   # another as-code tree, not a git rev
 git commit                                          # the tree is the source of truth
 # Phase 4: idm vault.diff → deploy STG → verify → promote
 ```

@@ -34,7 +34,8 @@ so you can set them on the lab afterwards.
   and every ACL**. `admin` does; a plain read-only account usually does not see
   ACLs or password policies, and the bundle is then incomplete without an error.
 
-[getting-started.md](getting-started.md) §1–§2 has the install in full.
+[install.md](install.md) §1–§2 has the install in full. Using the built tool
+is [getting-started.md](getting-started.md).
 
 ### 1.2 A working directory
 
