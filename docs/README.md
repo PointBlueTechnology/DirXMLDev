@@ -17,6 +17,7 @@ the help.
 | [examples/](examples/) | Copy sanitized, fictional snippets |
 | [walkthrough.md](walkthrough.md) | Follow the same loop in one long narrative |
 | [agents.md](agents.md) | Point any agent at the tool (Cursor, Claude Code, Codex, others) |
+| [mcp.md](mcp.md) | Optional MCP server: reads, dry-runs, and gated writes over `bin/idm` |
 | [agent-guide.md](agent-guide.md) | The loop and the refusal rules that agent follows |
 | [install.md](install.md) | Build `bin/idm` from source and configure a workstation |
 

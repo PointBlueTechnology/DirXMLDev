@@ -85,6 +85,9 @@ and point the agent at [agent-guide.md](agent-guide.md).
 Claude Code, when that is the agent, also loads `.claude/skills/dirxml-dev/`
 automatically in this checkout. Other agents do not need that directory.
 
+An optional MCP server in `mcp/dirxmldev-mcp` wraps reads, dry-runs, and a
+few gated writes. It is not required. [mcp.md](mcp.md) is the wiring.
+
 ## 3. A working directory per client
 
 The tool never keeps client content in this repository. Make one directory
