@@ -116,17 +116,7 @@ public final class DeployCli {
 
     /** A command that will change the vault. {@code --dry-run} is never a write. */
     static boolean writesVault(String cmd, Map<String, List<String>> opts) {
-        boolean yes = opts.containsKey("yes");
-        boolean dryRun = opts.containsKey("dry-run");
-        switch (cmd) {
-            case "vault.deploy":
-                return (yes || opts.containsKey("step")) && !dryRun;
-            case "vault.rollback":
-            case "vault.import-clone":
-                return yes;
-            default:
-                return false;
-        }
+        return AgentWriteGate.writesVault(cmd, opts);
     }
 
     private static String first(Map<String, List<String>> opts, String key) {

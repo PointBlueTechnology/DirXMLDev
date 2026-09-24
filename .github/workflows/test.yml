@@ -1,8 +1,9 @@
-# Proprietary NetIQ/OpenText jars in lib/ and a locally installed dirxml-simulator
-# are required to compile. They are not in this repository and the simulator is
-# not on Maven Central, so there is no profile that runs the suite without them.
-# bin/require-engine.sh fails this job with setup steps before Maven can report
-# a missing systemPath or an unresolved com.pointblue.dirxml:dirxml-simulator artifact.
+# Default job `test` is what a pull request must pass. It does not need the
+# proprietary IDM jars or dirxml-simulator (neither is in this repo).
+# Job `engine` runs the full `mvn -B test` only when the repository variable
+# RUN_ENGINE_TESTS is true. On a clean GitHub-hosted runner that variable is
+# unset, so the job is skipped and the workflow stays green.
+# See docs/install.md section 2.4.
 
 name: test
 
@@ -26,6 +27,70 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
+
+      - name: Validate workflow YAML
+        run: |
+          python3 - << 'PY'
+          import sys
+          try:
+              import yaml
+          except ImportError:
+              import subprocess
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "pyyaml", "-q"])
+              import yaml
+          with open(".github/workflows/test.yml") as f:
+              data = yaml.safe_load(f)
+          jobs = data["jobs"]
+          assert "test" in jobs and "engine" in jobs
+          assert "idm.portable" in open(".github/workflows/test.yml").read()
+          print("workflow yaml ok", sorted(jobs))
+          PY
+
+      - name: Shell syntax
+        run: |
+          dash -n bin/idm
+          dash -n bin/require-engine.sh
+          dash -n bin/ci-portable.sh
+
+      - name: Engine jars (informational)
+        run: bash bin/require-engine.sh --inform
+
+      - name: Doctor shell fallback
+        run: |
+          set +e
+          out=$(HOME="$(mktemp -d)" bin/idm doctor --json)
+          code=$?
+          set -e
+          printf '%s\n' "$out"
+          test "$code" -eq 1
+          printf '%s\n' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] is False; names={c["name"] for c in d["checks"]}; assert {"jdk","simulator","lib"} <= names'
+
+      - name: Portable tests
+        run: mvn -B -Pidm.portable test
+
+  engine:
+    # Full suite. Skipped unless a maintainer turns it on (self-hosted runner
+    # or a machine that already has lib/ and the simulator). A skip is not a failure.
+    if: vars.RUN_ENGINE_TESTS == 'true'
+    runs-on: ${{ vars.ENGINE_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Link engine jars from IDM_LIB
+        env:
+          IDM_LIB: ${{ vars.IDM_LIB }}
+        run: |
+          if [ -n "$IDM_LIB" ]; then
+            ln -sfn "$IDM_LIB" lib
+          fi
 
       - name: Require engine jars and simulator
         run: bash bin/require-engine.sh

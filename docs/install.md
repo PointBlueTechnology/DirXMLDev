@@ -88,6 +88,63 @@ automatically in this checkout. Other agents do not need that directory.
 An optional MCP server in `mcp/dirxmldev-mcp` wraps reads, dry-runs, and a
 few gated writes. It is not required. [mcp.md](mcp.md) is the wiring.
 
+### 2.4 Check the workstation (`doctor`) and what CI runs
+
+`bin/idm doctor` reports whether this machine can run the tool. It checks JDK 21,
+the simulator jar at the version this repo pins (`1.5.2`, or `IDM_SIM_VERSION`),
+and the ten proprietary jars in `lib/`. It does not print passwords, bind DNs, or
+URLs.
+
+```bash
+bin/idm doctor                 # one line per check; exit 1 when something is missing
+bin/idm doctor --json          # the same report as JSON (ok, checks[])
+bin/idm doctor --env stg       # also parse environments.properties and probe LDAPS
+```
+
+`--env` reads `environments.properties` (or `IDM_ENVIRONMENTS`) and lists each
+environment's name, tier, and whether a URL, a bind DN, a password, and a driver
+set are configured. The LDAPS probe runs only for the named environment. A refused
+handshake or a bad password is reported as a failure; the password and the bind DN
+are not printed. With no JDK and no built classes, the shell launcher still prints
+the JDK, simulator, and `lib/` lines so a broken workstation is diagnosable before
+`mvn` succeeds.
+
+**Agent write gate.** `vault.deploy` with `--yes` or `--step`, `vault.rollback --yes`,
+`vault.import-clone --yes`, and the operate commands that change a driver
+(`driver.start|stop|restart|migrate|resync|submit`, `driver.cache clear`,
+`driver.secrets set|remove`, `driver.trace set|reset`) refuse to run unless
+`IDM_AGENT_ALLOW_WRITE=1` or the command includes `--confirm <env>` for that same
+environment. `--dry-run` and read-only commands are not writes. The tier rules in
+§4 still apply on top of this gate; the gate is what stops an agent from mutating
+a vault when neither the environment variable nor an explicit confirm is present.
+It is checked before any secret is resolved and before LDAP is opened.
+
+**CI.** GitHub Actions (`.github/workflows/test.yml`) has two jobs:
+
+| Job | When it runs | What it runs |
+|---|---|---|
+| `test` | every push and pull request | workflow YAML, shell syntax, `bin/require-engine.sh --inform` (missing jars are a message, not a failure), the `doctor --json` shell fallback, and `mvn -B -Pidm.portable test` |
+| `engine` | only when the repository variable `RUN_ENGINE_TESTS` is `true` | `bin/require-engine.sh` (failure if jars are missing) and `mvn -B test` |
+
+`idm.portable` compiles doctor, the environment parser, and the write gate against
+a stub LDAP client and runs `DoctorTest` and `AgentWriteGateTest`. It does not
+compile the rest of the tree. A normal `mvn test` is still the full suite: the
+enforcer in `pom.xml` stops it with the jar list when `lib/` or the simulator is
+absent, which is what you want on a workstation where you meant to compile
+everything.
+
+A clean GitHub-hosted runner has no proprietary jars, so `test` is the required
+check and `engine` stays skipped. To run the full suite in Actions, on a
+self-hosted runner that already has the simulator in `~/.m2` and the jars on disk:
+
+1. Set the repository variable `RUN_ENGINE_TESTS` to `true`.
+2. Set `ENGINE_RUNNER` to that runner's label (`ubuntu-latest` is the default).
+3. Set `IDM_LIB` to the absolute path of the directory that holds the ten jars.
+   The engine job symlinks it to `lib/`. Do not commit the jars.
+
+Locally, with the jars installed as in §2.1, `mvn -B test` is the full suite.
+Without them, `mvn -B -Pidm.portable test` is the subset CI runs.
+
 ## 3. A working directory per client
 
 The tool never keeps client content in this repository. Make one directory
@@ -176,7 +233,10 @@ matches the last recorded deploy (or `--capture-drift` first), and
 `<env>.requires` satisfied when it is set. `simulate` is how you prove a
 policy change against a corpus; the production gate does not run the corpus
 itself. The design note is [vault-deploy.md](vault-deploy.md), "Environments
-and gating". The operator's version is [day-to-day.md](day-to-day.md).
+and gating". The operator's version is [day-to-day.md](day-to-day.md). Any
+command that would change the vault also needs `IDM_AGENT_ALLOW_WRITE=1` or
+`--confirm <env>` (§2.4); `--confirm prd` satisfies both the production tier
+and that gate.
 
 **TLS trust.** When `<env>.trustAll` is omitted it defaults to true: LDAPS
 accepts the server certificate without checking the JDK truststore. Set

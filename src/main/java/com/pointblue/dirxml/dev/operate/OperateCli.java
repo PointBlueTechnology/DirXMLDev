@@ -291,23 +291,7 @@ public final class OperateCli {
 
     /** Operate commands that change the vault. Read-only status, cache view, secrets list, and trace show/tail do not. */
     static boolean mutatesVault(String cmd, String sub) {
-        switch (cmd) {
-            case "driver.start":
-            case "driver.stop":
-            case "driver.restart":
-            case "driver.migrate":
-            case "driver.resync":
-            case "driver.submit":
-                return true;
-            case "driver.cache":
-                return "clear".equals(sub);
-            case "driver.secrets":
-                return "set".equals(sub) || "remove".equals(sub);
-            case "driver.trace":
-                return "set".equals(sub) || "reset".equals(sub);
-            default:
-                return false;
-        }
+        return AgentWriteGate.mutatesVault(cmd, sub);
     }
 
     private static String first(Map<String, List<String>> opts, String key) {

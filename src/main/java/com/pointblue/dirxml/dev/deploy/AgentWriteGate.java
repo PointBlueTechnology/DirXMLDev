@@ -1,5 +1,8 @@
 package com.pointblue.dirxml.dev.deploy;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * CLI gate for vault mutations ({@code vault.deploy --yes}/{@code --step},
  * {@code vault.rollback --yes}, {@code vault.import-clone --yes}, and the
@@ -35,5 +38,41 @@ public final class AgentWriteGate {
         }
         String target = envName == null || envName.isBlank() ? "<env>" : envName;
         return "refusing vault write to '" + target + "': set " + ENV + "=1 or pass --confirm " + target;
+    }
+
+    /** A vault CLI command that will change the vault. {@code --dry-run} is never a write. */
+    public static boolean writesVault(String cmd, Map<String, List<String>> opts) {
+        boolean yes = opts.containsKey("yes");
+        boolean dryRun = opts.containsKey("dry-run");
+        switch (cmd) {
+            case "vault.deploy":
+                return (yes || opts.containsKey("step")) && !dryRun;
+            case "vault.rollback":
+            case "vault.import-clone":
+                return yes;
+            default:
+                return false;
+        }
+    }
+
+    /** Operate commands that change the vault. Status, cache view, secrets list, and trace show/tail do not. */
+    public static boolean mutatesVault(String cmd, String sub) {
+        switch (cmd) {
+            case "driver.start":
+            case "driver.stop":
+            case "driver.restart":
+            case "driver.migrate":
+            case "driver.resync":
+            case "driver.submit":
+                return true;
+            case "driver.cache":
+                return "clear".equals(sub);
+            case "driver.secrets":
+                return "set".equals(sub) || "remove".equals(sub);
+            case "driver.trace":
+                return "set".equals(sub) || "reset".equals(sub);
+            default:
+                return false;
+        }
     }
 }

@@ -268,7 +268,7 @@ public final class Doctor {
         if (!Files.isRegularFile(jar)) {
             String detail = "Install the DirXML Simulator and run 'mvn install' in that repo so "
                 + jar + " exists. The launcher reads IDM_SIM_VERSION (default " + PROJECT_SIM_VERSION
-                + ", the version in pom.xml). See docs/getting-started.md section 2.";
+                + ", the version in pom.xml). See docs/install.md section 2.";
             notes.add(detail);
             fields.put("detail", detail);
             return new Check("simulator", false, "simulator: FAIL  " + version + " missing", notes, fields);
@@ -329,7 +329,7 @@ public final class Doctor {
             String detail = "Missing " + String.join(", ", missing) + ". Put the proprietary NetIQ/OpenText IDM jars in "
                 + dir + " (or symlink lib to the DirXML Simulator's lib/). They come from an IDM engine "
                 + "(/opt/novell/eDirectory/lib/dirxml/classes/) or a Designer install, and they are gitignored. "
-                + "See docs/getting-started.md section 2.";
+                + "See docs/install.md section 2.";
             fields.put("detail", detail);
             return new Check("lib", false, "lib: FAIL  missing " + String.join(", ", missing), List.of(detail), fields);
         }
