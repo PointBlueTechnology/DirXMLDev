@@ -1,321 +1,204 @@
-# Getting started — installing and configuring DirXMLDev
+# Getting started — using DirXMLDev
 
-This is the setup guide for a person (or the agent working for them) who wants
-to run DirXMLDev against a real Identity Manager environment. It covers what to
-install, what goes in the two private configuration files, and how to check
-that each part works. The process itself — take a driver set as code, change
-it, prove it, deploy it, operate it — is in [walkthrough.md](walkthrough.md).
+This is for someone who already has `bin/idm`. It gets a client directory,
+a vault target, and a first import onto disk. Building from source, the
+engine jars, the macOS Keychain, and TLS are in [install.md](install.md).
 
-Everything is a command-line tool: `bin/idm` (the tool) and `bin/apps` (the
-Identity Applications helper). There is no server, no database and no GUI.
+You run commands from the **client directory**. The DirXMLDev checkout is only
+where `bin/idm` lives. Call it by path (`~/IdeaProjects/DirXMLDev/bin/idm`) or
+put it on `PATH`. Client content never goes in the DirXMLDev repository.
 
-## 1. What you need
+`bin/idm` with no arguments lists every command. `bin/apps --help` lists the
+Identity Applications helper.
 
-| Requirement | Why | Check |
-|---|---|---|
-| **JDK 21** | the tool and the policy simulator are Java 21 | `/usr/libexec/java_home -v 21` (macOS) or `java -version` |
-| **Maven 3.9+** | build | `mvn -v` |
-| **git** | the tree is versioned; the deploy gate reads commits | `git --version` |
-| **Python 3.8+** | only for `bin/apps` (standard library, nothing to install) | `python3 --version` |
-| **The DirXML Policy Simulator** built and installed locally | the engine that validates and simulates policies | `ls ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/` |
-| **The Identity Manager engine jars** | proprietary; the simulator and the tool load the real policy compilers and the LDAP/extended-operation client | see §2 |
-| **Network access to the vault** | LDAPS to the eDirectory server that holds the driver set (port 636) | `nc -z host 636` |
-| Optional: **SSH to the engine host** | `driver.trace tail` reads the trace file over SSH | `ssh user@host true` |
-| Optional: **Designer 4.8+** on the workstation | only for `form.edit` (the vendor's JSON form builder is a Designer plugin) | `bin/idm form.edit --check` |
-| Optional: **the Identity Applications** URL and an application user | `bin/apps` runs a workflow end to end without a browser | `bin/apps --env <env> token` |
-| Optional: **kubectl/SSH to the applications host** | reading the workflow engine log | your own `kubectl` or SSH access |
-
-Roles and resources are not in scope: they are managed in the Identity
-Applications, not in Designer and not by this tool.
-
-## 2. Install
-
-### 2.1 The simulator and the engine jars
-
-```bash
-git clone https://github.com/PointBlueTechnology/DirXMLSimulator ~/IdeaProjects/DirXMLSimulator
-```
-
-Put the engine jars from your Identity Manager installation into the
-simulator's `lib/` (they are never committed; the directory is gitignored):
-`dirxml.jar`, `dirxml_misc.jar`, `nxsl.jar`, `xp.jar`, `js.jar`, `jclient.jar`,
-`ldap.jar`, `XDS.jar`, `dhutil.jar`, `CommonDriverShim.jar`. They come from
-the engine server (`/opt/novell/eDirectory/lib/dirxml/classes/`) or from the
-Designer install. Then build and install the simulator so Maven can find it:
-
-```bash
-cd ~/IdeaProjects/DirXMLSimulator && JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q install
-```
-
-### 2.2 DirXMLDev
-
-```bash
-git clone <this repository> ~/IdeaProjects/DirXMLDev
-cd ~/IdeaProjects/DirXMLDev
-ln -s ~/IdeaProjects/DirXMLSimulator/lib lib          # the same jars; lib/ is gitignored
-JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q test  # builds and runs the test suite
-bin/idm                                                # prints every command
-```
-
-`bin/idm` finds JDK 21 by itself (`IDM_JAVA_HOME` overrides), compiles on first
-use if `target/classes` is missing, and puts `target/classes`, `lib/*.jar` and
-the simulator jar on the class path. `IDM_SIM_VERSION` selects another
-installed simulator version; `IDM_JAVA_OPTS` passes JVM options through (used
-for `import-live` credentials and for TLS settings, below).
-
-Windows: `bin\idm.cmd` is the equivalent launcher (`IDM_JAVA_HOME` or
-`JAVA_HOME` must point at a JDK 21; the simulator jar is found under
-`%USERPROFILE%\.m2`); `bin/idm` also works from Git Bash or WSL. For the common
-Windows task — a fresh Designer project from a vault without Designer touching
-the vault — see [howto-fresh-designer-project.md](howto-fresh-designer-project.md).
-To carry a customer's vault home as a zip and stand it up as a test vault, see
-[howto-clone-vault.md](howto-clone-vault.md).
-
-### 2.3 Use it from an agent
-
-The repository ships a Claude Code skill in `.claude/skills/dirxml-dev/` — the
-loop, the rules (never deploy without reading the plan, never print a secret,
-never empty a kind, …), the recipes and the facts learned on real vaults. It is
-active automatically when Claude Code runs in this repository; for a client
-repository, copy or symlink that directory into the client's `.claude/skills/`.
-
-## 3. A working directory per client
-
-The tool never keeps client content in this repository. Make one directory
-(ideally its own git repository) per client or per environment family:
+## 1. One directory per client
 
 ```
 client-acme/
-  environments.properties     vault targets and tiers          — gitignored, never committed
-  secrets-stg.properties      what the tree cannot carry       — gitignored, never committed
+  environments.properties     vault targets — gitignored, mode 600
+  secrets-stg.properties      driver secrets — gitignored, mode 600
   secrets-prd.properties
-  tree/                       the driver set as code (bin/idm import-* writes it) — committed
-  cases/                      the simulator's regression corpus — committed
-  deploy-log/<env>.jsonl      one line per deploy/operation (the tool appends) — committed
-  deploy-snapshots/<env>/     LDIF taken before every write (the tool writes) — gitignored
-  catalog/                    package jars fetched from the update site (optional) — committed
+  tree/                       the driver set as code — committed
+  cases/                      regression corpus for simulate — committed
+  deploy-log/<env>.jsonl      one line per deploy or operation — committed
+  deploy-snapshots/<env>/     LDIF taken before every write — gitignored
+  catalog/                    package jars (optional) — committed
 ```
 
-Add `environments.properties`, `secrets*.properties`, `deploy-snapshots/` and
-`*.ldif` to that repository's `.gitignore` before the first commit. Every
-command takes the tree directory as its first argument and `--env <name>` for
-anything that touches a vault; run them from the client directory so
-`environments.properties` is found (or point `IDM_ENVIRONMENTS` at it).
+Ignore `environments.properties`, `secrets*.properties`, `deploy-snapshots/`,
+and `*.ldif` before the first commit. A redacted copy of the two property
+files is in [examples/](examples/).
 
-## 4. `environments.properties` — the vault targets
+`bin/idm` looks for `environments.properties` in `$IDM_ENVIRONMENTS`, then the
+working directory, then `~/.idm/environments.properties`.
 
-One block per environment; the prefix is the environment's name, which is what
-you type after `--env` and, for production, after `--confirm`.
+## 2. What the tree is
+
+`tree/` is the source of truth: one file per policy, filter, form, and so on,
+plus three manifests (`driverset.xml`, `library/library.xml`,
+`drivers/<driver>/driver.xml`). You commit it. You do not hand-edit the
+manifests; operations update them.
+
+A plain-language map is [tree-layout.md](tree-layout.md). The short version:
+
+```
+tree/
+  driverset.xml                 which drivers exist
+  config-values.xml             driver-set GCVs
+  library/                      shared policies, ECMAScript, mapping tables
+  drivers/<driver>/             that driver's policies, filter, channels
+  drivers/<driver>/provisioning/   JSON forms and PRDs (User Application driver)
+  .package-baseline/            pre-edit copy of a customized packaged object
+  .gitattributes                written by import: * -text, so line endings stay exact
+```
+
+`cases/`, `environments.properties`, and `secrets-*.properties` sit **beside**
+`tree/`, not inside it.
+
+## 3. Configure the vault target
+
+One block per environment. The prefix is the name you pass to `--env` and, on
+production, to `--confirm`. The hosts below are fictional.
 
 ```properties
-# --- staging -------------------------------------------------------------
-stg.url=ldaps://idm-stg.example.com:636        # LDAPS to the vault (required)
-stg.bindDn=cn=idm-deploy,ou=sa,o=system        # a deploy identity with rights on the driver set (required)
-stg.passwordKeychain=idm-stg/cn=idm-deploy     # the bind password from the macOS Keychain (§4.2), or
-                                               #   stg.passwordCommand=op read "op://idm/stg-deploy/password"
-                                               #   stg.passwordEnv=IDM_STG_PASSWORD
-                                               #   stg.password=…   (a literal — dev labs only)
-stg.driverSet=cn=driverset1,o=system           # the driver set this environment means (required)
-stg.tier=stg                                   # dev | stg | prd — decides the gate (required)
-stg.secrets=secrets-stg.properties             # the secrets file for this environment (§4.1)
-stg.sshHost=idm-stg.example.com                # engine host, for driver.trace tail (optional)
-stg.sshUser=idm                                # ssh user; key-based login is assumed (optional)
-stg.formsUrl=https://idm-stg-apps.example.com  # the Identity Applications base URL (optional; forms + bin/apps)
-stg.appsUser=uaadmin                           # bin/apps: the user that requests and approves (optional)
-stg.appsPasswordKeychain=idm-stg-apps/uaadmin  # bin/apps: that user's password — same four forms as above (optional)
-stg.appsClient=rbpmrest                        # bin/apps: OSP client id (optional, default rbpmrest)
-stg.appsSecretKeychain=idm-stg-apps/rbpmrest   # bin/apps: OSP client secret when it differs from the password (any form)
-stg.k8sHost=k3s.example.com                    # containerised applications: host, user, namespace and the
-stg.k8sUser=debian                             #   kubectl command to run there — only for reading the
-stg.k8sNamespace=idm                           #   applications' log during a live proof (optional)
-stg.kubectl=sudo -n k3s kubectl
+# --- staging ---
+stg.url=ldaps://idm-stg.example.com:636
+stg.bindDn=cn=idm-deploy,ou=sa,o=system
+stg.passwordEnv=IDM_STG_PASSWORD
+stg.driverSet=cn=driverset1,o=system
+stg.tier=stg
+stg.secrets=secrets-stg.properties
+stg.trustAll=false
+stg.sshHost=idm-stg.example.com
+stg.sshUser=idm
 
-# --- production ----------------------------------------------------------
+# --- production ---
 prd.url=ldaps://idm.example.com:636
 prd.bindDn=cn=idm-deploy,ou=sa,o=system
-prd.passwordEnv=IDM_PRD_PASSWORD               # the password comes from that environment variable
+prd.passwordEnv=IDM_PRD_PASSWORD
 prd.driverSet=cn=driverset1,o=system
 prd.tier=prd
 prd.secrets=secrets-prd.properties
-prd.requires=stg                               # a green stg deploy of the same tree commit is required first
+prd.trustAll=false
+prd.requires=stg
 ```
 
-**The deploy identity.** Give each environment its own eDirectory user with
-rights only on its driver set (and the User Application driver's `AppConfig`
-subtree when forms/PRDs are deployed). The tool writes nowhere else; `admin`
-works on a lab but should not be the identity in `prd`.
+Required for every environment: `url`, `bindDn`, a password, `driverSet`.
+`tier` is `dev`, `stg`, or `prd` (default `dev` when omitted).
 
-**Every credential takes four forms.** For any key `k` that holds a
-password (`password`, `appsPassword`, `appsSecret`, and every key of the
-secrets file below) the file may carry `k=` (a literal), `kEnv=VAR` (an
-environment variable), `kCommand=…` (a shell command whose output is the
-value, e.g. a password-manager CLI) or `kKeychain=service[/account]` (the
-macOS Keychain, §4.2). Use an indirect form for anything but a throwaway lab:
-the file then holds names, not secrets. The tool warns once per run when
-either file is readable by other users; keep them at mode 600:
+The password is one of four keys, for `password` and for every other secret
+(`appsPassword`, `appsSecret`, and each key in the secrets file):
+
+| Key | Value |
+|---|---|
+| `<k>=` | A literal. Throwaway labs only |
+| `<k>Env=VAR` | An environment variable |
+| `<k>Command=…` | A command whose stdout is the secret (`op read …`, `pass show …`) |
+| `<k>Keychain=service[/account]` | macOS Keychain. [install.md](install.md) has the `security` commands |
 
 ```bash
 chmod 600 environments.properties secrets-*.properties
 ```
 
-**Tiers and the gate.** `dev`: `--yes` or `--step`. `stg`: the same, and the
-tree must validate clean. `prd`: `--confirm prd` typed on the command line,
-a committed tree, a vault that matches the last recorded deploy (or
-`--capture-drift` first), a green simulation when the tree has a corpus, and
-`prd.requires` satisfied. The details are in
-[vault-deploy.md](vault-deploy.md), "Environments and gating".
+The tool warns when either file is readable by other users. It never prints a
+secret.
 
-### 4.1 `secrets-<env>.properties` — what the tree cannot carry
+**What the other keys do**
 
-Exports, projects and the tree hold no passwords. A driver needs them at
-deploy time, so they live in a per-environment file the tool reads and never
-prints, snapshots or logs:
+- `secrets` — file of shim passwords, Remote Loader passwords, and named
+  passwords. A new driver's deploy refuses until each required secret is
+  present (`MISSING SECRET: <driver>.<key>` in the plan). Existing drivers
+  are left alone unless you pass `--secrets missing` or `--secrets all`.
+- `requires` — on a production deploy, a green deploy of the same tree commit
+  to that other environment must already be in `deploy-log/`.
+- `sshHost` / `sshUser` — key-based SSH to the engine host, for
+  `driver.trace tail`. Without them, tail is unavailable; everything else works.
+- `trustAll` — when omitted, LDAPS accepts any server certificate. Set
+  `trustAll=false` once the vault CA is in the JDK truststore
+  ([install.md](install.md) §4.3).
+- `formsUrl`, `appsUser`, `appsPassword` (any of the four forms), optional
+  `appsClient` (default `rbpmrest`) and `appsSecret` — only for `bin/apps`
+  and for `form.edit --env`.
 
-```properties
-AD Driver.shim-auth-password=…                 # DirXML-ShimAuthPassword
-AD Driver.remote-loader-password=…
-AD Driver.named.exchange-service=…             # a named password the policies read
-driverset.named.smtp-relay=…                   # a named password on the driver set
-# any key can be indirect instead of literal (preferred):
-AD Driver.shim-auth-passwordEnv=AD_SHIM_PW                       # from an environment variable
-AD Driver.named.exchange-serviceCommand=op read "op://idm/exchange/password"   # from a command's output
-AD Driver.remote-loader-passwordKeychain=idm-stg/ad-remote-loader             # from the macOS Keychain (§4.2)
-```
+Give each environment its own eDirectory user with rights on its driver set
+(and on the User Application driver's `AppConfig` when you deploy forms or
+PRDs). `admin` is fine on a lab.
 
-A new driver's deploy refuses until every secret the driver needs is present
-(`MISSING SECRET: <driver>.<key>` in the plan). An existing driver's secrets
-are not touched unless you pass `--secrets all|missing`.
+## 4. Import the driver set
 
-### 4.2 macOS Keychain
-
-On a Mac the Keychain is the simplest place for these passwords: nothing is
-on disk in clear, and the login keychain unlocks with the session. Add one
-item per credential (the `-w` without a value prompts, so the password never
-enters shell history), then reference it by service and account:
+The live vault is the ground truth when you can reach it.
 
 ```bash
-security add-generic-password -s idm-stg -a cn=idm-deploy -w          # the stg bind password
-security add-generic-password -s idm-stg-apps -a uaadmin -w           # the applications user
-security add-generic-password -s idm-stg -a ad-remote-loader -w       # a driver secret
+bin/idm import-live tree/ --env stg
+bin/idm validate tree/
+bin/idm vault.diff tree/ --env stg
 ```
 
-```properties
-stg.passwordKeychain=idm-stg/cn=idm-deploy
-stg.appsPasswordKeychain=idm-stg-apps/uaadmin
-# secrets-stg.properties
-AD Driver.remote-loader-passwordKeychain=idm-stg/ad-remote-loader
-```
-
-The tool reads it with `security find-generic-password -s <service> -a
-<account> -w`; `service` alone (no `/account`) takes the first item with that
-service name. An item added with `security` is readable by `security` without
-a prompt; one created in Keychain Access asks once for permission — answer
-*Always Allow*. When the item is missing, the error names the exact
-`add-generic-password` command to run. Linux and Windows have no equivalent
-built in; use `kCommand` with your password manager's CLI (`op read`,
-`pass show`, `secret-tool lookup`, …).
-
-### 4.3 TLS, and when Java cannot reach the vault
-
-The JDK must trust the vault's LDAPS certificate: import the CA into the JDK's
-`cacerts` (`keytool -importcert -cacerts -alias idm-ca -file ca.pem`) or into a
-truststore named with `IDM_JAVA_OPTS=-Djavax.net.ssl.trustStore=…`. When the
-certificate's subject does not match the host name you connect to (a lab, an
-SSH tunnel), add `-Dcom.sun.jndi.ldap.object.disableEndpointIdentification=true`
-to `IDM_JAVA_OPTS` — never in production.
-
-If `ldapsearch`/`curl` reach the vault but every Java command reports
-"No route to host", forward the port over SSH through a host that can reach it
-and define a second environment that points at the tunnel:
+`import-live` reads `url`, `bindDn`, the password, and `driverSet` from the
+environment. A driver-set DN before the output directory overrides `driverSet`:
 
 ```bash
-ssh -f -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 6636:idm-vault:636 user@jump-host
+bin/idm import-live "cn=driverset1,o=system" tree/ --env stg
 ```
 
-```properties
-stgtun.url=ldaps://127.0.0.1:6636    # everything else identical to stg
-```
-
-## 5. The vendor form builder (optional)
-
-`bin/idm form.edit` opens a JSON provisioning form in OpenText's own form
-builder, which ships only as a Designer plugin. Install Designer 4.8 or later
-on the workstation (or copy the plugin's `lib` directory from a Designer
-install and point `IDM_FORMBUILDER` at it), then:
+The older form, with credentials in `IDM_JAVA_OPTS`, still works when you have
+no environments file yet:
 
 ```bash
-bin/idm form.edit tree/ "Help-desk Request Form" --check
+IDM_JAVA_OPTS="-Dldap.url=ldaps://idm-stg.example.com:636 -Dldap.bindDn=cn=idm-deploy,ou=sa,o=system -Dldap.password=…" \
+  bin/idm import-live "cn=driverset1,o=system" tree/
 ```
 
-`--check` reports which executable it will use and prints the one-time fixes
-each OS needs (Gatekeeper quarantine on macOS, SmartScreen on Windows, execute
-bits and `--no-sandbox` on Linux). It never runs them. On Apple silicon the
-vendor bundle is Intel-only and runs under Rosetta; the sibling
-DesignerModernPlatform project rebuilds it on native Electron. Everything
-else about forms (`form.field.add`, `form.preview`, `prd.map`, …) needs no
-builder.
+Do not put a real password in shell history. Prefer `--env`.
 
-## 6. The Identity Applications (optional)
-
-Nothing here is needed to author or deploy forms and workflows — only to
-*prove* them at runtime. With `formsUrl`, `appsUser`, `appsPassword` set (§4):
+Other sources, when the vault is not the one you trust yet:
 
 ```bash
-bin/apps --env stg token                       # OSP password grant works
-bin/apps --env stg permission "Widget Access"  # the PRD as the applications see it (is it indexed? which form?)
-bin/apps --env stg request "Widget Access" --data reason="proof"   # start it
-bin/apps --env stg tasks                       # the approval task
-bin/apps --env stg approve <taskId> --comment "ok"
-bin/apps --env stg history
+bin/idm import-project ~/designer_workspace/Client tree/
+bin/idm import DriverSet-export.xml tree/
+bin/idm import-ldif driverset.ldif tree/
 ```
 
-The bodies these calls send, the required fields and the accepted values are
-in [idapps-rest.md](idapps-rest.md). One timing fact matters: a PRD deployed
-less than about ten minutes ago is not yet in the applications' permission
-index and `request` reports it as not started.
+What to expect the first time:
 
-## 7. Packages (optional)
-
-To add packaged drivers or install packages the way Designer does, keep a
-catalog of package jars in git:
+- `validate` on a tree imported from a running vault reports 0 errors. Warnings
+  and infos (template placeholders, missing localisations) are normal. An error
+  on a production tree is a finding: report it, and do not edit the tree to
+  silence it.
+- `vault.diff` right after `import-live` reports no differences. Exit status 1
+  means the tree and the vault differ.
+- Import writes `tree/.gitattributes` (`* -text`) so git does not rewrite line
+  endings. Keep that file. A CRLF inside an ECMAScript resource must survive
+  checkout or the next diff will show it.
 
 ```bash
-bin/idm package.fetch --catalog catalog/ --short NOVLADBASE,NOVLADDCFG   # from the vendor update site (default site; --site NAME|URL for another)
-bin/idm package.list  --catalog catalog/ --base
+git add tree/ && git commit -m "Import stg driver set"
 ```
 
-Details and the install/upgrade/uninstall commands: [packages.md](packages.md).
+## 5. Look around before you change anything
 
-## 8. Check the installation
-
-Run these once; every one should succeed before the first real change.
+These commands only read the tree.
 
 ```bash
-bin/idm                                            # usage: the tool runs
-bin/idm engine.version --env stg                   # LDAPS + bind + driver set found
-bin/idm driverset.status --env stg                 # every driver: state, start option, cache
-bin/idm import-live tree/ --env stg                 # the driver set as code (url, bind, password, driver set from the environment)
-bin/idm validate tree/                             # the real compilers load every policy; expect 0 errors
-bin/idm vault.diff tree/ --env stg                  # "no differences" right after an import
-bin/idm form.edit tree/ "<any request form>" --check   # only if you will use the builder
-bin/apps --env stg token                            # only if you will use the applications
+bin/idm query tree/ drivers
+bin/idm query tree/ artifacts "AD Driver"
+bin/idm query tree/ chain "AD Driver" sub
+bin/idm query tree/ gcvs "AD Driver"
+bin/idm query tree/ tables "AD Driver"
+bin/idm query tree/ fishbone "AD Driver"
+bin/idm show tree/ "drivers/AD Driver/subscriber/sub-ctp-Transform"
+bin/idm refs tree/ "library/lib-Shared"
 ```
 
-`validate` on a production vault's tree normally reports zero errors and a
-handful of warnings/infos (template placeholders, missing localisations); an
-error means the engine would refuse the object too — read it before changing
-anything.
+`show`, `refs`, and `package.diff` take an **artifact path**: the object's
+name, with no filename extension (`drivers/AD Driver/subscriber/sub-ctp-Transform`,
+not `….policy.xml`). `chain` takes `sub` or `pub`.
 
-## 9. Keep it current
+`bin/idm check tree/` loads the tree and exits 1 when a link points at nothing.
 
-- After upgrading the tool, **re-import each tree from its vault** before the
-  next deploy: a tree written by an older version may lack a kind of object the
-  new version models, and a diff would then propose deleting it. The deployer
-  refuses to empty a kind, but a fresh import is the right fix.
-- `deploy-log/<env>.jsonl` and `cases/` are part of the tree's history; commit
-  them with it. `deploy-snapshots/` is the rollback material for the last
-  deploys; keep it out of git and out of chat.
-- Never paste a password, a bind DN's secret or a snapshot into a
-  conversation; the tool prints names, never values.
-- Prefer the Keychain or a password-manager command over literals in the two
-  credential files, and keep both files at mode 600.
+## 6. Next
+
+- Change, prove, and deploy: [day-to-day.md](day-to-day.md).
+- The same loop as one narrative: [walkthrough.md](walkthrough.md).
+- File-by-file layout: [tree-layout.md](tree-layout.md).
+- Fictional samples: [examples/](examples/).

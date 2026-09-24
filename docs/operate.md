@@ -1,5 +1,9 @@
 # Phase 5 design — operate
 
+Historical design note: which extended operation backs each command, and the
+tier gate. Day-to-day use is [day-to-day.md](day-to-day.md) §5. The gate table
+below matches `Operate.gate`.
+
 Status: **built and proven on the test vault** (2026-09-09; spike findings in [spikes/operate.md](spikes/operate.md)). Follows [plan.md](plan.md) Phase 5; builds on
 [vault-deploy.md](vault-deploy.md) (`Vault`, environments, tiers, secrets, the
 audit log) and [spikes/extended-ops-api.md](spikes/extended-ops-api.md).
@@ -17,9 +21,9 @@ idm driverset.status      --env stg                        every driver: state, 
 idm driver.status         --env stg --driver "AD Driver"
 idm driver.start|stop|restart --env stg --driver "AD Driver" [--wait N]
 idm driver.cache view     --env stg --driver "AD Driver" [--out cases/ad-cache]
-idm driver.cache clear    --env stg --driver "AD Driver" --yes
-idm driver.migrate        --env stg --driver "AD Driver" --xds migrate.xml
-idm driver.resync         --env stg --driver "AD Driver" [--since 2026-09-01T00:00:00Z]
+idm driver.cache clear    --env stg --driver "AD Driver" --yes --confirm stg
+idm driver.migrate        --env stg --driver "AD Driver" --xds migrate.xml --yes
+idm driver.resync         --env stg --driver "AD Driver" [--since 2026-09-01T00:00:00Z] --yes
 idm driver.secrets list|set|remove --env stg --driver "AD Driver" [--name X]
 idm driver.trace show|set|reset|tail --env stg --driver "AD Driver" [--level N] [--file F] [--lines N] [--follow]
 idm engine.version        --env stg
@@ -64,7 +68,7 @@ gating"), applied by what an operation can break:
 | status, cache view, trace show/tail, secrets list, engine.* | free | free | free |
 | start, restart, trace set/reset, secrets set/remove | free | `--yes` | `--yes --confirm <env>` |
 | stop, resync, migrate, submit | `--yes` | `--yes` | `--yes --confirm <env>` |
-| cache clear | `--yes` | `--yes --confirm <env>` | `--yes --confirm <env>` and the cache viewed first in this session (`--i-viewed-it` is not a flag: `cache clear` prints the count and first/last event, then asks) |
+| cache clear | `--yes` | `--yes --confirm <env>` | `--yes --confirm <env>`. The command prints the count and the first and last event before the gate; a missing flag is a refusal after that preview, not a second prompt |
 
 Every state-changing operation appends to `deploy-log/<env>.jsonl` with
 `operation: "operate"`, the command, the driver, the before/after state, and

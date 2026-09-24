@@ -1,6 +1,9 @@
 # Phase 6 design — Designer round-trip, agent workflows, documentation
 
-Status: **design confirmed, building** (2026-09-09). Follows [plan.md](plan.md) Phase 6; builds on
+Historical design note. Using `export`, `export-project`, and `docs` is in
+[day-to-day.md](day-to-day.md). Phase 6 in [plan.md](plan.md) is complete.
+
+Status: **shipped** (design written 2026-09-09). Follows [plan.md](plan.md) Phase 6; builds on
 everything before it — the reader for Designer projects
 (`source.ProjectReader`), the tree operations, the deployer and the operate
 surface. This is the last phase of the driver-development plan; Track P

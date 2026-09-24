@@ -32,7 +32,9 @@ comparison. Both start from the same `tree\` of §2.
    shell works too). `bin\idm` with no arguments lists every command.
 4. A working directory for the customer (not inside the DirXMLDev checkout),
    with an `environments.properties` for the vault — see
-   [getting-started.md](getting-started.md) §3–4. On Windows the password
+   [getting-started.md](getting-started.md) (client directory and the
+   environments file) and [install.md](install.md) if you still need to build.
+   On Windows the password
    should not be a literal in the file:
 
    ```properties
