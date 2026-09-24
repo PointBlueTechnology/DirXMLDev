@@ -79,7 +79,7 @@ public class DoctorTest {
         assertFalse(report.ok);
         assertTrue(text, text.contains("simulator: FAIL"));
         assertTrue(text, text.contains("mvn install"));
-        assertTrue(text, text.contains("docs/getting-started.md"));
+        assertTrue(text, text.contains("docs/install.md"));
         for (String jar : List.of("dirxml.jar", "ldap.jar", "nxsl.jar")) {
             assertTrue(text, text.contains(jar));
         }

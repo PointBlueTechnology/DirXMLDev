@@ -90,7 +90,7 @@ doctor_shell() {
   fi
 
   sim_ok=0
-  sim_detail="Install the DirXML Simulator and run 'mvn install' in that repo so $SIM_JAR exists (version $SIM_VER, the pin in pom.xml). See docs/getting-started.md section 2."
+  sim_detail="Install the DirXML Simulator and run 'mvn install' in that repo so $SIM_JAR exists (version $SIM_VER, the pin in pom.xml). See docs/install.md section 2."
   if [ -f "$SIM_JAR" ]; then
     sim_ok=1
     sim_detail="dirxml-simulator $SIM_VER is on disk; the Java doctor reads its version once target/classes is built."
@@ -114,7 +114,7 @@ doctor_shell() {
     lib_ok=1
     lib_detail="$present jars in $HERE/lib"
   else
-    lib_detail="Missing $missing. Put the proprietary NetIQ/OpenText IDM jars in $HERE/lib (or symlink lib to the DirXML Simulator's lib/). See docs/getting-started.md section 2."
+    lib_detail="Missing $missing. Put the proprietary NetIQ/OpenText IDM jars in $HERE/lib (or symlink lib to the DirXML Simulator's lib/). See docs/install.md section 2."
   fi
 
   cli_detail="The Java CLI is not built, so environments and the LDAPS probe were not checked. With JDK 21, the simulator jar, and lib/*.jar in place, run: mvn compile (or bin/idm doctor again)."
@@ -161,7 +161,10 @@ if [ ! -f "$SIM_JAR" ] && [ "$CMD" != "doctor" ]; then
   exit 1
 fi
 
-if [ ! -d "$HERE/target/classes" ]; then
+# A resources-only target/classes (the portable profile copies resources and skips
+# compile) is not a built CLI. Doctor still reports from the shell when the
+# simulator jar is missing, instead of a ClassNotFoundException.
+if [ ! -f "$HERE/target/classes/com/pointblue/dirxml/dev/Cli.class" ]; then
   if [ "$CMD" = "doctor" ] && { [ ! -f "$SIM_JAR" ] || ! is_java21 "$JH"; }; then
     doctor_shell "$@"
     exit 1

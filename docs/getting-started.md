@@ -196,6 +196,25 @@ not `….policy.xml`). `chain` takes `sub` or `pub`.
 
 `bin/idm check tree/` loads the tree and exits 1 when a link points at nothing.
 
+Before the first deploy, `bin/idm doctor` checks JDK 21, the simulator jar, and
+`lib/*.jar`. `--json` is the same report. `--env <name>` also lists environments
+(name, tier, and whether a URL, bind DN, password, and driver set are set) and
+probes that environment's LDAPS. Passwords and bind DNs are not printed.
+
+A command that changes the vault refuses unless `IDM_AGENT_ALLOW_WRITE=1` or
+`--confirm <env>` for that environment: `vault.deploy --yes` or `--step`,
+`vault.rollback --yes`, `vault.import-clone --yes`, and the operate commands
+that change a driver (`driver.start|stop|restart|migrate|resync|submit`,
+`driver.cache clear`, `driver.secrets set|remove`, `driver.trace set|reset`).
+`--dry-run` and read-only commands are not writes. The check runs before a
+secret is resolved and before LDAP opens. `--confirm prd` satisfies both this
+gate and the production tier.
+
+GitHub Actions runs those doctor and write-gate tests without the proprietary
+jars (`mvn -B -Pidm.portable test`). The full suite is `mvn test` where the
+jars and the simulator are installed. Workstation setup and the CI variables
+are [install.md](install.md) §2.4.
+
 ## 6. Next
 
 - Hand the same directory to an agent: [agents.md](agents.md).

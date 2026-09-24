@@ -19,7 +19,7 @@ the help.
 | [agents.md](agents.md) | Point any agent at the tool (Cursor, Claude Code, Codex, others) |
 | [mcp.md](mcp.md) | Optional MCP server: reads, dry-runs, and gated writes over `bin/idm` |
 | [agent-guide.md](agent-guide.md) | The loop and the refusal rules that agent follows |
-| [install.md](install.md) | Build `bin/idm` from source and configure a workstation |
+| [install.md](install.md) | Build `bin/idm` from source, run `bin/idm doctor`, and see what CI runs |
 
 ## By job
 
