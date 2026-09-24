@@ -15,10 +15,10 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
-- `mvn test` follows a `lib` directory symlink (the layout in
-  [docs/install.md](docs/install.md)), a real `lib/` directory of jars, or
-  per-jar symlinks. The previous validate rule treated any of those links as a
-  missing file.
+- `mvn test` needs the engine jars as regular files in a real `lib/` directory
+  ([docs/install.md](docs/install.md)). Maven's file check reports a directory
+  symlink of `lib/`, and per-jar symlinks, as missing. The install docs say to
+  copy the jars.
 
 ## [0.1.0] - 2026-09-24
 

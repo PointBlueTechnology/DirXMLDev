@@ -84,12 +84,16 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Link engine jars from IDM_LIB
+      - name: Copy engine jars from IDM_LIB
         env:
           IDM_LIB: ${{ vars.IDM_LIB }}
         run: |
           if [ -n "$IDM_LIB" ]; then
-            ln -sfn "$IDM_LIB" lib
+            mkdir -p lib
+            # Regular files. requireFilesExist rejects a directory symlink and per-jar symlinks.
+            for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar; do
+              cp -L "$IDM_LIB/$j" "lib/$j"
+            done
           fi
 
       - name: Require engine jars and simulator
