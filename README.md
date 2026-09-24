@@ -14,8 +14,9 @@ source of truth. The vault is a deploy target.
 
 - An IDM engineer who wants policies, filters, GCVs, forms, and workflows in
   git, with a diff and a snapshot before anything is written to a vault.
-- An agent (the Claude skill in `.claude/skills/dirxml-dev/`) doing that loop
-  under the same safety rules.
+- An agent doing that loop under the same safety rules. The interface is
+  `bin/idm`. How to point Claude Code, Cursor, or any other agent at it is
+  [docs/agents.md](docs/agents.md).
 - A team that still opens Designer: `export` and `export-project` hand the
   tree back as a configuration file or an updated project.
 
@@ -154,7 +155,9 @@ Windows: `bin\idm.cmd`. Step-by-step, including the engine jars and a client
 | `bin/idm`, `bin/apps` | The CLI and the Identity Applications helper |
 | `src/` | Model, as-code, validate, edit, simulate, deploy, operate |
 | `docs/` | User guides, then design notes and spikes |
-| `.claude/skills/dirxml-dev/` | Agent skill: the loop, the rules, the recipes |
+| `docs/agents.md`, `docs/agent-guide.md` | How any agent runs the loop |
+| `mcp/dirxmldev-mcp/` | Optional MCP server over a subset of `bin/idm` ([docs/mcp.md](docs/mcp.md)) |
+| `.claude/skills/dirxml-dev/` | The same loop, as a Claude Code skill |
 | `extensions/dirxmldev-visual/` | Read-only policy-flow fishbone |
 | `lib/` | Engine jars (gitignored) |
 
@@ -163,8 +166,22 @@ stay in the client's repository. They are gitignored here.
 
 ## For agents
 
-The skill in `.claude/skills/dirxml-dev/` is picked up when Claude Code runs
-in this repo. In a client repo, copy or symlink that directory to
-`.claude/skills/`. It points at [docs/agent-guide.md](docs/agent-guide.md).
-The simulator's `dirxml-policy-testing` skill covers running policies against
-sample events; this one is the loop around it.
+The agent interface is the CLI. [docs/agents.md](docs/agents.md) is the setup
+for any product. [docs/agent-guide.md](docs/agent-guide.md) is the loop and
+the refusals. A client repository should commit the
+[AGENTS.md template](docs/examples/client-AGENTS.md) so the agent that opens
+that repo sees the rules.
+
+Claude Code also auto-loads `.claude/skills/dirxml-dev/` when it runs in this
+checkout. That skill is a loader for the same instructions, not a second
+product. Copy or symlink it into a client repo's `.claude/skills/` only when
+the agent is Claude Code.
+
+Clients that call tools can run the optional MCP server in
+`mcp/dirxmldev-mcp`. It shells out to `bin/idm`. Reads and dry-runs are on by
+default. Vault deploy, rollback, and driver start/stop/cache clear stay off
+unless `IDM_AGENT_ALLOW_WRITE=1` and the call sets `confirm`. Tree edits stay
+on the CLI. Details: [docs/mcp.md](docs/mcp.md).
+
+Policy tests against sample events are the DirXML Policy Simulator. This
+repository is the loop around it.

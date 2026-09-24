@@ -7,7 +7,8 @@ validator is the engine's own verdict, and git is the history.
 A human learning the product starts at the [repository README](../README.md)
 and [docs/README.md](README.md) ([getting-started.md](getting-started.md),
 [day-to-day.md](day-to-day.md), [tree-layout.md](tree-layout.md)). This page
-is the same loop with the refusal rules spelled out.
+is the same loop with the refusal rules spelled out. How to give it to
+Claude Code, Cursor, or another agent is [agents.md](agents.md).
 
 `bin/idm` with no arguments prints every command with its arguments. Where
 this page and that text disagree, follow `bin/idm`. Edit operations are
