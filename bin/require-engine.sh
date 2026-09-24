@@ -44,14 +44,19 @@ The NetIQ/OpenText jars are proprietary and are not committed (lib/ is gitignore
 dirxml-simulator is not on Maven Central. The sources import both, so the suite
 cannot pass without them. pom.xml keeps those dependencies in the engine profile
 (active when lib/dirxml.jar exists) so that mvn test on a machine without the
-jars stops in the enforcer's validate rule — the file list above — instead of an
+jars stops in the validate check — the file list above — instead of an
 unresolved-artifact error. A clean GitHub-hosted runner has neither.
+The check follows symlinks. Maven's requireFilesExist rule does not: it treats a
+path whose canonical file differs (a directory symlink of lib/, or a symlink of
+a jar) as missing, so this build does not use that rule.
 
 Setup (docs/install.md, section 2):
-  1. Copy dirxml.jar, dirxml_misc.jar, nxsl.jar, xp.jar, CommonDriverShim.jar,
-     jclient.jar, dhutil.jar, XDS.jar, js.jar, and ldap.jar into lib/
-     (or: ln -s /path/to/DirXMLSimulator/lib lib).
-     The jars come from an IDM engine (/opt/novell/eDirectory/lib/dirxml/classes/)
+  1. Make lib/ visible to Maven. Either of these works:
+       ln -s /path/to/DirXMLSimulator/lib lib
+       # or copy the ten jars into a real lib/ directory
+     The jars are dirxml.jar, dirxml_misc.jar, nxsl.jar, xp.jar,
+     CommonDriverShim.jar, jclient.jar, dhutil.jar, XDS.jar, js.jar, and ldap.jar.
+     They come from an IDM engine (/opt/novell/eDirectory/lib/dirxml/classes/)
      or a Designer install. Do not commit them.
   2. Build the simulator and install it into the local Maven repository:
        cd /path/to/DirXMLSimulator && mvn install
