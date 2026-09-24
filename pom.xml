@@ -29,28 +29,6 @@
     </properties>
 
     <dependencies>
-        <!-- The simulator: readers (project/export/LDIF/live), engine harness, regression tooling. -->
-        <dependency>
-            <groupId>com.pointblue.dirxml</groupId>
-            <artifactId>dirxml-simulator</artifactId>
-            <version>${simulator.version}</version>
-        </dependency>
-
-        <!-- NetIQ / OpenText IDM jars (proprietary; system scope; lib/ is gitignored and may be a
-             symlink to the simulator's lib/). System-scope deps don't propagate transitively,
-             so they are declared here as well. -->
-        <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${project.basedir}/lib/dirxml.jar</systemPath></dependency>
-        <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml_misc</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${project.basedir}/lib/dirxml_misc.jar</systemPath></dependency>
-        <dependency><groupId>com.netiq.idm</groupId><artifactId>nxsl</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/nxsl.jar</systemPath></dependency>
-        <dependency><groupId>com.netiq.idm</groupId><artifactId>xp</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/xp.jar</systemPath></dependency>
-        <dependency><groupId>com.netiq.idm</groupId><artifactId>CommonDriverShim</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/CommonDriverShim.jar</systemPath></dependency>
-        <dependency><groupId>com.netiq.idm</groupId><artifactId>jclient</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/jclient.jar</systemPath></dependency>
-        <dependency><groupId>com.netiq.idm</groupId><artifactId>dhutil</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/dhutil.jar</systemPath></dependency>
-        <dependency><groupId>com.netiq.idm</groupId><artifactId>XDS</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/XDS.jar</systemPath></dependency>
-        <dependency><groupId>com.netiq.idm</groupId><artifactId>js</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/js.jar</systemPath></dependency>
-        <!-- Novell JLDAP SDK: DirXML LDAP extended operations (driver control, deploy, submit). -->
-        <dependency><groupId>com.novell.ldap</groupId><artifactId>jldap</artifactId><version>4.3</version><scope>system</scope><systemPath>${project.basedir}/lib/ldap.jar</systemPath></dependency>
-
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -67,6 +45,78 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
             </plugin>
+            <!-- With the engine profile inactive, this is what `mvn test` hits: the file
+                 list and the setup sentence. bin/require-engine.sh prints the same list. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>require-engine</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <fail>true</fail>
+                            <rules>
+                                <requireFilesExist>
+                                    <message>DirXMLDev needs the proprietary NetIQ/OpenText jars in lib/ and dirxml-simulator ${simulator.version} installed by 'mvn install' in the DirXMLSimulator repo. They are not committed and not on Maven Central, so a clean GitHub-hosted runner cannot compile until they are supplied. See docs/getting-started.md section 2 and bin/require-engine.sh.</message>
+                                    <files>
+                                        <file>${project.basedir}/lib/dirxml.jar</file>
+                                        <file>${project.basedir}/lib/dirxml_misc.jar</file>
+                                        <file>${project.basedir}/lib/nxsl.jar</file>
+                                        <file>${project.basedir}/lib/xp.jar</file>
+                                        <file>${project.basedir}/lib/CommonDriverShim.jar</file>
+                                        <file>${project.basedir}/lib/jclient.jar</file>
+                                        <file>${project.basedir}/lib/dhutil.jar</file>
+                                        <file>${project.basedir}/lib/XDS.jar</file>
+                                        <file>${project.basedir}/lib/js.jar</file>
+                                        <file>${project.basedir}/lib/ldap.jar</file>
+                                        <file>${user.home}/.m2/repository/com/pointblue/dirxml/dirxml-simulator/${simulator.version}/dirxml-simulator-${simulator.version}.jar</file>
+                                    </files>
+                                </requireFilesExist>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
+    <!-- Active when lib/dirxml.jar is present (a real file or a symlink into the simulator's lib/).
+         Maven resolves project dependencies before the lifecycle, so these stay out of the main
+         POM: without them, `mvn test` reaches the enforcer in validate and stops with the file
+         list. With them, the suite compiles. The profile does not make the jars optional —
+         the sources import the engine and the simulator. -->
+    <profiles>
+        <profile>
+            <id>engine</id>
+            <activation>
+                <file>
+                    <exists>lib/dirxml.jar</exists>
+                </file>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.pointblue.dirxml</groupId>
+                    <artifactId>dirxml-simulator</artifactId>
+                    <version>${simulator.version}</version>
+                </dependency>
+                <!-- Proprietary NetIQ/OpenText jars. System scope does not propagate, so they are
+                     declared here as well as living in lib/. lib/ is gitignored. -->
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${project.basedir}/lib/dirxml.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml_misc</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${project.basedir}/lib/dirxml_misc.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>nxsl</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/nxsl.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>xp</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/xp.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>CommonDriverShim</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/CommonDriverShim.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>jclient</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/jclient.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>dhutil</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/dhutil.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>XDS</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/XDS.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>js</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/js.jar</systemPath></dependency>
+                <dependency><groupId>com.novell.ldap</groupId><artifactId>jldap</artifactId><version>4.3</version><scope>system</scope><systemPath>${project.basedir}/lib/ldap.jar</systemPath></dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 </project>
