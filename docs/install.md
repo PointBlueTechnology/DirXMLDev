@@ -77,11 +77,13 @@ To carry a customer's vault home as a zip and stand it up as a test vault, see
 
 ### 2.3 Use it from an agent
 
-The repository ships a Claude Code skill in `.claude/skills/dirxml-dev/` — the
-loop, the rules (never deploy without reading the plan, never print a secret,
-never empty a kind, …), the recipes and the facts learned on real vaults. It is
-active automatically when Claude Code runs in this repository; for a client
-repository, copy or symlink that directory into the client's `.claude/skills/`.
+Any agent that can run a shell uses `bin/idm`. There is no separate agent
+protocol. Read [agents.md](agents.md): commit an `AGENTS.md` in the client
+repository (template in [examples/client-AGENTS.md](examples/client-AGENTS.md)),
+and point the agent at [agent-guide.md](agent-guide.md).
+
+Claude Code, when that is the agent, also loads `.claude/skills/dirxml-dev/`
+automatically in this checkout. Other agents do not need that directory.
 
 ## 3. A working directory per client
 
