@@ -20,9 +20,15 @@ description: >-
 
 The tree is the source of truth, the CLI keeps it consistent, the validator is
 the engine's verdict, the vault is a deploy target, and git is the history.
+Human-facing guides — what the product is, and how to run it — are the
+repository [README](../../../README.md) and
+[`docs/README.md`](../../../docs/README.md)
+([getting started](../../../docs/getting-started.md),
+[day to day](../../../docs/day-to-day.md),
+[tree layout](../../../docs/tree-layout.md)).
 `bin/idm` with no arguments lists every command; [reference/commands.md](reference/commands.md)
 groups them; [`docs/agent-guide.md`](../../../docs/agent-guide.md) explains each
-step in depth. **Before deriving how the engine, Designer, the Identity
+step in depth. When this skill and `bin/idm` disagree on a flag, follow `bin/idm`. **Before deriving how the engine, Designer, the Identity
 Applications or packages behave, read [reference/facts.md](reference/facts.md)** —
 every fact we have measured, with the spike that proves it; a question
 answered there is never re-spiked. This skill is about *the loop* and *the rules*.

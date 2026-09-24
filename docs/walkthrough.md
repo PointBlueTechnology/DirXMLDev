@@ -1,12 +1,15 @@
 # Walkthrough — from a live driver set to a proven, deployed change
 
-This is the process, end to end, for a person or an agent using DirXMLDev on a
-real environment. It assumes the setup in [getting-started.md](getting-started.md)
-is done: the tool builds, `environments.properties` names `stg` and `prd`, and
-the deploy identity can reach the vault. Commands are shown as run from the
-client directory (`tree/`, `cases/`, `environments.properties` beside each
-other). Every command prints `--help`-style usage when called wrong, and
-`--json` gives machine-readable output.
+The shorter versions of this loop are [getting-started.md](getting-started.md)
+and [day-to-day.md](day-to-day.md). This page is the same process in one
+narrative.
+
+It assumes [getting-started.md](getting-started.md) is done:
+`environments.properties` names `stg` and `prd`, and the deploy identity can
+reach the vault. Building the tool, if you still need to, is
+[install.md](install.md). Commands are shown as run from the client directory
+(`tree/`, `cases/`, `environments.properties` beside each other). `bin/idm`
+with no arguments lists every flag. `--json` gives machine-readable output.
 
 The loop is always the same, whatever the change:
 
@@ -57,9 +60,9 @@ bin/idm query tree/ artifacts "AD Driver"        # every policy/resource of a dr
 bin/idm query tree/ chain "AD Driver" sub         # the subscriber channel's policy chain in engine order
 bin/idm query tree/ gcvs "AD Driver"              # GCVs with their effective values
 bin/idm query tree/ tables "AD Driver"            # mapping tables
-bin/idm show tree/ "drivers/AD Driver/subscriber/NOVLADDCFG-sub-ctp-TransformTitle.policy.xml"
-bin/idm refs tree/ "library/NOVLLIBAJC-ecma-Utilities.ecmascript.xml"   # who references it
-bin/idm package.diff tree/ "drivers/AD Driver/NOVLADDCFG-sub-ctp-…"      # a customised packaged policy vs its baseline
+bin/idm show tree/ "drivers/AD Driver/subscriber/NOVLADDCFG-sub-ctp-TransformTitle"
+bin/idm refs tree/ "library/NOVLLIBAJC-ecma-Utilities"   # artifact path: no filename extension
+bin/idm package.diff tree/ "drivers/AD Driver/subscriber/NOVLADDCFG-sub-ctp-TransformTitle"
 bin/idm docs tree/ --out docs/ --format md        # a README, one page per driver, the library
 ```
 
@@ -83,13 +86,15 @@ bin/idm policy.add tree/ --driver "AD Driver" --scope subscriber --name "ACME-su
   --content-file normalize-title.xml --link subscriber-command --at last
 
 # or edit an existing one: rules in, out, moved, disabled
-bin/idm rule.add     tree/ --path "drivers/AD Driver/subscriber/ACME-sub-ctp-NormalizeTitle.policy.xml" --content-file rule.xml --at first
-bin/idm rule.disable tree/ --path "drivers/AD Driver/subscriber/NOVLADDCFG-sub-ctp-…policy.xml" --rule "Legacy title mapping"
-bin/idm artifact.set-content tree/ --path "drivers/AD Driver/…policy.xml" --content-file new-content.xml
+bin/idm rule.add     tree/ --path "drivers/AD Driver/subscriber/ACME-sub-ctp-NormalizeTitle" --content-file rule.xml --at first
+bin/idm rule.disable tree/ --path "drivers/AD Driver/subscriber/NOVLADDCFG-sub-ctp-TransformTitle" --rule "Legacy title mapping"
+bin/idm artifact.set-content tree/ --path "drivers/AD Driver/subscriber/ACME-sub-ctp-NormalizeTitle" --content-file new-content.xml
 
-# linkage and order
-bin/idm policy.link    tree/ --path "…" --driver "AD Driver" --set subscriber-command --at "after:…"
-bin/idm policy.reorder tree/ --driver "AD Driver" --set subscriber-command --order "A,B,C"
+# linkage and order. --order is repeated once per member (not a comma-separated list).
+bin/idm policy.link    tree/ --path "drivers/AD Driver/subscriber/ACME-sub-ctp-NormalizeTitle" --driver "AD Driver" --set subscriber-command --at "after:drivers/AD Driver/subscriber/NOVLADDCFG-sub-ctp-TransformTitle"
+bin/idm policy.reorder tree/ --driver "AD Driver" --set subscriber-command \
+  --order "drivers/AD Driver/subscriber/ACME-sub-ctp-NormalizeTitle" \
+  --order "drivers/AD Driver/subscriber/NOVLADDCFG-sub-ctp-TransformTitle"
 
 # GCVs, filter, schema map, mapping tables, driver settings — each has its own operation; bin/idm lists them
 ```
@@ -106,7 +111,7 @@ checks the filter and schema map against the driver.
 bin/idm form.field.add tree/ --form "Help-desk Request Form" --key priority --type select --label Priority --required
 bin/idm prd.map        tree/ --prd HelpdeskTicket --field priority           # into flowdata
 bin/idm form.localize  tree/ --form "Help-desk Request Form" --lang de --set "Priority=Priorität"
-bin/idm form.preview   tree/ --form "Help-desk Request Form" --out preview.html   # look at it without Designer
+bin/idm form.preview   tree/ "Help-desk Request Form" --out preview.html   # form name is positional
 bin/idm form.edit      tree/ "Help-desk Request Form"                              # or in the vendor builder
 ```
 
@@ -192,7 +197,7 @@ subtree first); emptying every entitlement, form or PRD of a driver (needs
 If something is wrong afterwards:
 
 ```bash
-bin/idm vault.rollback tree/ --env stg --snapshot deploy-snapshots/stg/<timestamp>.ldif --yes
+bin/idm vault.rollback --env stg --snapshot deploy-snapshots/stg/<timestamp>.ldif --yes
 bin/idm vault.verify   tree/ --env stg
 ```
 
@@ -203,7 +208,7 @@ prediction from the tree: submit an event on the Subscriber channel, read what
 the engine hands the shim, and compare.
 
 ```bash
-bin/idm driver.submit tree/ --env stg --driver "AD Driver" --xds event.xds --yes
+bin/idm driver.submit --env stg --driver "AD Driver" --xds event.xds --yes --tree tree/
 bin/idm driver.trace tail --env stg --driver "AD Driver" --since 5 --grep "Applying rule"
 ```
 
@@ -234,17 +239,21 @@ bin/idm driver.status    --env stg --driver "AD Driver"
 bin/idm engine.stats     --env stg --driver "AD Driver"
 bin/idm driver.cache view  --env stg --driver "AD Driver" --out cases/ad-cache   # queued events → a simulator case
 bin/idm driver.cache clear --env stg --driver "AD Driver" --yes --confirm stg
-bin/idm driver.start|stop|restart --env stg --driver "AD Driver" --yes
+bin/idm driver.restart --env stg --driver "AD Driver" --yes
+bin/idm driver.stop    --env stg --driver "AD Driver" --yes          # events keep queueing until you start it again
 bin/idm driver.trace set --env stg --driver "AD Driver" --level 3 --file /var/opt/novell/eDirectory/log/ad.trace
 bin/idm driver.trace tail --env stg --driver "AD Driver" --since 10
 bin/idm driver.resync  --env stg --driver "AD Driver" --since 2026-09-01T00:00:00Z --yes
 bin/idm driver.secrets list --env stg --driver "AD Driver"          # names only; set/remove need --yes
 ```
 
-Reads are free. Start, restart, trace and secrets need `--yes` on `stg` and
-`--yes --confirm prd` in production; stop, resync, migrate and submit need
-`--yes` everywhere; clearing a cache shows the count and saves the events
-before it asks. Every state change is audited in `deploy-log/`.
+Reads are free. Start, restart, trace set/reset, and secrets set/remove need
+`--yes` on `stg` and `--yes --confirm <env>` in production. Stop, resync,
+migrate, and submit need `--yes` on every tier and `--confirm <env>` in
+production. `driver.cache clear` prints the event count and the first and
+last event, writes them to a snapshot, and needs `--yes` everywhere plus
+`--confirm <env>` on `stg` and `prd`. Every state change is audited in
+`deploy-log/`.
 
 ## Step 8 — Promote to production
 
@@ -260,10 +269,12 @@ bin/idm vault.deploy tree/ --env prd --driver "AD Driver" --yes --confirm prd
 also requires: a committed tree (no uncommitted changes under `tree/`), a
 production vault that matches the last deploy recorded in
 `deploy-log/prd.jsonl` (otherwise someone changed it by hand — run
-`vault.deploy --capture-drift` first, which records the vault's current state
-on an `as-found/prd/<timestamp>` branch for you to merge), a green
-`simulate` when `cases/` exists, and, when `prd.requires=stg` is set, a green
-`stg` deploy of the same tree commit in `deploy-log/stg.jsonl`.
+`vault.deploy --capture-drift` first, which commits the vault's current state
+on an `as-found/<env>/<timestamp>` branch and prints the rebase that puts
+your change on top of it), and, when `prd.requires=stg` is set, a green
+`stg` deploy of the same tree commit in `deploy-log/stg.jsonl`. Run
+`simulate` yourself before you ask for `--confirm`; the production gate does
+not run the corpus.
 
 ## Step 9 — Hand it back to Designer
 
