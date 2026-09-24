@@ -37,3 +37,6 @@ extensions/*/node_modules/
 extensions/*/out/
 extensions/*/*.vsix
 **/.dirxmldev/
+
+# MCP server (sdk is installed locally; lockfile is committed)
+mcp/**/node_modules/
