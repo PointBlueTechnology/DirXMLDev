@@ -185,3 +185,7 @@ on the CLI. Details: [docs/mcp.md](docs/mcp.md).
 
 Policy tests against sample events are the DirXML Policy Simulator. This
 repository is the loop around it.
+
+## License
+
+The [DirXMLDev source](LICENSE) is MIT; proprietary NetIQ/OpenText engine jars and any third-party simulator packaging remain under their own terms and are not redistributed by this license.
