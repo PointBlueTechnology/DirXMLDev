@@ -198,6 +198,7 @@ not `….policy.xml`). `chain` takes `sub` or `pub`.
 
 ## 6. Next
 
+- Hand the same directory to an agent: [agents.md](agents.md).
 - Change, prove, and deploy: [day-to-day.md](day-to-day.md).
 - The same loop as one narrative: [walkthrough.md](walkthrough.md).
 - File-by-file layout: [tree-layout.md](tree-layout.md).
