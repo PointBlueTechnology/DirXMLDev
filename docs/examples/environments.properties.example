@@ -1,0 +1,31 @@
+# FICTIONAL. Copy to environments.properties in the client directory (gitignored).
+# Replace every host, DN, and variable. chmod 600 the copy.
+# Password forms: password= (literal, labs only), passwordEnv=, passwordCommand=, passwordKeychain=service[/account]
+
+# --- staging ---
+stg.url=ldaps://idm-stg.example.com:636
+stg.bindDn=cn=idm-deploy,ou=sa,o=system
+stg.passwordEnv=IDM_STG_PASSWORD
+stg.driverSet=cn=driverset1,o=system
+stg.tier=stg
+stg.secrets=secrets-stg.properties
+stg.trustAll=false
+stg.sshHost=idm-stg.example.com
+stg.sshUser=idm
+
+# Identity Applications — only for bin/apps and form.edit --env
+stg.formsUrl=https://idm-stg-apps.example.com
+stg.appsUser=uaadmin
+stg.appsPasswordEnv=IDM_STG_APPS_PASSWORD
+# stg.appsClient=rbpmrest
+# stg.appsSecretEnv=IDM_STG_APPS_SECRET
+
+# --- production ---
+prd.url=ldaps://idm.example.com:636
+prd.bindDn=cn=idm-deploy,ou=sa,o=system
+prd.passwordEnv=IDM_PRD_PASSWORD
+prd.driverSet=cn=driverset1,o=system
+prd.tier=prd
+prd.secrets=secrets-prd.properties
+prd.trustAll=false
+prd.requires=stg

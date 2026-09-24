@@ -1,5 +1,8 @@
 # Plan: fully agent-driven IDM development (Designer-optional)
 
+This is the architecture and the phase history. To use the tool, start at the
+[repository README](../README.md) and [docs/README.md](README.md).
+
 Status: **plan** (2026-09-08). The next horizon beyond the simulator: let an agent do
 the **whole** IDM development loop — read, design, edit, validate, test, diff,
 deploy, operate — without Designer in the loop, while still being able to hand a

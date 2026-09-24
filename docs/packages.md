@@ -1,5 +1,9 @@
 # Phase 7 — Packages: our own package management (design note, 2026-09-09)
 
+How to fetch and install is [day-to-day.md](day-to-day.md). `package.fetch`
+takes `--short` (required) and `--all-versions`; omitting the version fetches
+the newest. There is no `--latest` flag. `bin/idm` is authoritative.
+
 Jerry's decision (2026-09-09): **do not rely on Designer's headless application;
 build our own package management.** Package definitions are downloaded from
 the update site and kept in git; the tree installs, upgrades and uninstalls
@@ -64,7 +68,10 @@ reads canonical files, not base64 blobs.
 
 ### 3.1 Catalog
 
-- `package.fetch --catalog DIR [--site NAME|URL] [--short SHORT[_ver]…] [--latest|--all-versions] [--dry-run]`
+- `package.fetch --catalog DIR [--site NAME|URL] [--short SHORT[_ver]]… [--all-versions] [--dry-run]`
+  (`--short` is required and repeatable, one package per flag; `SHORT_ver` pins
+  a version, otherwise the newest; `--all-versions` fetches every version of
+  each `--short`). It
   reads `site.xml` → feature jar → `plugins/SHORT_ver.jar` (F16), verifies the
   jar parses and its stored checksums recompute (F1, F5) before adding it,
   unpacks it, updates `catalog.json`, and prints what was added. Nothing is
@@ -100,9 +107,11 @@ reads canonical files, not base64 blobs.
   driver (`name`, shim from `configuration-manifest`/`shim-config-info`,
   `global-config-values`, filter, options), then the resolved packages install
   onto it. This replaces the Designer-headless idea in the PDT analysis.
-- `package.prompts --catalog DIR SHORT[_ver] [--driver D] [--out FILE]` writes
-  the answers template (every prompt definition with display-name, name, type,
-  default) so an agent knows what to answer; `--answers` is keyed by
+- `package.prompts` was the planned answers-template command. It is **not**
+  registered in `bin/idm`. `package.show --catalog DIR SHORT[_ver]` prints a
+  prompts section (folder, class, and name). A missing answer is reported by
+  `package.install` / `driver.add` as `mandatory prompts without a value`,
+  naming each prompt. `--answers` is keyed by
   definition **name** with display-name accepted as a fallback (Designer's
   headless keys by display-name — F13); password-ref answers reference the
   environment's secrets file by key, never a literal.

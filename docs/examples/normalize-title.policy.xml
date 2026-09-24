@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FICTIONAL. A one-rule shape for:
+    bin/idm policy.add tree/ --driver "AD Driver" --scope subscriber \
+      --name "ACME-sub-ctp-NormalizeTitle" --link subscriber-command \
+      --content-file docs/examples/normalize-title.policy.xml
+  Not a customer policy. validate compiles it with the engine; this file only
+  shows the document shape (a <policy> of <rule>s), matching the sample tree
+  under extensions/dirxmldev-visual/sample-tree/.
+-->
+<policy>
+  <rule>
+    <description>FICTIONAL: veto User events (sample shape only)</description>
+    <conditions>
+      <and>
+        <if-class-name op="equal">User</if-class-name>
+      </and>
+    </conditions>
+    <actions>
+      <do-veto/>
+    </actions>
+  </rule>
+</policy>

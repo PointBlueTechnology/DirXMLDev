@@ -1,5 +1,10 @@
 # Track P — Provisioning forms (design note, 2026-09-11)
 
+How to run the form commands is [day-to-day.md](day-to-day.md). Flags below
+that still show a positional form name or `--json` for extra field properties
+are the design sketch: the shipped operation is `form.field.add <tree> --form
+<name> … --props '<json>'`, and `--json` is output. `bin/idm` is authoritative.
+
 Scope set by Jerry (2026-09-11): **JSON forms only** (IDM 4.8+ Form.io forms;
 classic XForms PRDs are read but never edited), and we may let people use the
 existing form builder — explore the options. Evidence:
