@@ -88,6 +88,32 @@ public class DoctorTest {
     }
 
     @Test
+    public void directorySymlinkIsNotAMavenLib() throws Exception {
+        Doctor.Request req = ready();
+        Path real = req.home.resolve("lib");
+        Path moved = req.home.resolve("jars-real");
+        Files.move(real, moved);
+        Files.createSymbolicLink(real, moved);
+        Doctor.Report report = Doctor.check(req);
+        assertFalse(report.ok);
+        assertTrue(report.text(), report.text().contains("directory symlink"));
+        assertTrue(report.text(), report.text().contains("requireFilesExist"));
+    }
+
+    @Test
+    public void perJarSymlinkIsNotAMavenLib() throws Exception {
+        Doctor.Request req = ready();
+        Path jar = req.home.resolve("lib").resolve("dirxml.jar");
+        Path moved = req.home.resolve("dirxml-real.jar");
+        Files.move(jar, moved);
+        Files.createSymbolicLink(jar, moved);
+        Doctor.Report report = Doctor.check(req);
+        assertFalse(report.ok);
+        assertTrue(report.text(), report.text().contains("dirxml.jar"));
+        assertTrue(report.text(), report.text().contains("Symlinked jars"));
+    }
+
+    @Test
     public void jarVersionMustMatchTheSelectedSimulator() throws Exception {
         Doctor.Request req = base();
         req.simJar = simJar("1.5.1");

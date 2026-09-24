@@ -133,8 +133,9 @@ are what shipped.
 
 ## Install and build
 
-JDK 21, Maven, and the Identity Manager engine jars in `lib/` (proprietary,
-never committed; `lib/` may be a symlink to the simulator's `lib/`). Build the
+JDK 21, Maven, and the Identity Manager engine jars copied into a real `lib/`
+directory (proprietary, never committed). A symlink of `lib/`, or symlinks of
+the jars, is not enough for Maven's file check. Build the
 DirXML Policy Simulator first so `dirxml-simulator` resolves from `~/.m2`.
 `bin/idm` finds JDK 21 via `IDM_JAVA_HOME` (or `java_home -v 21` on macOS),
 compiles on first use if `target/classes` is missing, and puts the simulator

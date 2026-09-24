@@ -27,8 +27,11 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <simulator.version>1.5.2</simulator.version>
         <!-- The idm.portable profile sets this so a clean runner can test doctor and the
-             write gate without the proprietary jars. A normal `mvn test` still enforces them. -->
+             write gate without the proprietary jars. A normal `mvn test` still requires them. -->
         <idm.skip.engine>false</idm.skip.engine>
+        <!-- systemPath must not name ${project.basedir} directly: Maven warns, and the
+             warning prints the uninterpolated expression. This property is that directory. -->
+        <idm.lib>${project.basedir}/lib</idm.lib>
     </properties>
 
     <dependencies>
@@ -48,8 +51,10 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
             </plugin>
-            <!-- With the engine profile inactive, this is what `mvn test` hits: the file
-                 list and the setup sentence. bin/require-engine.sh prints the same list. -->
+            <!-- requireFilesExist compares a path with its canonical path and reports the
+                 file missing when they differ. A directory symlink of lib/, or a symlink of
+                 a jar, fails that check even though ls sees the file. Real copies pass.
+                 bin/require-engine.sh rejects the same layouts. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
@@ -66,18 +71,18 @@
                             <fail>true</fail>
                             <rules>
                                 <requireFilesExist>
-                                    <message>DirXMLDev needs the proprietary NetIQ/OpenText jars in lib/ and dirxml-simulator ${simulator.version} installed by 'mvn install' in the DirXMLSimulator repo. They are not committed and not on Maven Central. `mvn test` is the full suite and stops here when they are absent. Doctor and the write gate still run without them: mvn -B -Pidm.portable test. See docs/install.md section 2 and bin/require-engine.sh.</message>
+                                    <message>DirXMLDev needs the proprietary NetIQ/OpenText jars as regular files in a real lib/ directory, and dirxml-simulator ${simulator.version} installed by 'mvn install' in the DirXMLSimulator repo. They are not committed and not on Maven Central. A directory symlink of lib/, or a symlink of a jar, is not enough: requireFilesExist reports that path as missing. Copy the jars. `mvn test` is the full suite and stops here when they are absent or linked. Doctor and the write gate still run without them: mvn -B -Pidm.portable test. See docs/install.md section 2 and bin/require-engine.sh.</message>
                                     <files>
-                                        <file>${project.basedir}/lib/dirxml.jar</file>
-                                        <file>${project.basedir}/lib/dirxml_misc.jar</file>
-                                        <file>${project.basedir}/lib/nxsl.jar</file>
-                                        <file>${project.basedir}/lib/xp.jar</file>
-                                        <file>${project.basedir}/lib/CommonDriverShim.jar</file>
-                                        <file>${project.basedir}/lib/jclient.jar</file>
-                                        <file>${project.basedir}/lib/dhutil.jar</file>
-                                        <file>${project.basedir}/lib/XDS.jar</file>
-                                        <file>${project.basedir}/lib/js.jar</file>
-                                        <file>${project.basedir}/lib/ldap.jar</file>
+                                        <file>${idm.lib}/dirxml.jar</file>
+                                        <file>${idm.lib}/dirxml_misc.jar</file>
+                                        <file>${idm.lib}/nxsl.jar</file>
+                                        <file>${idm.lib}/xp.jar</file>
+                                        <file>${idm.lib}/CommonDriverShim.jar</file>
+                                        <file>${idm.lib}/jclient.jar</file>
+                                        <file>${idm.lib}/dhutil.jar</file>
+                                        <file>${idm.lib}/XDS.jar</file>
+                                        <file>${idm.lib}/js.jar</file>
+                                        <file>${idm.lib}/ldap.jar</file>
                                         <file>${user.home}/.m2/repository/com/pointblue/dirxml/dirxml-simulator/${simulator.version}/dirxml-simulator-${simulator.version}.jar</file>
                                     </files>
                                 </requireFilesExist>
@@ -89,10 +94,11 @@
         </plugins>
     </build>
 
-    <!-- Active when lib/dirxml.jar is present (a real file or a symlink into the simulator's lib/).
+    <!-- Active when lib/dirxml.jar exists. File.exists follows a symlink, so a linked
+         lib/ still turns this profile on; requireFilesExist then rejects the link.
          Maven resolves project dependencies before the lifecycle, so these stay out of the main
-         POM: without them, `mvn test` reaches the enforcer in validate and stops with the file
-         list. With them, the suite compiles. The profile does not make the jars optional —
+         POM: without them, `mvn test` reaches the enforcer and stops with the file list.
+         With real jar files, the suite compiles. The profile does not make the jars optional —
          the sources import the engine and the simulator. -->
     <profiles>
         <profile>
@@ -110,21 +116,21 @@
                 </dependency>
                 <!-- Proprietary NetIQ/OpenText jars. System scope does not propagate, so they are
                      declared here as well as living in lib/. lib/ is gitignored. -->
-                <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${project.basedir}/lib/dirxml.jar</systemPath></dependency>
-                <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml_misc</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${project.basedir}/lib/dirxml_misc.jar</systemPath></dependency>
-                <dependency><groupId>com.netiq.idm</groupId><artifactId>nxsl</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/nxsl.jar</systemPath></dependency>
-                <dependency><groupId>com.netiq.idm</groupId><artifactId>xp</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/xp.jar</systemPath></dependency>
-                <dependency><groupId>com.netiq.idm</groupId><artifactId>CommonDriverShim</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/CommonDriverShim.jar</systemPath></dependency>
-                <dependency><groupId>com.netiq.idm</groupId><artifactId>jclient</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/jclient.jar</systemPath></dependency>
-                <dependency><groupId>com.netiq.idm</groupId><artifactId>dhutil</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/dhutil.jar</systemPath></dependency>
-                <dependency><groupId>com.netiq.idm</groupId><artifactId>XDS</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/XDS.jar</systemPath></dependency>
-                <dependency><groupId>com.netiq.idm</groupId><artifactId>js</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${project.basedir}/lib/js.jar</systemPath></dependency>
-                <dependency><groupId>com.novell.ldap</groupId><artifactId>jldap</artifactId><version>4.3</version><scope>system</scope><systemPath>${project.basedir}/lib/ldap.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${idm.lib}/dirxml.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>dirxml_misc</artifactId><version>4.10.1.0000</version><scope>system</scope><systemPath>${idm.lib}/dirxml_misc.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>nxsl</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/nxsl.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>xp</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/xp.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>CommonDriverShim</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/CommonDriverShim.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>jclient</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/jclient.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>dhutil</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/dhutil.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>XDS</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/XDS.jar</systemPath></dependency>
+                <dependency><groupId>com.netiq.idm</groupId><artifactId>js</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/js.jar</systemPath></dependency>
+                <dependency><groupId>com.novell.ldap</groupId><artifactId>jldap</artifactId><version>4.3</version><scope>system</scope><systemPath>${idm.lib}/ldap.jar</systemPath></dependency>
             </dependencies>
         </profile>
         <!-- Tests that compile without the engine or the simulator. GitHub Actions runs this
              on every push. It does not compile the rest of src/main. `mvn test` (no profile)
-             remains the full suite and still fails in the enforcer when the jars are absent. -->
+             remains the full suite and still fails the validate check when the jars are absent. -->
         <profile>
             <id>idm.portable</id>
             <properties>

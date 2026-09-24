@@ -97,24 +97,37 @@ doctor_shell() {
   fi
 
   missing=""
+  links=""
   present=0
-  for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar; do
-    if [ -f "$HERE/lib/$j" ]; then
-      present=$((present + 1))
-    else
-      if [ -n "$missing" ]; then
-        missing="$missing, $j"
+  if [ -L "$HERE/lib" ]; then
+    links="lib is a directory symlink"
+  else
+    for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar; do
+      if [ -L "$HERE/lib/$j" ]; then
+        if [ -n "$links" ]; then
+          links="$links, $j"
+        else
+          links="$j"
+        fi
+      elif [ -f "$HERE/lib/$j" ]; then
+        present=$((present + 1))
       else
-        missing="$j"
+        if [ -n "$missing" ]; then
+          missing="$missing, $j"
+        else
+          missing="$j"
+        fi
       fi
-    fi
-  done
+    done
+  fi
   lib_ok=0
-  if [ -z "$missing" ]; then
+  if [ -n "$links" ]; then
+    lib_detail="Symlink is not enough for Maven ($links). requireFilesExist reports a directory symlink of lib/, or a symlink of a jar, as missing. Copy the jars into a real $HERE/lib. See docs/install.md section 2."
+  elif [ -z "$missing" ]; then
     lib_ok=1
     lib_detail="$present jars in $HERE/lib"
   else
-    lib_detail="Missing $missing. Put the proprietary NetIQ/OpenText IDM jars in $HERE/lib (or symlink lib to the DirXML Simulator's lib/). See docs/install.md section 2."
+    lib_detail="Missing $missing. Copy the proprietary NetIQ/OpenText IDM jars into a real $HERE/lib directory (not a symlink). See docs/install.md section 2."
   fi
 
   cli_detail="The Java CLI is not built, so environments and the LDAPS probe were not checked. With JDK 21, the simulator jar, and lib/*.jar in place, run: mvn compile (or bin/idm doctor again)."

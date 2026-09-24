@@ -2,7 +2,7 @@
 target/
 *.class
 
-# proprietary NetIQ/OpenText jars — never commit (lib/ may be a symlink)
+# proprietary NetIQ/OpenText jars — never commit (real files in lib/, not symlinks)
 lib/*.jar
 lib
 
@@ -28,6 +28,10 @@ cases/**/case.properties
 environments.properties
 secrets*.properties
 deploy-snapshots/
+
+# Local audit log when this checkout is used as a working tree. Client repositories
+# commit their own deploy-log; this repository must not.
+deploy-log/
 
 # python bytecode from bin/apps
 __pycache__/

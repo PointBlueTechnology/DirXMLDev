@@ -51,15 +51,34 @@ Designer install. Then build and install the simulator so Maven can find it:
 cd ~/IdeaProjects/DirXMLSimulator && JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q install
 ```
 
+Resolving that installed `dirxml-simulator` may print that its POM is invalid:
+`systemPath` is still the literal `${project.basedir}/lib/...`, which fails
+Maven's absolute-path rule. That text is in the simulator artifact under
+`~/.m2`, written when the simulator was installed. It is not this repository's
+POM, and copying jars into DirXMLDev's `lib/` does not rewrite it. System-scoped
+dependencies are not transitive; this project declares the same jars itself.
+The message can appear whenever the engine profile resolves the simulator.
+
 ### 2.2 DirXMLDev
 
 ```bash
 git clone <this repository> ~/IdeaProjects/DirXMLDev
 cd ~/IdeaProjects/DirXMLDev
-ln -s ~/IdeaProjects/DirXMLSimulator/lib lib          # the same jars; lib/ is gitignored
+mkdir -p lib
+src=~/IdeaProjects/DirXMLSimulator/lib
+for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar js.jar jclient.jar \
+         ldap.jar XDS.jar dhutil.jar CommonDriverShim.jar; do
+  cp "$src/$j" "lib/$j"          # regular files; lib/ is gitignored
+done
 JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q test  # builds and runs the test suite
 bin/idm                                                # prints every command
 ```
+
+`lib` must be a real directory and each jar a regular file. Maven's
+`requireFilesExist` check compares a path with its canonical path and reports
+the file missing when they differ. A directory symlink (`ln -s …/lib lib`)
+fails that way, and so does a real `lib/` whose entries are symlinks to the
+jars. `ls` still shows the files. Copy them. Do not commit the jars.
 
 `bin/idm` finds JDK 21 by itself (`IDM_JAVA_HOME` overrides), compiles on first
 use if `target/classes` is missing, and puts `target/classes`, `lib/*.jar` and
@@ -129,9 +148,9 @@ It is checked before any secret is resolved and before LDAP is opened.
 `idm.portable` compiles doctor, the environment parser, and the write gate against
 a stub LDAP client and runs `DoctorTest` and `AgentWriteGateTest`. It does not
 compile the rest of the tree. A normal `mvn test` is still the full suite: the
-enforcer in `pom.xml` stops it with the jar list when `lib/` or the simulator is
-absent, which is what you want on a workstation where you meant to compile
-everything.
+validate check in `pom.xml` stops it with the jar list when `lib/` or the
+simulator is absent, which is what you want on a workstation where you meant to
+compile everything.
 
 A clean GitHub-hosted runner has no proprietary jars, so `test` is the required
 check and `engine` stays skipped. To run the full suite in Actions, on a
@@ -140,7 +159,8 @@ self-hosted runner that already has the simulator in `~/.m2` and the jars on dis
 1. Set the repository variable `RUN_ENGINE_TESTS` to `true`.
 2. Set `ENGINE_RUNNER` to that runner's label (`ubuntu-latest` is the default).
 3. Set `IDM_LIB` to the absolute path of the directory that holds the ten jars.
-   The engine job symlinks it to `lib/`. Do not commit the jars.
+   The engine job copies them into a real `lib/` (it does not symlink). Do not
+   commit the jars.
 
 Locally, with the jars installed as in §2.1, `mvn -B test` is the full suite.
 Without them, `mvn -B -Pidm.portable test` is the subset CI runs.
