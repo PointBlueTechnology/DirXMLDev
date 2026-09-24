@@ -50,7 +50,7 @@ before it reaches AD"*.
    "AD Driver"`; if the driver runs, `idm driver.trace tail --env prd --driver
    "AD Driver" --since 5` to see it load the new policy (`Found DirXMLScript
    policy …`) and process events.
-6. Commit `deploy-log/`. If anything is wrong: `idm vault.rollback tree/ --env
+6. Commit `deploy-log/`. If anything is wrong: `idm vault.rollback --env
    prd --snapshot <path> --yes`, verify, and say what happened.
 
 ## Investigate a misbehaving driver
@@ -121,10 +121,10 @@ before it reaches AD"*.
 1. **Orient.** `idm form.list tree/ --driver "User Application Driver"`,
    `idm form.show tree/ "Help-desk Request Form"` (fields, scripts, languages,
    the PRDs that bind it), `idm prd.show tree/ HelpdeskTicket` (bindings).
-2. **Add the field.** `idm form.field.add tree/ "Help-desk Request Form" --key priority --type select --label Priority --required --json '{"data":{"values":[{"label":"High","value":"high"},{"label":"Low","value":"low"}]}}'`
+2. **Add the field.** `idm form.field.add tree/ --form "Help-desk Request Form" --key priority --type select --label Priority --required --props '{"data":{"values":[{"label":"High","value":"high"},{"label":"Low","value":"low"}]}}'`
    — the request binding's field list is rebuilt automatically; a stock form
    is marked customized with its baseline kept.
-3. **Map it.** `idm prd.map tree/ HelpdeskTicket --field priority` — mappings
+3. **Map it.** `idm prd.map tree/ --prd HelpdeskTicket --field priority` — mappings
    are never invented by the sync, so this step is always explicit (`--activity`
    maps an approval activity's data item instead).
 4. **Localize.** `idm form.localize tree/ "Help-desk Request Form" --lang en --set "Priority=Priority"`

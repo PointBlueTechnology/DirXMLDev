@@ -1,103 +1,170 @@
-# DirXML Dev
+# DirXMLDev
 
-**Agent-driven IDM (DirXML) development — Designer-optional.** A typed model of an
-Identity Manager driver set, an **IDM-as-code** representation on disk, validation,
-and vault **deploy / operate** with safeguards — with the
-[DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
-as its test engine.
+DirXMLDev is a Designer-optional toolchain for OpenText / NetIQ Identity
+Manager. The **driver set lives as files** (IDM-as-code). You change those
+files with `bin/idm`, prove them with the engine's own compilers and the
+[DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator),
+then deploy and operate the Identity Vault over LDAPS and DirXML extended
+operations. Designer stays an import/export target for teams that still use it.
 
-Status: **Phases 0–7 and Track P (JSON provisioning forms) built and proven on the test vaults, in Designer and in the Identity Applications; Track W (workflow design) complete — typed `flow.*` operations for every activity kind, an engine-faithful flow check, entitlements as-code, and workflows authored without Designer that ran end to end on the idm254 lab, granting an entitlement (2026-09-16); the live proofs now run entirely over the Identity Applications REST API (`bin/apps`, `docs/idapps-rest.md`).**
-Phases 0–3: typed model, IDM-as-code with readers for export / Designer project
-/ LDIF / live vault (byte-idempotent); `validate` — every policy through the
-engine's own compilers in the driver's context plus linkage, GCV,
-mapping-table, ECMAScript and filter/schema-map checks (running production
-vaults validate with zero errors); the reference-aware edit operations as
-validated transactions with package-aware overrides; `export` (Designer imports
-it) and `simulate` (the regression corpus, diffed against the tree before the
-edit). Phase 4: `vault.diff` / `vault.deploy` (plan → snapshot → `--yes` or
-`--step` → restart → verify → audit) / `vault.rollback`, environments with
-tiers and a production gate that requires a known vault state, secrets sourced
-per environment. Phase 5: operate — `driverset.status`, `driver.start|stop|
-restart|cache|migrate|resync|secrets|trace` (incl. `trace tail` over SSH),
-`engine.version|stats`, and `driver.submit`, the DxCMD Phase 2 canary that
-compares what the live engine hands the shim with the simulator's prediction.
-Phase 6: `docs` (the driver set documented from the model), the
-`dirxml-dev` skill, `driver.add`, and `export-project`, which updates an
-existing Designer project in place from the tree (content, added/removed/
-renamed artifacts, linkage, driver settings, GCVs; non-packaged new drivers;
-packaged drivers refused). Phase 7: a git catalog of package jars fetched from
-the update site; `package.install` / `driver.add --packages` reproduce Designer's
-install (18/18 installed checksums identical to Designer's), the deployer writes
-the package stamps to the vault, `package.upgrade|uninstall|status|adopt`, and
-`package.build` turns a tree's hand-made content into a Designer-valid package
-served by `package.site`. CLI only by decision. **Start with [docs/getting-started.md](docs/getting-started.md) (install and configure) and [docs/walkthrough.md](docs/walkthrough.md) (the process end to end).** See [docs/plan.md](docs/plan.md),
-[docs/vault-deploy.md](docs/vault-deploy.md), [docs/operate.md](docs/operate.md)
-and [docs/agent-guide.md](docs/agent-guide.md).
+A human operator and an agent run the same commands. The tree in git is the
+source of truth. The vault is a deploy target.
 
-```bash
-bin/idm import <export.xml> <outDir>          # driver / driver-set export → IDM-as-code
-bin/idm import-project <projectDir> <outDir>  # Designer project → IDM-as-code
-bin/idm import-ldif <dump.ldif> <outDir>      # LDIF of the driver-set subtree → IDM-as-code
-bin/idm import-live <outDir> --env <name>     # live vault → IDM-as-code (connection from environments.properties)
-IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…" \
-  bin/idm import-live <driverSetDN> <outDir>  # live vault → IDM-as-code
-bin/idm check <asCodeDir>                     # load a tree, report it, exit 1 on broken links
-bin/idm validate <asCodeDir> [--json]         # every validation check; exit 1 on any error
-bin/idm export <asCodeDir> <out.xml>          # a Designer driver-set export of the tree
-bin/idm export-project <asCodeDir> <projectDir> [--dry-run]   # update an existing Designer project in place
-bin/idm docs <asCodeDir> --out <dir> [--since <commit>] [--format md|html]   # documentation from the model
-bin/idm simulate <asCodeDir> --cases <dir> [--against <asCodeDir>]   # the regression corpus, diffed
-bin/idm query <asCodeDir> chain <driver> sub  # orient: artifacts | chain | gcvs | tables; show; refs
-bin/idm policy.add <asCodeDir> --driver D --scope subscriber --name X --link subscriber-command
-bin/idm <operation> <asCodeDir> --… [--dry-run] [--force] [--json]   # bin/idm with no args lists them all
+## Who it is for
+
+- An IDM engineer who wants policies, filters, GCVs, forms, and workflows in
+  git, with a diff and a snapshot before anything is written to a vault.
+- An agent (the Claude skill in `.claude/skills/dirxml-dev/`) doing that loop
+  under the same safety rules.
+- A team that still opens Designer: `export` and `export-project` hand the
+  tree back as a configuration file or an updated project.
+
+## What you can do
+
+```
+import  →  edit  →  validate  →  simulate  →  vault.diff / vault.deploy  →  operate
 ```
 
-The edit operations (policies, rules, links, GCVs, filter, schema map, driver
-settings, mapping tables) are transactions: load → apply → validate → write only
-if no new error. See [docs/agent-guide.md](docs/agent-guide.md).
+| Step | Command | What you get |
+|---|---|---|
+| Bring a driver set in | `import`, `import-project`, `import-ldif`, `import-live` | One readable file per object under `tree/` |
+| See what is there | `query`, `show`, `refs`, `docs`, `query fishbone` | Chains, GCVs, who references what, a generated write-up, the policy-flow fishbone |
+| Change it | edit the policy file, or an operation (`policy.add`, `gcv.set`, `form.field.add`, `flow.activity.add`, `package.install`, …) | A transaction: load, apply, validate, write only if no new error |
+| Check it offline | `validate` | The engine's compilers, in the driver's context, plus linkage, GCV, filter, form, and flow checks |
+| Prove a policy change | `simulate --cases … --against …` | The regression corpus run on the new tree and diffed against the previous tree |
+| See the vault delta | `vault.diff` | Per-object added / changed / removed. Nothing is written |
+| Deploy | `vault.deploy --dry-run`, then `--yes` or `--step` | Plan, LDIF snapshot, LDAP writes, driver restart, re-read, an audit line |
+| Operate | `driverset.status`, `driver.start` / `stop` / `restart`, `cache`, `trace`, `migrate`, `resync`, `secrets`, `submit` | The same environments and audit log as deploy |
+| Prove a workflow | `bin/apps` | Identity Applications REST: request, tasks, approve, history |
+| Hand it back | `export`, `export-project` | A Designer driver-set export, or an update of an existing project |
 
-## Use it as a Claude Code skill
+A read-only VS Code / Cursor extension
+([extensions/dirxmldev-visual](extensions/dirxmldev-visual/README.md)) draws
+the classic policy-flow fishbone from `bin/idm query … fishbone`. It does not
+write the tree or talk to a vault.
 
-`.claude/skills/dirxml-dev/` teaches an agent the loop and the rules (validate
-→ simulate → diff → deploy staging → verify → canary → promote, with the
-safeguards as rules) and the recipes (implement a requirement, promote,
-investigate a misbehaving driver, onboard a vault, add a driver). It is picked
-up automatically when Claude Code runs in this repo; to use it from a client
-repo, copy or symlink the directory into that repo's `.claude/skills/`. The
-simulator's `dirxml-policy-testing` skill covers testing policies against
-events; this one covers everything around it.
+`bin/idm` with no arguments lists every command and flag. That text is the
+contract. Where an older design note disagrees with it, follow `bin/idm`.
 
-## What this is
+## Quick start
 
-The simulator already gives an agent the *read* and *test* halves of IDM work
-(load a driver set from a Designer project / export / LDIF / live LDAP; run real
-policies headlessly; regression corpus; compare; coverage). This repo adds the
-*write, deploy, and operate* halves:
-
-- a **typed, reference-aware model** of the driver set (policies, filters, GCVs,
-  resources, mapping tables, schema map, packages) with canonical serialization;
-- **IDM-as-code** — one readable, git-versioned file per object as the source of truth;
-- **validation** (DTD, XSLT/ECMAScript compile, linkage, GCV/mapping-table refs, schema);
-- **vault deploy** over LDAP + the DirXML extended operations, with diff/dry-run,
-  snapshot/rollback, environment gating, and package-aware overrides;
-- **driver operations** (status, start/stop/restart, cache view/clear, migrate/resync, named passwords, trace incl. tail over SSH, engine stats) and the **submit canary** (live engine vs simulator);
-- **provisioning forms** (Track P — the form builder for PRDs);
-- surfaced as a **CLI** (`bin/idm`), one operation registry, `--json` everywhere; no MCP server by decision.
-
-## Requirements
-
-JDK 21, Maven, and the NetIQ/OpenText IDM jars in `lib/` (proprietary; never
-committed — `lib/` may be a symlink to the simulator's `lib/`). Build the simulator
-first (`mvn install` in its repo) so `dirxml-simulator` resolves from `~/.m2`.
+These assume `bin/idm` is already built and you are in a **client** directory
+(not this repository). Full setup of that directory, including a redacted
+`environments.properties`, is [docs/getting-started.md](docs/getting-started.md).
+Names such as `stg` and `AD Driver` are placeholders for your environment name
+and your driver's name.
 
 ```bash
-export JAVA_HOME=.../zulu-21
+bin/idm import-live tree/ --env stg
+bin/idm validate tree/
+bin/idm vault.diff tree/ --env stg
+bin/idm query tree/ chain "AD Driver" sub
+bin/idm query tree/ drivers
+```
+
+A policy change, then a staging deploy. Read the dry-run before `--yes`.
+
+```bash
+bin/idm policy.add tree/ --driver "AD Driver" --scope subscriber \
+  --name "ACME-sub-ctp-NormalizeTitle" --link subscriber-command \
+  --content-file normalize-title.policy.xml
+bin/idm validate tree/
+bin/idm simulate tree/ --cases cases/ --against /path/to/tree-before
+bin/idm vault.diff tree/ --env stg
+bin/idm vault.deploy tree/ --env stg --driver "AD Driver" --dry-run
+bin/idm vault.deploy tree/ --env stg --driver "AD Driver" --yes
+```
+
+Production is the same commands plus the gate. A person types the environment
+name after `--confirm`:
+
+```bash
+bin/idm vault.deploy tree/ --env prd --driver "AD Driver" --dry-run
+bin/idm vault.deploy tree/ --env prd --driver "AD Driver" --yes --confirm prd
+```
+
+More workflows, including forms, packages, and driver operations:
+[docs/day-to-day.md](docs/day-to-day.md). Sanitized samples:
+[docs/examples/](docs/examples/).
+
+## Safety
+
+- Show the plan before you write. `vault.diff`, then `vault.deploy --dry-run`,
+  then a human's yes, then `--yes` or `--step`.
+- A production environment (`tier=prd`) requires `--confirm <env>`, a committed
+  tree, and a vault that matches the last recorded deploy. If it does not,
+  `--capture-drift` records the vault's current state first.
+- The deployer refuses to delete a driver unless you pass `--delete-driver`,
+  and refuses to empty every object of a kind (entitlements, forms, PRDs, …)
+  unless you pass `--delete-all <kind>`. A plan full of deletes usually means
+  the tree is stale: re-import with `import-live`.
+- Secrets stay in `secrets-<env>.properties` or come from a keychain, a
+  command, or an environment variable. The tool prints names, never values.
+  Do not paste passwords, snapshots, or client policy content into chat.
+- `driver.stop` leaves the cache in place, and events keep queueing.
+  `driver.cache clear` prints the count and the first and last event, writes
+  them to a snapshot, and on staging or production also requires
+  `--confirm <env>`.
+- Edit operations refuse rather than leave the tree invalid. Do not pass
+  `--force` to skip a refusal; fix the cause.
+
+## Guides
+
+Start at [docs/README.md](docs/README.md). The short path:
+
+1. [Getting started](docs/getting-started.md) — client tree, environments file, first import.
+2. [Tree layout](docs/tree-layout.md) — what `driverset.xml`, `drivers/`, `cases/`, and the secrets files are.
+3. [Day to day](docs/day-to-day.md) — policy change, deploy, packages, forms, operate.
+4. [Examples](docs/examples/) — fictional, sanitized snippets.
+5. [Agent guide](docs/agent-guide.md) — the same loop, written for an agent at the shell.
+
+Building from source is [docs/install.md](docs/install.md).
+
+## Status
+
+Phases 0–7, JSON provisioning forms, and workflow authoring (`flow.*`) are
+built. Vault deploy, driver operations, and Identity Applications proofs have
+been run on lab vaults. The phase-by-phase record, the architecture, and the
+decisions already made are in [docs/plan.md](docs/plan.md). Design notes under
+`docs/` that still say "building" are historical; the commands in `bin/idm`
+are what shipped.
+
+## Install and build
+
+JDK 21, Maven, and the Identity Manager engine jars in `lib/` (proprietary,
+never committed; `lib/` may be a symlink to the simulator's `lib/`). Build the
+DirXML Policy Simulator first so `dirxml-simulator` resolves from `~/.m2`.
+`bin/idm` finds JDK 21 via `IDM_JAVA_HOME` (or `java_home -v 21` on macOS),
+compiles on first use if `target/classes` is missing, and puts the simulator
+jar on the classpath (`IDM_SIM_VERSION` selects another installed version).
+
+```bash
+export IDM_JAVA_HOME=/path/to/jdk-21
 mvn test
+bin/idm
 ```
 
-## Layout
+Windows: `bin\idm.cmd`. Step-by-step, including the engine jars and a client
+`environments.properties`: [docs/install.md](docs/install.md).
 
-- `docs/plan.md` — the plan (architecture, phases, decisions, safeguards).
-- `docs/vscode-extension-v1.md` — thin VS Code/Cursor fishbone (policy-flow) viewer; scaffold in `extensions/dirxmldev-visual/`.
-- `docs/spikes/` — spike findings (Phase 0, 4, 5).
-- `src/` — model, as-code, validate, edit, simulate, deploy, operate.
+## This repository
+
+| Path | What it is |
+|---|---|
+| `bin/idm`, `bin/apps` | The CLI and the Identity Applications helper |
+| `src/` | Model, as-code, validate, edit, simulate, deploy, operate |
+| `docs/` | User guides, then design notes and spikes |
+| `.claude/skills/dirxml-dev/` | Agent skill: the loop, the rules, the recipes |
+| `extensions/dirxmldev-visual/` | Read-only policy-flow fishbone |
+| `lib/` | Engine jars (gitignored) |
+
+Client trees, LDIFs, traces, `environments.properties`, and `secrets*.properties`
+stay in the client's repository. They are gitignored here.
+
+## For agents
+
+The skill in `.claude/skills/dirxml-dev/` is picked up when Claude Code runs
+in this repo. In a client repo, copy or symlink that directory to
+`.claude/skills/`. It points at [docs/agent-guide.md](docs/agent-guide.md).
+The simulator's `dirxml-policy-testing` skill covers running policies against
+sample events; this one is the loop around it.

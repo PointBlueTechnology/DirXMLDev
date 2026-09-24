@@ -4,7 +4,15 @@ How an agent (or a person at a shell) changes an IDM driver set without
 Designer: the tree is the source of truth, the CLI keeps it consistent, the
 validator is the engine's own verdict, and git is the history.
 
-`bin/idm` with no arguments prints every command with its arguments.
+A human learning the product starts at the [repository README](../README.md)
+and [docs/README.md](README.md) ([getting-started.md](getting-started.md),
+[day-to-day.md](day-to-day.md), [tree-layout.md](tree-layout.md)). This page
+is the same loop with the refusal rules spelled out.
+
+`bin/idm` with no arguments prints every command with its arguments. Where
+this page and that text disagree, follow `bin/idm`. Edit operations are
+`command <tree> --flag value` (for example `--form`, `--prd`, `--props`).
+`--json` always means machine-readable output.
 
 ## The tree
 
@@ -23,6 +31,10 @@ tree/
   drivers/<driver>/publisher/…
   .package-baseline/…               pre-edit content of customized packaged artifacts
 ```
+
+Forms, PRDs, entitlements, and the rest of AppConfig live under the driver as
+well. The plain-language map, including `cases/` and the secrets files beside
+the tree, is [tree-layout.md](tree-layout.md).
 
 Artifacts are addressed by **path**: `library/<name>`, `drivers/<driver>/<name>`,
 `drivers/<driver>/subscriber/<name>`, `drivers/<driver>/publisher/<name>`.
@@ -55,6 +67,8 @@ bin/idm query tree/ gcvs "AD Driver"         # every GCV in scope, value, and wh
 bin/idm query tree/ tables "AD Driver"       # mapping tables in reach, with columns
 bin/idm show tree/ "drivers/AD Driver/subscriber/sub-ctp-Transform"
 bin/idm refs tree/ "library/lib-Shared"      # who links / includes / maps it
+bin/idm query tree/ drivers                  # driver names and directories
+bin/idm query tree/ fishbone "AD Driver"     # the policy-flow fishbone (--json for the VS Code viewer)
 ```
 
 `validate` on a tree from a running vault should report **0 errors**. If it
@@ -108,9 +122,9 @@ every write). A
 common recipe, add a field to a request form and map it to flowdata:
 
 ```bash
-bin/idm form.field.add tree/ "Help-desk Request Form" --key priority --type select \
-    --label Priority --required --json '{"data":{"values":[{"label":"High","value":"high"},{"label":"Low","value":"low"}]}}'
-bin/idm prd.map tree/ HelpdeskTicket --field priority          # default target: flowdata.Start/Help-desk_Request_Form/priority
+bin/idm form.field.add tree/ --form "Help-desk Request Form" --key priority --type select \
+    --label Priority --required --props '{"data":{"values":[{"label":"High","value":"high"},{"label":"Low","value":"low"}]}}'
+bin/idm prd.map tree/ --prd HelpdeskTicket --field priority    # default target: flowdata.Start/Help-desk_Request_Form/priority
 bin/idm validate tree/                                          # 0 errors expected (FormCheck runs by default)
 ```
 
@@ -198,7 +212,7 @@ bin/idm flow.activity.add tree/ --prd "Widget Access" --kind approval --id appro
     --addressee "IDVault.get(recipient,'user','manager')"
 bin/idm flow.activity.add tree/ --prd "Widget Access" --kind approval --id approval_2 --after approval_1 --via approved \
     --addressee "'cn=uaadmin,ou=sa,o=data'"
-bin/idm prd.map tree/ "Widget Access" --field reason                        # bind the request form's field to flowdata
+bin/idm prd.map tree/ --prd "Widget Access" --field reason                    # bind the request form's field to flowdata
 bin/idm validate tree/                                                       # 0 errors, 0 flow-placeholder expected
 bin/idm prd.flow tree/ "Widget Access" --format mermaid --out flow.mmd       # review the shape before deploying
 ```
@@ -374,7 +388,7 @@ its own catalog (a git directory of package jars) and installs, inspects and
 builds packages without Designer ([packages.md](packages.md)):
 
 ```bash
-bin/idm package.fetch  --catalog ~/idm-packages --short NOVLADBASE --latest      # from the update site
+bin/idm package.fetch  --catalog ~/idm-packages --short NOVLADBASE               # newest version; --all-versions for every one
 bin/idm package.import --catalog ~/idm-packages /Applications/Designer/packages/eclipse/plugins   # or a Designer install
 bin/idm package.show   --catalog ~/idm-packages NOVLADBASE
 bin/idm package.resolve --catalog ~/idm-packages --base NOVLADBASE --feature NOVLADDCFG
@@ -398,7 +412,7 @@ before package stamps were read needs `package.adopt` (or a fresh
 
 ```bash
 bin/idm validate tree/                                   # engine will load it
-bin/idm simulate tree/ --cases cases/ --against tree@HEAD # regression corpus: what changed
+bin/idm simulate tree/ --cases cases/ --against /path/to/tree-before # another as-code tree, not a git rev
 git add -A tree/ && git commit -m "AD: normalize Title on subscriber command (#123)"
 ```
 
@@ -418,7 +432,7 @@ bin/idm vault.deploy tree/ --env stg --driver "AD Driver" --dry-run   # the plan
 bin/idm vault.deploy tree/ --env stg --driver "AD Driver" --yes       # snapshot → write → restart → verify → audit
 bin/idm vault.deploy tree/ --env stg --step               # or: confirm and verify each change
 bin/idm vault.verify tree/ --env stg                      # re-read: vault == tree
-bin/idm vault.rollback tree/ --env stg --snapshot deploy-snapshots/stg/<ts>.ldif --yes
+bin/idm vault.rollback --env stg --snapshot deploy-snapshots/stg/<ts>.ldif --yes
 ```
 
 What the deployer will not do: write anything the tree doesn't `validate`
@@ -438,18 +452,21 @@ bin/idm driver.status    --env stg --driver "AD Driver"     # + trace file, name
 bin/idm engine.stats     --env stg --driver "AD Driver"     # JVM heap/threads + cache and operation counters
 bin/idm driver.cache view --env stg --driver "AD Driver" --out cases/ad-cache   # queued events → a simulator case
 bin/idm driver.trace tail --env stg --driver "AD Driver" --since 10 --grep "Applying rule"
-bin/idm driver.start|stop|restart --env stg --driver "AD Driver" [--yes]
-bin/idm driver.trace set --env stg --driver "AD Driver" --level 3 --file /var/opt/novell/eDirectory/log/ad.trace
+bin/idm driver.restart --env stg --driver "AD Driver" --yes
+bin/idm driver.stop --env stg --driver "AD Driver" --yes
+bin/idm driver.trace set --env stg --driver "AD Driver" --level 3 --file /var/opt/novell/eDirectory/log/ad.trace --yes
 bin/idm driver.submit --env stg --driver "AD Driver" --xds event.xds --yes --tree tree/   # the canary
 bin/idm driver.cache clear --env stg --driver "AD Driver" --yes --confirm stg
 ```
 
 Gating follows what an operation can break ([operate.md](operate.md)): reads
-are free; start/restart/trace/secrets need `--yes` on stg and `--yes --confirm`
-on prd; stop/resync/migrate/submit need `--yes` everywhere; `cache clear`
-shows the count and first/last event, saves the events to
-`deploy-snapshots/`, and needs `--yes` (plus `--confirm` on stg/prd). Every
-state change is audited. `driver.submit --tree` is the ground truth for a
+(status, cache view, trace show/tail, secrets list, engine.*) are free;
+start, restart, trace set/reset, and secrets set/remove need `--yes` on stg
+and `--yes --confirm <env>` on prd; stop, resync, migrate, and submit need
+`--yes` on every tier and `--confirm <env>` on prd; `cache clear` prints the
+count and first/last event, saves the events to `deploy-snapshots/`, and
+needs `--yes` plus `--confirm <env>` on stg and prd. Every state change is
+audited. `driver.submit --tree` is the ground truth for a
 policy change: the live engine's Subscriber channel hands the shim a document,
 the trace shows which, and the simulator's prediction from the tree must match
 it.
