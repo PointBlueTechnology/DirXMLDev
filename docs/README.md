@@ -16,7 +16,8 @@ the help.
 | [day-to-day.md](day-to-day.md) | Change a policy, deploy, install a package, edit a form, operate a driver |
 | [examples/](examples/) | Copy sanitized, fictional snippets |
 | [walkthrough.md](walkthrough.md) | Follow the same loop in one long narrative |
-| [agent-guide.md](agent-guide.md) | Run the loop as an agent, including the refusal rules |
+| [agents.md](agents.md) | Point any agent at the tool (Cursor, Claude Code, Codex, others) |
+| [agent-guide.md](agent-guide.md) | The loop and the refusal rules that agent follows |
 | [install.md](install.md) | Build `bin/idm` from source and configure a workstation |
 
 ## By job
@@ -52,7 +53,10 @@ These describe how the tool was built. They are not the place to learn a command
 |---|---|
 | [plan.md](plan.md) | Architecture, phases, decisions, safeguards |
 | [model.md](model.md) | The typed model and the as-code file contract |
-| [spikes/](spikes/) | Measurements that closed a question. Facts also live in the skill's `reference/facts.md` |
+| [spikes/](spikes/) | Measurements that closed a question. The same facts are in `.claude/skills/dirxml-dev/reference/facts.md` (plain markdown; any agent can read it) |
 
-The agent skill (loop, rules, recipes, command groups) is
+How an agent is set up, for any product, is [agents.md](agents.md). Claude
+Code's loader for the same rules is
 [../.claude/skills/dirxml-dev/SKILL.md](../.claude/skills/dirxml-dev/SKILL.md).
+Measured facts are
+[../.claude/skills/dirxml-dev/reference/facts.md](../.claude/skills/dirxml-dev/reference/facts.md).

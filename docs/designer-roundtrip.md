@@ -1,7 +1,9 @@
 # Phase 6 design — Designer round-trip, agent workflows, documentation
 
 Historical design note. Using `export`, `export-project`, and `docs` is in
-[day-to-day.md](day-to-day.md). Phase 6 in [plan.md](plan.md) is complete.
+[day-to-day.md](day-to-day.md). The agent instructions are
+[agents.md](agents.md) for any product; Claude Code still loads the same loop
+from `.claude/skills/dirxml-dev/`. Phase 6 in [plan.md](plan.md) is complete.
 
 Status: **shipped** (design written 2026-09-09). Follows [plan.md](plan.md) Phase 6; builds on
 everything before it — the reader for Designer projects

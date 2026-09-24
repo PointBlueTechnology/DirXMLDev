@@ -28,7 +28,10 @@ repository [README](../../../README.md) and
 [tree layout](../../../docs/tree-layout.md)).
 `bin/idm` with no arguments lists every command; [reference/commands.md](reference/commands.md)
 groups them; [`docs/agent-guide.md`](../../../docs/agent-guide.md) explains each
-step in depth. When this skill and `bin/idm` disagree on a flag, follow `bin/idm`. **Before deriving how the engine, Designer, the Identity
+step in depth. When this skill and `bin/idm` disagree on a flag, follow `bin/idm`.
+This file is the Claude Code loader. Any other agent reads
+[docs/agents.md](../../../docs/agents.md) and does not need this directory.
+**Before deriving how the engine, Designer, the Identity
 Applications or packages behave, read [reference/facts.md](reference/facts.md)** —
 every fact we have measured, with the spike that proves it; a question
 answered there is never re-spiked. This skill is about *the loop* and *the rules*.
