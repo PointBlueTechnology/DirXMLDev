@@ -1,0 +1,21 @@
+{
+  "name": "dirxmldev-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Thin gated MCP server that wraps bin/idm (and read-only bin/apps) for Cursor and other agents.",
+  "type": "module",
+  "bin": {
+    "dirxmldev-mcp": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.1.0",
+    "zod": "^4.6.5"
+  }
+}

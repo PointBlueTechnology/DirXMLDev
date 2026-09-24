@@ -1,6 +1,12 @@
 {
   "name": "dirxmldev-visual",
-  "description": "Thin MCP/tool hooks for the DirXMLDev fishbone. There is no MCP server in DirXMLDev today (CLI-only). These tool definitions are the adapter surface; implementations are TypeScript helpers in src/hooks.ts and the VS Code commands.",
+  "description": "Fishbone tool names implemented by the DirXMLDev MCP server (mcp/dirxmldev-mcp, docs/mcp.md). fishbone.get and fishbone.reveal shell out to bin/idm query; fishbone.refresh writes only the .dirxmldev/fishbone.refresh sentinel. The VS Code commands remain the editor-side hooks.",
+  "mcpServer": {
+    "package": "mcp/dirxmldev-mcp",
+    "docs": "docs/mcp.md",
+    "command": "node",
+    "args": ["mcp/dirxmldev-mcp/src/index.js"]
+  },
   "tools": [
     {
       "name": "fishbone.get",
@@ -21,7 +27,7 @@
           "tree"
         ]
       },
-      "run": "bin/idm query <tree> fishbone <driver> --json   (or node extensions/dirxmldev-visual/out/cli.js dump <tree> [driver])"
+      "run": "mcp/dirxmldev-mcp: bin/idm query <tree> drivers --json when driver is omitted, then bin/idm query <tree> fishbone <driver> --json"
     },
     {
       "name": "fishbone.refresh",
@@ -66,6 +72,7 @@
           "ref"
         ]
       },
+      "run": "mcp/dirxmldev-mcp: bin/idm query <tree> fishbone <driver> --json, then resolve ref to a content file under the tree",
       "vscodeCommand": "dirxmldev.fishbone.reveal"
     }
   ]
