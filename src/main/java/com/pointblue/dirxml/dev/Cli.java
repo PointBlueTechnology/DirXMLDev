@@ -19,6 +19,7 @@ import java.util.List;
  *   import &lt;export.xml&gt; &lt;outDir&gt;   read a driver / driver-set export, write IDM-as-code
  *   check  &lt;asCodeDir&gt;             load an as-code tree, report it, exit 1 on broken links
  *   validate &lt;asCodeDir&gt; [--json]  run every validation check, exit 1 on any error
+ *   doctor [--json] [--env NAME]     JDK 21, simulator, lib jars, environments (no secrets)
  * </pre>
  */
 public final class Cli {
@@ -224,6 +225,9 @@ public final class Cli {
                 System.out.println(refs.size() + " reference(s)");
                 System.exit(0);
             }
+            if (args.length >= 1 && args[0].equals("doctor")) {
+                System.exit(Doctor.run(args));
+            }
             if (args.length >= 2 && args[0].equals("validate")) {
                 boolean json = false;
                 Path dir = null;
@@ -380,6 +384,9 @@ public final class Cli {
 
     private static void usage() {
         System.err.println("usage:");
+        System.err.println("  doctor [--json] [--env NAME]          JDK 21, simulator jar, lib/*.jar, environments (names, tiers,");
+        System.err.println("                                        whether url/bind/password/driverSet are set — never the values);");
+        System.err.println("                                        --env opens one LDAPS connection and does not print the password");
         System.err.println("  import <export.xml> <outDir>          read a driver / driver-set export, write IDM-as-code");
         System.err.println("  import-project <projectDir> <outDir>  read a Designer project, write IDM-as-code");
         System.err.println("  import-ldif <dump.ldif> <outDir>      read an LDIF of the driver-set subtree, write IDM-as-code");
@@ -440,6 +447,9 @@ public final class Cli {
         System.err.println("                  [--depends SHORT…] [--gcvs referenced|all|none] [--customized keep] [--base] [--json]   build a package jar from a driver's artifacts");
         System.err.println("  package.site    --catalog DIR --out DIR [--description …]   render the catalog as an Eclipse update site Designer can read");
         System.err.println("  package.status  <tree> [--driver D] [--catalog DIR] [--json]   installed packages per driver vs the catalog (upgrades available)");
+        System.err.println("vault writes (vault.deploy --yes|--step, vault.rollback --yes, vault.import-clone --yes,");
+        System.err.println("  driver start|stop|restart, cache clear, migrate, resync, secrets set|remove, trace set|reset, submit)");
+        System.err.println("  also need IDM_AGENT_ALLOW_WRITE=1 or --confirm <env>. A --dry-run stays read-only.");
         System.err.println("operate (docs/operate.md; environments.properties, tiers, deploy-log audit):");
         System.err.println("  driverset.status --env E [--json]");
         System.err.println("  driver.status --env E --driver D [--json] [--tree DIR]");
