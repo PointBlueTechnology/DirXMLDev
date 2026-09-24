@@ -24,8 +24,9 @@ so you can set them on the lab afterwards.
   the engine jars from the customer's own IDM installation in its `lib/`
   (`/opt/novell/eDirectory/lib/dirxml/classes/` on an engine server, or the
   Designer install). The jars are proprietary and are never committed.
-- The **DirXMLDev** repository with `lib` symlinked to the simulator's `lib`, built
-  once (`mvn -q test`). `bin/idm` then runs everything; on Windows use
+- The **DirXMLDev** repository with `lib` symlinked to the simulator's `lib`
+  (or the jars copied into a real `lib/` directory), built once (`mvn -q test`).
+  `bin/idm` then runs everything; on Windows use
   `bin\idm.cmd` (a JDK 21 in `IDM_JAVA_HOME` or `JAVA_HOME`).
 - **LDAPS** to the vault server that holds the driver set. If the driver set is
   served by more than one server, LDAPS to each of them, or an SSH tunnel per

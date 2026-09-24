@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Removed
+
+- The lab `deploy-log/` audit trail is no longer in the tree. `deploy-log/` is
+  gitignored in this repository so a local log is not committed. A client
+  repository still commits its own `deploy-log/`.
+
+### Fixed
+
+- `mvn test` follows a `lib` directory symlink (the layout in
+  [docs/install.md](docs/install.md)), a real `lib/` directory of jars, or
+  per-jar symlinks. The previous validate rule treated any of those links as a
+  missing file.
+
 ## [0.1.0] - 2026-09-24
 
 First public version line of the Designer-optional Identity Manager toolchain

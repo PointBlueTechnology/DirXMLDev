@@ -327,7 +327,7 @@ public final class Doctor {
         fields.put("missing", new ArrayList<Object>(missing));
         if (!missing.isEmpty()) {
             String detail = "Missing " + String.join(", ", missing) + ". Put the proprietary NetIQ/OpenText IDM jars in "
-                + dir + " (or symlink lib to the DirXML Simulator's lib/). They come from an IDM engine "
+                + dir + " (or symlink lib to the DirXML Simulator's lib/, or copy the jars into a real lib/). They come from an IDM engine "
                 + "(/opt/novell/eDirectory/lib/dirxml/classes/) or a Designer install, and they are gitignored. "
                 + "See docs/install.md section 2.";
             fields.put("detail", detail);

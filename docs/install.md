@@ -61,6 +61,13 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q test  # builds and runs the tes
 bin/idm                                                # prints every command
 ```
 
+`lib` is gitignored. The command above is the layout `mvn test` uses: `lib` is a
+directory symlink to the simulator's `lib`, so the jars live in one place.
+Copying the ten jars into a real `lib/` directory works the same, and so does a
+real `lib/` directory whose entries are symlinks to those jars. The validate
+step checks each path with a plain exists test, which follows links
+(`bin/require-engine.sh` prints the same list). Do not commit the jars.
+
 `bin/idm` finds JDK 21 by itself (`IDM_JAVA_HOME` overrides), compiles on first
 use if `target/classes` is missing, and puts `target/classes`, `lib/*.jar` and
 the simulator jar on the class path. `IDM_SIM_VERSION` selects another
@@ -129,9 +136,9 @@ It is checked before any secret is resolved and before LDAP is opened.
 `idm.portable` compiles doctor, the environment parser, and the write gate against
 a stub LDAP client and runs `DoctorTest` and `AgentWriteGateTest`. It does not
 compile the rest of the tree. A normal `mvn test` is still the full suite: the
-enforcer in `pom.xml` stops it with the jar list when `lib/` or the simulator is
-absent, which is what you want on a workstation where you meant to compile
-everything.
+validate check in `pom.xml` stops it with the jar list when `lib/` or the
+simulator is absent, which is what you want on a workstation where you meant to
+compile everything.
 
 A clean GitHub-hosted runner has no proprietary jars, so `test` is the required
 check and `engine` stays skipped. To run the full suite in Actions, on a

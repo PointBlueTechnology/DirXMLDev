@@ -29,6 +29,10 @@ environments.properties
 secrets*.properties
 deploy-snapshots/
 
+# Local audit log when this checkout is used as a working tree. Client repositories
+# commit their own deploy-log; this repository must not.
+deploy-log/
+
 # python bytecode from bin/apps
 __pycache__/
 

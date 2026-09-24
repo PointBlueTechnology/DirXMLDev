@@ -114,7 +114,7 @@ doctor_shell() {
     lib_ok=1
     lib_detail="$present jars in $HERE/lib"
   else
-    lib_detail="Missing $missing. Put the proprietary NetIQ/OpenText IDM jars in $HERE/lib (or symlink lib to the DirXML Simulator's lib/). See docs/install.md section 2."
+    lib_detail="Missing $missing. Put the proprietary NetIQ/OpenText IDM jars in $HERE/lib (symlink lib to the DirXML Simulator's lib/, or copy the jars into a real lib/). See docs/install.md section 2."
   fi
 
   cli_detail="The Java CLI is not built, so environments and the LDAPS probe were not checked. With JDK 21, the simulator jar, and lib/*.jar in place, run: mvn compile (or bin/idm doctor again)."
