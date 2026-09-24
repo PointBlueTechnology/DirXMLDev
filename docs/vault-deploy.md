@@ -1,6 +1,11 @@
 # Phase 4 design — vault deploy with safeguards
 
-Status: **design confirmed, building** (2026-09-08). Follows [plan.md](plan.md) Phase 4; builds on
+Historical design note. The commands shipped; how to run them is
+[day-to-day.md](day-to-day.md) and [getting-started.md](getting-started.md).
+`bin/idm` usage wins where this note and the CLI disagree. Phase 4 in
+[plan.md](plan.md) is complete.
+
+Status: **shipped** (design written 2026-09-08; proven on the test vault). Follows [plan.md](plan.md) Phase 4; builds on
 the Phase 0 spikes ([spikes/ldap-write.md](spikes/ldap-write.md),
 [spikes/engine-pickup.md](spikes/engine-pickup.md),
 [spikes/extended-ops-api.md](spikes/extended-ops-api.md)), the model, the
@@ -361,7 +366,7 @@ a macOS Keychain item (so a password manager, the Keychain or a CI secret
 store is the real source and nothing sensitive sits in a file). The same four
 forms apply to the environments file's `password`, `appsPassword` and
 `appsSecret`; both files trigger a one-line warning when readable by other
-users (keep them at mode 600). See [getting-started.md](getting-started.md) §4. The deployer never prints a secret and never writes
+users (keep them at mode 600). See [getting-started.md](getting-started.md#configure-the-vault-target). The deployer never prints a secret and never writes
 one into a snapshot, an audit line, or a tree.
 
 **In the plan.** Secrets are not diffable — the vault won't return them — so

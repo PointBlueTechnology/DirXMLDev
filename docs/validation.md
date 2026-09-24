@@ -1,5 +1,8 @@
 # Validation — the offline gate
 
+What each check means. Running it is [getting-started.md](getting-started.md)
+and [day-to-day.md](day-to-day.md).
+
 `bin/idm validate <asCodeDir> [--json]` runs every check over an IDM-as-code tree
 and exits 1 on any error. It is the first of the safeguards in
 [plan.md](plan.md): nothing is deployed to a vault that does not validate clean,
