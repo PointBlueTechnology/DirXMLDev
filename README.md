@@ -148,6 +148,14 @@ bin/idm
 Windows: `bin\idm.cmd`. Step-by-step, including the engine jars and a client
 `environments.properties`: [docs/install.md](docs/install.md).
 
+`bin/idm doctor` checks JDK 21, the simulator jar, and `lib/*.jar`. GitHub
+Actions does not have those jars. The default `test` job runs
+`mvn -B -Pidm.portable test` (doctor and the agent write gate). The full
+`mvn test` runs locally once `lib/` and the simulator are installed, or in
+Actions when `RUN_ENGINE_TESTS=true` on a runner that has them. A CLI write
+also needs `IDM_AGENT_ALLOW_WRITE=1` or `--confirm <env>`. Details:
+[docs/install.md](docs/install.md) §2.4.
+
 ## This repository
 
 | Path | What it is |

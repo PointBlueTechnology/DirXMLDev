@@ -47,6 +47,15 @@ public final class DeployCli {
             System.err.println("--env <name> is required (environments.properties; see docs/vault-deploy.md)");
             return 2;
         }
+        if (writesVault(cmd, opts)) {
+            String why = AgentWriteGate.refusal(envName, true, first(opts, "confirm"), System.getenv(AgentWriteGate.ENV));
+            if (why != null) {
+                Deployer.Result refused = new Deployer.Result();
+                refused.refusal = why;
+                System.out.print(json ? refused.json() + "\n" : refused.text());
+                return 1;
+            }
+        }
         Environments.Environment env = Environments.load().get(envName);
         List<String> drivers = opts.getOrDefault("driver", List.of());
 
@@ -103,6 +112,11 @@ public final class DeployCli {
                 System.err.println("unknown command " + cmd);
                 return 2;
         }
+    }
+
+    /** A command that will change the vault. {@code --dry-run} is never a write. */
+    static boolean writesVault(String cmd, Map<String, List<String>> opts) {
+        return AgentWriteGate.writesVault(cmd, opts);
     }
 
     private static String first(Map<String, List<String>> opts, String key) {
