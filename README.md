@@ -127,7 +127,9 @@ Start at [docs/README.md](docs/README.md). The short path:
 4. [Examples](docs/examples/) — fictional, sanitized snippets.
 5. [Agent guide](docs/agent-guide.md) — the same loop, written for an agent at the shell.
 
-Building from source is [docs/install.md](docs/install.md).
+On a new machine, [agent-assisted setup](docs/agent-assisted-setup.md) hands
+the install to a coding agent. Building from source by hand is
+[docs/install.md](docs/install.md).
 
 ## Status
 
@@ -140,6 +142,10 @@ decisions already made are in [docs/plan.md](docs/plan.md). Release notes are
 are what shipped.
 
 ## Install and build
+
+A coding agent can do this setup from
+[docs/agent-assisted-setup.md](docs/agent-assisted-setup.md). The steps below
+are the same work by hand.
 
 JDK 21, Maven, and the Identity Manager engine jars copied into a real `lib/`
 directory (proprietary, never committed). A symlink of `lib/`, or symlinks of

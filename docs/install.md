@@ -3,7 +3,10 @@
 This page is for someone who still has to **build** `bin/idm`. If the tool is
 already on your machine, skip to [getting-started.md](getting-started.md):
 client directory, a redacted `environments.properties`, and the first
-`import-live` / `validate` / `vault.diff`.
+`import-live` / `validate` / `vault.diff`. To hand this setup to a coding
+agent instead, start at [agent-assisted-setup.md](agent-assisted-setup.md):
+paste a prompt, and keep the jars, the vault facts, the deploy identity, and
+the passwords as the steps that stay with you.
 
 It covers what to install, what goes in the two private configuration files,
 and how to check that each part works. Day-to-day use is in
