@@ -476,6 +476,11 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   [spikes/prd-rest-live.md](spikes/prd-rest-live.md). Open check: whether
   `POST /index/permissions ADD_OR_MODIFY` makes a just-deployed PRD
   requestable before the index's 10-minute interval.
+- ~~**Multi-server driver sets beyond the clone**~~ — done 2026-09-25 (Norbert's
+  question): import-live reads every server's own driver settings, the tree keeps
+  the differences per server, diff and deploy act per server, a primary change fans
+  out; docs/vault-deploy.md "Several servers".
+
 - ~~**`bin/idm query <tree> fishbone <driver> --json`**~~ — built 2026-09-24
   (`edit/Fishbone`, `query … drivers --json` for the picker); extension 0.1.2 draws
   from it and its own manifest parser is gone (docs/vscode-extension-v1.md §6.3).

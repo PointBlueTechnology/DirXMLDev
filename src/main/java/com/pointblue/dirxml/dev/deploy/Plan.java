@@ -46,6 +46,8 @@ public final class Plan {
         public final String driver;           // affected driver name, or null
         /** DELETE_SUBTREE only: every DN of the driver's subtree (itself included), deepest first. */
         public final List<String> subtreeDns;
+        /** The server this step is written on (its DN): null for the environment's own connection. */
+        public final String server;
 
         Step(Op op, String dn, String attr, List<String> objectClasses, Map<String, List<byte[]>> values,
              String description, String change, String driver) {
@@ -54,6 +56,11 @@ public final class Plan {
 
         Step(Op op, String dn, String attr, List<String> objectClasses, Map<String, List<byte[]>> values,
              String description, String change, String driver, List<String> subtreeDns) {
+            this(op, dn, attr, objectClasses, values, description, change, driver, subtreeDns, null);
+        }
+
+        Step(Op op, String dn, String attr, List<String> objectClasses, Map<String, List<byte[]>> values,
+             String description, String change, String driver, List<String> subtreeDns, String server) {
             this.op = op;
             this.dn = dn;
             this.attr = attr;
@@ -63,11 +70,12 @@ public final class Plan {
             this.change = change;
             this.driver = driver;
             this.subtreeDns = subtreeDns;
+            this.server = server;
         }
 
         @Override
         public String toString() {
-            return String.format("%-12s %s", op.name().toLowerCase(), description);
+            return String.format("%-12s %s%s", op.name().toLowerCase(), description, server == null ? "" : "  @ " + server);
         }
     }
 
@@ -77,6 +85,10 @@ public final class Plan {
     public final List<String> notes = new ArrayList<>();
     public final List<String> missingSecrets = new ArrayList<>();
     public final Set<String> restart = new LinkedHashSet<>();       // driver names that will be restarted
+    /** Driver name → the other servers it must also be restarted on (where its server-specific settings changed). */
+    public final Map<String, Set<String>> serverRestarts = new LinkedHashMap<>();
+    /** The connection's own server, when the plan could ask; fan-out of a config change skips it. */
+    public String primaryServer;
     public final Set<String> touchedDns = new LinkedHashSet<>();    // for the snapshot
     public final Set<String> newDrivers = new LinkedHashSet<>();
     /** {@code --delete-driver} names that got a DELETE_SUBTREE step. */
@@ -155,6 +167,7 @@ public final class Plan {
                           List<String> deleteDrivers, VaultAccess vault, List<String> deleteAllKinds) {
         Plan p = new Plan();
         p.deleteAllKinds.addAll(deleteAllKinds);
+        p.primaryServer = vault != null ? Servers.primary(vault) : to.meta.get(Servers.PRIMARY_META);
         // every package either side names, so a partial record in the tree (an old project
         // tree's id-only package-id, an export's) is written to the vault as the full one
         p.packageIndex = com.pointblue.dirxml.dev.model.PackageStamps.Index.of(diff.from(), to);
@@ -302,6 +315,35 @@ public final class Plan {
                         : List.of(com.pointblue.dirxml.dev.xml.CanonicalXml.serialize(e).getBytes(StandardCharsets.UTF_8));
                     driverAttrs.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, values),
                         dn + "  " + attr + (values.isEmpty() ? " (remove)" : " (" + size(Map.of(attr, values)) + ")"), c.path + "#" + c.what, c.driver));
+                    // a never-sync attribute: every other server of the set holds its own copy, so the
+                    // change is written there too — except where the tree keeps that server's own override
+                    if (Servers.SERVER_CONFIG_KINDS.contains(c.what)) {
+                        for (String server : Servers.others(to, p.primaryServer)) {
+                            if (d.serverConfig.getOrDefault(server, Map.of()).containsKey(c.what)) {
+                                continue;
+                            }
+                            driverAttrs.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, values),
+                                dn + "  " + attr + (values.isEmpty() ? " (remove)" : " (" + size(Map.of(attr, values)) + ")") + " (the same value, on that server's own copy)",
+                                c.path + "#" + c.what, c.driver, null, server));
+                            p.serverRestarts.computeIfAbsent(c.driver, k -> new LinkedHashSet<>()).add(server);
+                        }
+                    }
+                    break;
+                }
+                case DRIVER_SERVER_CONFIG: {
+                    Driver d = to.driver(c.driver);
+                    String dn = VaultMapping.driverDn(dsDn, c.driver);
+                    p.touchedDns.add(dn);
+                    String attr = VaultMapping.driverConfigAttribute(c.what);
+                    Map<String, org.w3c.dom.Element> overrides = d.serverConfig.getOrDefault(c.server, Map.of());
+                    // an override present: that server's own value (absent = none there); removed: the primary's value
+                    org.w3c.dom.Element e = overrides.containsKey(c.what) ? overrides.get(c.what) : d.config.get(c.what);
+                    List<byte[]> values = e == null ? Collections.emptyList()
+                        : List.of(com.pointblue.dirxml.dev.xml.CanonicalXml.serialize(e).getBytes(StandardCharsets.UTF_8));
+                    driverAttrs.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, values),
+                        dn + "  " + attr + (values.isEmpty() ? " (remove)" : " (" + size(Map.of(attr, values)) + ")")
+                        + (overrides.containsKey(c.what) ? " (server-specific)" : " (back to the primary's value)"), c.path + "#" + c.what, c.driver, null, c.server));
+                    p.serverRestarts.computeIfAbsent(c.driver, k -> new LinkedHashSet<>()).add(c.server);
                     break;
                 }
                 case DRIVER_LINKAGE:
@@ -1004,6 +1046,11 @@ public final class Plan {
         }
         for (String d : restart) {
             sb.append(String.format("  %3d. %-12s %s  (after the writes, if the driver is running; a stopped driver loads them when started)%n", ++n, "restart", d));
+        }
+        for (Map.Entry<String, Set<String>> e : serverRestarts.entrySet()) {
+            for (String server : e.getValue()) {
+                sb.append(String.format("  %3d. %-12s %s  @ %s  (through that server's own connection, if the driver runs there)%n", ++n, "restart", e.getKey(), server));
+            }
         }
         for (String d : newDrivers) {
             sb.append("  new driver '").append(d).append("' is created stopped; start it explicitly when its secrets are in place\n");

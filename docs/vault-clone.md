@@ -243,6 +243,9 @@ Sources: [NetIQ ICE utility (eDirectory 9.2)](https://training.netiq.com/documen
 
 ## 9. Several servers in a driver set (added 2026-09-21, Jerry's requirement)
 
+*Since 2026-09-25 import-live, diff and deploy handle them too, on the same rules
+(`deploy.Servers`; docs/vault-deploy.md, "Several servers").*
+
 A driver set can name several servers in `DirXML-ServerList`, each running some of the
 drivers. IDM keeps a driver's server-specific settings — shim settings, GCVs, engine
 control values, start option, state, passwords — in eDirectory **never-sync attributes**

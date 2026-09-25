@@ -323,6 +323,37 @@ what the audit log says was last deployed there (the tree at that commit):
 The pre-deploy snapshot is always taken, so the state immediately before any
 production change is also on disk (and, with `--capture-drift`, in git).
 
+## Several servers in a driver set (2026-09-25)
+
+A driver set can be served by more than one server (`DirXML-ServerList`), and
+IDM keeps a driver's server-specific settings in never-sync attributes: each
+server holds its own `DirXML-ConfigValues`, `DirXML-ShimConfigInfo` and
+`DirXML-EngineControlValues`, and only that server's LDAP hands them out or
+takes them. Until now the tool saw one server's copy. Now:
+
+- **import-live** reads the driver set through the environment's connection
+  (the primary) and then every other server named in the list through its own
+  connection, at `<env>.servers=<serverDn>=<url>;…` or at the URL derived from
+  the server object (the clone's rule, docs/vault-clone.md §9). What differs
+  from the primary's value is kept per server under
+  `drivers/<driver>/servers/<server>/<kind>.xml` (an `absent` mark when that
+  server holds none); `driverset.xml` records the server list. A server that
+  cannot be read is noted and its settings stay unknown to the tree.
+- **diff** reports those overrides per server; **deploy** writes an override
+  through that server's connection, writes the primary's value there when an
+  override is removed, and fans a change of the primary's value out to every
+  server that has no override of its own — a server without an override holds
+  what the primary holds, and the deploy keeps it so. A driver whose settings
+  changed on a server is restarted there through that server's connection.
+- Each server written gets its own snapshot under
+  `deploy-snapshots/<env>/<server>/`; `vault.rollback --server <dn>` restores it
+  through that server's connection.
+- The operate commands (`driver.start`, `driver.status`, trace) still act on
+  the environment's own server; a driver running elsewhere needs an environment
+  whose URL is that server.
+
+On a single-server set none of this shows: no overrides, no server steps.
+
 ## Rollback
 
 `vault.rollback --env <name> --snapshot <file> [--yes]`: for each object in the
