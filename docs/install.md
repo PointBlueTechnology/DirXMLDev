@@ -115,7 +115,7 @@ few gated writes. It is not required. [mcp.md](mcp.md) is the wiring.
 ### 2.4 Check the workstation (`doctor`) and what CI runs
 
 `bin/idm doctor` reports whether this machine can run the tool. It checks JDK 21,
-the simulator jar at the version this repo pins (`1.6.1`, or `IDM_SIM_VERSION`),
+the simulator jar at the version this repo pins (`1.7.0`, or `IDM_SIM_VERSION`),
 and the ten proprietary jars in `lib/`. It does not print passwords, bind DNs, or
 URLs.
 
@@ -263,9 +263,10 @@ command that would change the vault also needs `IDM_AGENT_ALLOW_WRITE=1` or
 `--confirm <env>` (§2.4); `--confirm prd` satisfies both the production tier
 and that gate.
 
-**TLS trust.** When `<env>.trustAll` is omitted it defaults to true: LDAPS
-accepts the server certificate without checking the JDK truststore. Set
-`<env>.trustAll=false` once the vault CA is in the JDK truststore (see §4.3).
+**TLS trust.** LDAPS verifies the server certificate against the JDK
+truststore (§4.3). `<env>.trustAll=true` opts in to accepting any certificate,
+and with it the host-name check is skipped too — a lab with a private CA, an
+SSH tunnel to `127.0.0.1`. Never on production.
 
 ### 4.1 `secrets-<env>.properties` — what the tree cannot carry
 
@@ -323,8 +324,8 @@ The JDK must trust the vault's LDAPS certificate: import the CA into the JDK's
 `cacerts` (`keytool -importcert -cacerts -alias idm-ca -file ca.pem`) or into a
 truststore named with `IDM_JAVA_OPTS=-Djavax.net.ssl.trustStore=…`. When the
 certificate's subject does not match the host name you connect to (a lab, an
-SSH tunnel), add `-Dcom.sun.jndi.ldap.object.disableEndpointIdentification=true`
-to `IDM_JAVA_OPTS` — never in production.
+SSH tunnel), `<env>.trustAll=true` skips both the certificate and the host-name
+check — never in production.
 
 If `ldapsearch`/`curl` reach the vault but every Java command reports
 "No route to host", forward the port over SSH through a host that can reach it

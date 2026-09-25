@@ -61,6 +61,7 @@ src.passwordEnv=IDM_SRC_PASSWORD           # or src.passwordKeychain=… / src.p
 src.driverSet=cn=driverset1,o=system
 src.tier=dev
 src.secrets=secrets-src.properties         # may stay empty; the export needs no secrets
+# src.trustAll=true                        # only if the vault's CA is not in the JDK truststore; TLS is verified otherwise
 ```
 
 Then tell the tool where the file is:
@@ -78,14 +79,14 @@ Two situations need one more line each:
   reachable from your workstation, name the URLs yourself:
   `src.servers=cn=idm2,ou=servers,o=system=ldaps://10.0.0.2:636;cn=idm3,ou=servers,o=system=ldaps://10.0.0.3:636`
 - **Only reachable through a jump host.** Forward the port and point the
-  environment at the tunnel; the tool accepts the certificate's name not
-  matching `127.0.0.1` (a build before 2026-09-23 needs
-  `IDM_JAVA_OPTS=-Dcom.sun.jndi.ldap.object.disableEndpointIdentification=true`).
+  environment at the tunnel with `trustAll=true`, which skips the certificate
+  and the host-name check a tunnel to `127.0.0.1` cannot pass.
   ```bash
   ssh -f -N -o ExitOnForwardFailure=yes -L 6636:idm-vault.customer.example:636 you@jump-host
   ```
   ```properties
   src.url=ldaps://127.0.0.1:6636
+  src.trustAll=true                        # a tunnel never matches the certificate's name
   ```
 
 ### 1.4 Check the connection

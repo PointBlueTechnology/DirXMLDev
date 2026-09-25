@@ -93,7 +93,7 @@ public final class Vault implements VaultAccess {
         public String url;          // ldaps://host:636
         public String bindDn;
         public String password;
-        public boolean trustAll = true;
+        public boolean trustAll = false;   // opt in: accept any certificate (a lab, a tunnel); verified otherwise
         /** Attributes beyond {@link #BINARY_ATTRS} to read as bytes (a clone marks every octet-string attribute of the source schema). */
         public java.util.Collection<String> binaryAttrs = List.of();
 

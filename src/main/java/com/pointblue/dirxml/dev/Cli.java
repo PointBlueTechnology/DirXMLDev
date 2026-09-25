@@ -63,7 +63,7 @@ public final class Cli {
                     c.url = need("ldap.url");
                     c.bindDn = need("ldap.bindDn");
                     c.password = need("ldap.password");
-                    c.trustAll = !"false".equals(System.getProperty("ldap.trustAll"));
+                    c.trustAll = "true".equals(System.getProperty("ldap.trustAll"));
                     driverSetDn = positional.get(0);
                 }
                 Path outDir = Paths.get(positional.get(positional.size() - 1));

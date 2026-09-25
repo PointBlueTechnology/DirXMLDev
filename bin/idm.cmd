@@ -22,7 +22,7 @@ if not exist "%JH%\bin\java.exe" (
   exit /b 1
 )
 set "SIM_VER=%IDM_SIM_VERSION%"
-if "%SIM_VER%"=="" set "SIM_VER=1.6.1"
+if "%SIM_VER%"=="" set "SIM_VER=1.7.0"
 set "SIM_JAR=%USERPROFILE%\.m2\repository\com\pointblue\dirxml\dirxml-simulator\%SIM_VER%\dirxml-simulator-%SIM_VER%.jar"
 if not exist "%SIM_JAR%" (
   if /I "%CMD%"=="doctor" (

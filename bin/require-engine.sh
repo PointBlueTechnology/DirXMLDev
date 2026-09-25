@@ -12,7 +12,7 @@ if [ "${1:-}" = "--inform" ]; then
   inform=1
 fi
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-SIM_VER="${IDM_SIM_VERSION:-1.6.1}"
+SIM_VER="${IDM_SIM_VERSION:-1.7.0}"
 SIM_JAR="${HOME}/.m2/repository/com/pointblue/dirxml/dirxml-simulator/${SIM_VER}/dirxml-simulator-${SIM_VER}.jar"
 
 missing=""

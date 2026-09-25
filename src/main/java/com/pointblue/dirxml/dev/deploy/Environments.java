@@ -190,7 +190,7 @@ public final class Environments {
         String secrets = props.getProperty(name + ".secrets");
         Path secretsFile = secrets == null || secrets.isBlank() ? null
             : (file == null ? Paths.get(secrets) : file.toAbsolutePath().getParent().resolve(secrets));
-        boolean trustAll = !"false".equals(props.getProperty(name + ".trustAll"));
+        boolean trustAll = "true".equals(props.getProperty(name + ".trustAll"));   // opt in; TLS is verified otherwise
         String sshHost = props.getProperty(name + ".sshHost");
         String sshUser = props.getProperty(name + ".sshUser");
         return new Environment(name, url, bindDn, password, driverSet, tier,
