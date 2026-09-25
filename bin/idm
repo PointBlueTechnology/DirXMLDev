@@ -9,7 +9,7 @@
 # reports that itself. It never prints secrets.
 set -e
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-SIM_VER="${IDM_SIM_VERSION:-1.6.0}"
+SIM_VER="${IDM_SIM_VERSION:-1.6.1}"
 SIM_JAR="$HOME/.m2/repository/com/pointblue/dirxml/dirxml-simulator/$SIM_VER/dirxml-simulator-$SIM_VER.jar"
 CMD="${1:-}"
 

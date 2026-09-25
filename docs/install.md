@@ -115,7 +115,7 @@ few gated writes. It is not required. [mcp.md](mcp.md) is the wiring.
 ### 2.4 Check the workstation (`doctor`) and what CI runs
 
 `bin/idm doctor` reports whether this machine can run the tool. It checks JDK 21,
-the simulator jar at the version this repo pins (`1.6.0`, or `IDM_SIM_VERSION`),
+the simulator jar at the version this repo pins (`1.6.1`, or `IDM_SIM_VERSION`),
 and the ten proprietary jars in `lib/`. It does not print passwords, bind DNs, or
 URLs.
 

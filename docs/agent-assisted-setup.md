@@ -89,8 +89,8 @@ Phase 2 — build. Clone the simulator. Copy these ten jars from
 dirxml_misc.jar, nxsl.jar, xp.jar, js.jar, jclient.jar, ldap.jar, XDS.jar,
 dhutil.jar, CommonDriverShim.jar (a 4.10.2 engine names xp.jar
 xp-1.0.0.jar; copy it as xp.jar). Run mvn install there with JDK 21 so
-dirxml-simulator 1.6.0 lands in ~/.m2 (on Windows, %USERPROFILE%\.m2).
-DirXMLDev pins 1.6.0; set IDM_SIM_VERSION only if I asked for another build.
+dirxml-simulator 1.6.1 lands in ~/.m2 (on Windows, %USERPROFILE%\.m2).
+DirXMLDev pins 1.6.1; set IDM_SIM_VERSION only if I asked for another build.
 A simulator release zip does not satisfy doctor. Clone DirXMLDev, copy the
 same ten jars as regular files into its lib/, and run mvn test with JDK 21.
 A warning that the simulator POM's systemPath is invalid is expected;
@@ -243,8 +243,8 @@ Clone https://github.com/PointBlueTechnology/DirXMLSimulator into
 ~/IdeaProjects/DirXMLSimulator (or another directory I name). Copy the ten
 jars into that repo's lib/. With JAVA_HOME pointed at JDK 21, run
 mvn install. That must produce
-~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/1.6.0/dirxml-simulator-1.6.0.jar
-(on Windows, under %USERPROFILE%\.m2). DirXMLDev pins 1.6.0. A release zip
+~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/1.6.1/dirxml-simulator-1.6.1.jar
+(on Windows, under %USERPROFILE%\.m2). DirXMLDev pins 1.6.1. A release zip
 of the simulator is not a substitute. Set IDM_SIM_VERSION only if I asked.
 
 Clone https://github.com/PointBlueTechnology/DirXMLDev into
@@ -384,8 +384,8 @@ launcher also checks SIM_JAVA_HOME, /usr/libexec/java_home -v 21, JAVA_HOME
 when that Java is 21, /usr/lib/jvm/*21*, and java on PATH when that java is
 21. On Windows, bin\idm.cmd uses only IDM_JAVA_HOME or JAVA_HOME.
 
-Simulator: this repo pins dirxml-simulator 1.6.0. doctor looks for
-~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/1.6.0/dirxml-simulator-1.6.0.jar
+Simulator: this repo pins dirxml-simulator 1.6.1. doctor looks for
+~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/1.6.1/dirxml-simulator-1.6.1.jar
 (bin\idm.cmd uses %USERPROFILE%\.m2\...). Produce it with mvn install in the
 DirXMLSimulator repo, run with JDK 21. If mvn install succeeded and doctor
 still says the jar is missing, Maven and the launcher are looking at
@@ -479,7 +479,7 @@ show me DOCTOR: OK, or the next failure that is not a symlink.
 |---|---|---|---|---|
 | **macOS** | `/usr/libexec/java_home -v 21` finds it; Homebrew or a Temurin JDK installs it (the agent asks first). Run Maven with the same `JAVA_HOME` | `bin/idm` | The Keychain. An item added with `security` is read without a prompt; one made in Keychain Access asks once (choose Always Allow). A missing item's error names the command to run | `chmod 600` both properties files; the tool warns once per run when either is readable by others |
 | **Linux** | `IDM_JAVA_HOME`, else a `JAVA_HOME` that is 21, else `/usr/lib/jvm/*21*`, else `java` on `PATH` when it is 21. The distro's OpenJDK 21 (`openjdk-21-jdk` on Debian and Ubuntu, `java-21-openjdk-devel` on Fedora and RHEL) and Maven 3.9 or newer are enough | `bin/idm` | `passwordCommand=` or `passwordEnv=` | `chmod 600` as on macOS; `XDS.jar` must keep its capitals on a case-sensitive filesystem |
-| **Windows** | `IDM_JAVA_HOME` or `JAVA_HOME` only; no search. The simulator jar is under `%USERPROFILE%\.m2\repository\com\pointblue\dirxml\dirxml-simulator\1.6.0\` | `bin\idm.cmd`; Git Bash or WSL can run `bin/idm`, which has the fuller search and reads `$HOME/.m2` — use one home directory for Maven and the launcher | `passwordCommand=` or `passwordEnv=`; there is no Keychain | The mode-600 warning is a POSIX check; keep the two properties files out of git and out of shared folders |
+| **Windows** | `IDM_JAVA_HOME` or `JAVA_HOME` only; no search. The simulator jar is under `%USERPROFILE%\.m2\repository\com\pointblue\dirxml\dirxml-simulator\1.6.1\` | `bin\idm.cmd`; Git Bash or WSL can run `bin/idm`, which has the fuller search and reads `$HOME/.m2` — use one home directory for Maven and the launcher | `passwordCommand=` or `passwordEnv=`; there is no Keychain | The mode-600 warning is a POSIX check; keep the two properties files out of git and out of shared folders |
 
 A fresh Designer project from a vault, without Designer connecting, is a
 later task: [howto-fresh-designer-project.md](howto-fresh-designer-project.md).
