@@ -65,6 +65,15 @@ Global configuration values for the whole driver set. A driver can override
 the same name in its own `config-values.xml`. `query tree/ gcvs "<driver>"`
 shows the value that wins and where it is defined.
 
+### `drivers/<driver>/servers/<server>/`
+
+Only on a driver set served by several servers: the never-sync settings
+(`config-values.xml`, `shim-config-info.xml`, `engine-control-values.xml`)
+that this server holds differently from the primary's, one directory per
+server; `driver.xml` lists them under `<server dn>`. `driverset.xml` records
+the set's server list. See [vault-deploy.md](vault-deploy.md), "Several
+servers".
+
 ### `library/`
 
 Policies, ECMAScript, mapping tables, and GCV objects shared by more than one

@@ -32,6 +32,8 @@ public final class VaultMapping {
     public static final String DATA = "DirXML-Data";
     public static final String CONTENT_TYPE = "DirXML-ContentType";
     public static final String CONFIG_VALUES = "DirXML-ConfigValues";
+    /** The driver set's servers (each holds its own never-sync driver settings; see {@code Servers}). */
+    public static final String SERVER_LIST = "DirXML-ServerList";
     public static final String POLICIES = "DirXML-Policies";
     public static final String JAVA_MODULE = "DirXML-JavaModule";
     public static final String SHIM_AUTH_SERVER = "DirXML-ShimAuthServer";

@@ -25,8 +25,15 @@ public final class Driver {
     public String shimClass;
     public String shimAuthServer;
     public String shimAuthId;
-    /** Raw config blobs by kind (see constants). */
+    /** Raw config blobs by kind (see constants) — the primary server's, or the only server's. */
     public final Map<String, Element> config = new LinkedHashMap<>();
+    /**
+     * Per other server of the driver set, the never-sync config blobs that differ from
+     * {@link #config} there (server DN → kind → blob; a null blob = that server holds none).
+     * Empty on a single-server set and wherever a server holds what the primary holds.
+     * See {@code deploy.Servers}.
+     */
+    public final Map<String, Map<String, Element>> serverConfig = new LinkedHashMap<>();
     public final List<Policy> policies = new ArrayList<>();      // driver scope
     public final List<Resource> resources = new ArrayList<>();   // driver scope
     public final Channel subscriber = new Channel(Scope.SUBSCRIBER);

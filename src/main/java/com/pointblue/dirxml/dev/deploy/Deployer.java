@@ -16,6 +16,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 
@@ -135,6 +137,52 @@ public final class Deployer {
 
     private final Options o;
     private final VaultAccess testVault;   // non-null only from the package-private test constructor
+    /** Test seam: the other servers of the set, by DN (their own fakes). Real runs connect through {@link Servers}. */
+    Map<String, VaultAccess> testServers = Map.of();
+    private final Map<String, VaultAccess> serverConnections = new LinkedHashMap<>();
+
+    /** The connection for a step: the environment's own, or the named server's (opened once, closed with the run). */
+    private VaultAccess vaultFor(VaultAccess primary, Environments.Environment env, String serverDn) {
+        if (serverDn == null) {
+            return primary;
+        }
+        VaultAccess v = serverConnections.get(serverDn);
+        if (v == null) {
+            v = testServers.get(serverDn);
+            if (v == null && testVault == null) {
+                String url = Servers.urlOf(env, primary, serverDn);
+                if (url == null) {
+                    throw new VaultAccessException("no LDAP URL for server " + serverDn + " (give " + env.name + ".servers=" + serverDn + "=ldaps://host:port)");
+                }
+                v = Vault.connect(env.vaultConfig().withUrl(url));
+            }
+            if (v == null) {
+                throw new VaultAccessException("no connection for server " + serverDn);
+            }
+            serverConnections.put(serverDn, v);
+        }
+        return v;
+    }
+
+    /** A server connection could not be made; reported as a failure of the run. */
+    static final class VaultAccessException extends RuntimeException {
+        VaultAccessException(String m) {
+            super(m);
+        }
+    }
+
+    private void closeServerConnections() {
+        for (VaultAccess v : serverConnections.values()) {
+            if (!testServers.containsValue(v)) {
+                try {
+                    v.close();
+                } catch (RuntimeException ignore) {
+                    // best effort
+                }
+            }
+        }
+        serverConnections.clear();
+    }
 
     public Deployer(Options o) {
         this(o, null);
@@ -172,8 +220,9 @@ public final class Deployer {
         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
 
         try (VaultAccess vault = testVault != null ? testVault : Vault.connect(env.vaultConfig())) {
-            // 2. diff and plan
+            // 2. diff and plan — the other servers' own driver settings included, read through their connections
             DriverSet from = VaultDiff.fromVault(vault, dsDn);
+            Servers.readOverrides(from, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
             ModelDiff diff = VaultDiff.of(from, to, o.drivers);
             r.diffText = diff.text();
             Map<String, List<String>> liveNamed = new LinkedHashMap<>();
@@ -233,6 +282,26 @@ public final class Deployer {
             Path snapDir = o.tree.resolve("deploy-snapshots").resolve(env.name);
             Path snapFile = snap.write(snapDir);
             r.snapshot = o.tree.toAbsolutePath().relativize(snapFile.toAbsolutePath()).toString().replace('\\', '/');
+            // the other servers' own copies of what the plan writes there: one snapshot per server
+            // (vault.rollback --server <dn> restores it through that server's connection)
+            Map<String, Set<String>> perServerDns = new LinkedHashMap<>();
+            for (Plan.Step s : plan.steps) {
+                if (s.server != null) {
+                    perServerDns.computeIfAbsent(s.server, k -> new LinkedHashSet<>()).add(s.dn);
+                }
+            }
+            for (Map.Entry<String, Set<String>> e : perServerDns.entrySet()) {
+                try {
+                    Snapshot ss = Snapshot.capture(vaultFor(vault, env, e.getKey()), env.name, dsDn, e.getValue(), List.of(), treeCommit,
+                        "deploy@" + e.getKey(), r.planText);
+                    Path f = ss.write(snapDir.resolve(Servers.dirName(e.getKey())));
+                    r.skipped.add("snapshot for " + e.getKey() + ": " + o.tree.toAbsolutePath().relativize(f.toAbsolutePath()).toString().replace('\\', '/'));
+                } catch (RuntimeException ex) {
+                    r.refusal = "cannot snapshot server " + e.getKey() + ": " + ex.getMessage();
+                    closeServerConnections();
+                    return r;
+                }
+            }
 
             // 5. writes
             DeployLog.Record log = DeployLog.record(env.name, "deploy");
@@ -242,10 +311,10 @@ public final class Deployer {
             boolean stopped = false;
             try {
                 if (o.step) {
-                    stopped = !stepThrough(vault, plan, to, dsDn, secrets, r);
+                    stopped = !stepThrough(vault, env, plan, to, dsDn, secrets, r);
                 } else {
                     for (Plan.Step s : plan.steps) {
-                        execute(vault, s, secrets, r);
+                        execute(vaultFor(vault, env, s.server), s, secrets, r);
                     }
                 }
             } catch (RuntimeException | IOException e) {
@@ -272,8 +341,31 @@ public final class Deployer {
                 }
             }
 
-            // 7. verify
+            // 6b. restarts on the other servers, where a driver's own settings changed there
+            if (r.failure == null && !stopped) {
+                for (Map.Entry<String, Set<String>> e : plan.serverRestarts.entrySet()) {
+                    String dn = VaultMapping.driverDn(dsDn, e.getKey());
+                    for (String server : e.getValue()) {
+                        try {
+                            VaultAccess sv = vaultFor(vault, env, server);
+                            int st = sv.driverState(dn);
+                            if (st == Vault.STATE_RUNNING || st == Vault.STATE_STARTING) {
+                                sv.restartDriver(dn);
+                                r.restarted.add(e.getKey() + " @ " + server + " (" + sv.waitForState(dn, Vault.STATE_RUNNING, o.restartWaitSeconds) + ")");
+                            } else {
+                                r.skipped.add("restart " + e.getKey() + " @ " + server + " — driver is " + Vault.stateName(st) + " there");
+                            }
+                        } catch (RuntimeException ex) {
+                            r.failure = "restart " + e.getKey() + " @ " + server + ": " + ex.getMessage();
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 7. verify — the other servers' own settings re-read too
             DriverSet after = VaultDiff.fromVault(vault, dsDn);
+            Servers.readOverrides(after, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
             ModelDiff verify = VaultDiff.of(after, to, o.drivers.isEmpty() ? diff.affectedDrivers() : o.drivers);
             r.verified = verify.isEmpty();
             r.verifyText = verify.isEmpty() ? "" : verify.text();
@@ -308,6 +400,8 @@ public final class Deployer {
             }
             DeployLog.append(o.tree, log);
             return r;
+        } finally {
+            closeServerConnections();
         }
     }
 
@@ -391,7 +485,7 @@ public final class Deployer {
     }
 
     /** {@code --step}: per change — show, ask, write, verify that object. Returns false if the user quit. */
-    private boolean stepThrough(VaultAccess vault, Plan plan, DriverSet to, String dsDn, Secrets secrets, Result r) throws IOException {
+    private boolean stepThrough(VaultAccess vault, Environments.Environment env, Plan plan, DriverSet to, String dsDn, Secrets secrets, Result r) throws IOException {
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         for (String change : plan.changes()) {
             List<Plan.Step> steps = plan.stepsOf(change);
@@ -414,7 +508,7 @@ public final class Deployer {
                 continue;
             }
             for (Plan.Step s : steps) {
-                execute(vault, s, secrets, r);
+                execute(vaultFor(vault, env, s.server), s, secrets, r);
             }
             // verify this change's objects immediately
             for (Plan.Step s : steps) {
@@ -661,6 +755,11 @@ public final class Deployer {
     // ---- rollback ----
 
     public static Result rollback(Path tree, Environments.Environment env, Path snapshotFile, boolean yes) throws IOException {
+        return rollback(tree, env, snapshotFile, yes, null);
+    }
+
+    /** {@code serverDn} non-null: restore through that server's own connection (a per-server snapshot). */
+    public static Result rollback(Path tree, Environments.Environment env, Path snapshotFile, boolean yes, String serverDn) throws IOException {
         Result r = new Result();
         Snapshot snap = Snapshot.read(snapshotFile);
         r.planText = "rollback to " + snapshotFile + ":\n" + snap.text();
@@ -672,7 +771,18 @@ public final class Deployer {
             r.refusal = "add --yes to restore the snapshot";
             return r;
         }
-        try (Vault vault = Vault.connect(env.vaultConfig())) {
+        Vault.Config cfg = env.vaultConfig();
+        if (serverDn != null) {
+            try (Vault primary = Vault.connect(env.vaultConfig())) {
+                String url = Servers.urlOf(env, primary, serverDn);
+                if (url == null) {
+                    r.refusal = "no LDAP URL for server " + serverDn + " (give " + env.name + ".servers=" + serverDn + "=ldaps://host:port)";
+                    return r;
+                }
+                cfg = cfg.withUrl(url);
+            }
+        }
+        try (Vault vault = Vault.connect(cfg)) {
             // a rollback is itself reversible: snapshot the current state of the same objects first
             List<String> dns = new ArrayList<>();
             for (Snapshot.CapturedEntry e : snap.entries) {
