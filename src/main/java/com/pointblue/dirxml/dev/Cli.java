@@ -67,8 +67,13 @@ public final class Cli {
                     driverSetDn = positional.get(0);
                 }
                 Path outDir = Paths.get(positional.get(positional.size() - 1));
-                // every attribute (package stamps included) — the same reader vault.diff / deploy use
-                System.exit(write(com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, driverSetDn), outDir));
+                // every attribute (package stamps included) — the same reader vault.diff / deploy use;
+                // with --env, the other servers' own driver settings too (docs/vault-deploy.md, "Several servers")
+                com.pointblue.dirxml.dev.model.DriverSet live = envName != null && driverSetDn.equals(
+                    com.pointblue.dirxml.dev.deploy.Environments.load().get(envName).driverSetDn)
+                    ? com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(com.pointblue.dirxml.dev.deploy.Environments.load().get(envName), n -> System.err.println("note: " + n))
+                    : com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, driverSetDn);
+                System.exit(write(live, outDir));
             }
             if (args.length >= 2 && args[0].equals("check")) {
                 System.exit(doCheck(Paths.get(args[1])));

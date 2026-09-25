@@ -46,7 +46,7 @@ public final class ModelDiff {
     /** The kind of one {@link Change}. */
     public enum Kind {
         ARTIFACT_ADDED, ARTIFACT_REMOVED, ARTIFACT_CHANGED, ARTIFACT_KIND_CHANGED,
-        DRIVER_ADDED, DRIVER_REMOVED, DRIVER_SETTING, DRIVER_CONFIG, DRIVER_LINKAGE, DRIVER_STAMPS,
+        DRIVER_ADDED, DRIVER_REMOVED, DRIVER_SETTING, DRIVER_CONFIG, DRIVER_SERVER_CONFIG, DRIVER_LINKAGE, DRIVER_STAMPS,
         DRIVER_ICON,
         DRIVERSET_GCVS, DRIVERSET_LINKAGE, DRIVERSET_STAMPS,
         FORM_ADDED, FORM_REMOVED, FORM_CHANGED, PRD_ADDED, PRD_REMOVED, PRD_CHANGED,
@@ -110,12 +110,18 @@ public final class ModelDiff {
         public final String summary;
         public final String detail;
         public final Set<String> parts;
+        /** {@link Kind#DRIVER_SERVER_CONFIG} only: the server whose own value changed (its DN); null otherwise. */
+        public final String server;
 
         Change(Kind kind, String driver, String path, String what, String summary, String detail) {
             this(kind, driver, path, what, summary, detail, null);
         }
 
         Change(Kind kind, String driver, String path, String what, String summary, String detail, Set<String> parts) {
+            this(kind, driver, path, what, summary, detail, parts, null);
+        }
+
+        Change(Kind kind, String driver, String path, String what, String summary, String detail, Set<String> parts, String server) {
             this.kind = Objects.requireNonNull(kind, "kind");
             this.driver = driver;
             this.path = Objects.requireNonNull(path, "path");
@@ -123,6 +129,7 @@ public final class ModelDiff {
             this.summary = Objects.requireNonNull(summary, "summary");
             this.detail = detail;
             this.parts = parts == null ? null : Collections.unmodifiableSet(parts);
+            this.server = server;
         }
 
         @Override
@@ -481,6 +488,7 @@ public final class ModelDiff {
             Driver b = to.driver(name);
             diffDriverSettings(a, b);
             diffDriverConfig(a, b);
+            diffDriverServerConfig(a, b);
             diffDriverLinkage(a, b);
             diffProvisioning(a, b);
             diffEntitlements(a, b);
@@ -1017,6 +1025,44 @@ public final class ModelDiff {
 
     private static String display(String s) {
         return s == null ? "(none)" : s;
+    }
+
+    /**
+     * A driver's server-specific settings on the other servers of the set ({@link Driver#serverConfig}):
+     * per server and kind, an override added, removed or changed. A removed override means the server
+     * goes back to holding what the primary holds; the plan writes the primary's value there.
+     */
+    private void diffDriverServerConfig(Driver a, Driver b) {
+        Set<String> servers = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        servers.addAll(a.serverConfig.keySet());
+        servers.addAll(b.serverConfig.keySet());
+        for (String server : servers) {
+            Map<String, Element> ma = a.serverConfig.getOrDefault(server, Map.of());
+            Map<String, Element> mb = b.serverConfig.getOrDefault(server, Map.of());
+            Set<String> kinds = new LinkedHashSet<>(ma.keySet());
+            kinds.addAll(mb.keySet());
+            for (String kind : kinds) {
+                boolean inA = ma.containsKey(kind);
+                boolean inB = mb.containsKey(kind);
+                Element ea = ma.get(kind);
+                Element eb = mb.get(kind);
+                String path = "drivers/" + a.name + "/servers/" + server;
+                if (inA && !inB) {
+                    changes.add(new Change(Kind.DRIVER_SERVER_CONFIG, a.name, path, kind,
+                        "- removed server-specific config " + kind + " on " + server + " (the server takes the primary's)", null, null, server));
+                } else if (!inA && inB) {
+                    changes.add(new Change(Kind.DRIVER_SERVER_CONFIG, a.name, path, kind,
+                        "+ added server-specific config " + kind + " on " + server, eb == null ? "(none on that server)" : null, null, server));
+                } else {
+                    String x = ea == null ? "" : CanonicalXml.serialize(ea);
+                    String y = eb == null ? "" : CanonicalXml.serialize(eb);
+                    if (!x.equals(y)) {
+                        changes.add(new Change(Kind.DRIVER_SERVER_CONFIG, a.name, path, kind,
+                            "~ changed server-specific config " + kind + " on " + server, textDiff(x, y), null, server));
+                    }
+                }
+            }
+        }
     }
 
     private void diffDriverConfig(Driver a, Driver b) {

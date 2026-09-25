@@ -47,6 +47,11 @@ public final class AsCodeReader {
                 ds.configValues = xml(root.resolve(attr(c, "file")));
             }
         }
+        for (Element s : children(dsm, "server")) {
+            if (attr(s, "dn") != null) {
+                ds.servers.add(attr(s, "dn"));
+            }
+        }
 
         // library
         Path lib = root.resolve("library");
@@ -75,6 +80,13 @@ public final class AsCodeReader {
         readMeta(m, d.meta);
         for (Element c : children(m, "config")) {
             d.config.put(attr(c, "kind"), xml(dir.resolve(attr(c, "file"))));
+        }
+        for (Element s : children(m, "server")) {
+            java.util.Map<String, Element> overrides = new java.util.LinkedHashMap<>();
+            for (Element c : children(s, "config")) {
+                overrides.put(attr(c, "kind"), "true".equals(attr(c, "absent")) ? null : xml(dir.resolve(attr(c, "file"))));
+            }
+            d.serverConfig.put(attr(s, "dn"), overrides);
         }
         Element icon = child(m, "icon");
         if (icon != null && attr(icon, "file") != null) {

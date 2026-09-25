@@ -113,6 +113,9 @@ secret.
   to that other environment must already be in `deploy-log/`.
 - `sshHost` / `sshUser` — key-based SSH to the engine host, for
   `driver.trace tail`. Without them, tail is unavailable; everything else works.
+- `servers` — `<serverDn>=<url>;…`: the other servers of a multi-server
+  driver set, when their URLs cannot be derived from the tree; import, deploy
+  and the clone reach each server's own driver settings through them.
 - `trustAll` — when omitted, LDAPS accepts any server certificate. Set
   `trustAll=false` once the vault CA is in the JDK truststore
   ([install.md](install.md) §4.3).
