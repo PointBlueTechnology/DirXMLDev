@@ -46,11 +46,20 @@ import  →  edit  →  validate  →  simulate  →  vault.diff / vault.deploy 
 | See the vault delta | `vault.diff` | Per-object added / changed / removed. Nothing is written |
 | Deploy | `vault.deploy --dry-run`, then `--yes` or `--step` | Plan, LDIF snapshot, LDAP writes, driver restart, re-read, an audit line |
 | Operate | `driverset.status`, `driver.start` / `stop` / `restart`, `cache`, `trace`, `migrate`, `resync`, `secrets`, `submit` | The same environments and audit log as deploy |
+| Read a trace | `driver.trace tail --ldap`, `driver.trace view` | The engine's trace over LDAP in the terminal, or opened in the [DirXML Trace Viewer](https://github.com/PointBlueTechnology/DirXMLTraceViewer) on the desktop, live with a driver selected or from a file |
 | Prove a workflow | `bin/apps` | Identity Applications REST: request, tasks, approve, history |
 | Hand it back | `export`, `export-project` | A Designer driver-set export, or an update of an existing project |
 
 The VS Code / Cursor extension in [Policy flow](#policy-flow) draws that
 fishbone. It does not write the tree or talk to a vault.
+
+The [DirXML Trace Viewer](https://github.com/PointBlueTechnology/DirXMLTraceViewer)
+is Point Blue's desktop viewer for driver trace: live over LDAP with syntax
+colouring, filters and find, or a trace file of any size. `bin/idm
+viewer.install` fetches its latest release, checksum verified, and
+`driver.trace view --env stg --driver "AD Driver"` (or `--file trace.log`)
+opens it, so a person reads the trace in the viewer while the agent works in
+the terminal ([docs/install.md §5.2](docs/install.md#52-the-dirxml-trace-viewer)).
 
 `bin/idm` with no arguments lists every command and flag. That text is the
 contract. Where an older design note disagrees with it, follow `bin/idm`.
@@ -183,6 +192,7 @@ also needs `IDM_AGENT_ALLOW_WRITE=1` or `--confirm <env>`. Details:
 | `mcp/dirxmldev-mcp/` | Optional MCP server over a subset of `bin/idm` ([docs/mcp.md](docs/mcp.md)) |
 | `.claude/skills/dirxml-dev/` | The same loop, as a Claude Code skill |
 | `extensions/dirxmldev-visual/` | Read-only policy-flow fishbone |
+| [DirXMLTraceViewer](https://github.com/PointBlueTechnology/DirXMLTraceViewer) (separate repository) | The desktop trace viewer `driver.trace view` opens; `viewer.install` fetches it |
 | `lib/` | Engine jars (gitignored) |
 
 Client trees, LDIFs, traces, `environments.properties`, and `secrets*.properties`
