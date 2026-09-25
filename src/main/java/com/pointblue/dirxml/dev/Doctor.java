@@ -310,6 +310,18 @@ public final class Doctor {
         return new Check("simulator", true, "simulator: OK  " + version + "  (" + jar + ")", notes, fields);
     }
 
+    /** A versioned spelling of a required jar that is present instead ({@code xp-1.0.0.jar} for {@code xp.jar}), or null. */
+    static String renamedVariant(Path dir, String name) {
+        String base = name.endsWith(".jar") ? name.substring(0, name.length() - 4) : name;
+        try (java.util.stream.Stream<Path> s = Files.list(dir)) {
+            return s.map(p -> p.getFileName().toString())
+                .filter(f -> f.toLowerCase(java.util.Locale.ROOT).startsWith(base.toLowerCase(java.util.Locale.ROOT) + "-") && f.endsWith(".jar"))
+                .sorted().findFirst().orElse(null);
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
     private static Check lib(Request req) {
         Path dir = req.libDir();
         List<String> missing = new ArrayList<>();
@@ -343,6 +355,13 @@ public final class Doctor {
             }
             if (!missing.isEmpty()) {
                 detail.append("Missing ").append(String.join(", ", missing)).append(". ");
+            }
+            for (String name : missing) {
+                String other = renamedVariant(dir, name);
+                if (other != null) {
+                    detail.append("Found ").append(other).append(": copy it as ").append(name)
+                        .append(" (the name pom.xml and the simulator's POM expect; engines from 4.10.2 on ship it under the versioned name). ");
+                }
             }
             detail.append("Maven's requireFilesExist check compares each path with its canonical path and ")
                 .append("reports a directory symlink of lib/, or a symlink of a jar, as missing. ")
