@@ -111,8 +111,10 @@ secret.
   are left alone unless you pass `--secrets missing` or `--secrets all`.
 - `requires` — on a production deploy, a green deploy of the same tree commit
   to that other environment must already be in `deploy-log/`.
-- `sshHost` / `sshUser` — key-based SSH to the engine host, for
-  `driver.trace tail`. Without them, tail is unavailable; everything else works.
+- `sshHost` / `sshUser` — key-based SSH to the engine host, for reading a
+  driver's trace file. Without them `driver.trace tail` streams the trace over
+  LDAP instead (the engine's debug events; `--follow` or `--seconds N`), so
+  they are optional.
 - `trustAll` — when omitted, LDAPS accepts any server certificate. Set
   `trustAll=false` once the vault CA is in the JDK truststore
   ([install.md](install.md) §4.3).
