@@ -260,8 +260,8 @@ public class DoctorTest {
             assertTrue(idm, idm.contains(jar));
         }
         String cmd = Files.readString(root.resolve("bin/idm.cmd"));
-        assertTrue(cmd, cmd.contains("SIM_VER=1.5.2") || cmd.contains("set \"SIM_VER=1.5.2\"") || cmd.contains("%SIM_VER%"));
-        assertTrue(cmd, cmd.contains("if \"%SIM_VER%\"==\"\" set \"SIM_VER=1.5.2\""));
+        assertTrue(cmd, cmd.contains("SIM_VER=1.6.0") || cmd.contains("set \"SIM_VER=1.6.0\"") || cmd.contains("%SIM_VER%"));
+        assertTrue(cmd, cmd.contains("if \"%SIM_VER%\"==\"\" set \"SIM_VER=1.6.0\""));
     }
 
     @Test
