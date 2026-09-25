@@ -26,6 +26,7 @@ idm driver.migrate        --env stg --driver "AD Driver" --xds migrate.xml --yes
 idm driver.resync         --env stg --driver "AD Driver" [--since 2026-09-01T00:00:00Z] --yes
 idm driver.secrets list|set|remove --env stg --driver "AD Driver" [--name X]
 idm driver.trace show|set|reset|tail --env stg --driver "AD Driver" [--level N] [--file F] [--lines N] [--follow] [--ldap [--seconds N] [--engine]]
+idm driver.trace view      --env stg --driver "AD Driver"   |   --file trace.log      (the desktop DirXML Trace Viewer)
 idm engine.version        --env stg
 idm engine.stats          --env stg [--driver "AD Driver"]
 ```
@@ -53,6 +54,7 @@ Remote Loader lifecycle (the RL process is outside the vault), `--delete-driver`
 | `driver.resync` | `DriverResync(dn, since)` — epoch **seconds**; no `--since` = `Date(0)` = full resync | the driver must be running; a full resync of a big tree is a real load |
 | `driver.secrets list/set/remove` | `List/Set/RemoveNamedPassword`; `set` reads the value from the environment's secrets file (`<driver>.named.<name>`) or `--stdin`, never from an argument | `vault.secrets` from the Phase 4 note lands here |
 | `driver.trace show/set/reset` | `DirXML-TraceLevel` (int) and `DirXML-TraceFile` on the driver (spike 1b: the only driver-level trace attributes); `set` records the previous values in the audit line so `reset` can put them back (`--for 15m` resets automatically) | a trace change is a live change: the engine picks up trace level without a restart? — **spike 5b** checks (1b changed it while stopped) |
+| `driver.trace view` | Opens the [DirXML Trace Viewer](https://github.com/PointBlueTechnology/DirXMLTraceViewer) (install.md §5.2) already connected to the environment's vault with the driver selected, streaming live with colouring, filters and find, or already showing a trace file (`--file`). The viewer makes its own LDAP connection; the password goes to it on stdin. For a person; the agent keeps `tail` for what it reads itself | read-only |
 | `driver.trace tail` | Two ways. **Over LDAP** (`--ldap`, and the default when the environment names no `sshHost`): the engine's DirXML debug events on the environment's own LDAPS connection, one driver's lines out of them, `--follow` until Ctrl-C or `--seconds N` (default 30) collected; `--grep` filters, `--engine` adds the engine channel; needs eDirectory's Monitor Entry right, no trace file, nothing written (the simulator's `EdirTraceStream`, proved 2026-09-25). **Over SSH**: `ssh <env.sshUser>@<env.sshHost> tail -n N [-f] <traceFile>` — the file on the engine host; `--since` = the last N minutes by the trace's own timestamps, which only the file has | read-only; this is how spike 1b proved engine pickup, made routine |
 | `engine.version` | `GetVersion` (packed int → `DxConst.parseDirXMLVersion`) | |
 | `engine.stats` | `GetDriverStats` per driver, and the engine's JVM stats if the ext op exposes them (`GetJvmStats` — to confirm in the jar); the "which driver is leaking heap" question from the test vault's ndsd deaths | read-only |

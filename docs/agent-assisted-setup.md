@@ -125,8 +125,10 @@ and stop; do not edit the tree to silence them. Commit tree/, .gitignore,
 secrets, deploy-snapshots, LDIFs, and jars uncommitted.
 
 Phase 5 — only if I ask. MCP server per docs/mcp.md, with
-IDM_AGENT_ALLOW_WRITE=0, and the fishbone extension under
-extensions/dirxmldev-visual. Both are optional.
+IDM_AGENT_ALLOW_WRITE=0; the fishbone extension under
+extensions/dirxmldev-visual; the DirXML Trace Viewer with bin/idm
+viewer.install (a release from GitHub, SHA-256 checked) or viewer.install
+--source (clone and build). All three are optional.
 
 Start at phase 1.
 ```
@@ -142,7 +144,7 @@ right.
 | 2. Build | `bin/idm doctor` prints `DOCTOR: OK` |
 | 3. Client directory | `bin/idm doctor --env <env-name>` reports `ldaps: OK` |
 | 4. First import | `validate` reports 0 errors, and `vault.diff` reports no differences |
-| 5. Optional extras | An MCP read works, or the fishbone opens. Skip this if you only want the CLI |
+| 5. Optional extras | An MCP read works, the fishbone opens, or `viewer.check` finds the trace viewer. Skip this if you only want the CLI |
 
 Expect these along the way:
 
@@ -367,8 +369,16 @@ dirxmldev.idmPath to the DirXMLDev bin/idm (or IDM_HOME to the checkout) so
 the view can run query fishbone. The extension is read-only: it does not
 deploy and it does not talk to the vault.
 
-Stop when a read-only MCP call works, or the fishbone opens, and tell me
-which one you verified. Skip either piece if I say so.
+DirXML Trace Viewer (optional; docs/install.md section 5.2): bin/idm
+viewer.install downloads the latest release from
+https://github.com/PointBlueTechnology/DirXMLTraceViewer into
+~/.idm/trace-viewer and checks its SHA-256; viewer.install --source clones
+and builds it instead. Then bin/idm viewer.check, and
+bin/idm driver.trace view --env <env-name> --driver "<a driver>" opens it
+connected (it asks me about an untrusted certificate; I answer).
+
+Stop when a read-only MCP call works, the fishbone opens, or the viewer
+opens, and tell me which ones you verified. Skip any piece if I say so.
 ```
 
 ## Troubleshooting
