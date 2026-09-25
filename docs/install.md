@@ -27,7 +27,7 @@ Identity Applications helper). There is no server, no database and no GUI.
 | **The DirXML Policy Simulator** built and installed locally | the engine that validates and simulates policies | `ls ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/` |
 | **The Identity Manager engine jars** | proprietary; the simulator and the tool load the real policy compilers and the LDAP/extended-operation client | see §2 |
 | **Network access to the vault** | LDAPS to the eDirectory server that holds the driver set (port 636) | `nc -z host 636` |
-| Optional: **SSH to the engine host** | `driver.trace tail` reads the trace file over SSH | `ssh user@host true` |
+| Optional: **SSH to the engine host** | `driver.trace tail` can read the trace file over SSH; without it the trace streams over LDAP | `ssh user@host true` |
 | Optional: **Designer 4.8+** on the workstation | only for `form.edit` (the vendor's JSON form builder is a Designer plugin) | `bin/idm form.edit --check` |
 | Optional: **the Identity Applications** URL and an application user | `bin/apps` runs a workflow end to end without a browser | `bin/apps --env <env> token` |
 | Optional: **kubectl/SSH to the applications host** | reading the workflow engine log | your own `kubectl` or SSH access |
@@ -113,7 +113,7 @@ few gated writes. It is not required. [mcp.md](mcp.md) is the wiring.
 ### 2.4 Check the workstation (`doctor`) and what CI runs
 
 `bin/idm doctor` reports whether this machine can run the tool. It checks JDK 21,
-the simulator jar at the version this repo pins (`1.5.2`, or `IDM_SIM_VERSION`),
+the simulator jar at the version this repo pins (`1.6.0`, or `IDM_SIM_VERSION`),
 and the ten proprietary jars in `lib/`. It does not print passwords, bind DNs, or
 URLs.
 

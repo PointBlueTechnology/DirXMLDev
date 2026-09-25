@@ -25,7 +25,7 @@ idm driver.cache clear    --env stg --driver "AD Driver" --yes --confirm stg
 idm driver.migrate        --env stg --driver "AD Driver" --xds migrate.xml --yes
 idm driver.resync         --env stg --driver "AD Driver" [--since 2026-09-01T00:00:00Z] --yes
 idm driver.secrets list|set|remove --env stg --driver "AD Driver" [--name X]
-idm driver.trace show|set|reset|tail --env stg --driver "AD Driver" [--level N] [--file F] [--lines N] [--follow]
+idm driver.trace show|set|reset|tail --env stg --driver "AD Driver" [--level N] [--file F] [--lines N] [--follow] [--ldap [--seconds N] [--engine]]
 idm engine.version        --env stg
 idm engine.stats          --env stg [--driver "AD Driver"]
 ```
@@ -53,7 +53,7 @@ Remote Loader lifecycle (the RL process is outside the vault), `--delete-driver`
 | `driver.resync` | `DriverResync(dn, since)` — epoch **seconds**; no `--since` = `Date(0)` = full resync | the driver must be running; a full resync of a big tree is a real load |
 | `driver.secrets list/set/remove` | `List/Set/RemoveNamedPassword`; `set` reads the value from the environment's secrets file (`<driver>.named.<name>`) or `--stdin`, never from an argument | `vault.secrets` from the Phase 4 note lands here |
 | `driver.trace show/set/reset` | `DirXML-TraceLevel` (int) and `DirXML-TraceFile` on the driver (spike 1b: the only driver-level trace attributes); `set` records the previous values in the audit line so `reset` can put them back (`--for 15m` resets automatically) | a trace change is a live change: the engine picks up trace level without a restart? — **spike 5b** checks (1b changed it while stopped) |
-| `driver.trace tail` | `ssh <env.sshUser>@<env.sshHost> tail -n N [-f] <traceFile>` — the trace file is on the engine host, readable over the key-based SSH the environment names; `--grep` filters; `--since` = the last N minutes by the trace's own timestamps | read-only; this is how spike 1b proved engine pickup, made routine |
+| `driver.trace tail` | Two ways. **Over LDAP** (`--ldap`, and the default when the environment names no `sshHost`): the engine's DirXML debug events on the environment's own LDAPS connection, one driver's lines out of them, `--follow` until Ctrl-C or `--seconds N` (default 30) collected; `--grep` filters, `--engine` adds the engine channel; needs eDirectory's Monitor Entry right, no trace file, nothing written (the simulator's `EdirTraceStream`, proved 2026-09-25). **Over SSH**: `ssh <env.sshUser>@<env.sshHost> tail -n N [-f] <traceFile>` — the file on the engine host; `--since` = the last N minutes by the trace's own timestamps, which only the file has | read-only; this is how spike 1b proved engine pickup, made routine |
 | `engine.version` | `GetVersion` (packed int → `DxConst.parseDirXMLVersion`) | |
 | `engine.stats` | `GetDriverStats` per driver, and the engine's JVM stats if the ext op exposes them (`GetJvmStats` — to confirm in the jar); the "which driver is leaking heap" question from the test vault's ndsd deaths | read-only |
 | `driver.submit` | `SubmitCommand` (subscriber channel) — spike 5c: runs through the channel on a running driver, the shim's status comes back in the result document. `SubmitEvent` (publisher) delivers nothing (5c, as 1b) — not offered | the DxCMD Phase 2 canary for the subscriber channel: the same command through the simulator and the live engine, compared |
@@ -86,7 +86,7 @@ initialization), and report what they saw.
 ## Environments, extended
 
 ```properties
-stg.sshHost=idm-stg            # the engine host, for driver.trace tail (key-based ssh)
+stg.sshHost=idm-stg            # the engine host, for driver.trace tail over SSH (optional: without it tail streams over LDAP)
 stg.sshUser=root
 stg.traceDir=/var/opt/novell/eDirectory/log   # where trace files land when a driver sets a relative name
 ```

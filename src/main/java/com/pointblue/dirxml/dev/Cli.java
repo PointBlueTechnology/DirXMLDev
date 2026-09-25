@@ -459,7 +459,7 @@ public final class Cli {
         System.err.println("  driver.migrate --env E --driver D --xds FILE --yes [--confirm E]");
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
-        System.err.println("  driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow]");
+        System.err.println("  driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]");
         System.err.println("  driver.submit --env E --driver D --xds <file> --yes [--tree DIR]   SubmitCommand into the running driver; with --tree, the simulator canary first");
         System.err.println("  engine.version --env E");
         System.err.println("  engine.stats --env E [--driver D…] [--json]");
