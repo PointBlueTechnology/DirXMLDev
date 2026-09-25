@@ -188,4 +188,32 @@ public class LdifReaderTest {
             Files.deleteIfExists(f);
         }
     }
+
+    /** A file without a driver set says what it did hold, and why that is not enough. */
+    @Test
+    public void missingDriverSetIsExplained() {
+        List<Entry> noClasses = List.of(
+            new Entry("cn=driverset1,o=system", java.util.Map.of("dirxml-configvalues", List.of("<configuration-values/>"))),
+            new Entry("cn=AD,cn=driverset1,o=system", java.util.Map.of("dirxml-shimconfiginfo", List.of("<driver-config/>"))));
+        try {
+            LdifReader.fromEntries(noClasses, "attrs-only.ldif");
+            org.junit.Assert.fail("expected a refusal");
+        } catch (IllegalArgumentException e) {
+            String m = e.getMessage();
+            org.junit.Assert.assertTrue(m, m.contains("2 entries, none with an objectClass attribute"));
+            org.junit.Assert.assertTrue(m, m.contains("DirXML-ConfigValues") || m.contains("dirxml-configvalues"));
+            org.junit.Assert.assertTrue(m, m.contains("objectClass included"));
+        }
+        List<Entry> wrongBase = List.of(
+            entry("cn=jsmith,ou=users,o=data", "inetOrgPerson", "cn", "jsmith"),
+            entry("ou=users,o=data", "organizationalUnit", "ou", "users"));
+        try {
+            LdifReader.fromEntries(wrongBase, "people.ldif");
+            org.junit.Assert.fail("expected a refusal");
+        } catch (IllegalArgumentException e) {
+            String m = e.getMessage();
+            org.junit.Assert.assertTrue(m, m.contains("classes seen: inetOrgPerson (1), organizationalUnit (1)"));
+            org.junit.Assert.assertTrue(m, m.contains("driver set's DN downwards"));
+        }
+    }
 }
