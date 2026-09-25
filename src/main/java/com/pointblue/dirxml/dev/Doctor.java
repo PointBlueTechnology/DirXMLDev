@@ -28,7 +28,7 @@ import java.util.jar.JarFile;
 public final class Doctor {
 
     /** Matches {@code pom.xml} {@code simulator.version} and the {@code bin/idm} default. */
-    public static final String PROJECT_SIM_VERSION = "1.6.1";
+    public static final String PROJECT_SIM_VERSION = "1.7.0";
 
     /**
      * The proprietary NetIQ/OpenText jars {@code pom.xml} puts on the system classpath.

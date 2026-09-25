@@ -9,7 +9,7 @@ stg.passwordEnv=IDM_STG_PASSWORD
 stg.driverSet=cn=driverset1,o=system
 stg.tier=stg
 stg.secrets=secrets-stg.properties
-stg.trustAll=false
+# stg.trustAll=true            # only for a lab with a private CA or an SSH tunnel; TLS is verified otherwise
 stg.sshHost=idm-stg.example.com
 stg.sshUser=idm
 
@@ -27,5 +27,4 @@ prd.passwordEnv=IDM_PRD_PASSWORD
 prd.driverSet=cn=driverset1,o=system
 prd.tier=prd
 prd.secrets=secrets-prd.properties
-prd.trustAll=false
 prd.requires=stg

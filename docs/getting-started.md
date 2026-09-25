@@ -68,7 +68,6 @@ stg.passwordEnv=IDM_STG_PASSWORD
 stg.driverSet=cn=driverset1,o=system
 stg.tier=stg
 stg.secrets=secrets-stg.properties
-stg.trustAll=false
 stg.sshHost=idm-stg.example.com
 stg.sshUser=idm
 
@@ -79,8 +78,15 @@ prd.passwordEnv=IDM_PRD_PASSWORD
 prd.driverSet=cn=driverset1,o=system
 prd.tier=prd
 prd.secrets=secrets-prd.properties
-prd.trustAll=false
 prd.requires=stg
+
+# --- a lab with a private CA, or reached through an SSH tunnel ---
+lab.url=ldaps://127.0.0.1:6636
+lab.bindDn=cn=admin,ou=sa,o=system
+lab.passwordKeychain=lab/cn=admin
+lab.driverSet=cn=driverset1,o=system
+lab.tier=dev
+lab.trustAll=true                     # opt in: accept any certificate (and skip the host-name check a tunnel breaks)
 ```
 
 Required for every environment: `url`, `bindDn`, a password, `driverSet`.
@@ -118,9 +124,10 @@ secret.
 - `servers` — `<serverDn>=<url>;…`: the other servers of a multi-server
   driver set, when their URLs cannot be derived from the tree; import, deploy
   and the clone reach each server's own driver settings through them.
-- `trustAll` — when omitted, LDAPS accepts any server certificate. Set
-  `trustAll=false` once the vault CA is in the JDK truststore
-  ([install.md](install.md) §4.3).
+- `trustAll` — LDAPS verifies the server certificate against the JDK
+  truststore ([install.md](install.md) §4.3). `trustAll=true` opts in to
+  accepting any certificate and skips the host-name check, for a lab with a
+  private CA or an SSH tunnel; never on production.
 - `formsUrl`, `appsUser`, `appsPassword` (any of the four forms), optional
   `appsClient` (default `rbpmrest`) and `appsSecret` — only for `bin/apps`
   and for `form.edit --env`.
