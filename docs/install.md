@@ -21,7 +21,7 @@ Identity Applications helper). There is no server, no database and no GUI.
 | Requirement | Why | Check |
 |---|---|---|
 | **JDK 21** | the tool and the policy simulator are Java 21 | `/usr/libexec/java_home -v 21` (macOS) or `java -version` |
-| **Maven 3.9+** | build | `mvn -v` |
+| **Maven 3.9+** | build; 3.6.3 is the oldest the build plugins accept, and the enforcer says so | `mvn -v` |
 | **git** | the tree is versioned; the deploy gate reads commits | `git --version` |
 | **Python 3.8+** | only for `bin/apps` (standard library, nothing to install) | `python3 --version` |
 | **The DirXML Policy Simulator** built and installed locally | the engine that validates and simulates policies | `ls ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/` |
@@ -48,7 +48,9 @@ simulator's `lib/` (they are never committed; the directory is gitignored):
 `dirxml.jar`, `dirxml_misc.jar`, `nxsl.jar`, `xp.jar`, `js.jar`, `jclient.jar`,
 `ldap.jar`, `XDS.jar`, `dhutil.jar`, `CommonDriverShim.jar`. They come from
 the engine server (`/opt/novell/eDirectory/lib/dirxml/classes/`) or from the
-Designer install. Then build and install the simulator so Maven can find it:
+Designer install. Engines from 4.10.2 on ship `xp.jar` as `xp-1.0.0.jar`:
+copy it as `xp.jar`, the name both POMs expect (`doctor` says so when it finds
+the versioned name). Then build and install the simulator so Maven can find it:
 
 ```bash
 cd ~/IdeaProjects/DirXMLSimulator && JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q install
