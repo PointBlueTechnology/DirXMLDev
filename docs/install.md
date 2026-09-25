@@ -339,7 +339,9 @@ ssh -f -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 6636:idm-vaul
 stgtun.url=ldaps://127.0.0.1:6636    # everything else identical to stg
 ```
 
-## 5. The vendor form builder (optional)
+## 5. Optional desktop tools
+
+### 5.1 The vendor form builder
 
 `bin/idm form.edit` opens a JSON provisioning form in OpenText's own form
 builder, which ships only as a Designer plugin. Install Designer 4.8 or later
@@ -357,6 +359,33 @@ vendor bundle is Intel-only and runs under Rosetta; the sibling
 DesignerModernPlatform project rebuilds it on native Electron. Everything
 else about forms (`form.field.add`, `form.preview`, `prd.map`, …) needs no
 builder.
+
+### 5.2 The DirXML Trace Viewer
+
+[DirXML Trace Viewer](https://github.com/PointBlueTechnology/DirXMLTraceViewer) is
+Point Blue's desktop viewer for driver trace: live over LDAP with syntax
+colouring, filters and find, or a trace file of any size. `driver.trace view`
+opens it from here, already connected to an environment with a driver
+selected, or already showing a file, so a person reads a trace in the viewer
+while the agent works in the terminal:
+
+```bash
+bin/idm viewer.install                       # the latest release, SHA-256 checked, into ~/.idm/trace-viewer
+bin/idm viewer.install --source              # or clone the repository and build it (JDK 21 + Maven)
+bin/idm viewer.check                         # where it is
+bin/idm driver.trace view --env stg --driver "AD Driver"
+bin/idm driver.trace view --file trace.log
+```
+
+`viewer.install --version v1.2.0` takes a release tag; `--dir` another
+directory (then set `IDM_TRACE_VIEWER` to the jar). The viewer is found
+through `IDM_TRACE_VIEWER` (a jar, the macOS app, or a launcher), the
+`traceViewer` system property, the install directory, or the Mac app in
+`/Applications`; `doctor` reports it, and its absence never fails doctor.
+The bind password reaches the viewer on its standard input, never as an
+argument. An untrusted server certificate is shown in the viewer for the
+person to accept once; `trustAll` in the environment does not apply to it.
+Needs viewer 1.2.0 or later for the command-line options.
 
 ## 6. The Identity Applications (optional)
 

@@ -263,6 +263,9 @@ public final class Cli {
                 // and package.diff --catalog …, is the catalog's own command set.
                 System.exit(com.pointblue.dirxml.dev.packages.PackageCli.run(args));
             }
+            if (args.length >= 1 && args[0].startsWith("viewer.")) {
+                System.exit(com.pointblue.dirxml.dev.operate.ViewerCli.run(args));
+            }
             if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine."))) {
                 System.exit(com.pointblue.dirxml.dev.operate.OperateCli.run(args));
             }
@@ -465,6 +468,8 @@ public final class Cli {
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
         System.err.println("  driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]");
+        System.err.println("  driver.trace view --env E [--driver D] | --file FILE   open the DirXML Trace Viewer (desktop) connected to the vault, or on a file");
+        System.err.println("  viewer.check | viewer.install [--version TAG] [--source] [--dir DIR]   the viewer: where it is; download a release or build from https://github.com/PointBlueTechnology/DirXMLTraceViewer");
         System.err.println("  driver.submit --env E --driver D --xds <file> --yes [--tree DIR]   SubmitCommand into the running driver; with --tree, the simulator canary first");
         System.err.println("  engine.version --env E");
         System.err.println("  engine.stats --env E [--driver D…] [--json]");
