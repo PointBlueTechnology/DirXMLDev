@@ -10,6 +10,20 @@ after each phase so you can see it worked.
 The agent runs the same `bin/idm` you would. After setup, day-to-day use is
 [getting-started.md](getting-started.md) and [agents.md](agents.md).
 
+## Which prompts do I need?
+
+Paste the [kickoff prompt](#all-in-one-kickoff) once. That is the whole
+setup. The agent works through every phase and stops at each checkpoint so
+you can look. You say continue, and you leave the other prompts unused.
+
+| You want to | What to paste |
+|---|---|
+| The whole install, in one conversation | The kickoff prompt. It is enough on its own. |
+| One phase at a time, a resume after a break or a failure partway through, or one phase again later (a second environment, MCP after the CLI already works) | That phase's prompt, by itself |
+| A step that failed | The matching troubleshooting prompt |
+
+The phase prompts are other ways in. They are not further steps after the kickoff.
+
 ## What you do
 
 These stay with you. The rest of this page is the agent's job.
@@ -156,9 +170,11 @@ port.
 ## Prompts
 
 Replace the angle-bracket placeholders, then paste. Leave every password out.
+One prompt is the whole job: the kickoff, below, or a single phase prompt
+when you are doing just that phase.
 
-These rules are already in the prompts. They still apply if you paste only
-one phase:
+These rules are already written into the kickoff prompt and into each phase
+prompt:
 
 - Vault access stays read-only until you say otherwise.
 - Secrets stay out of the chat, the shell history, command output, and git.
@@ -166,6 +182,10 @@ one phase:
 - The agent stops and asks before any vault write.
 
 ### All-in-one kickoff
+
+This is the prompt to paste. It is enough on its own: the agent works
+through every phase and stops at each checkpoint. Skip the phase prompts
+below; they are alternatives, not the next thing to paste.
 
 ```
 You are setting up DirXMLDev (https://github.com/PointBlueTechnology/DirXMLDev)
@@ -250,6 +270,13 @@ extensions/dirxmldev-visual. Both are optional.
 
 Start at phase 1.
 ```
+
+### Phase prompts
+
+Skip this section if you used the kickoff prompt. Each prompt below is an
+alternative, for when you want to go one phase at a time, resume in a new
+session or after a break or a failure partway through, or redo a single
+phase later.
 
 ### Phase 1 — prerequisites
 
@@ -414,7 +441,9 @@ which one you verified. Skip either piece if I say so.
 
 ### Troubleshooting
 
-Paste one of these when a phase stops. Fill the same placeholders.
+Use these only when something goes wrong. A setup that is moving through
+the checkpoints does not need them. Paste one of these when a phase stops.
+Fill the same placeholders.
 
 #### `doctor` is not OK
 
