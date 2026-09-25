@@ -7,17 +7,62 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-### Added
-
-- [docs/agent-assisted-setup.md](docs/agent-assisted-setup.md): paste-ready
-  prompts for a coding agent to install and configure DirXMLDev. Linked from
-  the README, the docs index, and the manual install page.
+## [0.2.0] - 2026-09-25
 
 ### Changed
 
-- [docs/agent-assisted-setup.md](docs/agent-assisted-setup.md): the kickoff
-  prompt is the whole setup. The phase prompts are alternatives (one phase,
-  a resume, or a redo), and the troubleshooting prompts are for failures.
+- **TLS is verified by default.** An environment's LDAPS connection checks
+  the server certificate against the JDK truststore; `<env>.trustAll=true`
+  opts in to accepting any certificate (and, as before, skips the host-name
+  check an SSH tunnel cannot pass). Before 0.2.0 `trustAll` defaulted to true.
+  An environment on a private CA that never set it now needs `trustAll=true`
+  or the CA in the truststore ([docs/install.md](docs/install.md) §4.3).
+  `import-live` without `--env` likewise needs `-Dldap.trustAll=true`. The
+  simulator made the same change (its 1.6.1 and 1.7.0); DirXMLDev pins
+  `dirxml-simulator` 1.7.0.
+- `driver.trace tail` streams the engine's DirXML trace over LDAP
+  (`--ldap`, and the default whenever an environment names no `sshHost`):
+  `--follow` or `--seconds N`, `--grep`, `--engine`. The SSH host and the
+  trace file are optional; `--since` still needs the file
+  ([docs/operate.md](docs/operate.md)).
+- Multi-server driver sets: `import-live` reads every server's own driver
+  settings (`DirXML-ConfigValues`, `DirXML-ShimConfigInfo`,
+  `DirXML-EngineControlValues`) through that server's connection and keeps
+  what differs under `drivers/<d>/servers/<server>/`; `vault.diff` reports per
+  server; `vault.deploy` writes an override on its server, fans a change of the
+  primary's value out to servers without an override, restarts the driver
+  there, and snapshots each server (`vault.rollback --server`). Single-server
+  sets are unchanged ([docs/vault-deploy.md](docs/vault-deploy.md), "Several
+  servers"). Proven against fake servers only so far.
+- The build states its minimums up front: Maven 3.6.3 or newer and JDK 21
+  (enforcer). `doctor` and `bin/require-engine.sh` name a 4.10.2 engine's
+  `xp-1.0.0.jar` when `xp.jar` is missing and say to copy it as `xp.jar`.
+- `import-ldif` explains a file that holds no driver set: how many entries,
+  whether `objectClass` is present, which classes or `DirXML-*` attributes
+  it saw, and what to export instead
+  ([docs/getting-started.md](docs/getting-started.md)).
+- [docs/agent-assisted-setup.md](docs/agent-assisted-setup.md) is restructured
+  around the one kickoff prompt: placeholders first, the prompt, the
+  checkpoints, then the alternatives.
+
+### Added
+
+- [DirXML Trace Viewer](https://github.com/PointBlueTechnology/DirXMLTraceViewer)
+  integration: `viewer.install` (a release from GitHub, SHA-256 checked, or
+  `--source` to clone and build), `viewer.check`, a `doctor` line, and
+  `driver.trace view --env E [--driver D]` / `--file F` to open the desktop
+  viewer connected to a vault with a driver selected, or on a trace file, the
+  password on its stdin. Needs viewer 1.2.0 ([docs/install.md](docs/install.md) §5.2).
+- `package.status --strict`: exit 1 and every violation named — a customised
+  packaged object, a package stamped on objects with no installed record, and
+  with `--catalog` a version the catalog lacks — for a client whose auditors
+  forbid customised released packages; a pull-request template in
+  [docs/examples](docs/examples/PULL_REQUEST_TEMPLATE.md)
+  ([docs/packages.md](docs/packages.md) §5.1).
+- [docs/agent-assisted-setup.md](docs/agent-assisted-setup.md): paste-ready
+  prompts for a coding agent to install and configure DirXMLDev. Linked from
+  the README, the docs index, and the manual install page.
+- The Active Directory policy-flow fishbone on the README.
 
 ### Removed
 
@@ -31,6 +76,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   ([docs/install.md](docs/install.md)). Maven's file check reports a directory
   symlink of `lib/`, and per-jar symlinks, as missing. The install docs say to
   copy the jars.
+- The portable CI build compiles everything `doctor` depends on.
 
 ## [0.1.0] - 2026-09-24
 
