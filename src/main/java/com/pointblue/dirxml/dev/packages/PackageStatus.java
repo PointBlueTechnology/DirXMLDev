@@ -173,6 +173,31 @@ public final class PackageStatus {
         return i;
     }
 
+    /**
+     * What a staging policy that forbids customised released packages would object to: every
+     * customised packaged object, every package the tree names that no manifest record vouches
+     * for, and — when a catalog was given — every installed version the catalog does not hold
+     * (auditors want the installed jar on record). Empty when the tree is clean.
+     */
+    public List<String> violations(boolean catalogGiven) {
+        List<String> out = new ArrayList<>();
+        for (Target t : targets) {
+            for (String c : t.customized) {
+                out.add(t.name + ": customized packaged object " + c);
+            }
+            for (Installed i : t.packages) {
+                if (!i.inManifest) {
+                    out.add(t.name + ": " + i.shortName + " " + (i.version == null ? "?" : i.version)
+                        + " is stamped on objects but not recorded as installed (package.adopt records it)");
+                }
+                if (catalogGiven && "no".equals(i.inCatalog)) {
+                    out.add(t.name + ": " + i.shortName + " " + (i.version == null ? "?" : i.version) + " is not in the catalog");
+                }
+            }
+        }
+        return out;
+    }
+
     public String text() {
         StringBuilder sb = new StringBuilder();
         for (Target t : targets) {
@@ -226,12 +251,13 @@ public final class PackageStatus {
         return sb.append("]}").toString();
     }
 
-    /** {@code package.status <tree> [--driver D] [--catalog DIR] [--json]} */
+    /** {@code package.status <tree> [--driver D] [--catalog DIR] [--strict] [--json]}; {@code --strict} exits 1 on any {@link #violations}. */
     public static int cli(String[] args) throws IOException {
         Path tree = null;
         String driver = null;
         Catalog catalog = null;
         boolean json = false;
+        boolean strict = false;
         for (int i = 1; i < args.length; i++) {
             if (args[i].equals("--driver") && i + 1 < args.length) {
                 driver = args[++i];
@@ -239,16 +265,38 @@ public final class PackageStatus {
                 catalog = Catalog.open(Paths.get(args[++i]));
             } else if (args[i].equals("--json")) {
                 json = true;
+            } else if (args[i].equals("--strict")) {
+                strict = true;
             } else if (tree == null) {
                 tree = Paths.get(args[i]);
             }
         }
         if (tree == null) {
-            System.err.println("usage: package.status <tree> [--driver D] [--catalog DIR] [--json]");
+            System.err.println("usage: package.status <tree> [--driver D] [--catalog DIR] [--strict] [--json]");
             return 2;
         }
         PackageStatus st = of(tree, driver, catalog);
-        System.out.print(json ? st.json() + "\n" : st.text());
-        return 0;
+        List<String> violations = strict ? st.violations(catalog != null) : List.of();
+        if (json) {
+            String j = st.json();
+            if (strict) {
+                StringBuilder v = new StringBuilder(",\"strict\":{\"ok\":" + violations.isEmpty() + ",\"violations\":[");
+                for (int i = 0; i < violations.size(); i++) {
+                    v.append(i > 0 ? "," : "").append(DeployLog.q(violations.get(i)));
+                }
+                j = j.substring(0, j.lastIndexOf('}')) + v + "]}}";
+            }
+            System.out.println(j);
+        } else {
+            System.out.print(st.text());
+            if (strict) {
+                for (String v : violations) {
+                    System.out.println("STRICT: " + v);
+                }
+                System.out.println(violations.isEmpty() ? "STRICT: OK — no customized packaged object" + (catalog != null ? ", every installed version is in the catalog" : "")
+                    : "STRICT: " + violations.size() + " violation(s)");
+            }
+        }
+        return strict && !violations.isEmpty() ? 1 : 0;
     }
 }
