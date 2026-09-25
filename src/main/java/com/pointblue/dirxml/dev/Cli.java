@@ -67,8 +67,13 @@ public final class Cli {
                     driverSetDn = positional.get(0);
                 }
                 Path outDir = Paths.get(positional.get(positional.size() - 1));
-                // every attribute (package stamps included) — the same reader vault.diff / deploy use
-                System.exit(write(com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, driverSetDn), outDir));
+                // every attribute (package stamps included) — the same reader vault.diff / deploy use;
+                // with --env, the other servers' own driver settings too (docs/vault-deploy.md, "Several servers")
+                com.pointblue.dirxml.dev.model.DriverSet live = envName != null && driverSetDn.equals(
+                    com.pointblue.dirxml.dev.deploy.Environments.load().get(envName).driverSetDn)
+                    ? com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(com.pointblue.dirxml.dev.deploy.Environments.load().get(envName), n -> System.err.println("note: " + n))
+                    : com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, driverSetDn);
+                System.exit(write(live, outDir));
             }
             if (args.length >= 2 && args[0].equals("check")) {
                 System.exit(doCheck(Paths.get(args[1])));
@@ -446,7 +451,7 @@ public final class Cli {
         System.err.println("  package.build   --catalog DIR <tree> --driver D --short SHORT --name N --vendor V --version M.m.r [--include PATH…] [--new-version-of SHORT_ver|jar]");
         System.err.println("                  [--depends SHORT…] [--gcvs referenced|all|none] [--customized keep] [--base] [--json]   build a package jar from a driver's artifacts");
         System.err.println("  package.site    --catalog DIR --out DIR [--description …]   render the catalog as an Eclipse update site Designer can read");
-        System.err.println("  package.status  <tree> [--driver D] [--catalog DIR] [--json]   installed packages per driver vs the catalog (upgrades available)");
+        System.err.println("  package.status  <tree> [--driver D] [--catalog DIR] [--strict] [--json]   installed packages per driver vs the catalog (upgrades available); --strict exits 1 on a customized packaged object or a version the catalog lacks");
         System.err.println("vault writes (vault.deploy --yes|--step, vault.rollback --yes, vault.import-clone --yes,");
         System.err.println("  driver start|stop|restart, cache clear, migrate, resync, secrets set|remove, trace set|reset, submit)");
         System.err.println("  also need IDM_AGENT_ALLOW_WRITE=1 or --confirm <env>. A --dry-run stays read-only.");

@@ -104,6 +104,7 @@ public final class LdifReader {
             ds.dn = dsDn;
             ds.configValues = xml(dsEntry.first("DirXML-ConfigValues"), ds.meta, "configvalues");
             copyMeta(dsEntry, ds.meta, "DirXML-DriverSet");
+            ds.servers.addAll(dsEntry.all("DirXML-ServerList"));
             // the driver set's own linkage (GCV objects in set 14), as the export reader records it
             int n = 0;
             for (String link : dsEntry.all("DirXML-Policies")) {
@@ -112,7 +113,7 @@ public final class LdifReader {
         } else {
             // a dump of a single driver: synthesize the set from the driver's parent
             Entry anyDriver = entries.stream().filter(e -> e.hasClass("DirXML-Driver")).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("no DirXML-DriverSet or DirXML-Driver entry in " + sourceName));
+                .orElseThrow(() -> new IllegalArgumentException(noDriverSetMessage(entries, sourceName)));
             dsDn = parentDn(anyDriver.dn);
             ds = new DriverSet(rdn(dsDn));
             ds.dn = dsDn;
@@ -589,6 +590,56 @@ public final class LdifReader {
             }
         }
         return out;
+    }
+
+    /**
+     * Why a file yields no driver set: an LDIF that carries no {@code objectClass} at all (an
+     * export that asked for selected attributes), one whose base sits below the driver set, or
+     * one that simply holds other objects. The message says which, with what the file did hold.
+     */
+    static String noDriverSetMessage(Collection<Entry> entries, String sourceName) {
+        int total = entries.size();
+        int withClass = 0;
+        Map<String, Integer> classes = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, Integer> dirxmlAttrs = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (Entry e : entries) {
+            List<String> oc = e.all("objectclass");
+            if (!oc.isEmpty()) {
+                withClass++;
+                for (String c : oc) {
+                    if (!c.equalsIgnoreCase("Top")) {
+                        classes.merge(c, 1, Integer::sum);
+                    }
+                }
+            }
+            for (String a : e.attributeNames()) {
+                if (a.toLowerCase(java.util.Locale.ROOT).startsWith("dirxml-")) {
+                    dirxmlAttrs.merge(a, 1, Integer::sum);
+                }
+            }
+        }
+        StringBuilder sb = new StringBuilder("no DirXML-DriverSet or DirXML-Driver entry in " + sourceName + ": " + total + " entries");
+        if (total == 0) {
+            return sb.append("; the file is empty or not LDIF").toString();
+        }
+        if (withClass == 0) {
+            sb.append(", none with an objectClass attribute");
+            if (!dirxmlAttrs.isEmpty()) {
+                sb.append(" although ").append(dirxmlAttrs.size()).append(" DirXML-* attributes are present (")
+                    .append(String.join(", ", dirxmlAttrs.keySet().stream().limit(5).toList())).append(dirxmlAttrs.size() > 5 ? ", …" : "").append(")");
+            }
+            sb.append(". The reader finds the driver set and its drivers by objectClass: export with objectClass included "
+                + "(an ldapsearch that lists attributes must list objectClass too; ICE's LDIF export includes it).");
+            return sb.toString();
+        }
+        sb.append(", ").append(withClass).append(" with objectClass, classes seen: ");
+        List<String> top = classes.entrySet().stream()
+            .sorted((a, b) -> b.getValue() - a.getValue())
+            .limit(8).map(en -> en.getKey() + " (" + en.getValue() + ")").toList();
+        sb.append(String.join(", ", top));
+        sb.append(". The file must hold the driver set entry (objectClass DirXML-DriverSet) and its subtree, or at least "
+            + "the DirXML-Driver entries with their children: export from the driver set's DN downwards.");
+        return sb.toString();
     }
 
     /** Preserve package/state attributes the model doesn't interpret. */

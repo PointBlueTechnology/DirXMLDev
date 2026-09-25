@@ -339,6 +339,35 @@ and 29 stale package-level values Designer never validates.**
 4. **Round trip through the vault**: deploy → `import-live` → `package.status`
    agrees with what was installed.
 
+### 5.1 Auditable staging: no customised released packages
+
+A customer whose auditors want every released package on record, unmodified,
+gets one command and one gate:
+
+```bash
+bin/idm package.status tree/ --catalog catalog/ --strict
+```
+
+`--strict` exits 1 and names every violation: a customised packaged object
+(the `package.customized` mark), a package stamped on objects with no
+installed-package record (`package.adopt` writes it), and, with `--catalog`,
+an installed version the catalog does not hold, so the jar that produced the
+tree is always on record. `--json` adds `strict.ok` and `strict.violations`.
+Run it in CI on every pull request and the rule enforces itself; a
+customisation then has one path, a new package version built with
+`package.build` and installed with `package.upgrade`, which is what the
+auditor wants to see in the log. A pull-request template that asks for the
+evidence is in [examples/PULL_REQUEST_TEMPLATE.md](examples/PULL_REQUEST_TEMPLATE.md)
+(copy it to `.github/` in the client repository).
+
+```yaml
+# .github/workflows/packages.yml in the client repository
+- run: <path-to-DirXMLDev>/bin/idm package.status tree/ --catalog catalog/ --strict
+```
+
+Trees that do customise packages on purpose (overrides are the supported
+method, §1) simply do not pass `--strict`.
+
 ## 6. Safeguards
 
 - Catalog integrity: every jar's sha256 and stored checksums verified on

@@ -46,7 +46,7 @@ Get a tree from any source:
 ```bash
 bin/idm import <driver-or-driverset-export.xml> tree/
 bin/idm import-project <designer-project-dir> tree/
-bin/idm import-ldif <driverset-subtree.ldif> tree/
+bin/idm import-ldif <driverset-subtree.ldif> tree/    # a subtree export from the driver set's DN, objectClass included
 bin/idm import-live tree/ --env stg          # connection + driver set from environments.properties (preferred)
 IDM_JAVA_OPTS="-Dldap.url=ldaps://host:636 -Dldap.bindDn=… -Dldap.password=…" \
   bin/idm import-live "cn=driverset1,o=system" tree/

@@ -107,4 +107,30 @@ public class PackageStatusTest {
         assertTrue(again.ok());
         assertTrue(again.notes.get(0), again.notes.get(0).startsWith("0 installed-package"));
     }
+
+    /** --strict: customised objects, unrecorded packages and (with a catalog) versions the catalog lacks are violations. */
+    @Test
+    public void strictNamesEveryViolation() {
+        PackageStatus st = new PackageStatus();
+        PackageStatus.Target t = new PackageStatus.Target();
+        t.name = "AD";
+        PackageStatus.Installed ok = new PackageStatus.Installed();
+        ok.shortName = "NOVLADBASE"; ok.version = "4.1.0"; ok.inManifest = true; ok.inCatalog = "yes";
+        PackageStatus.Installed unrecorded = new PackageStatus.Installed();
+        unrecorded.shortName = "NOVLADENTEX"; unrecorded.version = "4.1.0"; unrecorded.inManifest = false; unrecorded.inCatalog = "yes";
+        PackageStatus.Installed uncatalogued = new PackageStatus.Installed();
+        uncatalogued.shortName = "NOVLPWDSYNC"; uncatalogued.version = "4.0.1"; uncatalogued.inManifest = true; uncatalogued.inCatalog = "no";
+        t.packages.add(ok); t.packages.add(unrecorded); t.packages.add(uncatalogued);
+        t.customized.add("drivers/AD/subscriber/NOVLADBASE-sub-etp");
+        st.targets.add(t);
+        List<String> v = st.violations(true);
+        assertEquals(3, v.size());
+        assertTrue(v.get(0), v.get(0).contains("customized packaged object drivers/AD/subscriber/NOVLADBASE-sub-etp"));
+        assertTrue(v.get(1), v.get(1).contains("NOVLADENTEX 4.1.0 is stamped on objects but not recorded"));
+        assertTrue(v.get(2), v.get(2).contains("NOVLPWDSYNC 4.0.1 is not in the catalog"));
+        assertEquals("without a catalog the catalog rule is not applied", 2, st.violations(false).size());
+        t.customized.clear();
+        t.packages.remove(unrecorded);
+        assertTrue(st.violations(false).isEmpty());
+    }
 }

@@ -59,6 +59,9 @@ public final class AsCodeWriter {
             writeXml(root.resolve(CONFIG_VALUES_FILE), ds.configValues);
             m.child("config").attr("kind", Driver.CONFIG_VALUES).attr("file", CONFIG_VALUES_FILE);
         }
+        for (String s : ds.servers) {
+            m.child("server").attr("dn", s);
+        }
         List<Driver> drivers = new ArrayList<>(ds.drivers);
         drivers.sort(Comparator.comparing(d -> d.name));
         for (Driver d : drivers) {
@@ -96,6 +99,25 @@ public final class AsCodeWriter {
             String file = kind + ".xml";
             writeXml(dir.resolve(file), e);
             m.child("config").attr("kind", kind).attr("file", file);
+        }
+
+        // server-specific settings that differ from the primary's, per other server of the set
+        // (docs/vault-deploy.md, "Several servers"): servers/<server>/<kind>.xml, or an empty
+        // element for a server that holds none of that kind
+        for (Map.Entry<String, Map<String, Element>> s : d.serverConfig.entrySet()) {
+            Manifest sm = m.child("server").attr("dn", s.getKey());
+            String sdir = "servers/" + com.pointblue.dirxml.dev.deploy.Servers.dirName(s.getKey());
+            for (Map.Entry<String, Element> c : s.getValue().entrySet()) {
+                Manifest cm = sm.child("config").attr("kind", c.getKey());
+                if (c.getValue() == null) {
+                    cm.attr("absent", "true");
+                } else {
+                    Files.createDirectories(dir.resolve(sdir));
+                    String file = sdir + "/" + c.getKey() + ".xml";
+                    writeXml(dir.resolve(file), c.getValue());
+                    cm.attr("file", file);
+                }
+            }
         }
 
         // the driver's icon: opaque bytes beside driver.xml, named by the extension Designer
