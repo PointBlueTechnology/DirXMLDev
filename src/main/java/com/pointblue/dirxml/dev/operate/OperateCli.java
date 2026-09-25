@@ -201,7 +201,7 @@ public final class OperateCli {
                     } else if ("tail".equals(sub)) {
                         return traceTail(engine, env, driver, opts, json);
                     } else {
-                        System.err.println("usage: driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow]");
+                        System.err.println("usage: driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]");
                         return 2;
                     }
                     break;
@@ -252,9 +252,8 @@ public final class OperateCli {
     /** {@code driver.trace tail}: the driver's trace file on the engine host over SSH. */
     private static int traceTail(Operate.Engine engine, Environments.Environment env, String driver,
                                  Map<String, List<String>> opts, boolean json) throws Exception {
-        if (env.sshHost == null) {
-            System.err.println("environment '" + env.name + "' has no sshHost; add " + env.name + ".sshHost / .sshUser to tail traces");
-            return 2;
+        if (opts.containsKey("ldap") || env.sshHost == null) {
+            return traceOverLdap(env, driver, opts, json);
         }
         com.pointblue.dirxml.dev.deploy.Vault.Entry d = engine.read(
             com.pointblue.dirxml.dev.deploy.VaultMapping.driverDn(env.driverSetDn, driver));
@@ -289,6 +288,40 @@ public final class OperateCli {
         return 0;
     }
 
+    /**
+     * {@code driver.trace tail --ldap}: the driver's lines out of the engine's DirXML debug events over
+     * the environment's own LDAPS connection ({@link LdapTrace}) — the default when the environment names
+     * no {@code sshHost}. {@code --follow} streams until Ctrl-C; otherwise {@code --seconds N} (default 30)
+     * collects and prints. {@code --grep} filters, {@code --engine} adds the engine-level channel;
+     * {@code --lines} and {@code --since} do not apply to a live stream.
+     */
+    private static int traceOverLdap(Environments.Environment env, String driver, Map<String, List<String>> opts, boolean json) throws Exception {
+        String grep = first(opts, "grep");
+        boolean engineToo = opts.containsKey("engine");
+        long seconds = opts.containsKey("seconds") ? Long.parseLong(first(opts, "seconds")) : 30;
+        if (opts.containsKey("follow")) {
+            System.err.println("streaming '" + driver + "' trace over LDAP from " + env.url + " until Ctrl-C");
+            long n = LdapTrace.stream(env, driver, grep, engineToo, 0, System.out::println);
+            System.err.println(n + " line(s)");
+            return 0;
+        }
+        List<String> out = LdapTrace.collect(env, driver, grep, engineToo, seconds);
+        if (json) {
+            StringBuilder sb = new StringBuilder("{\"source\":\"ldap\",\"seconds\":" + seconds + ",\"lines\":[");
+            for (int i = 0; i < out.size(); i++) {
+                sb.append(i == 0 ? "" : ",").append(com.pointblue.dirxml.dev.deploy.DeployLog.q(out.get(i)));
+            }
+            System.out.println(sb.append("]}"));
+        } else {
+            for (String line : out) {
+                System.out.println(line);
+            }
+            System.err.println(out.size() + " line(s) in " + seconds + "s over LDAP" + (out.isEmpty()
+                ? " — a driver at trace level 0 emits only its log events; driver.trace set --level 3 shows the rest" : ""));
+        }
+        return 0;
+    }
+
     /** Operate commands that change the vault. Read-only status, cache view, secrets list, and trace show/tail do not. */
     static boolean mutatesVault(String cmd, String sub) {
         return AgentWriteGate.mutatesVault(cmd, sub);
@@ -309,7 +342,7 @@ public final class OperateCli {
         System.err.println("  driver.migrate --env E --driver D --xds FILE --yes [--confirm E]");
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
-        System.err.println("  driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow]");
+        System.err.println("  driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]");
         System.err.println("  driver.submit --env E --driver D --xds <file> --yes [--tree DIR]   SubmitCommand; with --tree, the simulator canary");
         System.err.println("  engine.version --env E");
         System.err.println("  engine.stats --env E [--driver D…] [--json]");
