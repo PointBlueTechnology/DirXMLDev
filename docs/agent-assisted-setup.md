@@ -1,191 +1,47 @@
 # Agent-assisted setup
 
-You already know Identity Manager. JDK 21, Maven, the policy simulator, ten
-proprietary jars, an environments file, Keychain items, and TLS are the same
-work as [install.md](install.md). This page hands that work to a coding agent
-— Claude Code, Cursor, Codex, or any agent that can read files and run a
-shell. You paste a prompt. The agent does the workstation steps and stops
-after each phase so you can see it worked.
+The same install as [install.md](install.md) — JDK 21, Maven, the policy
+simulator, ten proprietary jars, an environments file, a stored password, TLS
+— done by a coding agent (Claude Code, Cursor, Codex, anything that reads
+files and runs a shell) while you watch. You paste one prompt; the agent
+works phase by phase and stops at each checkpoint for you to look. Setup
+ends on read-only checks against the vault, and takes under an hour on a
+machine that has the jars.
 
-The agent runs the same `bin/idm` you would. After setup, day-to-day use is
-[getting-started.md](getting-started.md) and [agents.md](agents.md).
+## Before you paste
 
-## Which prompts do I need?
+Have these eight values ready. None of them is a secret. The password is
+never in the prompt; you store it yourself in phase 3 (see
+[What stays with you](#what-stays-with-you)).
 
-Paste the [kickoff prompt](#all-in-one-kickoff) once. That is the whole
-setup. The agent works through every phase and stops at each checkpoint so
-you can look. You say continue, and you leave the other prompts unused.
+| Placeholder | What it is | Example |
+|---|---|---|
+| `<path-to-idm-jars>` | A directory that already holds the ten engine jars, readable on this workstation | `~/Downloads/idm-4.10.1-jars` |
+| `<env-name>` | The environment's name, used after `--env` and as the Keychain item | `stg` |
+| `<tier>` | `dev`, `stg` or `prd`; decides the deploy gate | `stg` |
+| `<vault-host>` | The eDirectory server that holds the driver set, LDAPS on 636 | `idm-stg.example.com` |
+| `<bind-dn>` | The deploy identity's DN | `cn=idm-deploy,ou=sa,o=system` |
+| `<driver-set-dn>` | The driver set this environment means | `cn=driverset1,o=system` |
+| `<client-dir>` | The working directory to create: its own git repository, outside both checkouts | `~/idm-work/acme` |
+| `<path-to-DirXMLDev>` | Where DirXMLDev is cloned; the kickoff defaults it to `~/IdeaProjects/DirXMLDev` | `~/IdeaProjects/DirXMLDev` |
 
-| You want to | What to paste |
-|---|---|
-| The whole install, in one conversation | The kickoff prompt. It is enough on its own. |
-| One phase at a time, a resume after a break or a failure partway through, or one phase again later (a second environment, MCP after the CLI already works) | That phase's prompt, by itself |
-| A step that failed | The matching troubleshooting prompt |
+**The ten jars.** The policy compilers and the LDAP client are proprietary
+NetIQ / OpenText jars, not in git and not on Maven Central. You already have
+them on the engine server (`/opt/novell/eDirectory/lib/dirxml/classes/`), on
+a Remote Loader host, or in a Designer install. DirXMLDev needs all ten, with
+these names (`XDS.jar` keeps its capitals): `dirxml.jar`, `dirxml_misc.jar`,
+`nxsl.jar`, `xp.jar`, `js.jar`, `jclient.jar`, `ldap.jar`, `XDS.jar`,
+`dhutil.jar`, `CommonDriverShim.jar`. The simulator calls `ldap.jar`
+optional; here every vault command needs it. If they are only on a server,
+the agent can `scp` them once you name the host and say it may. They are
+copied as regular files into each project's `lib/` and never committed or
+symlinked. You keep the license you already have.
 
-The phase prompts are other ways in. They are not further steps after the kickoff.
+## The kickoff prompt
 
-## What you do
-
-These stay with you. The rest of this page is the agent's job.
-
-### Where the engine jars are
-
-The policy compilers and the LDAP client are proprietary NetIQ / OpenText
-jars. They are not in this git repository and not on Maven Central. You
-already have them in one of these places:
-
-- The engine server, in `/opt/novell/eDirectory/lib/dirxml/classes/`
-- A Remote Loader install (the same jars, on that host's engine classpath)
-- A Designer install on the workstation
-
-DirXMLDev needs these ten files, with these names (`XDS.jar` is capitalized):
-
-`dirxml.jar`, `dirxml_misc.jar`, `nxsl.jar`, `xp.jar`, `js.jar`,
-`jclient.jar`, `ldap.jar`, `XDS.jar`, `dhutil.jar`, `CommonDriverShim.jar`
-
-The [DirXML Policy Simulator](https://github.com/PointBlueTechnology/DirXMLSimulator)
-describes `ldap.jar` as optional (only its cache-reading command needs it).
-DirXMLDev needs it for every vault command. Copy all ten. They are the
-4.10.1 engine set this project expects.
-
-Tell the agent the directory that already contains them
-(`<path-to-idm-jars>`). That directory has to be readable on the
-workstation. When the jars are only on the engine or the Remote Loader,
-copy those ten files down first; the agent can `scp` them once you give it
-a host and say it may. The agent then copies them as ordinary files into
-each project's `lib/`. You keep the license you already have.
-
-### The vault, in names
-
-The agent drafts `environments.properties` from facts that are not secrets:
-
-- The LDAPS URL, usually `ldaps://<vault-host>:636`
-- The driver-set DN
-- An environment name (`<env-name>`, for example `stg`) and a tier: `dev`,
-  `stg`, or `prd`
-- The bind DN of the deploy identity
-
-### A deploy identity
-
-Each environment gets its own eDirectory user with rights on that driver set,
-and on the User Application driver's `AppConfig` when you later deploy forms
-or PRDs. Creating that user is ordinary eDirectory administration. `admin` is
-fine on a lab. Use a dedicated account for production.
-
-### Passwords, typed by you
-
-The password goes into the macOS Keychain, into your password manager, or
-into an environment variable you set in your own terminal. The properties
-file stores a pointer: `passwordKeychain=`, `passwordCommand=`, or
-`passwordEnv=`. A literal `password=` belongs on a throwaway lab only.
-
-The agent may print the Keychain command. You run it. `-w` with nothing
-after it prompts, so the password stays out of shell history:
-
-```bash
-security add-generic-password -s <env-name> -a '<bind-dn>' -w
-```
-
-Linux and Windows have no Keychain built in. Use your password manager's
-CLI (`op read`, `pass show`, `secret-tool lookup`, …) as `passwordCommand=`,
-or `passwordEnv=`.
-
-Put the jar path, the host, the DNs, and the environment name in the prompt.
-Keep the password out of the chat, out of the prompt, and out of any file
-the agent writes.
-
-### Saying yes to a vault write
-
-Setup ends on read-only checks. A command that would change the vault
-refuses to run unless `IDM_AGENT_ALLOW_WRITE=1` is set or the command
-includes `--confirm <env-name>` for that same environment. The gated
-commands are `vault.deploy` with `--yes` or `--step`, `vault.rollback --yes`,
-`vault.import-clone --yes`, and the operate commands that change a driver
-(`driver.start`, `stop`, `restart`, `migrate`, `resync`, `submit`,
-`driver.cache clear`, `driver.secrets set` or `remove`, `driver.trace set`
-or `reset`). `--dry-run` and read-only commands are not writes. The check
-happens before any secret is resolved and before LDAP opens.
-
-Leave the write flag unset during setup. When you want a write, say so after
-you have read `vault.diff` and `vault.deploy --dry-run`. On a `prd` tier,
-`--confirm` plus the environment name is also the production gate.
-`--confirm prd` satisfies both.
-
-## What the agent does
-
-It asks before installing software. Then it can:
-
-1. Check for JDK 21, Maven 3.9 or newer, and git, and install what is missing.
-2. Clone the simulator, copy the ten jars into its `lib/` as regular files,
-   and run `mvn install` so `dirxml-simulator` **1.5.2** (the version this
-   repo pins) is in the local Maven repository. `IDM_SIM_VERSION` selects
-   another installed build only when you mean it to. A release zip of the
-   simulator runs `bin/sim` on its own; `bin/idm doctor` looks for the jar
-   `mvn install` writes under `~/.m2`.
-3. Clone this repository
-   (`https://github.com/PointBlueTechnology/DirXMLDev`), copy the same jars
-   into a real `lib/` (regular files again), and build. `lib/*.jar` is
-   gitignored.
-4. Run `bin/idm doctor` and fix what that report names.
-5. Create a client directory — its own git repo, outside this checkout —
-   with a `.gitignore` for `environments.properties`, `secrets*.properties`,
-   `deploy-snapshots/`, and `*.ldif`.
-6. Draft `environments.properties` with an indirect password, and on macOS
-   or Linux set the file to mode 600.
-7. Sort out TLS, or an SSH tunnel when the workstation cannot open port 636.
-8. Run the read-only checks: `engine.version`, `driverset.status`,
-   `import-live`, `validate`, `vault.diff`.
-9. Optionally wire the [MCP server](mcp.md) and the Cursor / VS Code
-   [fishbone extension](../extensions/dirxmldev-visual/README.md).
-
-Maven may print that the installed simulator POM is invalid because
-`systemPath` is still the literal `${project.basedir}/lib/...`. That text
-lives in the simulator artifact under `~/.m2`. It is not this repository's
-POM, and copying jars into DirXMLDev's `lib/` does not rewrite it. The build
-continues.
-
-Python 3.8 or newer is only for `bin/apps`, later. Node is only for the
-optional MCP server (Node 20 or newer) and the fishbone (Node 18 or newer).
-
-## Checkpoints
-
-Stop after each phase. The next one starts when you say it looks right.
-
-| Phase | Done when |
-|---|---|
-| 1. Prerequisites | `java -version` is 21, `mvn -v` is 3.9 or newer, `git --version` works |
-| 2. Build | `bin/idm doctor` prints `DOCTOR: OK` |
-| 3. Client directory | `bin/idm doctor --env <env-name>` reports `ldaps: OK` |
-| 4. First import | `validate` reports 0 errors, and `vault.diff` reports no differences |
-| 5. Optional extras | An MCP read works, or the fishbone opens. Skip this if you only want the CLI |
-
-`doctor` with no `--env` does not open LDAP. A missing environments file is
-expected at phase 2 (`environments: OK  none configured`). `--env` is the
-connection test. A refused handshake or a bad password fails that check. The
-report leaves out the password, the bind DN, and the URL. It prints host and
-port.
-
-`import-live` writes the local `tree/` only. It does not change the vault.
-
-## Prompts
-
-Replace the angle-bracket placeholders, then paste. Leave every password out.
-One prompt is the whole job: the kickoff, below, or a single phase prompt
-when you are doing just that phase.
-
-These rules are already written into the kickoff prompt and into each phase
-prompt:
-
-- Vault access stays read-only until you say otherwise.
-- Secrets stay out of the chat, the shell history, command output, and git.
-- The proprietary jars stay out of git.
-- The agent stops and asks before any vault write.
-
-### All-in-one kickoff
-
-This is the prompt to paste. It is enough on its own: the agent works
-through every phase and stops at each checkpoint. Skip the phase prompts
-below; they are alternatives, not the next thing to paste.
+Replace the placeholders and paste. This one prompt is the whole setup; the
+[phase prompts](#alternatives-to-the-kickoff) further down are ways to resume
+or redo a single phase, not the next thing to paste.
 
 ```
 You are setting up DirXMLDev (https://github.com/PointBlueTechnology/DirXMLDev)
@@ -271,12 +127,81 @@ extensions/dirxmldev-visual. Both are optional.
 Start at phase 1.
 ```
 
-### Phase prompts
+## Checkpoints
 
-Skip this section if you used the kickoff prompt. Each prompt below is an
-alternative, for when you want to go one phase at a time, resume in a new
-session or after a break or a failure partway through, or redo a single
-phase later.
+The agent stops after each phase. The next one starts when you say it looks
+right.
+
+| Phase | Done when |
+|---|---|
+| 1. Prerequisites | `java -version` is 21, `mvn -v` is 3.9 or newer, `git --version` works |
+| 2. Build | `bin/idm doctor` prints `DOCTOR: OK` |
+| 3. Client directory | `bin/idm doctor --env <env-name>` reports `ldaps: OK` |
+| 4. First import | `validate` reports 0 errors, and `vault.diff` reports no differences |
+| 5. Optional extras | An MCP read works, or the fishbone opens. Skip this if you only want the CLI |
+
+Expect these along the way:
+
+- `doctor` without `--env` does not open LDAP, and at phase 2 a missing
+  environments file is expected (`environments: OK  none configured`). With
+  `--env` it is the connection test: a refused handshake or a bad password
+  fails it. The report prints host and port and leaves out the URL, the bind
+  DN and the password.
+- Maven may say the installed simulator POM is invalid because `systemPath`
+  is still `${project.basedir}/lib/...`. That text lives in the simulator
+  artifact under `~/.m2`, not in this repository's POM; the build continues.
+- `import-live` writes the local `tree/` only. It never changes the vault.
+- Python 3.8 or newer is only for `bin/apps`, later. Node is only for the
+  optional MCP server (20 or newer) and the fishbone (18 or newer).
+
+## What stays with you
+
+The agent asks before installing software and does the workstation work. Four
+things are yours.
+
+**A deploy identity.** Each environment gets its own eDirectory user with
+rights on that driver set, and on the User Application driver's `AppConfig`
+when you later deploy forms or PRDs. Creating it is ordinary eDirectory
+administration. `admin` is fine on a lab; production gets a dedicated account.
+
+**The password, typed by you.** It goes into the macOS Keychain, your
+password manager, or an environment variable you set in your own terminal.
+The environments file stores a pointer (`passwordKeychain=`,
+`passwordCommand=` or `passwordEnv=`); a literal `password=` belongs on a
+throwaway lab only. The agent prints the Keychain command and you run it.
+`-w` with nothing after it prompts, so the password stays out of shell
+history:
+
+```bash
+security add-generic-password -s <env-name> -a '<bind-dn>' -w
+```
+
+Linux and Windows have no Keychain: use your password manager's CLI
+(`op read`, `pass show`, `secret-tool lookup`, …) as `passwordCommand=`, or
+`passwordEnv=`. Keep the password out of the chat, the prompt, and any file
+the agent writes.
+
+**Saying yes to a vault write.** Setup ends on read-only checks. Any command
+that would change the vault or a driver refuses to run unless
+`IDM_AGENT_ALLOW_WRITE=1` is set or the command carries `--confirm <env-name>`;
+`--dry-run` and reads are never writes, and the check runs before any secret
+is resolved. The gated commands are listed in [install.md](install.md) under
+"Agent write gate". Leave the variable unset during setup. When you want a
+write, say so after you have read `vault.diff` and `vault.deploy --dry-run`;
+on a `prd` tier `--confirm prd` is the production gate as well.
+
+**The facts in the table above.** The agent drafts `environments.properties`
+from them; nothing in it is a secret.
+
+## Alternatives to the kickoff
+
+Skip this section if you used the kickoff. Each prompt below does one phase
+on its own: for going one phase at a time, resuming in a new session after a
+break or a failure, or redoing a phase later (a second environment, MCP after
+the CLI already works). The same rules are written into every one of them:
+vault access stays read-only until you say otherwise, secrets stay out of the
+chat, the shell history, command output and git, the jars stay out of git,
+and the agent stops before any vault write.
 
 ### Phase 1 — prerequisites
 
@@ -427,8 +352,8 @@ output must not contain secret values.
 Fishbone extension (Node 18 or newer; Node 20 covers both):
 cd extensions/dirxmldev-visual && npm install && npm run compile
 Install that folder as a local extension. The directory name is
-pointblue.dirxmldev-visual-<version> using the version field in package.json
-(0.1.2 today): ~/.cursor/extensions/ on Cursor, ~/.vscode/extensions/ on
+pointblue.dirxmldev-visual-<version>, using the version field in package.json:
+~/.cursor/extensions/ on Cursor, ~/.vscode/extensions/ on
 VS Code. On Windows, %USERPROFILE%\.cursor\extensions\ and the VS Code
 equivalent. Restart the editor. When the open folder is <client-dir>, set
 dirxmldev.idmPath to the DirXMLDev bin/idm (or IDM_HOME to the checkout) so
@@ -439,13 +364,12 @@ Stop when a read-only MCP call works, or the fishbone opens, and tell me
 which one you verified. Skip either piece if I say so.
 ```
 
-### Troubleshooting
+## Troubleshooting
 
-Use these only when something goes wrong. A setup that is moving through
-the checkpoints does not need them. Paste one of these when a phase stops.
-Fill the same placeholders.
+Paste one of these when a phase stops, with the same placeholders filled in.
+A setup that is moving through the checkpoints does not need them.
 
-#### `doctor` is not OK
+### `doctor` is not OK
 
 ```
 bin/idm doctor is failing in the DirXMLDev checkout. Read its full output.
@@ -477,7 +401,7 @@ a failed LDAPS line is a connection problem: use the TLS / route prompt
 below. Do not print secrets. Do not write to the vault.
 ```
 
-#### TLS, or "No route to host"
+### TLS, or "No route to host"
 
 ```
 engine.version or bin/idm doctor --env <env-name> cannot reach the vault.
@@ -520,7 +444,7 @@ Stay read-only. When doctor --env reports ldaps: OK, stop and show me that
 line.
 ```
 
-#### Symlink / `requireFilesExist`
+### Symlink / `requireFilesExist`
 
 ```
 mvn test, bin/require-engine.sh, or bin/idm doctor says a jar is missing,
@@ -547,57 +471,19 @@ show me DOCTOR: OK, or the next failure that is not a symlink.
 
 ## Platform notes
 
-### macOS
-
-The launcher finds JDK 21 with `/usr/libexec/java_home -v 21`. Homebrew (or
-a Temurin JDK 21 you already have) is a normal way to install it; the agent
-asks first. Run Maven with that same `JAVA_HOME`.
-
-The Keychain is the password store to use. An item added with `security` is
-readable by `security` without a prompt. An item created in Keychain Access
-asks once; choose Always Allow. When the item is missing, the error names
-the `add-generic-password` command to run. `doctor` still leaves the bind DN
-out of its report, so the prompts have the agent print that command from the
-DN you already provided.
-
-`chmod 600 environments.properties secrets-*.properties` after they exist.
-The tool warns once per run when either file is readable by other users.
-
-### Windows
-
-`bin\idm.cmd` is the launcher. `IDM_JAVA_HOME` or `JAVA_HOME` must be a JDK
-21; this launcher does not search `java_home` or `/usr/lib/jvm`. The
-simulator jar is
-`%USERPROFILE%\.m2\repository\com\pointblue\dirxml\dirxml-simulator\1.5.2\dirxml-simulator-1.5.2.jar`.
-
-Git Bash or WSL can run `bin/idm`, which has the fuller JDK search and reads
-`$HOME/.m2`. Use one home directory for Maven and the launcher so both see
-the installed simulator jar.
-
-There is no Keychain. Use `passwordCommand=` (your password manager's CLI)
-or `passwordEnv=`. The mode-600 warning is a POSIX check; on Windows keep
-the two properties files out of git and out of a shared folder.
+| | JDK 21 | Launcher | Password store | Files |
+|---|---|---|---|---|
+| **macOS** | `/usr/libexec/java_home -v 21` finds it; Homebrew or a Temurin JDK installs it (the agent asks first). Run Maven with the same `JAVA_HOME` | `bin/idm` | The Keychain. An item added with `security` is read without a prompt; one made in Keychain Access asks once (choose Always Allow). A missing item's error names the command to run | `chmod 600` both properties files; the tool warns once per run when either is readable by others |
+| **Linux** | `IDM_JAVA_HOME`, else a `JAVA_HOME` that is 21, else `/usr/lib/jvm/*21*`, else `java` on `PATH` when it is 21. The distro's OpenJDK 21 (`openjdk-21-jdk` on Debian and Ubuntu, `java-21-openjdk-devel` on Fedora and RHEL) and Maven 3.9 or newer are enough | `bin/idm` | `passwordCommand=` or `passwordEnv=` | `chmod 600` as on macOS; `XDS.jar` must keep its capitals on a case-sensitive filesystem |
+| **Windows** | `IDM_JAVA_HOME` or `JAVA_HOME` only; no search. The simulator jar is under `%USERPROFILE%\.m2\repository\com\pointblue\dirxml\dirxml-simulator\1.5.2\` | `bin\idm.cmd`; Git Bash or WSL can run `bin/idm`, which has the fuller search and reads `$HOME/.m2` — use one home directory for Maven and the launcher | `passwordCommand=` or `passwordEnv=`; there is no Keychain | The mode-600 warning is a POSIX check; keep the two properties files out of git and out of shared folders |
 
 A fresh Designer project from a vault, without Designer connecting, is a
 later task: [howto-fresh-designer-project.md](howto-fresh-designer-project.md).
 
-### Linux
-
-The launcher accepts `IDM_JAVA_HOME`, then a `JAVA_HOME` that is JDK 21,
-then `/usr/lib/jvm/*21*`, then `java` on `PATH` when that binary is 21.
-OpenJDK 21 from the distro (`openjdk-21-jdk` on Debian and Ubuntu,
-`java-21-openjdk-devel` on Fedora and RHEL) and Maven 3.9 or newer are
-enough; the agent asks before it installs packages.
-
-Passwords use `passwordCommand=` (`op read`, `pass show`,
-`secret-tool lookup`, …) or `passwordEnv=`. `chmod 600` the properties
-files. `XDS.jar` must keep that capitalization on a case-sensitive
-filesystem.
-
 ## When this is done
 
-The client directory is the place you work. Call `bin/idm` by its full path,
-or put it on `PATH`. The next pages:
+The client directory is where you work. Call `bin/idm` by its full path, or
+put it on `PATH`. Next:
 
 - [getting-started.md](getting-started.md) — the same first import, and how
   to look around the tree.
