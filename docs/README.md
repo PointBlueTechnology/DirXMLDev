@@ -2,6 +2,9 @@
 
 Use the tool first. The design notes and the phase history are below them.
 
+On a new machine, [agent-assisted-setup.md](agent-assisted-setup.md) hands the
+install to a coding agent. The manual version is [install.md](install.md).
+
 `bin/idm` with no arguments is the command reference. `bin/apps --help` is the
 Identity Applications reference. When a page and the live help disagree, follow
 the help.
@@ -19,6 +22,7 @@ the help.
 | [agents.md](agents.md) | Point any agent at the tool (Cursor, Claude Code, Codex, others) |
 | [mcp.md](mcp.md) | Optional MCP server: reads, dry-runs, and gated writes over `bin/idm` |
 | [agent-guide.md](agent-guide.md) | The loop and the refusal rules that agent follows |
+| [agent-assisted-setup.md](agent-assisted-setup.md) | Have a coding agent install DirXMLDev; paste a prompt |
 | [install.md](install.md) | Build `bin/idm` from source, run `bin/idm doctor`, and see what CI runs |
 
 ## By job
