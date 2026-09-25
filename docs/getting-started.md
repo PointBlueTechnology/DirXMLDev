@@ -159,6 +159,16 @@ bin/idm import DriverSet-export.xml tree/
 bin/idm import-ldif driverset.ldif tree/
 ```
 
+An LDIF the reader accepts is a subtree export from the driver set's DN
+downwards, every entry with its `objectClass` values and the DirXML data
+attributes (`XmlData`, `DirXML-Data`, `DirXML-ShimConfigInfo`,
+`DirXML-ConfigValues`, `DirXML-DriverFilter`, `DirXML-EngineControlValues`,
+`DirXML-Policies`, the entitlement and AppConfig objects). A plain
+`ldapsearch -b <driver set DN> -s sub '(objectClass=*)'` gives exactly that;
+an export that names attributes must include `objectClass`, and one whose
+base is a driver rather than the driver set still works but yields only that
+driver. When the reader finds no driver set it now says what the file held.
+
 What to expect the first time:
 
 - `validate` on a tree imported from a running vault reports 0 errors. Warnings
