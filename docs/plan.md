@@ -476,6 +476,10 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   [spikes/prd-rest-live.md](spikes/prd-rest-live.md). Open check: whether
   `POST /index/permissions ADD_OR_MODIFY` makes a just-deployed PRD
   requestable before the index's 10-minute interval.
+- ~~**DirXML Trace Viewer integration**~~ — done 2026-09-25: `viewer.install`
+  (release or `--source`), `viewer.check`, doctor line, `driver.trace view --env|--file`;
+  the viewer gained `--open` / `--connect … --driver` / `--password-stdin` (its 1.2.0).
+
 - ~~**Multi-server driver sets beyond the clone**~~ — done 2026-09-25 (Norbert's
   question): import-live reads every server's own driver settings, the tree keeps
   the differences per server, diff and deploy act per server, a primary change fans

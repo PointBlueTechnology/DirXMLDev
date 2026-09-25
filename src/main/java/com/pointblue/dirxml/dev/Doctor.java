@@ -205,6 +205,7 @@ public final class Doctor {
         checks.add(jdk(req));
         checks.add(simulator(req));
         checks.add(lib(req));
+        checks.add(traceViewer());
         Environments loaded = null;
         Path envFile = null;
         try {
@@ -320,6 +321,18 @@ public final class Doctor {
         } catch (java.io.IOException e) {
             return null;
         }
+    }
+
+    /** The DirXML Trace Viewer is optional: found or not, this check never fails the report. */
+    private static Check traceViewer() {
+        com.pointblue.dirxml.dev.operate.TraceViewer.Status st = com.pointblue.dirxml.dev.operate.TraceViewer.locate();
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("path", st.path == null ? null : st.path.toString());
+        fields.put("source", st.source);
+        fields.put("version", st.version);
+        String line = st.ready() ? "trace viewer: OK  " + st.path + (st.version == null ? "" : "  " + st.version)
+            : "trace viewer: OK  not installed (optional; bin/idm viewer.install)";
+        return new Check("traceViewer", true, line, st.ready() ? List.of() : List.of(st.describe()), fields);
     }
 
     private static Check lib(Request req) {

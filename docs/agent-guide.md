@@ -304,6 +304,12 @@ form's does; `package.revert tree/ --path <tree path>` puts any customized
 packaged thing back (content, mark and the package's checksum). Deploy as always: `vault.diff` shows the objects, `vault.deploy`
 writes only the changed attributes.
 
+When a person wants to read a trace rather than have it summarised, open the
+desktop viewer for them: `driver.trace view --env <env> --driver <D>` streams
+live in the DirXML Trace Viewer, `driver.trace view --file <trace>` opens a
+file (`viewer.install` first, once; `viewer.check` says whether it is there).
+It is read-only and separate from what you read yourself with `tail`.
+
 To make a driver fully custom — no package ever installed it, as far as the
 tree, the vault and Designer can tell — `package.strip tree/ --driver D`
 removes every stamp, mark and baseline under the driver and marks it stripped;
