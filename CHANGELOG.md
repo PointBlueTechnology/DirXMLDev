@@ -7,6 +7,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- [docs/agent-assisted-setup.md](docs/agent-assisted-setup.md): paste-ready
+  prompts for a coding agent to install and configure DirXMLDev. Linked from
+  the README, the docs index, and the manual install page.
+
 ### Removed
 
 - The lab `deploy-log/` audit trail is no longer in the tree. `deploy-log/` is
