@@ -24,7 +24,23 @@ public final class VaultDiff {
 
     /** Read the environment's driver set live into a model. */
     public static DriverSet readLive(Environments.Environment env) {
-        return readLive(env.vaultConfig(), env.driverSetDn);
+        return readLive(env, System.err::println);
+    }
+
+    /**
+     * The driver set through the environment's connection, plus every other server's own
+     * driver settings where they differ ({@link Servers#readOverrides}); {@code notes} hears about
+     * servers that could not be read.
+     */
+    public static DriverSet readLive(Environments.Environment env, java.util.function.Consumer<String> notes) {
+        try (Vault v = Vault.connect(env.vaultConfig())) {
+            DriverSet ds = fromVault(v, env.driverSetDn, env.url + "/" + env.driverSetDn);
+            Servers.readOverrides(ds, env.driverSetDn, v, serverDn -> {
+                String url = Servers.urlOf(env, v, serverDn);
+                return url == null ? null : Vault.connect(env.vaultConfig().withUrl(url));
+            }, notes);
+            return ds;
+        }
     }
 
     /** Every attribute of the driver-set subtree (package stamps included), through our own connection. */

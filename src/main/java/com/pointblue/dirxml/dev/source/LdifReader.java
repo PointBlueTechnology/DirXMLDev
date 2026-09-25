@@ -104,6 +104,7 @@ public final class LdifReader {
             ds.dn = dsDn;
             ds.configValues = xml(dsEntry.first("DirXML-ConfigValues"), ds.meta, "configvalues");
             copyMeta(dsEntry, ds.meta, "DirXML-DriverSet");
+            ds.servers.addAll(dsEntry.all("DirXML-ServerList"));
             // the driver set's own linkage (GCV objects in set 14), as the export reader records it
             int n = 0;
             for (String link : dsEntry.all("DirXML-Policies")) {
