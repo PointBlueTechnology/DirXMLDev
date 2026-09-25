@@ -61,6 +61,26 @@
                 <version>3.5.0</version>
                 <executions>
                     <execution>
+                        <id>require-tooling</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <fail>true</fail>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[3.6.3,)</version>
+                                    <message>DirXMLDev needs Maven 3.9 or newer (3.6.3 is the oldest the build plugins accept). A distribution's stock Maven is often older: install a current Maven from maven.apache.org or your package manager's newer channel, and run it with JDK 21.</message>
+                                </requireMavenVersion>
+                                <requireJavaVersion>
+                                    <version>[21,)</version>
+                                    <message>DirXMLDev builds with JDK 21: set JAVA_HOME to a JDK 21 (on macOS, JAVA_HOME=$(/usr/libexec/java_home -v 21)).</message>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>require-engine</id>
                         <phase>validate</phase>
                         <goals>
@@ -71,7 +91,7 @@
                             <fail>true</fail>
                             <rules>
                                 <requireFilesExist>
-                                    <message>DirXMLDev needs the proprietary NetIQ/OpenText jars as regular files in a real lib/ directory, and dirxml-simulator ${simulator.version} installed by 'mvn install' in the DirXMLSimulator repo. They are not committed and not on Maven Central. A directory symlink of lib/, or a symlink of a jar, is not enough: requireFilesExist reports that path as missing. Copy the jars. `mvn test` is the full suite and stops here when they are absent or linked. Doctor and the write gate still run without them: mvn -B -Pidm.portable test. See docs/install.md section 2 and bin/require-engine.sh.</message>
+                                    <message>DirXMLDev needs the proprietary NetIQ/OpenText jars as regular files in a real lib/ directory, and dirxml-simulator ${simulator.version} installed by 'mvn install' in the DirXMLSimulator repo. They are not committed and not on Maven Central. A directory symlink of lib/, or a symlink of a jar, is not enough: requireFilesExist reports that path as missing. Copy the jars; an engine from 4.10.2 on ships xp.jar as xp-1.0.0.jar — copy it as xp.jar. `mvn test` is the full suite and stops here when they are absent or linked. Doctor and the write gate still run without them: mvn -B -Pidm.portable test. See docs/install.md section 2 and bin/require-engine.sh.</message>
                                     <files>
                                         <file>${idm.lib}/dirxml.jar</file>
                                         <file>${idm.lib}/dirxml_misc.jar</file>

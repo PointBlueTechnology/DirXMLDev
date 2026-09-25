@@ -337,4 +337,18 @@ public class DoctorTest {
         }
         throw new IOException("dirxml-dev pom.xml not found from " + System.getProperty("user.dir"));
     }
+
+    /** A 4.10.2 engine ships xp.jar as xp-1.0.0.jar: the report names the file it found and what to call it. */
+    @Test
+    public void renamedXpJarIsPointedOut() throws Exception {
+        Path lib = tmp.newFolder("lib-renamed").toPath();
+        for (String name : Doctor.REQUIRED_JARS) {
+            if (!name.equals("xp.jar")) {
+                Files.write(lib.resolve(name), new byte[] {0});
+            }
+        }
+        Files.write(lib.resolve("xp-1.0.0.jar"), new byte[] {0});
+        assertEquals("xp-1.0.0.jar", Doctor.renamedVariant(lib, "xp.jar"));
+        assertEquals(null, Doctor.renamedVariant(lib, "dirxml.jar"));
+    }
 }

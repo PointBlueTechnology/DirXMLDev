@@ -28,6 +28,11 @@ for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient
   elif [ ! -f "$HERE/lib/$j" ]; then
     missing="${missing}
   lib/${j}"
+    base="${j%.jar}"
+    for v in "$HERE/lib/$base"-*.jar; do
+      [ -f "$v" ] && missing="${missing}  (found $(basename "$v"): copy it as ${j})"
+      break
+    done
   fi
 done
 
@@ -66,7 +71,8 @@ Copy the jars into a real lib/ directory.
 Setup (docs/install.md, section 2):
   1. Copy dirxml.jar, dirxml_misc.jar, nxsl.jar, xp.jar, CommonDriverShim.jar,
      jclient.jar, dhutil.jar, XDS.jar, js.jar, and ldap.jar into a real lib/
-     directory (regular files, not symlinks):
+     directory (regular files, not symlinks). Engines from 4.10.2 on ship
+     xp.jar as xp-1.0.0.jar: copy it as xp.jar.
        mkdir -p lib && cp /path/to/DirXMLSimulator/lib/dirxml.jar lib/  # and the other nine
      They come from an IDM engine (/opt/novell/eDirectory/lib/dirxml/classes/)
      or a Designer install. Do not commit them.

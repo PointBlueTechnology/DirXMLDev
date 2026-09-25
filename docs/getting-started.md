@@ -115,6 +115,9 @@ secret.
   driver's trace file. Without them `driver.trace tail` streams the trace over
   LDAP instead (the engine's debug events; `--follow` or `--seconds N`), so
   they are optional.
+- `servers` — `<serverDn>=<url>;…`: the other servers of a multi-server
+  driver set, when their URLs cannot be derived from the tree; import, deploy
+  and the clone reach each server's own driver settings through them.
 - `trustAll` — when omitted, LDAPS accepts any server certificate. Set
   `trustAll=false` once the vault CA is in the JDK truststore
   ([install.md](install.md) §4.3).
@@ -160,6 +163,16 @@ bin/idm import-project ~/designer_workspace/Client tree/
 bin/idm import DriverSet-export.xml tree/
 bin/idm import-ldif driverset.ldif tree/
 ```
+
+An LDIF the reader accepts is a subtree export from the driver set's DN
+downwards, every entry with its `objectClass` values and the DirXML data
+attributes (`XmlData`, `DirXML-Data`, `DirXML-ShimConfigInfo`,
+`DirXML-ConfigValues`, `DirXML-DriverFilter`, `DirXML-EngineControlValues`,
+`DirXML-Policies`, the entitlement and AppConfig objects). A plain
+`ldapsearch -b <driver set DN> -s sub '(objectClass=*)'` gives exactly that;
+an export that names attributes must include `objectClass`, and one whose
+base is a driver rather than the driver set still works but yields only that
+driver. When the reader finds no driver set it now says what the file held.
 
 What to expect the first time:
 

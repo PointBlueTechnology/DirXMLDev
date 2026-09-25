@@ -21,6 +21,8 @@ public final class DriverSet {
     public Element configValues;
     public final Library library = new Library();
     public final List<Driver> drivers = new ArrayList<>();
+    /** The servers that serve this set ({@code DirXML-ServerList}), the connection's own included; empty when unknown. */
+    public final List<String> servers = new ArrayList<>();
     public final Map<String, String> meta = new LinkedHashMap<>();
 
     public DriverSet(String name) {

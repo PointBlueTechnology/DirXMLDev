@@ -31,7 +31,8 @@ them on the engine server (`/opt/novell/eDirectory/lib/dirxml/classes/`), on
 a Remote Loader host, or in a Designer install. DirXMLDev needs all ten, with
 these names (`XDS.jar` keeps its capitals): `dirxml.jar`, `dirxml_misc.jar`,
 `nxsl.jar`, `xp.jar`, `js.jar`, `jclient.jar`, `ldap.jar`, `XDS.jar`,
-`dhutil.jar`, `CommonDriverShim.jar`. The simulator calls `ldap.jar`
+`dhutil.jar`, `CommonDriverShim.jar`. Engines from 4.10.2 on ship `xp.jar`
+as `xp-1.0.0.jar`; copy it as `xp.jar`. The simulator calls `ldap.jar`
 optional; here every vault command needs it. If they are only on a server,
 the agent can `scp` them once you name the host and say it may. They are
 copied as regular files into each project's `lib/` and never committed or
@@ -86,7 +87,8 @@ mvn -v shows 3.9 or newer, git --version works.
 Phase 2 — build. Clone the simulator. Copy these ten jars from
 <path-to-idm-jars> into its lib/ as regular files: dirxml.jar,
 dirxml_misc.jar, nxsl.jar, xp.jar, js.jar, jclient.jar, ldap.jar, XDS.jar,
-dhutil.jar, CommonDriverShim.jar. Run mvn install there with JDK 21 so
+dhutil.jar, CommonDriverShim.jar (a 4.10.2 engine names xp.jar
+xp-1.0.0.jar; copy it as xp.jar). Run mvn install there with JDK 21 so
 dirxml-simulator 1.6.0 lands in ~/.m2 (on Windows, %USERPROFILE%\.m2).
 DirXMLDev pins 1.6.0; set IDM_SIM_VERSION only if I asked for another build.
 A simulator release zip does not satisfy doctor. Clone DirXMLDev, copy the
@@ -234,7 +236,8 @@ docs/agent-assisted-setup.md in the DirXMLDev repo once it is cloned.
 Jars are already on disk at <path-to-idm-jars>. Copy these ten as regular
 files (cp, not ln -s), including ldap.jar, and keep the name XDS.jar:
 dirxml.jar, dirxml_misc.jar, nxsl.jar, xp.jar, js.jar, jclient.jar,
-ldap.jar, XDS.jar, dhutil.jar, CommonDriverShim.jar.
+ldap.jar, XDS.jar, dhutil.jar, CommonDriverShim.jar. A 4.10.2 engine names
+xp.jar xp-1.0.0.jar: copy it as xp.jar.
 
 Clone https://github.com/PointBlueTechnology/DirXMLSimulator into
 ~/IdeaProjects/DirXMLSimulator (or another directory I name). Copy the ten
@@ -393,7 +396,8 @@ simulator does not put this jar in .m2.
 lib/: a real directory containing regular files dirxml.jar,
 dirxml_misc.jar, nxsl.jar, xp.jar, js.jar, jclient.jar, ldap.jar, XDS.jar,
 dhutil.jar, and CommonDriverShim.jar. ldap.jar is required here. Copy them
-from <path-to-idm-jars>. If the report says classes did not load, the jars
+from <path-to-idm-jars>; if that directory has xp-1.0.0.jar instead of
+xp.jar, copy it as xp.jar. If the report says classes did not load, the jars
 are present but are not the 4.10.1 engine set.
 
 A missing environments file is fine when --env was not passed. With --env,

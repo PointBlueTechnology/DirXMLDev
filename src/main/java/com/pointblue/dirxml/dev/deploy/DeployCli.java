@@ -97,11 +97,11 @@ public final class DeployCli {
             case "vault.rollback": {
                 String snap = first(opts, "snapshot");
                 if (snap == null) {
-                    System.err.println("usage: vault.rollback --env <name> --snapshot <file.ldif> [--yes] [--json]");
+                    System.err.println("usage: vault.rollback --env <name> --snapshot <file.ldif> [--yes] [--server <serverDn>] [--json]");
                     return 2;
                 }
                 Path tree = pos.isEmpty() ? Paths.get(".") : Paths.get(pos.get(0));
-                Deployer.Result r = Deployer.rollback(tree, env, Paths.get(snap), opts.containsKey("yes"));
+                Deployer.Result r = Deployer.rollback(tree, env, Paths.get(snap), opts.containsKey("yes"), first(opts, "server"));
                 System.out.print(json ? r.json() + "\n" : r.text());
                 return r.ok ? 0 : 1;
             }

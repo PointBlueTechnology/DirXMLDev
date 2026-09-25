@@ -432,41 +432,11 @@ public final class CloneExporter {
      * object's {@code ldapInterfaces}; null when the tree does not say.
      */
     private String deriveUrl(String serverDn, Report r) {
-        try {
-            Vault.Entry srv = vault.read(serverDn, "networkAddress");
-            String ip = null;
-            if (srv != null) {
-                for (byte[] v : srv.attrs.getOrDefault("networkAddress", List.of())) {
-                    int hash = indexOf(v, (byte) '#');
-                    if (hash < 0) {
-                        continue;
-                    }
-                    String type = new String(v, 0, hash, StandardCharsets.US_ASCII);
-                    if ((type.equals("9") || type.equals("8")) && v.length >= hash + 7) {
-                        ip = (v[hash + 3] & 0xFF) + "." + (v[hash + 4] & 0xFF) + "." + (v[hash + 5] & 0xFF) + "." + (v[hash + 6] & 0xFF);
-                        break;
-                    }
-                }
-            }
-            if (ip == null) {
-                return null;
-            }
-            String port = "636";
-            for (Vault.Entry ls : vault.search(parent(serverDn), "(&(objectClass=ldapServer)(ldapHostServer=" + serverDn + "))", SearchControls.SUBTREE_SCOPE)) {
-                for (String i : ls.strings("ldapInterfaces")) {
-                    if (i.startsWith("ldaps://")) {
-                        String p = i.substring(i.lastIndexOf(':') + 1).replace("/", "");
-                        if (!p.isEmpty()) {
-                            port = p;
-                        }
-                    }
-                }
-            }
-            return "ldaps://" + ip + ":" + port;
-        } catch (RuntimeException e) {
-            r.notes.add("could not derive an LDAP URL for " + serverDn + ": " + e.getMessage());
-            return null;
+        String url = com.pointblue.dirxml.dev.deploy.Servers.deriveUrl(vault, serverDn);
+        if (url == null) {
+            r.notes.add("could not derive an LDAP URL for " + serverDn + " (no TCP networkAddress on the server object)");
         }
+        return url;
     }
 
     private static int indexOf(byte[] v, byte b) {
