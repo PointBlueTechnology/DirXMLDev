@@ -117,6 +117,9 @@ secret.
   are left alone unless you pass `--secrets missing` or `--secrets all`.
 - `requires` — on a production deploy, a green deploy of the same tree commit
   to that other environment must already be in `deploy-log/`.
+- (optional) the [DirXML Trace Viewer](install.md#52-the-dirxml-trace-viewer): `bin/idm viewer.install`
+  once, then `driver.trace view --env stg --driver D` opens it connected, or
+  `--file` on a trace file, for reading trace on the desktop.
 - `sshHost` / `sshUser` — key-based SSH to the engine host, for reading a
   driver's trace file. Without them `driver.trace tail` streams the trace over
   LDAP instead (the engine's debug events; `--follow` or `--seconds N`), so

@@ -68,6 +68,9 @@ public final class OperateCli {
         }
 
         boolean json = opts.containsKey("json");
+        if (cmd.equals("driver.trace") && "view".equals(sub)) {
+            return ViewerCli.view(opts, json);   // the viewer opens its own connection; a file needs none
+        }
         String envName = first(opts, "env");
         if (envName == null) {
             System.err.println("--env <name> is required (environments.properties; see docs/vault-deploy.md)");
@@ -201,7 +204,7 @@ public final class OperateCli {
                     } else if ("tail".equals(sub)) {
                         return traceTail(engine, env, driver, opts, json);
                     } else {
-                        System.err.println("usage: driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]");
+                        System.err.println("usage: driver.trace show|set|reset|tail|view --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]   (view: the desktop viewer, or view --file F)");
                         return 2;
                     }
                     break;
@@ -342,7 +345,7 @@ public final class OperateCli {
         System.err.println("  driver.migrate --env E --driver D --xds FILE --yes [--confirm E]");
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
-        System.err.println("  driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]");
+        System.err.println("  driver.trace show|set|reset|tail|view --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]   (view: the desktop viewer, or view --file F)");
         System.err.println("  driver.submit --env E --driver D --xds <file> --yes [--tree DIR]   SubmitCommand; with --tree, the simulator canary");
         System.err.println("  engine.version --env E");
         System.err.println("  engine.stats --env E [--driver D…] [--json]");
