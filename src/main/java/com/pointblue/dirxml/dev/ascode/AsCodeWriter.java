@@ -68,6 +68,7 @@ public final class AsCodeWriter {
             m.child("driver").attr("name", d.name).attr("dir", "drivers/" + fileSafe(d.name));
         }
         writeText(root.resolve(DRIVERSET_MANIFEST), m.toXml());
+        com.pointblue.dirxml.dev.deploy.Overrides.write(root, ds.overrides);
 
         // library
         Path lib = root.resolve("library");
