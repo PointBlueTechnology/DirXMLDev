@@ -7,6 +7,18 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Values that differ per stage: `overrides/<env>.properties` beside the tree,
+  one file per environment (`drivers/<driver>.gcv.<name>`,
+  `drivers/<driver>.shim.<name>`, `driverset.gcv.<name>`). `vault.diff` and
+  `vault.deploy --env X` apply X's file to the base; `import-live --env X`
+  folds X's values back into that file and keeps the base in the tree;
+  `validate` checks the files (`override-malformed`, `override-unknown`,
+  `override-missing-env`). Asked for by Norbert Klasen: one tree used to
+  deploy the same GCV value to every stage, and an import from one stage
+  overwrote it ([docs/getting-started.md](docs/getting-started.md) §3.1).
+
 ## [0.2.0] - 2026-09-25
 
 ### Changed

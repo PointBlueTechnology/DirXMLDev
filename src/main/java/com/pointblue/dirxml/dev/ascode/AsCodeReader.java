@@ -52,6 +52,7 @@ public final class AsCodeReader {
                 ds.servers.add(attr(s, "dn"));
             }
         }
+        ds.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(root));
 
         // library
         Path lib = root.resolve("library");

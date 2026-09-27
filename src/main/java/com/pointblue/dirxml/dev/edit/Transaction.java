@@ -45,7 +45,7 @@ import java.util.stream.Stream;
 public final class Transaction {
 
     private static final List<String> MANAGED = Arrays.asList(
-        AsCodeWriter.DRIVERSET_MANIFEST, AsCodeWriter.CONFIG_VALUES_FILE, "library", "drivers");
+        AsCodeWriter.DRIVERSET_MANIFEST, AsCodeWriter.CONFIG_VALUES_FILE, "library", "drivers", com.pointblue.dirxml.dev.deploy.Overrides.DIR);
 
     private final Path tree;
     private final DriverSet ds;

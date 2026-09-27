@@ -74,6 +74,14 @@ server; `driver.xml` lists them under `<server dn>`. `driverset.xml` records
 the set's server list. See [vault-deploy.md](vault-deploy.md), "Several
 servers".
 
+### `overrides/<env>.properties`
+
+Values that differ per stage — one file per environment, `key = value`
+lines for GCVs and shim parameters (`drivers/<driver>.gcv.<name>`,
+`drivers/<driver>.shim.<name>`, `driverset.gcv.<name>`). The tree's own
+files keep the base value; a deploy to that environment applies its file. See
+[getting-started.md](getting-started.md) §3.1.
+
 ### `library/`
 
 Policies, ECMAScript, mapping tables, and GCV objects shared by more than one

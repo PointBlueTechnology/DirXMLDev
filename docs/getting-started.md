@@ -139,6 +139,31 @@ Give each environment its own eDirectory user with rights on its driver set
 (and on the User Application driver's `AppConfig` when you deploy forms or
 PRDs). `admin` is fine on a lab.
 
+### 3.1 Values that differ per stage
+
+The tree holds one value per GCV and shim parameter: the **base**, what a
+fresh vault or a lab gets. A value that must differ per stage — the AD
+driver's domain name, a URL, a container DN — goes in one file per
+environment, beside the tree and committed with it:
+
+```properties
+# overrides/prd.properties
+drivers/AD Driver.gcv.drv.domain.dns.name = corp.example.com
+drivers/AD Driver.shim.pub-heartbeat-interval = 5
+driverset.gcv.company.name = ACME Corp
+```
+
+Keys are `drivers/<driver>.gcv.<name>` (a GCV the driver's scope defines,
+its own or a linked GCV resource or the driver set's), `drivers/<driver>.shim.<name>`
+(a shim parameter) and `driverset.gcv.<name>`. `vault.diff` and
+`vault.deploy --env prd` use the base with prd's file applied, so the plan
+shows prd's values and a stg deploy never sees them. `import-live --env prd`
+folds the other way: a value prd's file covers refreshes that file when the
+vault differs and leaves the base alone. `validate` reports a key that names
+nothing (`override-unknown`) and a key set for one environment but not
+another (`override-missing-env`). Secrets are not overrides; they stay in the
+environment's secrets file.
+
 ## 4. Import the driver set
 
 The live vault is the ground truth when you can reach it.
