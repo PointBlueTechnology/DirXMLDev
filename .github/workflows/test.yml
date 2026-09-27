@@ -51,6 +51,7 @@ jobs:
           dash -n bin/idm
           dash -n bin/require-engine.sh
           dash -n bin/ci-portable.sh
+          python3 -m py_compile bin/apps
 
       - name: Engine jars (informational)
         run: bash bin/require-engine.sh --inform
@@ -67,6 +68,15 @@ jobs:
 
       - name: Portable tests
         run: mvn -B -Pidm.portable test
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: MCP server tests
+        working-directory: mcp/dirxmldev-mcp
+        run: |
+          npm ci
+          npm test
 
   engine:
     # Full suite. Skipped unless a maintainer turns it on (self-hosted runner

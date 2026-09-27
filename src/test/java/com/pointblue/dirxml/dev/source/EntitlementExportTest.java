@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -55,7 +56,7 @@ public class EntitlementExportTest {
     /** The real thing (guarded): Designer's export of an Active Directory driver with three entitlements. */
     @Test
     public void designerExportOfAnActiveDirectoryDriver() throws Exception {
-        Path f = Path.of(System.getProperty("user.home"), "Downloads", "Active Directory Driver.xml");
+        Path f = LocalFixture.adDriverExport();
         assumeTrue("needs " + f, Files.isRegularFile(f));
         DriverSet ds = ExportReader.read(f);
         Driver ad = ds.driver("Active Directory Driver");

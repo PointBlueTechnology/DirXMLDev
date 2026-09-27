@@ -62,16 +62,22 @@ public final class TraceTail {
         return proc;
     }
 
-    /** Lines whose DirXML timestamp is within the last {@code minutes} (trace lines start with {@code [MM/dd/yy HH:mm:ss.SSS]}); untimestamped lines follow the last timestamped one. */
+    /**
+     * Lines whose DirXML timestamp is within the last {@code minutes}; untimestamped lines follow
+     * the last timestamped one. A trace line starts with {@code [MM/dd/yy HH:mm:ss.SSS]} in the
+     * engine's local time with no zone, so the cutoff is taken from the engine's own clock
+     * ({@code date} over the same ssh), never from this machine's zone. The whole file is
+     * streamed through the filter (never stored), so a very large trace takes a while.
+     */
     public List<String> since(String file, int minutes, String grep) throws IOException {
-        long cutoff = System.currentTimeMillis() - minutes * 60_000L;
+        java.time.LocalDateTime cutoff = engineNow().minusMinutes(minutes);
         List<String> out = new ArrayList<>();
         Pattern p = grep == null || grep.isBlank() ? null : Pattern.compile(grep);
         boolean[] in = {false};
         run("cat " + q(file), line -> {
-            Long ts = timestamp(line);
+            java.time.LocalDateTime ts = timestamp(line);
             if (ts != null) {
-                in[0] = ts >= cutoff;
+                in[0] = !ts.isBefore(cutoff);
             }
             if (in[0] && (p == null || p.matcher(line).find())) {
                 out.add(line);
@@ -92,16 +98,30 @@ public final class TraceTail {
         return -1;
     }
 
-    /** The DirXML trace timestamp of a line, as epoch millis, or null. */
-    static Long timestamp(String line) {
+    private static final java.time.format.DateTimeFormatter STAMP = java.time.format.DateTimeFormatter.ofPattern("MM/dd/yy HH:mm:ss.SSS");
+
+    /** The engine host's current local time, in the trace stamp's form; this machine's clock when the host does not answer. */
+    java.time.LocalDateTime engineNow() {
+        List<String> out = new ArrayList<>();
+        try {
+            run("date '+%m/%d/%y %H:%M:%S.000'", out::add);
+            if (!out.isEmpty()) {
+                return java.time.LocalDateTime.parse(out.get(0).trim(), STAMP);
+            }
+        } catch (IOException | RuntimeException e) {
+            // fall through
+        }
+        return java.time.LocalDateTime.now();
+    }
+
+    /** The DirXML trace timestamp of a line (the engine's local time, no zone), or null. */
+    static java.time.LocalDateTime timestamp(String line) {
         // [09/09/26 08:59:28.431]:QT ST:…
         if (line.length() < 24 || line.charAt(0) != '[' || line.charAt(22) != ']') {
             return null;
         }
         try {
-            java.time.LocalDateTime t = java.time.LocalDateTime.parse(line.substring(1, 22),
-                java.time.format.DateTimeFormatter.ofPattern("MM/dd/yy HH:mm:ss.SSS"));
-            return t.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+            return java.time.LocalDateTime.parse(line.substring(1, 22), STAMP);
         } catch (RuntimeException e) {
             return null;
         }

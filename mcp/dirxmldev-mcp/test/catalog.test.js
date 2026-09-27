@@ -86,7 +86,7 @@ describe("argv matches bin/idm usage", () => {
     assert.deepEqual(argvFor("apps.permission", { env: "stg", prd: "My PRD" }), [
       "--env", "stg", "--json", "permission", "My PRD",
     ]);
-    assert.deepEqual(argvFor("apps.token", { env: "stg", insecure: true }), ["--env", "stg", "--insecure", "token"]);
+    assert.deepEqual(argvFor("apps.token", { env: "stg", insecure: true }), ["--env", "stg", "token"]);
     assert.equal(argvFor("apps.token", { env: "stg" }).includes("--json"), false);
   });
 

@@ -160,4 +160,23 @@ public class EnvironmentsSecretsTest {
             assertFalse(SecretSource.isShared(f)); // non-POSIX: never shared, never warns
         }
     }
+
+    @Test
+    public void aCommandHelperThatFloodsStderrStillReturnsItsValue() throws IOException {
+        org.junit.Assume.assumeTrue(Files.isExecutable(Path.of("/bin/sh")));
+        Path dir = Files.createTempDirectory("idm-sec");
+        Path f = dir.resolve("secrets.properties");
+        // 300 KB on stderr: more than a pipe holds, so an undrained stderr would block the helper for ever
+        Files.writeString(f, String.join("\n",
+            "AD.named.svcCommand=i=0; while [ $i -lt 5000 ]; do echo 'sign-in notice sign-in notice sign-in notice sign-in notice' 1>&2; i=$((i+1)); done; echo the-value",
+            "AD.named.badCommand=echo 'not signed in' 1>&2; exit 3"), StandardCharsets.UTF_8);
+        Secrets s = Secrets.load(f);
+        assertEquals("the-value", new String(s.get("AD.named.svc")));
+        try {
+            s.get("AD.named.bad");
+            fail("expected the exit code");
+        } catch (IOException e) {
+            assertTrue(e.getMessage(), e.getMessage().contains("exited 3") && e.getMessage().contains("not signed in"));
+        }
+    }
 }

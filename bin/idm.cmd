@@ -21,6 +21,13 @@ if not exist "%JH%\bin\java.exe" (
   echo ERROR: no java.exe under "%JH%" 1>&2
   exit /b 1
 )
+rem the same check bin/idm makes: the engine classes need 21
+set "JV="
+for /f "tokens=3" %%v in ('"%JH%\bin\java.exe" -version 2^>^&1 ^| findstr /i /c:"version"') do if not defined JV set "JV=%%~v"
+if not "%JV:~0,3%"=="21." (
+  echo ERROR: "%JH%" is Java %JV%, not 21. Set IDM_JAVA_HOME ^(or JAVA_HOME^) to a JDK 21 install. 1>&2
+  exit /b 1
+)
 set "SIM_VER=%IDM_SIM_VERSION%"
 if "%SIM_VER%"=="" set "SIM_VER=1.7.0"
 set "SIM_JAR=%USERPROFILE%\.m2\repository\com\pointblue\dirxml\dirxml-simulator\%SIM_VER%\dirxml-simulator-%SIM_VER%.jar"

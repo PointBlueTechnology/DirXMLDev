@@ -66,6 +66,10 @@ public final class Cli {
                     c.trustAll = "true".equals(System.getProperty("ldap.trustAll"));
                     driverSetDn = positional.get(0);
                 }
+                if (positional.isEmpty()) {
+                    System.err.println("usage: import-live [<driverSetDN>] <outDir> --env NAME   |   import-live <driverSetDN> <outDir> (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
+                    System.exit(2);
+                }
                 Path outDir = Paths.get(positional.get(positional.size() - 1));
                 // every attribute (package stamps included) — the same reader vault.diff / deploy use;
                 // with --env, the other servers' own driver settings too (docs/vault-deploy.md, "Several servers")

@@ -3,7 +3,7 @@
 This is the architecture and the phase history. To use the tool, start at the
 [repository README](../README.md) and [docs/README.md](README.md).
 
-Status: **plan** (2026-09-08). The next horizon beyond the simulator: let an agent do
+Status: **shipped through 0.4.0** (plan written 2026-09-08; phases 0–7 and tracks P and W complete, see the phase history below). The horizon beyond the simulator: let an agent do
 the **whole** IDM development loop — read, design, edit, validate, test, diff,
 deploy, operate — without Designer in the loop, while still being able to hand a
 Designer-compatible project to a human team when they want one.
@@ -16,9 +16,9 @@ Designer does five jobs. Two we've already replaced or exceeded; three are the w
 |---|---|
 | **Read/model** a driver set (policies, GCVs, filters, schema map, resources, mapping tables, packages) | ✅ done — `DesignerProject` / `DriverExport` / `LdifDriverSource` / live LDAP, plus the `dirxml-designer-workspace` skill |
 | **Test** policies (Policy Simulator) | ✅ exceeded — real-engine simulator, regression corpus, compare, coverage |
-| **Edit/author** policies and config, keeping the project's cross-references intact | ❌ the core of this plan |
-| **Deploy / compare** against the live vault | ❌ read is done; write + diff + safeguards are the work |
-| **Operate** drivers (start/stop/restart, migrate, cache, trace, passwords) | ◐ cache read + state done; the rest is wiring ops we already have |
+| **Edit/author** policies and config, keeping the project's cross-references intact | ✅ done — Phase 3 (`edit/*`, `Transaction`, the Designer project writer) |
+| **Deploy / compare** against the live vault | ✅ done — Phase 4 (`vault.diff`, `vault.deploy`, snapshots, the production gate, per-server and per-stage values) |
+| **Operate** drivers (start/stop/restart, migrate, cache, trace, passwords) | ✅ done — Phase 5 (`driver.*`, trace over SSH and LDAP, the trace viewer) |
 
 The realistic target is **Designer-*optional***, not Designer-forbidden: the agent
 can do everything end-to-end, and the artifacts stay interoperable (import into
@@ -509,10 +509,27 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   the single-driver and the driver-set export.
 - ~~`PkgTest7` on ig4~~ — removed 2026-09-16 with `vault.deploy --delete-driver`
   (see the incident in [vault-deploy.md](vault-deploy.md)).
+- **Committed synthetic fixtures for the guarded suites** (from the 0.4.0 review,
+  2026-09-27). The RFI / JFW / UA-LDIF / AD-export tests and the Designer-catalog
+  package suites (`PackageInstallTest`, `PackageLifecycleTest`, `PackageChecksumTest`,
+  `PackageBuildTest`, `PackageStatusTest`, `DesignerCatalogGuardedTest`) skip anywhere
+  but a machine with the private files, so the engine CI job never runs them. Commit a
+  small synthetic driver-set export (one library policy, one entitlement, one form) and
+  a tiny package jar under `src/test/resources`, point one round-trip of each suite at
+  them, and keep a single opt-in test per suite on the real file through `LocalFixture`.
+  Never commit the Amica project, the RFI export or the AD driver export.
+- **Duplicate guarded tests** (same review): `FormOpsGuardedTest`'s three zero-error
+  validation methods repeat `ProvisioningGuardedTest` on the same three sources (keep
+  the edit test); `PlanTest`'s empty-kind guard and `DeployerTest.deleteAllEntitlements…`
+  exercise one refusal at two layers (keep the Deployer one). Cheap duplication; fold
+  when either suite is next touched.
+- **`simulate --env X`** applying `overrides/X.properties` before the tree is rendered
+  for the simulator, so a case runs with a stage's values (item 5 of the 2026-09-27
+  config review).
 
 ## Non-goals (for now)
 
 - Reusing Designer's Java code or UI.
-- Workflow-activity/flow design and roles/resources modeling (after Track P).
+- Workflow activities beyond the integration activities Track W ships; roles/resources modeling stays typed ops (`role.*`, `resource.*`), not a designer.
 - Native-shim / Remote Loader *installation* (RL config attributes are LDAP and in
   scope; the OS-level install isn't).

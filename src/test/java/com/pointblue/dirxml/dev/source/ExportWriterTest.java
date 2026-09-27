@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -140,7 +141,7 @@ public class ExportWriterTest {
 
     @Test
     public void realRfiDriverSetRoundTripsThroughAsCode() throws Exception {
-        Path rfi = Path.of(System.getProperty("user.home"), "tmp", "RFI-DriverSet.xml");
+        Path rfi = LocalFixture.rfiExport();
         assumeTrue("needs the local RFI-DriverSet.xml export", Files.exists(rfi));
 
         DriverSet ds1 = ExportReader.read(rfi);
@@ -174,7 +175,7 @@ public class ExportWriterTest {
 
     @Test
     public void simulatorLoadsTheWrittenExport() throws Exception {
-        Path rfi = Path.of(System.getProperty("user.home"), "tmp", "RFI-DriverSet.xml");
+        Path rfi = LocalFixture.rfiExport();
         assumeTrue("needs the local RFI-DriverSet.xml export", Files.exists(rfi));
 
         DriverSet ds = ExportReader.read(rfi);
@@ -297,7 +298,7 @@ public class ExportWriterTest {
 
     @Test
     public void realRlandSingleDriverExportAssemblesSubscriberChainWithLibraryPolicyAndTable() throws Exception {
-        Path rfi = Path.of(System.getProperty("user.home"), "tmp", "RFI-DriverSet.xml");
+        Path rfi = LocalFixture.rfiExport();
         assumeTrue("needs the local RFI-DriverSet.xml export", Files.exists(rfi));
 
         DriverSet ds = ExportReader.read(rfi);
