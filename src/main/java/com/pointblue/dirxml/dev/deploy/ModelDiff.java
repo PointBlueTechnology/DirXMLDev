@@ -960,7 +960,15 @@ public final class ModelDiff {
     private void diffDriverSettings(Driver a, Driver b) {
         settingChange(a, "shim-class", a.shimClass, b.shimClass);
         settingChange(a, "shim-auth-server", a.shimAuthServer, b.shimAuthServer);
-        settingChange(a, "shim-auth-id", a.shimAuthId, b.shimAuthId);
+        if (a.shimAuthIdSecret || b.shimAuthIdSecret) {
+            // the secrets file supplies the id: say that it differs, never what either side holds
+            if (!Objects.equals(a.shimAuthId, b.shimAuthId)) {
+                changes.add(new Change(Kind.DRIVER_SETTING, a.name, "drivers/" + a.name, "shim-auth-id",
+                    "~ shim-auth-id: (the secrets file's value differs from the vault's)", null));
+            }
+        } else {
+            settingChange(a, "shim-auth-id", a.shimAuthId, b.shimAuthId);
+        }
         diffDriverIcon(a, b);
         List<String> lines = new ArrayList<>();
         // the driver's own record (its base package) — either vocabulary, field by field; the
@@ -1036,7 +1044,30 @@ public final class ModelDiff {
         Set<String> servers = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         servers.addAll(a.serverConfig.keySet());
         servers.addAll(b.serverConfig.keySet());
+        servers.addAll(a.serverSettings.keySet());
+        servers.addAll(b.serverSettings.keySet());
         for (String server : servers) {
+            Map<String, String> sa = a.serverSettings.getOrDefault(server, Map.of());
+            Map<String, String> sb = b.serverSettings.getOrDefault(server, Map.of());
+            for (String kind : Servers.SERVER_SETTING_KINDS) {
+                boolean inA = sa.containsKey(kind);
+                boolean inB = sb.containsKey(kind);
+                if (!inA && !inB) {
+                    continue;
+                }
+                String path = "drivers/" + a.name + "/servers/" + server;
+                boolean hide = Driver.SHIM_AUTH_ID.equals(kind) && (a.shimAuthIdSecret || b.shimAuthIdSecret);
+                if (inA && !inB) {
+                    changes.add(new Change(Kind.DRIVER_SERVER_CONFIG, a.name, path, kind,
+                        "- removed server-specific setting " + kind + " on " + server + " (the server takes the primary's)", null, null, server));
+                } else if (!inA && inB) {
+                    changes.add(new Change(Kind.DRIVER_SERVER_CONFIG, a.name, path, kind,
+                        "+ added server-specific setting " + kind + " on " + server + (hide ? "" : ": " + display(sb.get(kind))), null, null, server));
+                } else if (!Objects.equals(sa.get(kind), sb.get(kind))) {
+                    changes.add(new Change(Kind.DRIVER_SERVER_CONFIG, a.name, path, kind,
+                        "~ changed server-specific setting " + kind + " on " + server + (hide ? "" : ": " + display(sa.get(kind)) + " -> " + display(sb.get(kind))), null, null, server));
+                }
+            }
             Map<String, Element> ma = a.serverConfig.getOrDefault(server, Map.of());
             Map<String, Element> mb = b.serverConfig.getOrDefault(server, Map.of());
             Set<String> kinds = new LinkedHashSet<>(ma.keySet());

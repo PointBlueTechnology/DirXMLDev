@@ -155,14 +155,21 @@ driverset.gcv.company.name = ACME Corp
 
 Keys are `drivers/<driver>.gcv.<name>` (a GCV the driver's scope defines,
 its own or a linked GCV resource or the driver set's), `drivers/<driver>.shim.<name>`
-(a shim parameter) and `driverset.gcv.<name>`. `vault.diff` and
+(a shim parameter), `drivers/<driver>.ecv.<name>` (an engine control value),
+`drivers/<driver>.shim-auth-server` and `drivers/<driver>.shim-auth-id` (the
+driver object's own connection settings: a Remote Loader host, an AD account,
+a REST base URL) and `driverset.gcv.<name>`. `vault.diff` and
 `vault.deploy --env prd` use the base with prd's file applied, so the plan
 shows prd's values and a stg deploy never sees them. `import-live --env prd`
 folds the other way: a value prd's file covers refreshes that file when the
 vault differs and leaves the base alone. `validate` reports a key that names
 nothing (`override-unknown`) and a key set for one environment but not
 another (`override-missing-env`). Secrets are not overrides; they stay in the
-environment's secrets file.
+environment's secrets file. That includes a shim auth id that is a credential
+rather than a user name (an OAuth client id, an API key): put
+`<driver>.shim-auth-id=…` in the secrets file, leave it out of the tree, and
+the deploy applies it, the diff and the plan never show it, and an import never
+writes it into the tree.
 
 ## 4. Import the driver set
 

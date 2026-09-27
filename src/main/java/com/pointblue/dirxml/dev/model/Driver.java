@@ -19,6 +19,9 @@ public final class Driver {
     public static final String CONFIG_VALUES = "config-values";
     public static final String DRIVER_FILTER = "driver-filter";
     public static final String ENGINE_CONTROL_VALUES = "engine-control-values";
+    /** Keys of {@link #serverSettings} and the {@code drivers/<d>.<setting>} override keys: the driver's own never-sync settings. */
+    public static final String SHIM_AUTH_SERVER = "shim-auth-server";
+    public static final String SHIM_AUTH_ID = "shim-auth-id";
 
     public final String name;
     public String dn;
@@ -34,6 +37,19 @@ public final class Driver {
      * See {@code deploy.Servers}.
      */
     public final Map<String, Map<String, Element>> serverConfig = new LinkedHashMap<>();
+    /**
+     * Per other server of the driver set, the never-sync settings ({@link #SHIM_AUTH_SERVER},
+     * {@link #SHIM_AUTH_ID}) that differ from {@link #shimAuthServer} / {@link #shimAuthId} there
+     * (server DN → setting → value; "" = that server holds none). Kept in {@code driver.xml} as
+     * attributes of the {@code <server dn>} element.
+     */
+    public final Map<String, Map<String, String>> serverSettings = new LinkedHashMap<>();
+    /**
+     * True when {@link #shimAuthId} came from the environment's secrets file
+     * ({@code <driver>.shim-auth-id}), not from the tree: a diff and a plan then never show it,
+     * and an import never writes it into the tree.
+     */
+    public boolean shimAuthIdSecret;
     public final List<Policy> policies = new ArrayList<>();      // driver scope
     public final List<Resource> resources = new ArrayList<>();   // driver scope
     public final Channel subscriber = new Channel(Scope.SUBSCRIBER);
