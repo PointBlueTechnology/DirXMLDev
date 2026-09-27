@@ -326,8 +326,13 @@ production change is also on disk (and, with `--capture-drift`, in git).
 ## Values that differ per stage (2026-09-27)
 
 `overrides/<env>.properties` beside the tree, one file per environment, one
-`key = value` line per value that differs from the tree's base
-(docs/getting-started.md §3.1 has the key forms). Where it acts:
+`key = value` line per value that differs from the tree's base. Keys:
+`drivers/<driver>.gcv.<name>`, `drivers/<driver>.shim.<name>`,
+`drivers/<driver>.ecv.<name>`, `drivers/<driver>.shim-auth-server`,
+`drivers/<driver>.shim-auth-id`, `driverset.gcv.<name>`
+(docs/getting-started.md §3.1). Precedence for a shim auth id: the secrets
+file's `<driver>.shim-auth-id` beats the override, which beats the tree. Where
+it acts:
 
 - **diff and deploy** read the tree, apply the target environment's file to a
   throwaway copy of the model, and compare or write that. The plan says
@@ -348,9 +353,11 @@ and an import from one stage overwrote the tree's value.
 
 A driver set can be served by more than one server (`DirXML-ServerList`), and
 IDM keeps a driver's server-specific settings in never-sync attributes: each
-server holds its own `DirXML-ConfigValues`, `DirXML-ShimConfigInfo` and
-`DirXML-EngineControlValues`, and only that server's LDAP hands them out or
-takes them. Until now the tool saw one server's copy. Now:
+server holds its own `DirXML-ConfigValues`, `DirXML-ShimConfigInfo`,
+`DirXML-EngineControlValues`, `DirXML-ShimAuthServer` and `DirXML-ShimAuthID`
+(the last two added 2026-09-27, after reading the never-sync flags off a lab
+schema), and only that server's LDAP hands them out or takes them. Until now
+the tool saw one server's copy. Now:
 
 - **import-live** reads the driver set through the environment's connection
   (the primary) and then every other server named in the list through its own
@@ -358,8 +365,11 @@ takes them. Until now the tool saw one server's copy. Now:
   the server object (the clone's rule, docs/vault-clone.md §9). What differs
   from the primary's value is kept per server under
   `drivers/<driver>/servers/<server>/<kind>.xml` (an `absent` mark when that
-  server holds none); `driverset.xml` records the server list. A server that
-  cannot be read is noted and its settings stay unknown to the tree.
+  server holds none), and a shim auth server or id a server holds differently
+  as an attribute of that server's `<server dn>` element in `driver.xml`
+  (`shim-auth-server="…"`, `shim-auth-id="…"`, empty = none on that server);
+  `driverset.xml` records the server list. A server that cannot be read is
+  noted and its settings stay unknown to the tree.
 - **diff** reports those overrides per server; **deploy** writes an override
   through that server's connection, writes the primary's value there when an
   override is removed, and fans a change of the primary's value out to every
@@ -400,6 +410,7 @@ as an afterthought a human fixes in iManager.
 | Remote Loader password | shim-config-info / engine-control values name a remote loader (`remote-loader` parameters) | to locate on a Remote Loader driver (not on the test driver); expected to be a driver attribute or a named password |
 | named passwords | `validate` already lists every `token-named-password` a policy reads (`named-password` findings); password-ref GCVs (`type="password-ref"`) name them too | `SetNamedPassword` extended op on the driver (or driver set for shared names) — **measured: works on both**; `ListNamedPasswords` verifies the name exists; `RemoveNamedPassword` |
 | application-side secrets inside shim parameters (a `password` typed parameter) | shim-config-info definitions with `type="password-ref"` | as named passwords |
+| a shim auth id that is a credential (`DirXML-ShimAuthID` holding an OAuth client id or API key) | not detected — the tree's `shim-auth-id` is left empty and the secrets file's `<driver>.shim-auth-id` supplies it (2026-09-27) | an ordinary modify, but the diff says only that the value differs, the plan says `(from the secrets file)`, and `import-live --env` keeps it out of the tree |
 
 **Where they come from** — a per-environment secrets file, gitignored, or the
 environment:
@@ -408,6 +419,7 @@ environment:
 # secrets-stg.properties (gitignored; path in stg.secrets=… or IDM_SECRETS)
 AD Driver.shim-auth-password=…
 AD Driver.remote-loader-password=…
+Beeline.shim-auth-id=…                      # an OAuth client id / API key, not a user name
 AD Driver.named.exchange-service=…
 driverset.named.smtp-relay=…
 # or, per key: <key>Env=VAR_NAME   /   <key>Command=op read "op://vault/item/field"   /   <key>Keychain=service[/account] (macOS)

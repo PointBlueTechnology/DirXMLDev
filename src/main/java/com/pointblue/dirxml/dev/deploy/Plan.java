@@ -295,8 +295,22 @@ public final class Plan {
                         : c.what.equals("shim-auth-server") ? VaultMapping.SHIM_AUTH_SERVER : VaultMapping.SHIM_AUTH_ID;
                     String v = c.what.equals("shim-class") ? d.shimClass : c.what.equals("shim-auth-server") ? d.shimAuthServer : d.shimAuthId;
                     List<byte[]> values = v == null || v.isBlank() ? Collections.emptyList() : Vault.value(v);
+                    boolean hide = c.what.equals("shim-auth-id") && d.shimAuthIdSecret;
+                    String shown = values.isEmpty() ? " (remove)" : hide ? " (from the secrets file)" : " = " + v;
                     driverAttrs.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, values),
-                        dn + "  " + attr + (values.isEmpty() ? " (remove)" : " = " + v), c.path + "#" + c.what, c.driver));
+                        dn + "  " + attr + shown, c.path + "#" + c.what, c.driver));
+                    // the shim auth settings are never-sync: every other server holds its own copy
+                    if (Servers.SERVER_SETTING_KINDS.contains(c.what)) {
+                        for (String server : Servers.others(to, p.primaryServer)) {
+                            if (d.serverSettings.getOrDefault(server, Map.of()).containsKey(c.what)) {
+                                continue;
+                            }
+                            driverAttrs.add(new Step(Op.MODIFY, dn, attr, null, Map.of(attr, values),
+                                dn + "  " + attr + shown + " (the same value, on that server's own copy)",
+                                c.path + "#" + c.what, c.driver, null, server));
+                            p.serverRestarts.computeIfAbsent(c.driver, k -> new LinkedHashSet<>()).add(server);
+                        }
+                    }
                     break;
                 }
                 case DRIVER_CONFIG: {
@@ -334,6 +348,19 @@ public final class Plan {
                     Driver d = to.driver(c.driver);
                     String dn = VaultMapping.driverDn(dsDn, c.driver);
                     p.touchedDns.add(dn);
+                    if (Servers.SERVER_SETTING_KINDS.contains(c.what)) {
+                        // a driver setting a server holds differently: that server's own value, or (override removed) the primary's
+                        Map<String, String> settings = d.serverSettings.getOrDefault(c.server, Map.of());
+                        String sattr = Servers.settingAttribute(c.what);
+                        String sv = settings.containsKey(c.what) ? settings.get(c.what) : Servers.settingOf(d, c.what);
+                        List<byte[]> svalues = sv == null || sv.isBlank() ? Collections.emptyList() : Vault.value(sv);
+                        boolean hide = Driver.SHIM_AUTH_ID.equals(c.what) && d.shimAuthIdSecret;
+                        driverAttrs.add(new Step(Op.MODIFY, dn, sattr, null, Map.of(sattr, svalues),
+                            dn + "  " + sattr + (svalues.isEmpty() ? " (remove)" : hide ? " (from the secrets file)" : " = " + sv)
+                            + (settings.containsKey(c.what) ? " (server-specific)" : " (back to the primary's value)"), c.path + "#" + c.what, c.driver, null, c.server));
+                        p.serverRestarts.computeIfAbsent(c.driver, k -> new LinkedHashSet<>()).add(c.server);
+                        break;
+                    }
                     String attr = VaultMapping.driverConfigAttribute(c.what);
                     Map<String, org.w3c.dom.Element> overrides = d.serverConfig.getOrDefault(c.server, Map.of());
                     // an override present: that server's own value (absent = none there); removed: the primary's value
