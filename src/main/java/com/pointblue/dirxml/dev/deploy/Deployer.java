@@ -220,6 +220,7 @@ public final class Deployer {
         String overrideNote = overrides.summary() == null ? "" : overrides.summary() + "\n";
         String treeCommit = DeployLog.treeCommit(o.tree);
         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
+        secrets.applyShimAuthIds(to);   // ids the secrets file supplies win over the tree's (never shown)
 
         try (VaultAccess vault = testVault != null ? testVault : Vault.connect(env.vaultConfig())) {
             // 2. diff and plan — the other servers' own driver settings included, read through their connections
@@ -407,10 +408,11 @@ public final class Deployer {
         }
     }
 
-    /** A tree read for comparison with an environment's vault: the base with that environment's overrides applied. */
-    private static DriverSet readWithOverrides(Path tree, String env) throws IOException {
+    /** A tree read for comparison with an environment's vault: the base with that environment's overrides and secret shim auth ids applied. */
+    private static DriverSet readWithOverrides(Path tree, Environments.Environment env) throws IOException {
         DriverSet ds = AsCodeReader.read(tree);
-        Overrides.apply(ds, env);
+        Overrides.apply(ds, env.name);
+        (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).applyShimAuthIds(ds);
         return ds;
     }
 
@@ -622,7 +624,7 @@ public final class Deployer {
         try {
             // an icon set in Designer since the last deploy is not drift worth refusing over: the
             // deploy neither restarts for it nor clobbers policy because of it
-            ModelDiff drift = ModelDiff.of(readWithOverrides(known, env.name), live);
+            ModelDiff drift = ModelDiff.of(readWithOverrides(known, env), live);
             if (!drift.isEmptyButForIcons()) {
                 return driftRefusal(env, live, drift, "the vault differs from the last deploy on record (" + last.treeCommit.substring(0, 12) + ")");
             }
@@ -656,7 +658,7 @@ public final class Deployer {
             // model, never through git's view (which may normalize line endings)
             boolean differs;
             try {
-                differs = !ModelDiff.of(readWithOverrides(wt, env.name), live).isEmptyButForIcons();
+                differs = !ModelDiff.of(readWithOverrides(wt, env), live).isEmptyButForIcons();
             } catch (RuntimeException | IOException e) {
                 differs = true;
             }

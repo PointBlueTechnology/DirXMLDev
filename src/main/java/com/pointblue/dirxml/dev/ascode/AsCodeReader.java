@@ -88,6 +88,11 @@ public final class AsCodeReader {
                 overrides.put(attr(c, "kind"), "true".equals(attr(c, "absent")) ? null : xml(dir.resolve(attr(c, "file"))));
             }
             d.serverConfig.put(attr(s, "dn"), overrides);
+            for (String kind : com.pointblue.dirxml.dev.deploy.Servers.SERVER_SETTING_KINDS) {
+                if (s.hasAttribute(kind)) {
+                    d.serverSettings.computeIfAbsent(attr(s, "dn"), k -> new java.util.LinkedHashMap<>()).put(kind, s.getAttribute(kind));
+                }
+            }
         }
         Element icon = child(m, "icon");
         if (icon != null && attr(icon, "file") != null) {

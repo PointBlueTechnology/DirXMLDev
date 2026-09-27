@@ -105,10 +105,16 @@ public final class AsCodeWriter {
         // server-specific settings that differ from the primary's, per other server of the set
         // (docs/vault-deploy.md, "Several servers"): servers/<server>/<kind>.xml, or an empty
         // element for a server that holds none of that kind
-        for (Map.Entry<String, Map<String, Element>> s : d.serverConfig.entrySet()) {
-            Manifest sm = m.child("server").attr("dn", s.getKey());
-            String sdir = "servers/" + com.pointblue.dirxml.dev.deploy.Servers.dirName(s.getKey());
-            for (Map.Entry<String, Element> c : s.getValue().entrySet()) {
+        // (the driver's own never-sync settings a server holds differently are attributes of <server>)
+        java.util.Set<String> serverDns = new java.util.LinkedHashSet<>(d.serverConfig.keySet());
+        serverDns.addAll(d.serverSettings.keySet());
+        for (String serverDn : serverDns) {
+            Manifest sm = m.child("server").attr("dn", serverDn);
+            for (Map.Entry<String, String> st : d.serverSettings.getOrDefault(serverDn, Map.of()).entrySet()) {
+                sm.attr(st.getKey(), st.getValue() == null ? "" : st.getValue());
+            }
+            String sdir = "servers/" + com.pointblue.dirxml.dev.deploy.Servers.dirName(serverDn);
+            for (Map.Entry<String, Element> c : d.serverConfig.getOrDefault(serverDn, Map.<String, Element>of()).entrySet()) {
                 Manifest cm = sm.child("config").attr("kind", c.getKey());
                 if (c.getValue() == null) {
                     cm.attr("absent", "true");

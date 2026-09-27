@@ -8,8 +8,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code overrides/<env>.properties}: every line is {@code key = value}, every key names a GCV or
- * shim parameter the tree defines, and a key one environment sets is set for every other
+ * {@code overrides/<env>.properties}: every line is {@code key = value}, every key names a GCV,
+ * shim parameter, engine control value or driver setting the tree defines, and a key one environment sets is set for every other
  * environment that has a file — "must differ per stage" usually means "must be set per stage".
  */
 public final class OverridesCheck implements Check {
@@ -31,7 +31,7 @@ public final class OverridesCheck implements Check {
                 }
                 allKeys.add(e.getKey());
                 Overrides.Target t = Overrides.resolve(ds, e.getKey());
-                if (t.definition == null) {
+                if (!t.resolved()) {
                     report.add(Finding.error("override-unknown", path, e.getKey() + ": " + t.problem));
                 }
             }

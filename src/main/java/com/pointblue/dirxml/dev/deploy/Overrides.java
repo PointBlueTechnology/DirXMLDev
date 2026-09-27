@@ -25,6 +25,9 @@ import java.util.stream.Stream;
  * <pre>
  *   drivers/AD Driver.gcv.drv.domain.dns.name = corp.example.com
  *   drivers/AD Driver.shim.pub-heartbeat-interval = 5
+ *   drivers/AD Driver.shim-auth-server = REMOTE(hostname=rl.corp.example port=8090 kmo=idm)dc.corp.example
+ *   drivers/AD Driver.shim-auth-id = CORP\\svc-idm
+ *   drivers/AD Driver.ecv.dirxml.engine.retry-interval = 60
  *   driverset.gcv.company.name = ACME
  * </pre>
  * The tree's own files carry the base value (what a fresh vault or a lab gets); a deploy to
@@ -103,7 +106,7 @@ public final class Overrides {
 
     public static String format(String env, Map<String, String> values) {
         StringBuilder sb = new StringBuilder("# Values for environment '" + env + "' that differ from the tree's base values.\n"
-            + "# key = value; keys: drivers/<driver>.gcv.<name>, drivers/<driver>.shim.<name>, driverset.gcv.<name>\n");
+            + "# key = value; keys: drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, .shim-auth-server, .shim-auth-id; driverset.gcv.<name>\n");
         for (Map.Entry<String, String> e : new TreeMap<>(values).entrySet()) {
             if (!e.getKey().startsWith("?")) {
                 sb.append(e.getKey()).append(" = ").append(e.getValue()).append('\n');
@@ -114,14 +117,57 @@ public final class Overrides {
 
     // ---- resolving a key against the model ----
 
-    /** What a key names: the {@code <definition>} element holding the value, or null with a reason. */
+    /**
+     * What a key names: the {@code <definition>} element holding the value (a GCV, a shim parameter,
+     * an engine control value), or a driver's own setting ({@code shim-auth-server},
+     * {@code shim-auth-id}); else nothing, with a reason.
+     */
     public static final class Target {
         public final Element definition;
+        public final Driver driver;
+        public final String setting;
         public final String problem;
 
         Target(Element definition, String problem) {
+            this(definition, null, null, problem);
+        }
+
+        static Target ofSetting(Driver driver, String setting) {
+            return new Target(null, driver, setting, null);
+        }
+
+        private Target(Element definition, Driver driver, String setting, String problem) {
             this.definition = definition;
+            this.driver = driver;
+            this.setting = setting;
             this.problem = problem;
+        }
+
+        public boolean resolved() {
+            return problem == null;
+        }
+
+        /** The value the model holds for the key, or null when it holds none. */
+        public String value() {
+            if (definition != null) {
+                return valueOf(definition);
+            }
+            if (driver == null) {
+                return null;
+            }
+            return Driver.SHIM_AUTH_SERVER.equals(setting) ? driver.shimAuthServer : driver.shimAuthId;
+        }
+
+        public void set(String value) {
+            if (definition != null) {
+                setValue(definition, value);
+            } else if (driver != null) {
+                if (Driver.SHIM_AUTH_SERVER.equals(setting)) {
+                    driver.shimAuthServer = value;
+                } else {
+                    driver.shimAuthId = value;
+                }
+            }
         }
     }
 
@@ -135,26 +181,52 @@ public final class Overrides {
             return home == null ? new Target(null, "the driver set defines no GCV '" + name + "'") : new Target(home.definition, null);
         }
         if (!key.startsWith("drivers/")) {
-            return new Target(null, "a key starts with drivers/<driver>.gcv., drivers/<driver>.shim. or driverset.gcv.");
+            return new Target(null, "a key starts with drivers/<driver>.gcv., drivers/<driver>.shim., drivers/<driver>.ecv., "
+                + "drivers/<driver>." + Driver.SHIM_AUTH_SERVER + ", drivers/<driver>." + Driver.SHIM_AUTH_ID + " or driverset.gcv.");
         }
-        int gcv = key.indexOf(".gcv.");
-        int shim = key.indexOf(".shim.");
-        int cut = gcv > 0 && (shim < 0 || gcv < shim) ? gcv : shim;
+        String rest = key.substring("drivers/".length());
+        // the driver's own settings: drivers/<driver>.shim-auth-server, drivers/<driver>.shim-auth-id
+        for (String setting : List.of(Driver.SHIM_AUTH_SERVER, Driver.SHIM_AUTH_ID)) {
+            if (rest.endsWith("." + setting)) {
+                String driverName = rest.substring(0, rest.length() - setting.length() - 1);
+                Driver d = ds.driver(driverName);
+                return d == null ? new Target(null, "no driver '" + driverName + "' in the tree") : Target.ofSetting(d, setting);
+            }
+        }
+        // a definition under one of the driver's config blobs: drivers/<driver>.<kind>.<name>
+        int cut = -1;
+        String kind = null;
+        for (String k : List.of("gcv", "shim", "ecv")) {
+            int i = rest.indexOf("." + k + ".");
+            if (i > 0 && (cut < 0 || i < cut)) {
+                cut = i;
+                kind = k;
+            }
+        }
         if (cut < 0) {
-            return new Target(null, "a driver key is drivers/<driver>.gcv.<name> or drivers/<driver>.shim.<name>");
+            return new Target(null, "a driver key is drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, ."
+                + Driver.SHIM_AUTH_SERVER + " or ." + Driver.SHIM_AUTH_ID);
         }
-        String driverName = key.substring("drivers/".length(), cut);
+        String driverName = rest.substring(0, cut);
         Driver d = ds.driver(driverName);
         if (d == null) {
             return new Target(null, "no driver '" + driverName + "' in the tree");
         }
-        String name = key.substring(cut + (cut == gcv ? ".gcv.".length() : ".shim.".length()));
-        if (cut == gcv) {
-            GcvOps.Home home = GcvOps.find(ds, d, name, ds.index());
-            return home == null ? new Target(null, "driver '" + d.name + "' and what it links define no GCV '" + name + "'") : new Target(home.definition, null);
+        String name = rest.substring(cut + kind.length() + 2);
+        switch (kind) {
+            case "gcv": {
+                GcvOps.Home home = GcvOps.find(ds, d, name, ds.index());
+                return home == null ? new Target(null, "driver '" + d.name + "' and what it links define no GCV '" + name + "'") : new Target(home.definition, null);
+            }
+            case "shim": {
+                Element def = GcvOps.definition(d.config.get(Driver.SHIM_CONFIG_INFO), name);
+                return def == null ? new Target(null, "driver '" + d.name + "' has no shim parameter '" + name + "'") : new Target(def, null);
+            }
+            default: {
+                Element def = GcvOps.definition(d.config.get(Driver.ENGINE_CONTROL_VALUES), name);
+                return def == null ? new Target(null, "driver '" + d.name + "' has no engine control value '" + name + "'") : new Target(def, null);
+            }
         }
-        Element def = GcvOps.definition(d.config.get(Driver.SHIM_CONFIG_INFO), name);
-        return def == null ? new Target(null, "driver '" + d.name + "' has no shim parameter '" + name + "'") : new Target(def, null);
     }
 
     /** The scalar value a definition holds ({@code <value>} text), or null when it has none. */
@@ -225,11 +297,11 @@ public final class Overrides {
         }
         for (Map.Entry<String, String> e : values.entrySet()) {
             Target t = resolve(ds, e.getKey());
-            if (t.definition == null) {
+            if (!t.resolved()) {
                 a.problems.add(e.getKey() + " (" + t.problem + ")");
                 continue;
             }
-            setValue(t.definition, e.getValue());
+            t.set(e.getValue());
             a.applied.add(e.getKey());
         }
         return a;
@@ -250,19 +322,19 @@ public final class Overrides {
         }
         for (Map.Entry<String, String> e : new ArrayList<>(values.entrySet())) {
             Target t = resolve(live, e.getKey());
-            if (t.definition == null) {
+            if (!t.resolved()) {
                 notes.add(e.getKey() + ": " + t.problem + " (left as recorded)");
                 continue;
             }
-            String vaultValue = valueOf(t.definition);
+            String vaultValue = t.value();
             if (vaultValue != null && !vaultValue.equals(e.getValue())) {
                 values.put(e.getKey(), vaultValue);
                 notes.add(e.getKey() + ": " + DIR + "/" + env + EXT + " updated from the vault");
             }
             if (base != null) {
                 Target b = resolve(base, e.getKey());
-                if (b.definition != null && valueOf(b.definition) != null) {
-                    setValue(t.definition, valueOf(b.definition));
+                if (b.resolved() && b.value() != null) {
+                    t.set(b.value());
                 }
             }
         }
