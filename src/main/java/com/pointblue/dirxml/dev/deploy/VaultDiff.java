@@ -104,7 +104,7 @@ public final class VaultDiff {
             System.err.println(applied.summary());
         }
         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
-        secrets.applyShimAuthIds(to);
+        Overrides.applySecretShimAuthIds(to, secrets);
         DriverSet from = readLive(env);
         return of(from, to, onlyDrivers);
     }

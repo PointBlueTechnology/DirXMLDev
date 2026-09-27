@@ -116,42 +116,6 @@ public final class Secrets {
         return driver + "." + SHIM_AUTH_ID;
     }
 
-    // ---- shim auth ids the secrets file supplies ----
-
-    /**
-     * Put every {@code <driver>.shim-auth-id} this file holds into the model (the driver's
-     * {@code shimAuthId}, flagged secret), for a diff or a deploy. Returns the drivers touched.
-     */
-    public List<String> applyShimAuthIds(com.pointblue.dirxml.dev.model.DriverSet ds) throws IOException {
-        List<String> out = new ArrayList<>();
-        for (com.pointblue.dirxml.dev.model.Driver d : ds.drivers) {
-            String key = shimAuthId(d.name);
-            if (has(key)) {
-                char[] v = get(key);
-                if (v != null) {
-                    d.shimAuthId = new String(v);
-                    d.shimAuthIdSecret = true;
-                    java.util.Arrays.fill(v, '\0');
-                    out.add(d.name);
-                }
-            }
-        }
-        return out;
-    }
-
-    /** {@code import-live}: drop the shim auth id of every driver this file supplies one for, so the tree never carries it. Returns the drivers touched. */
-    public List<String> stripShimAuthIds(com.pointblue.dirxml.dev.model.DriverSet ds) {
-        List<String> out = new ArrayList<>();
-        for (com.pointblue.dirxml.dev.model.Driver d : ds.drivers) {
-            if (has(shimAuthId(d.name))) {
-                d.shimAuthId = null;
-                d.shimAuthIdSecret = false;
-                out.add(d.name);
-            }
-        }
-        return out;
-    }
-
     public static String named(String driverOrDriverset, String name) {
         return driverOrDriverset + ".named." + name;
     }

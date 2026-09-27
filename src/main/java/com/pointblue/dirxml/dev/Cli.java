@@ -79,7 +79,7 @@ public final class Cli {
                 if (envName != null) {
                     java.nio.file.Path secretsFile = com.pointblue.dirxml.dev.deploy.Environments.load().get(envName).secretsFile;
                     if (secretsFile != null) {
-                        for (String d : com.pointblue.dirxml.dev.deploy.Secrets.load(secretsFile).stripShimAuthIds(live)) {
+                        for (String d : com.pointblue.dirxml.dev.deploy.Overrides.stripSecretShimAuthIds(live, com.pointblue.dirxml.dev.deploy.Secrets.load(secretsFile))) {
                             System.err.println("secret: '" + d + "'.shim-auth-id kept out of the tree (the secrets file supplies it)");
                         }
                     }

@@ -351,4 +351,41 @@ public final class Overrides {
         GcvOps.Home home = GcvOps.find(ds, d, name, ds.index());
         return home == null ? null : home.resource;
     }
+
+    // ---- shim auth ids the secrets file supplies (docs/vault-deploy.md, "Secrets") ----
+
+    /**
+     * Put every {@code <driver>.shim-auth-id} the environment's secrets file holds into the model
+     * (the driver's {@code shimAuthId}, flagged secret), for a diff or a deploy: it wins over the
+     * tree's value and over an override. Returns the drivers touched.
+     */
+    public static List<String> applySecretShimAuthIds(DriverSet ds, Secrets secrets) throws IOException {
+        List<String> out = new ArrayList<>();
+        for (Driver d : ds.drivers) {
+            String key = Secrets.shimAuthId(d.name);
+            if (secrets.has(key)) {
+                char[] v = secrets.get(key);
+                if (v != null) {
+                    d.shimAuthId = new String(v);
+                    d.shimAuthIdSecret = true;
+                    java.util.Arrays.fill(v, '\0');
+                    out.add(d.name);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** {@code import-live}: drop the shim auth id of every driver the secrets file supplies one for, so the tree never carries it. Returns the drivers touched. */
+    public static List<String> stripSecretShimAuthIds(DriverSet ds, Secrets secrets) {
+        List<String> out = new ArrayList<>();
+        for (Driver d : ds.drivers) {
+            if (secrets.has(Secrets.shimAuthId(d.name))) {
+                d.shimAuthId = null;
+                d.shimAuthIdSecret = false;
+                out.add(d.name);
+            }
+        }
+        return out;
+    }
 }

@@ -220,7 +220,7 @@ public final class Deployer {
         String overrideNote = overrides.summary() == null ? "" : overrides.summary() + "\n";
         String treeCommit = DeployLog.treeCommit(o.tree);
         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
-        secrets.applyShimAuthIds(to);   // ids the secrets file supplies win over the tree's (never shown)
+        Overrides.applySecretShimAuthIds(to, secrets);   // ids the secrets file supplies win over the tree's (never shown)
 
         try (VaultAccess vault = testVault != null ? testVault : Vault.connect(env.vaultConfig())) {
             // 2. diff and plan — the other servers' own driver settings included, read through their connections
@@ -412,7 +412,7 @@ public final class Deployer {
     private static DriverSet readWithOverrides(Path tree, Environments.Environment env) throws IOException {
         DriverSet ds = AsCodeReader.read(tree);
         Overrides.apply(ds, env.name);
-        (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).applyShimAuthIds(ds);
+        Overrides.applySecretShimAuthIds(ds, env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile));
         return ds;
     }
 
