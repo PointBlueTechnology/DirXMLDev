@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
@@ -28,7 +29,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -51,10 +51,14 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@link ProjectWriter} against a copy of the real hand-built Designer project at
- * {@code ~/designer_workspace/test11} (read-only; every test copies it) — never the
- * synthetic fixture {@code ProjectReaderTest} uses, since the writer's contract is
- * about the exact on-disk shape a real project has.
+ * {@link ProjectWriter} against a copy of a real hand-built Designer project
+ * (read-only; every test copies it) — never the synthetic fixture
+ * {@code ProjectReaderTest} uses, since the writer's contract is about the exact
+ * on-disk shape a real project has. The project is not committed. It defaults to
+ * {@code /Users/jcombs/designer_workspace/test11}; {@code -Ddirxml.fixture.test11}
+ * or {@code DIRXML_FIXTURE_TEST11} names another copy. When the directory is
+ * absent the tests are skipped, the same way {@code ProvisioningProjectWriterTest}
+ * skips.
  *
  * <p>Each test builds the "tree" by reading the copy ({@link ProjectReader}), writing
  * it as IDM-as-code ({@code AsCodeWriter}), then applying one edit with the
@@ -64,11 +68,6 @@ import static org.junit.Assert.assertTrue;
  */
 public class ProjectWriterTest {
 
-    private static final String TEST11 = "/Users/jcombs/designer_workspace/test11";
-    private static final String AMICA =
-        "/private/tmp/claude-501/-Users-jcombs-Dev-DirXML-Engine-Analysis/34814343-5cce-492a-8498-a04381e36292"
-            + "/scratchpad/amica-prd/AMICA-PRD-20260627";
-
     @Rule
     public TemporaryFolder tmp = new TemporaryFolder();
 
@@ -77,7 +76,10 @@ public class ProjectWriterTest {
     // ---- fixture helpers --------------------------------------------------------------
 
     private Path copyProject() throws IOException {
-        return copyDirectory(Paths.get(TEST11), tmp.newFolder("project" + (seq++)).toPath());
+        Path src = LocalFixture.test11();
+        Assume.assumeTrue("needs the local test11 Designer project at " + src
+            + " (-Ddirxml.fixture.test11 or DIRXML_FIXTURE_TEST11)", Files.isDirectory(src));
+        return copyDirectory(src, tmp.newFolder("project" + (seq++)).toPath());
     }
 
     private static Path copyDirectory(Path src, Path dst) throws IOException {
@@ -573,8 +575,9 @@ public class ProjectWriterTest {
 
     @Test
     public void amicaNoChangeTouchesNothing() throws IOException {
-        Assume.assumeTrue(Files.isDirectory(Paths.get(AMICA)));
-        Path project = copyDirectory(Paths.get(AMICA), tmp.newFolder("amica" + (seq++)).toPath());
+        Path amica = LocalFixture.amica();
+        Assume.assumeTrue(Files.isDirectory(amica));
+        Path project = copyDirectory(amica, tmp.newFolder("amica" + (seq++)).toPath());
         Path tree = buildTree(project);
         Map<String, String> before = hashAll(project);
 
@@ -588,8 +591,9 @@ public class ProjectWriterTest {
 
     @Test
     public void amicaOneContentChangeChangesOneFile() throws IOException {
-        Assume.assumeTrue(Files.isDirectory(Paths.get(AMICA)));
-        Path project = copyDirectory(Paths.get(AMICA), tmp.newFolder("amica" + (seq++)).toPath());
+        Path amica = LocalFixture.amica();
+        Assume.assumeTrue(Files.isDirectory(amica));
+        Path project = copyDirectory(amica, tmp.newFolder("amica" + (seq++)).toPath());
         DriverSet ds = ProjectReader.read(project);
         Policy target = findUnpackagedPolicy(ds);
         Path tree = buildTree(project);

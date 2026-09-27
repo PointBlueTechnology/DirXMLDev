@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.edit;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.model.Driver;
@@ -94,7 +95,7 @@ public class DriverOpsTest {
 
     @Test
     public void fromRealExport() throws IOException {
-        Path rfi = Path.of("/Users/jcombs/tmp/RFI-DriverSet.xml");
+        Path rfi = LocalFixture.rfiExport();
         Assume.assumeTrue(Files.exists(rfi));
         // into a tree from the same set, so the driver-set GCVs its policies read exist
         AsCodeWriter.write(com.pointblue.dirxml.dev.source.ExportReader.read(rfi), tree);

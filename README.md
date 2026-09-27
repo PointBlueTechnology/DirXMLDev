@@ -161,9 +161,9 @@ A coding agent can do this setup from
 [docs/agent-assisted-setup.md](docs/agent-assisted-setup.md). The steps below
 are the same work by hand.
 
-JDK 21, Maven, and the Identity Manager engine jars copied into a real `lib/`
-directory (proprietary, never committed). A symlink of `lib/`, or symlinks of
-the jars, is not enough for Maven's file check. Build the
+JDK 21, Maven 3.9 or newer, and the Identity Manager engine jars copied into a
+real `lib/` directory (proprietary, never committed). A symlink of `lib/`, or
+symlinks of the jars, is not enough for Maven's file check. Build the
 DirXML Policy Simulator first so `dirxml-simulator` resolves from `~/.m2`.
 `bin/idm` finds JDK 21 via `IDM_JAVA_HOME` (or `java_home -v 21` on macOS),
 compiles on first use if `target/classes` is missing, and puts the simulator

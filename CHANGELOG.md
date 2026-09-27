@@ -7,6 +7,23 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Maven 3.9 is the minimum. The enforcer range is `[3.9,)`, the same floor its
+  message and the install docs already stated. The 0.2.0 note that the build
+  accepted Maven 3.6.3 described the range that release enforced; it is no
+  longer the requirement.
+
+### Fixed
+
+- `ProjectWriterTest` skips when its Designer project is not on the machine,
+  instead of failing with `NoSuchFileException`. The project is not committed.
+  `-Ddirxml.fixture.test11` or `DIRXML_FIXTURE_TEST11` points that test at a
+  local copy. The same override covers the other tests that hard-code a
+  machine-local path (the Amica project, the e2e trees, and the RFI export).
+  With nothing set, the historical path is used
+  ([docs/install.md](docs/install.md) §2.4).
+
 ## [0.3.0] - 2026-09-27
 
 ### Added

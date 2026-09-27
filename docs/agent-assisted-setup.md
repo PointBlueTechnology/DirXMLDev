@@ -1,6 +1,6 @@
 # Agent-assisted setup
 
-The same install as [install.md](install.md) — JDK 21, Maven, the policy
+The same install as [install.md](install.md) — JDK 21, Maven 3.9 or newer, the policy
 simulator, ten proprietary jars, an environments file, a stored password, TLS
 — done by a coding agent (Claude Code, Cursor, Codex, anything that reads
 files and runs a shell) while you watch. You paste one prompt; the agent
