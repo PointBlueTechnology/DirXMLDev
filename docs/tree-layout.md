@@ -70,14 +70,17 @@ shows the value that wins and where it is defined.
 Only on a driver set served by several servers: the never-sync settings
 (`config-values.xml`, `shim-config-info.xml`, `engine-control-values.xml`)
 that this server holds differently from the primary's, one directory per
-server; `driver.xml` lists them under `<server dn>`. `driverset.xml` records
-the set's server list. See [vault-deploy.md](vault-deploy.md), "Several
+server; `driver.xml` lists them under `<server dn>`, whose `shim-auth-server`
+and `shim-auth-id` attributes carry those two settings when the server holds
+them differently. `driverset.xml` records the set's server list. See [vault-deploy.md](vault-deploy.md), "Several
 servers".
 
 ### `overrides/<env>.properties`
 
 Values that differ per stage — one file per environment, `key = value`
-lines for GCVs and shim parameters (`drivers/<driver>.gcv.<name>`,
+lines for GCVs, shim parameters, engine control values and the driver's
+connection settings (`drivers/<driver>.gcv.<name>`, `.ecv.<name>`,
+`.shim-auth-server`, `.shim-auth-id`,
 `drivers/<driver>.shim.<name>`, `driverset.gcv.<name>`). The tree's own
 files keep the base value; a deploy to that environment applies its file. See
 [getting-started.md](getting-started.md) §3.1.

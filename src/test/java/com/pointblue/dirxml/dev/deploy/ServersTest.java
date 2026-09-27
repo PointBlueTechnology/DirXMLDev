@@ -196,4 +196,52 @@ public class ServersTest {
         assertTrue(r.text(), r.skipped.stream().anyMatch(s -> s.startsWith("snapshot for " + S2)));
         assertTrue(Files.isDirectory(t.resolve("deploy-snapshots/test/idm2")));
     }
+    @Test
+    public void shimAuthSettingsArePerServerToo() throws Exception {
+        FakeVault primary = server(S1, GCV_A, SHIM, null);
+        FakeVault second = server(S2, GCV_A, SHIM, null);
+        String dn = "cn=AD," + DS;
+        primary.replace(dn, VaultMapping.SHIM_AUTH_SERVER, Vault.value("rl-a"));
+        primary.replace(dn, VaultMapping.SHIM_AUTH_ID, Vault.value("svc"));
+        second.replace(dn, VaultMapping.SHIM_AUTH_SERVER, Vault.value("rl-b"));
+        second.replace(dn, VaultMapping.SHIM_AUTH_ID, Vault.value("svc"));
+        DriverSet ds = VaultDiff.fromVault(primary, DS);
+        List<String> notes = new ArrayList<>();
+        Servers.readOverrides(ds, DS, primary, s -> second, notes::add);
+        Driver d = ds.drivers.get(0);
+        assertEquals("rl-a", d.shimAuthServer);
+        assertEquals(Map.of(Driver.SHIM_AUTH_SERVER, "rl-b"), d.serverSettings.get(S2));
+        assertTrue(notes.toString(), notes.isEmpty());
+
+        // driver.xml keeps it as an attribute of <server dn> and reads it back
+        Path t = tmp.newFolder("tree-auth").toPath();
+        AsCodeWriter.write(ds, t);
+        String driverXml = java.nio.file.Files.readString(t.resolve("drivers/AD/driver.xml"), StandardCharsets.UTF_8);
+        assertTrue(driverXml, driverXml.contains("shim-auth-server=\"rl-b\""));
+        DriverSet read = AsCodeReader.read(t);
+        assertEquals(Map.of(Driver.SHIM_AUTH_SERVER, "rl-b"), read.drivers.get(0).serverSettings.get(S2));
+
+        // the server's own value changes, and the primary's auth id changes (fanned out to the server without an id override)
+        DriverSet to = AsCodeReader.read(t);
+        to.drivers.get(0).serverSettings.get(S2).put(Driver.SHIM_AUTH_SERVER, "rl-b2");
+        to.drivers.get(0).shimAuthId = "svc2";
+        ModelDiff diff = ModelDiff.of(read, to);
+        String text = diff.text();
+        assertTrue(text, text.contains("changed server-specific setting shim-auth-server on " + S2 + ": rl-b -> rl-b2"));
+        assertTrue(text, text.contains("shim-auth-id: svc -> svc2"));
+        Plan plan = Plan.of(diff, to, DS, Secrets.none(), "none", null, true, t);
+        List<Plan.Step> onS2 = new ArrayList<>();
+        for (Plan.Step s : plan.steps) {
+            if (S2.equals(s.server)) {
+                onS2.add(s);
+            }
+        }
+        assertEquals(onS2.toString(), 2, onS2.size());
+        assertTrue(onS2.stream().anyMatch(s -> VaultMapping.SHIM_AUTH_SERVER.equals(s.attr) && "rl-b2".equals(new String(s.values.get(s.attr).get(0), StandardCharsets.UTF_8))));
+        assertTrue(onS2.stream().anyMatch(s -> VaultMapping.SHIM_AUTH_ID.equals(s.attr) && "svc2".equals(new String(s.values.get(s.attr).get(0), StandardCharsets.UTF_8))));
+        assertTrue(plan.steps.stream().anyMatch(s -> s.server == null && VaultMapping.SHIM_AUTH_ID.equals(s.attr)));
+        assertTrue("the primary's shim-auth-server did not change, so nothing is written there",
+            plan.steps.stream().noneMatch(s -> s.server == null && VaultMapping.SHIM_AUTH_SERVER.equals(s.attr)));
+        assertEquals(java.util.Set.of(S2), plan.serverRestarts.get("AD"));
+    }
 }

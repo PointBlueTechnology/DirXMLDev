@@ -75,6 +75,15 @@ public final class Cli {
                     : com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, driverSetDn);
                 // values that differ per stage (docs/vault-deploy.md): the environment's file takes the vault's
                 // value, the tree's files keep the base value the existing tree holds
+                // a shim auth id the environment's secrets file supplies never lands in the tree
+                if (envName != null) {
+                    java.nio.file.Path secretsFile = com.pointblue.dirxml.dev.deploy.Environments.load().get(envName).secretsFile;
+                    if (secretsFile != null) {
+                        for (String d : com.pointblue.dirxml.dev.deploy.Secrets.load(secretsFile).stripShimAuthIds(live)) {
+                            System.err.println("secret: '" + d + "'.shim-auth-id kept out of the tree (the secrets file supplies it)");
+                        }
+                    }
+                }
                 if (envName != null && java.nio.file.Files.isDirectory(outDir.resolve(com.pointblue.dirxml.dev.deploy.Overrides.DIR))) {
                     com.pointblue.dirxml.dev.model.DriverSet base = java.nio.file.Files.isRegularFile(outDir.resolve(com.pointblue.dirxml.dev.ascode.AsCodeWriter.DRIVERSET_MANIFEST))
                         ? com.pointblue.dirxml.dev.ascode.AsCodeReader.read(outDir) : null;

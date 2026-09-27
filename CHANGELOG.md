@@ -7,6 +7,27 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Overrides reach the driver object's own connection settings and the engine
+  control values: `drivers/<driver>.shim-auth-server`,
+  `drivers/<driver>.shim-auth-id`, `drivers/<driver>.ecv.<name>`. A Remote
+  Loader host, an AD account or a REST base URL now differs per stage the same
+  way a GCV does.
+- `<driver>.shim-auth-id` in the secrets file, for an auth id that is an OAuth
+  client id or API key: applied on diff and deploy, never shown by either,
+  never written into the tree by `import-live --env`.
+- The per-server model carries `DirXML-ShimAuthServer` and `DirXML-ShimAuthID`
+  too (both never-sync, like the config blobs): read per server, kept as
+  attributes of `<server dn>` in `driver.xml`, diffed, written through that
+  server's connection, and a change of the primary's value fans out to the
+  servers without their own.
+
+### Fixed
+
+- A change of a driver's `shim-auth-server` or `shim-auth-id` reached only the
+  primary server of a multi-server set.
+
 ## [0.3.0] - 2026-09-27
 
 ### Added

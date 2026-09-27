@@ -18,8 +18,9 @@ import java.util.function.Function;
 /**
  * A driver set served by several servers ({@code DirXML-ServerList} names them). IDM keeps a
  * driver's server-specific settings in eDirectory never-sync attributes: each server holds its
- * own {@code DirXML-ConfigValues}, {@code DirXML-ShimConfigInfo} and
- * {@code DirXML-EngineControlValues}, and only that server's LDAP hands them out or takes them.
+ * own {@code DirXML-ConfigValues}, {@code DirXML-ShimConfigInfo}, {@code DirXML-EngineControlValues},
+ * {@code DirXML-ShimAuthServer} and {@code DirXML-ShimAuthID}, and only that server's LDAP hands
+ * them out or takes them.
  * The tree models that as the primary's values (the driver's own config files) plus, per other
  * server, the values that differ ({@link Driver#serverConfig}, {@code drivers/<d>/servers/<s>/}).
  * A server without an override holds what the primary holds, and a deploy keeps it so.
@@ -36,6 +37,19 @@ public final class Servers {
 
     /** The never-sync driver settings the tree carries per server, by config kind. */
     public static final List<String> SERVER_CONFIG_KINDS = List.of(Driver.CONFIG_VALUES, Driver.SHIM_CONFIG_INFO, Driver.ENGINE_CONTROL_VALUES);
+
+    /** The never-sync driver settings (plain values on the driver object) the tree carries per server. */
+    public static final List<String> SERVER_SETTING_KINDS = List.of(Driver.SHIM_AUTH_SERVER, Driver.SHIM_AUTH_ID);
+
+    /** The vault attribute a server setting kind lives in. */
+    public static String settingAttribute(String kind) {
+        return Driver.SHIM_AUTH_SERVER.equals(kind) ? VaultMapping.SHIM_AUTH_SERVER : VaultMapping.SHIM_AUTH_ID;
+    }
+
+    /** A driver's own value of a server setting kind (the primary's). */
+    public static String settingOf(Driver d, String kind) {
+        return Driver.SHIM_AUTH_SERVER.equals(kind) ? d.shimAuthServer : d.shimAuthId;
+    }
 
     private Servers() {
     }
@@ -174,9 +188,17 @@ public final class Servers {
             try {
                 for (Driver d : ds.drivers) {
                     String dn = VaultMapping.driverDn(driverSetDn, d.name);
-                    Vault.Entry e = other.read(dn, VaultMapping.CONFIG_VALUES, VaultMapping.SHIM_CONFIG_INFO, VaultMapping.ENGINE_CONTROL_VALUES);
+                    Vault.Entry e = other.read(dn, VaultMapping.CONFIG_VALUES, VaultMapping.SHIM_CONFIG_INFO, VaultMapping.ENGINE_CONTROL_VALUES,
+                        VaultMapping.SHIM_AUTH_SERVER, VaultMapping.SHIM_AUTH_ID);
                     if (e == null) {
                         continue;
+                    }
+                    for (String kind : SERVER_SETTING_KINDS) {
+                        String mine = e.string(settingAttribute(kind));
+                        String primaryValue = settingOf(d, kind);
+                        if (!blank(mine).equals(blank(primaryValue))) {
+                            d.serverSettings.computeIfAbsent(s, k -> new LinkedHashMap<>()).put(kind, blank(mine));
+                        }
                     }
                     for (String kind : SERVER_CONFIG_KINDS) {
                         String attr = VaultMapping.driverConfigAttribute(kind);
@@ -205,6 +227,10 @@ public final class Servers {
             }
         }
         return out;
+    }
+
+    static String blank(String s) {
+        return s == null ? "" : s;
     }
 
     static boolean sameXml(Element a, Element b) {

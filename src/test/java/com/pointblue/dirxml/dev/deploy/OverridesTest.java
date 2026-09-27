@@ -162,4 +162,59 @@ public class OverridesTest {
             }
         }
     }
+    private static final String ECV = "<configuration-values><definitions>"
+        + "<definition display-name=\"Retry\" name=\"dirxml.engine.retry-interval\" type=\"integer\"><value>30</value></definition>"
+        + "</definitions></configuration-values>";
+
+    private static DriverSet modelWithSettings() {
+        DriverSet ds = model();
+        Driver d = ds.driver("AD Driver");
+        d.shimAuthServer = "REMOTE(hostname=rl.lab.example port=8090 kmo=idm)dc.lab.example";
+        d.shimAuthId = "LAB\\svc-idm";
+        d.config.put(Driver.ENGINE_CONTROL_VALUES, ValidatorTest.xml(ECV));
+        return ds;
+    }
+
+    @Test
+    public void driverSettingsAndEngineControlValuesAreOverridableToo() throws Exception {
+        DriverSet ds = modelWithSettings();
+        ds.overrides.put("prd", new java.util.LinkedHashMap<>(Map.of(
+            "drivers/AD Driver.shim-auth-server", "REMOTE(hostname=rl.corp.example port=8090 kmo=idm)dc.corp.example",
+            "drivers/AD Driver.shim-auth-id", "CORP\\svc-idm",
+            "drivers/AD Driver.ecv.dirxml.engine.retry-interval", "60")));
+        Overrides.Applied a = Overrides.apply(ds, "prd");
+        assertTrue(a.summary(), a.problems.isEmpty());
+        assertEquals(3, a.applied.size());
+        Driver d = ds.driver("AD Driver");
+        assertEquals("REMOTE(hostname=rl.corp.example port=8090 kmo=idm)dc.corp.example", d.shimAuthServer);
+        assertEquals("CORP\\svc-idm", d.shimAuthId);
+        assertEquals("60", Overrides.valueOf(GcvOps.definition(d.config.get(Driver.ENGINE_CONTROL_VALUES), "dirxml.engine.retry-interval")));
+
+        // the files round-trip the new keys and validation knows them
+        Path t = tmp.newFolder("tree-settings").toPath();
+        AsCodeWriter.write(modelWithSettings(), t);
+        Files.createDirectories(t.resolve("overrides"));
+        Files.writeString(t.resolve("overrides/prd.properties"),
+            "drivers/AD Driver.shim-auth-server = x\ndrivers/AD Driver.ecv.dirxml.engine.no-such = 1\n", StandardCharsets.UTF_8);
+        DriverSet read = AsCodeReader.read(t);
+        Report r = Validator.standard().validate(read);
+        List<String> unknown = new java.util.ArrayList<>();
+        for (Finding f : r.withCode("override-unknown")) {
+            unknown.add(f.message);
+        }
+        assertEquals(unknown.toString(), 1, unknown.size());
+        assertTrue(unknown.get(0), unknown.get(0).contains("no engine control value 'dirxml.engine.no-such'"));
+    }
+
+    @Test
+    public void foldBackRefreshesADriverSettingAndKeepsTheBase() throws Exception {
+        DriverSet base = modelWithSettings();
+        DriverSet live = modelWithSettings();
+        live.driver("AD Driver").shimAuthServer = "REMOTE(hostname=rl.prd.example port=8090 kmo=idm)dc.prd.example";
+        live.overrides.put("prd", new java.util.LinkedHashMap<>(Map.of("drivers/AD Driver.shim-auth-server", "old")));
+        List<String> notes = Overrides.foldBack(live, "prd", base);
+        assertEquals(notes.toString(), 1, notes.size());
+        assertEquals("REMOTE(hostname=rl.prd.example port=8090 kmo=idm)dc.prd.example", live.overrides.get("prd").get("drivers/AD Driver.shim-auth-server"));
+        assertEquals("the tree keeps the base", base.driver("AD Driver").shimAuthServer, live.driver("AD Driver").shimAuthServer);
+    }
 }
