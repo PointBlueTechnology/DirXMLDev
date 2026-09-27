@@ -216,6 +216,8 @@ public final class Deployer {
             }
         }
         DriverSet to = AsCodeReader.read(o.tree);
+        Overrides.Applied overrides = Overrides.apply(to, env.name);
+        String overrideNote = overrides.summary() == null ? "" : overrides.summary() + "\n";
         String treeCommit = DeployLog.treeCommit(o.tree);
         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
 
@@ -234,7 +236,7 @@ public final class Deployer {
                 }
             }
             Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault, o.deleteAllKinds);
-            r.planText = plan.text(env.name, dsDn);
+            r.planText = overrideNote + plan.text(env.name, dsDn);
             if (!plan.deleteDriverRefusals.isEmpty()) {
                 r.refusal = String.join("; ", plan.deleteDriverRefusals);
                 return r;
@@ -403,6 +405,13 @@ public final class Deployer {
         } finally {
             closeServerConnections();
         }
+    }
+
+    /** A tree read for comparison with an environment's vault: the base with that environment's overrides applied. */
+    private static DriverSet readWithOverrides(Path tree, String env) throws IOException {
+        DriverSet ds = AsCodeReader.read(tree);
+        Overrides.apply(ds, env);
+        return ds;
     }
 
     /** Execute one step; records it in the result; throws on failure. */
@@ -613,7 +622,7 @@ public final class Deployer {
         try {
             // an icon set in Designer since the last deploy is not drift worth refusing over: the
             // deploy neither restarts for it nor clobbers policy because of it
-            ModelDiff drift = ModelDiff.of(AsCodeReader.read(known), live);
+            ModelDiff drift = ModelDiff.of(readWithOverrides(known, env.name), live);
             if (!drift.isEmptyButForIcons()) {
                 return driftRefusal(env, live, drift, "the vault differs from the last deploy on record (" + last.treeCommit.substring(0, 12) + ")");
             }
@@ -647,7 +656,7 @@ public final class Deployer {
             // model, never through git's view (which may normalize line endings)
             boolean differs;
             try {
-                differs = !ModelDiff.of(AsCodeReader.read(wt), live).isEmptyButForIcons();
+                differs = !ModelDiff.of(readWithOverrides(wt, env.name), live).isEmptyButForIcons();
             } catch (RuntimeException | IOException e) {
                 differs = true;
             }

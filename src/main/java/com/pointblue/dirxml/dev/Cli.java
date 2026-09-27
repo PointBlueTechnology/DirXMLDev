@@ -73,6 +73,16 @@ public final class Cli {
                     com.pointblue.dirxml.dev.deploy.Environments.load().get(envName).driverSetDn)
                     ? com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(com.pointblue.dirxml.dev.deploy.Environments.load().get(envName), n -> System.err.println("note: " + n))
                     : com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, driverSetDn);
+                // values that differ per stage (docs/vault-deploy.md): the environment's file takes the vault's
+                // value, the tree's files keep the base value the existing tree holds
+                if (envName != null && java.nio.file.Files.isDirectory(outDir.resolve(com.pointblue.dirxml.dev.deploy.Overrides.DIR))) {
+                    com.pointblue.dirxml.dev.model.DriverSet base = java.nio.file.Files.isRegularFile(outDir.resolve(com.pointblue.dirxml.dev.ascode.AsCodeWriter.DRIVERSET_MANIFEST))
+                        ? com.pointblue.dirxml.dev.ascode.AsCodeReader.read(outDir) : null;
+                    live.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(outDir));
+                    for (String n : com.pointblue.dirxml.dev.deploy.Overrides.foldBack(live, envName, base)) {
+                        System.err.println("override: " + n);
+                    }
+                }
                 System.exit(write(live, outDir));
             }
             if (args.length >= 2 && args[0].equals("check")) {

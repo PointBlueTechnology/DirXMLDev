@@ -39,7 +39,8 @@ public final class Validator {
             new FlowCheck(),
             new EntitlementCheck(),
             new AppConfigCheck(),
-            new PackageLinkageCheck()));
+            new PackageLinkageCheck(),
+            new OverridesCheck()));
     }
 
     public Report validate(DriverSet ds) {

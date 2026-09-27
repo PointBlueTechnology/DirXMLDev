@@ -37,9 +37,9 @@ public final class GcvOps {
     }
 
     /** Where a GCV is defined: the definition element and the artifact (resource) or driver/driver-set that holds it. */
-    static final class Home {
-        final Element definition;
-        final Artifact resource;   // null when in a config-values blob
+    public static final class Home {
+        public final Element definition;
+        public final Artifact resource;   // null when in a config-values blob
         final String owner;        // "drivers/D", "driverset", or the resource path
 
         Home(Element definition, Artifact resource, String owner) {
@@ -49,7 +49,7 @@ public final class GcvOps {
         }
     }
 
-    static Home find(DriverSet ds, Driver d, String name, Map<String, Artifact> index) {
+    public static Home find(DriverSet ds, Driver d, String name, Map<String, Artifact> index) {
         if (d != null) {
             Element def = definition(d.config.get(Driver.CONFIG_VALUES), name);
             if (def != null) {
@@ -86,7 +86,7 @@ public final class GcvOps {
         return null;
     }
 
-    static Element definition(Element configValues, String name) {
+    public static Element definition(Element configValues, String name) {
         if (configValues == null) {
             return null;
         }

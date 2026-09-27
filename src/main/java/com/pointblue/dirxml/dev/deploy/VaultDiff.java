@@ -99,6 +99,10 @@ public final class VaultDiff {
     /** The diff of the live vault against the tree. */
     public static ModelDiff of(Path tree, Environments.Environment env, Collection<String> onlyDrivers) throws IOException {
         DriverSet to = AsCodeReader.read(tree);
+        Overrides.Applied applied = Overrides.apply(to, env.name);
+        if (applied.summary() != null) {
+            System.err.println(applied.summary());
+        }
         DriverSet from = readLive(env);
         return of(from, to, onlyDrivers);
     }
@@ -117,6 +121,8 @@ public final class VaultDiff {
         n.dn = ds.dn;
         n.configValues = ds.configValues;
         n.meta.putAll(ds.meta);
+        n.servers.addAll(ds.servers);
+        n.overrides.putAll(ds.overrides);
         n.library.policies.addAll(ds.library.policies);
         n.library.resources.addAll(ds.library.resources);
         List<String> missing = new ArrayList<>();
