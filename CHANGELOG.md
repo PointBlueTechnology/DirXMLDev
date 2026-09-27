@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-27
+
 ### Fixed
 
 - A multi-server deploy could not write: reading the other servers' settings
