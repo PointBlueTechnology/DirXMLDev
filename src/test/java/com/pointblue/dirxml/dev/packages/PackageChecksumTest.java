@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.packages;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import org.junit.Assume;
 import org.junit.Test;
 import org.w3c.dom.Element;
@@ -20,7 +21,7 @@ import static org.junit.Assert.assertTrue;
  */
 public class PackageChecksumTest {
 
-    static final Path CATALOG = Paths.get("/Applications/Designer/packages/eclipse/plugins");
+    static final Path CATALOG = LocalFixture.designerPlugins();
 
     @Test
     public void crcIsCrc32OfConcatenatedUtf8() {

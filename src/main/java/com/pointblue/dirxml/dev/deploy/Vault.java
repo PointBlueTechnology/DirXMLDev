@@ -250,9 +250,13 @@ public final class Vault implements VaultAccess {
             sc.setSearchScope(scope);
             sc.setReturningAttributes(new String[] {"*"});
             NamingEnumeration<SearchResult> results = ldap.search(base, filter, sc);
-            while (results.hasMore()) {
-                SearchResult r = results.next();
-                out.add(toEntry(r.getNameInNamespace(), r.getAttributes()));
+            try {
+                while (results.hasMore()) {
+                    SearchResult r = results.next();
+                    out.add(toEntry(r.getNameInNamespace(), r.getAttributes()));
+                }
+            } finally {
+                results.close();
             }
         } catch (NameNotFoundException e) {
             return out;
@@ -264,14 +268,24 @@ public final class Vault implements VaultAccess {
 
     private static Entry toEntry(String dn, Attributes a) throws Exception {
         Entry e = new Entry(dn);
-        for (NamingEnumeration<? extends Attribute> ids = a.getAll(); ids.hasMore(); ) {
-            Attribute at = ids.next();
-            List<byte[]> values = new ArrayList<>();
-            for (NamingEnumeration<?> vs = at.getAll(); vs.hasMore(); ) {
-                Object v = vs.next();
-                values.add(v instanceof byte[] ? (byte[]) v : String.valueOf(v).getBytes(StandardCharsets.UTF_8));
+        NamingEnumeration<? extends Attribute> ids = a.getAll();
+        try {
+            while (ids.hasMore()) {
+                Attribute at = ids.next();
+                List<byte[]> values = new ArrayList<>();
+                NamingEnumeration<?> vs = at.getAll();
+                try {
+                    while (vs.hasMore()) {
+                        Object v = vs.next();
+                        values.add(v instanceof byte[] ? (byte[]) v : String.valueOf(v).getBytes(StandardCharsets.UTF_8));
+                    }
+                } finally {
+                    vs.close();
+                }
+                e.attrs.put(at.getID(), values);
             }
-            e.attrs.put(at.getID(), values);
+        } finally {
+            ids.close();
         }
         return e;
     }
@@ -441,7 +455,10 @@ public final class Vault implements VaultAccess {
                 if ("ldaps".equals(u.getScheme())) {
                     SSLContext ctx = SSLContext.getInstance("TLS");
                     ctx.init(null, config.trustAll ? new TrustManager[] {TRUST_ALL} : null, new java.security.SecureRandom());
-                    conn = new LDAPConnection(new LDAPJSSESecureSocketFactory(ctx.getSocketFactory()));
+                    // the JNDI channel gets host-name checking from the JVM; a raw JSSE socket does not
+                    // unless asked, so ask (trustAll opts out of both, as documented)
+                    conn = new LDAPConnection(new LDAPJSSESecureSocketFactory(
+                        config.trustAll ? ctx.getSocketFactory() : endpointChecking(ctx.getSocketFactory())));
                 } else {
                     conn = new LDAPConnection();
                 }
@@ -717,6 +734,61 @@ public final class Vault implements VaultAccess {
 
     public static List<byte[]> value(String s) {
         return List.of(s.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** A socket factory whose SSL sockets verify that the certificate matches the host (RFC 2818 rules, as HTTPS does). */
+    static javax.net.ssl.SSLSocketFactory endpointChecking(javax.net.ssl.SSLSocketFactory delegate) {
+        return new javax.net.ssl.SSLSocketFactory() {
+            private java.net.Socket checked(java.net.Socket s) {
+                if (s instanceof javax.net.ssl.SSLSocket) {
+                    javax.net.ssl.SSLSocket ssl = (javax.net.ssl.SSLSocket) s;
+                    javax.net.ssl.SSLParameters params = ssl.getSSLParameters();
+                    params.setEndpointIdentificationAlgorithm("HTTPS");
+                    ssl.setSSLParameters(params);
+                }
+                return s;
+            }
+
+            @Override
+            public String[] getDefaultCipherSuites() {
+                return delegate.getDefaultCipherSuites();
+            }
+
+            @Override
+            public String[] getSupportedCipherSuites() {
+                return delegate.getSupportedCipherSuites();
+            }
+
+            @Override
+            public java.net.Socket createSocket() throws java.io.IOException {
+                return checked(delegate.createSocket());
+            }
+
+            @Override
+            public java.net.Socket createSocket(java.net.Socket s, String host, int port, boolean autoClose) throws java.io.IOException {
+                return checked(delegate.createSocket(s, host, port, autoClose));
+            }
+
+            @Override
+            public java.net.Socket createSocket(String host, int port) throws java.io.IOException {
+                return checked(delegate.createSocket(host, port));
+            }
+
+            @Override
+            public java.net.Socket createSocket(String host, int port, java.net.InetAddress localHost, int localPort) throws java.io.IOException {
+                return checked(delegate.createSocket(host, port, localHost, localPort));
+            }
+
+            @Override
+            public java.net.Socket createSocket(java.net.InetAddress host, int port) throws java.io.IOException {
+                return checked(delegate.createSocket(host, port));
+            }
+
+            @Override
+            public java.net.Socket createSocket(java.net.InetAddress address, int port, java.net.InetAddress localAddress, int localPort) throws java.io.IOException {
+                return checked(delegate.createSocket(address, port, localAddress, localPort));
+            }
+        };
     }
 
     private static final X509TrustManager TRUST_ALL = new X509TrustManager() {

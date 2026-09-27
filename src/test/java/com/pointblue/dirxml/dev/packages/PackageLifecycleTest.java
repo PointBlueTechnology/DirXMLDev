@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.packages;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.edit.ArtifactOps;
@@ -54,8 +55,8 @@ import static org.junit.Assert.assertTrue;
  */
 public class PackageLifecycleTest {
 
-    static final Path CATALOG = Paths.get("/Applications/Designer/packages/eclipse/plugins");
-    static final Path TEST11 = Paths.get(System.getProperty("user.home"), "designer_workspace", "test11");
+    static final Path CATALOG = LocalFixture.designerPlugins();
+    static final Path TEST11 = LocalFixture.test11();
 
     static final String NOVLEDIRBASE = "NOVLEDIRBASE_2.1.2.20190219130306";
     static final String NOVLEDIRDCFG_OLD = "NOVLEDIRDCFG_1.0.1";

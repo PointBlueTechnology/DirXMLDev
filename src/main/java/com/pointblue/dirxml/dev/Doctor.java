@@ -498,6 +498,13 @@ public final class Doctor {
             fields.put("detail", detail);
             return new Check("ldaps", false, "ldaps: FAIL  " + req.probeEnv + "  " + host, List.of(detail), fields);
         }
+        boolean cleartext = env.url != null && env.url.toLowerCase(java.util.Locale.ROOT).startsWith("ldap://");
+        if (cleartext) {
+            String detail = "connected over ldap:// — the bind password and every read cross the network in the clear; prefer ldaps://";
+            fields.put("detail", detail);
+            fields.put("cleartext", Boolean.TRUE);
+            return new Check("ldaps", true, "ldaps: OK  " + req.probeEnv + " connected (" + host + ", cleartext ldap:// — prefer ldaps://)", List.of(detail), fields);
+        }
         fields.put("detail", "connected");
         return new Check("ldaps", true, "ldaps: OK  " + req.probeEnv + " connected (" + host + ")", List.of(), fields);
     }

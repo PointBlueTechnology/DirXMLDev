@@ -66,7 +66,13 @@ public final class DeployCli {
                     System.err.println("usage: " + cmd + " <tree> --env <name> [--driver D…] [--json]");
                     return 2;
                 }
-                ModelDiff diff = VaultDiff.of(Paths.get(pos.get(0)), env, drivers);
+                ModelDiff diff;
+                try {
+                    diff = VaultDiff.of(Paths.get(pos.get(0)), env, drivers);
+                } catch (IllegalArgumentException e) {
+                    System.err.println("REFUSED — " + e.getMessage());
+                    return 2;
+                }
                 System.out.print(json ? diff.json() + "\n" : diff.text());
                 return diff.isEmpty() ? 0 : 1;
             }

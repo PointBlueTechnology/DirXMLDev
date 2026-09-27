@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
@@ -278,7 +279,7 @@ public class ExportReaderTest {
 
     @Test
     public void realJfwSingleDriverExportWhenPresent() {
-        Path f = Path.of(System.getProperty("user.home"), "IdeaProjects", "DirXMLSimulator", "JFW-DEV-UKG.xml");
+        Path f = LocalFixture.jfwExport();
         assumeTrue("needs the local JFW-DEV-UKG.xml export", Files.exists(f));
 
         DriverSet ds = ExportReader.read(f);
@@ -296,7 +297,7 @@ public class ExportReaderTest {
 
     @Test
     public void realRfiDriverSetExportWhenPresent() {
-        Path f = Path.of(System.getProperty("user.home"), "tmp", "RFI-DriverSet.xml");
+        Path f = LocalFixture.rfiExport();
         assumeTrue("needs the local RFI-DriverSet.xml export", Files.exists(f));
 
         DriverSet ds = ExportReader.read(f);

@@ -147,7 +147,7 @@ It is checked before any secret is resolved and before LDAP is opened.
 
 | Job | When it runs | What it runs |
 |---|---|---|
-| `test` | every push and pull request | workflow YAML, shell syntax, `bin/require-engine.sh --inform` (missing jars are a message, not a failure), the `doctor --json` shell fallback, and `mvn -B -Pidm.portable test` |
+| `test` | every push and pull request | workflow YAML, shell syntax (and `bin/apps` compiles), `bin/require-engine.sh --inform` (missing jars are a message, not a failure), the `doctor --json` shell fallback, `mvn -B -Pidm.portable test` (doctor, JSON, the environments and secrets parsers, the write gate, the trace viewer locator), and the MCP server's `npm test` |
 | `engine` | only when the repository variable `RUN_ENGINE_TESTS` is `true` | `bin/require-engine.sh` (failure if jars are missing) and `mvn -B test` |
 
 `idm.portable` compiles doctor, the environment parser, and the write gate against

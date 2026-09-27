@@ -429,7 +429,6 @@ export const tools = [
       env: envName,
       prd: z.string().min(1).describe("PRD name or DN."),
       props: z.string().min(1).optional().describe("environments.properties path (--props). Default is the CLI's."),
-      insecure: z.boolean().optional().describe("Pass --insecure (skip TLS verification)."),
     }),
     bin: "apps",
     build: (a) => appsArgs(a, ["permission", safeToken("prd", a.prd)]),
@@ -444,7 +443,6 @@ export const tools = [
       q: z.string().min(1).optional().describe("--q search. CLI default is *."),
       size: z.number().int().min(1).max(500).optional(),
       props: z.string().min(1).optional(),
-      insecure: z.boolean().optional(),
     }),
     bin: "apps",
     build(a) {
@@ -463,7 +461,6 @@ export const tools = [
       env: envName,
       taskId: z.string().min(1),
       props: z.string().min(1).optional(),
-      insecure: z.boolean().optional(),
     }),
     bin: "apps",
     build: (a) => appsArgs(a, ["task", safeToken("taskId", a.taskId)]),
@@ -478,7 +475,6 @@ export const tools = [
       q: z.string().min(1).optional(),
       size: z.number().int().min(1).max(500).optional(),
       props: z.string().min(1).optional(),
-      insecure: z.boolean().optional(),
     }),
     bin: "apps",
     build(a) {
@@ -497,7 +493,6 @@ export const tools = [
     inputSchema: z.object({
       env: envName,
       props: z.string().min(1).optional(),
-      insecure: z.boolean().optional(),
     }),
     bin: "apps",
     build: (a) => appsArgs(a, ["token"], { json: false }),
@@ -660,7 +655,7 @@ export const tools = [
 function appsArgs(a, rest, { json = true } = {}) {
   const argv = ["--env", safeToken("env", a.env)];
   if (a.props) argv.push("--props", safeToken("props", a.props));
-  if (a.insecure) argv.push("--insecure");
+  // no --insecure from a tool call: TLS trust is the operator's setting in the environments file, not the agent's
   if (json) argv.push("--json");
   argv.push(...rest);
   return argv;

@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.packages;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
@@ -24,7 +25,7 @@ import static org.junit.Assert.assertTrue;
  */
 public class DesignerCatalogGuardedTest {
 
-    static final Path DESIGNER_PLUGINS = Paths.get("/Applications/Designer/packages/eclipse/plugins");
+    static final Path DESIGNER_PLUGINS = LocalFixture.designerPlugins();
     static final String EDIRBASE = "NOVLEDIRBASE_2.1.2.20190219130306.jar";
     static final String EDIRDCFG = "NOVLEDIRDCFG_2.1.0.20120831225140.jar";
     static final String COMSET = "NOVLCOMSET_2.0.1.20190806144720.jar";   // newest present locally

@@ -78,4 +78,19 @@ public class SecretShimAuthIdTest {
         assertNull(live.driver("Beeline").shimAuthId);
         assertFalse(live.driver("Beeline").shimAuthIdSecret);
     }
+
+    @Test
+    public void aNewDriverMissingItsPasswordDoesNotShowTheIdEither() throws Exception {
+        DriverSet to = model(null);
+        Secrets s = secrets();                                   // supplies the id, not the password
+        Overrides.applySecretShimAuthIds(to, s);
+        DriverSet from = new DriverSet("dvs");
+        from.dn = DS;
+        ModelDiff diff = ModelDiff.of(from, to);
+        Plan plan = Plan.of(diff, to, DS, s, "none", null, true, tmp.getRoot().toPath());
+        String text = plan.text("prd", DS);
+        assertTrue(text, text.contains("MISSING SECRET: Beeline.shim-auth-password"));
+        assertTrue(text, text.contains("id from the secrets file"));
+        assertFalse(text, text.contains(CLIENT_ID));
+    }
 }

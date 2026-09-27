@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.deploy;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.deploy.ModelDiff.Change;
@@ -502,7 +503,7 @@ public class ModelDiffTest {
     // ---- real data (guarded) ----
 
     private static Path rfiExport() {
-        return Path.of(System.getProperty("user.home"), "tmp", "RFI-DriverSet.xml");
+        return LocalFixture.rfiExport();
     }
 
     @Test

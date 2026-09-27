@@ -7,6 +7,45 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- A multi-server deploy could not write: reading the other servers' settings
+  closed the connections the deploy had cached for its snapshot, writes and
+  verify. The reader no longer closes what the caller handed it; the fake
+  vault in tests now refuses use after close, as the real one does.
+- The production known-state gate ran `git archive | tar` through a shell
+  with the deploy log's commit and the tree path interpolated. It now runs
+  git and tar as argument lists, accepts only a 40-hex SHA, removes its temp
+  directory on failure, and works on Windows.
+- The extended-op LDAPS channel (start/stop/restart, named passwords, cache,
+  submit) never checked that the certificate matched the host; it does now
+  unless `trustAll` is set.
+- A `…Command` secret helper that wrote enough to stderr blocked for ever;
+  stderr is drained, its first line joins the error on a non-zero exit, and
+  the process is destroyed on failure.
+- A secrets-file shim auth id no longer appears on `MISSING SECRET` lines.
+- `--driver` naming a driver neither the tree nor the vault has is refused
+  instead of reported as "no differences".
+- `import-live --env X` with no output directory prints the usage line.
+- `driver.trace tail --since` compared engine-local stamps against this
+  machine's zone; the cutoff now comes from `date` on the engine host.
+- JNDI search enumerations are closed; the server DN is escaped in the LDAP
+  filter that derives another server's URL; `doctor` says when a bind was
+  cleartext `ldap://`.
+- `bin/idm.cmd` checks that the JDK is 21, as `bin/idm` does.
+
+### Changed
+
+- The MCP `apps.*` tools no longer take `insecure`; TLS trust is the
+  operator's setting in the environments file, not a tool argument.
+- CI runs the JSON and environments/secrets parser tests and the MCP
+  server's `npm test`; the spike mains moved out of the product jar into the
+  test tree; `OperateCliTest` (a duplicate of the write-gate test) is gone.
+- Every fixture-bound test resolves its machine-local file through
+  `LocalFixture` (defaults under the user's home; `-Ddirxml.fixture.*` /
+  `DIRXML_FIXTURE_*` overrides, now including the e2e directory, the JFW and
+  AD exports and Designer's package catalog).
+
 ## [0.4.0] - 2026-09-27
 
 ### Added

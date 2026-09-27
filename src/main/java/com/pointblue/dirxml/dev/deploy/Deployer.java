@@ -142,6 +142,28 @@ public final class Deployer {
     private final Map<String, VaultAccess> serverConnections = new LinkedHashMap<>();
 
     /** The connection for a step: the environment's own, or the named server's (opened once, closed with the run). */
+    /**
+     * The primary connection this run opens and closes — or, under test, the test's own vault
+     * behind a proxy whose {@code close()} does nothing: the test opened it and inspects it after
+     * the run, and a fake that has been closed refuses every call, as the real one does.
+     */
+    private VaultAccess openPrimary(Environments.Environment env) {
+        if (testVault == null) {
+            return Vault.connect(env.vaultConfig());
+        }
+        return (VaultAccess) java.lang.reflect.Proxy.newProxyInstance(VaultAccess.class.getClassLoader(),
+            new Class<?>[] {VaultAccess.class}, (proxy, m, args) -> {
+                if (m.getName().equals("close") && m.getParameterCount() == 0) {
+                    return null;
+                }
+                try {
+                    return m.invoke(testVault, args);
+                } catch (java.lang.reflect.InvocationTargetException e) {
+                    throw e.getCause();
+                }
+            });
+    }
+
     private VaultAccess vaultFor(VaultAccess primary, Environments.Environment env, String serverDn) {
         if (serverDn == null) {
             return primary;
@@ -222,10 +244,16 @@ public final class Deployer {
         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
         Overrides.applySecretShimAuthIds(to, secrets);   // ids the secrets file supplies win over the tree's (never shown)
 
-        try (VaultAccess vault = testVault != null ? testVault : Vault.connect(env.vaultConfig())) {
+        try (VaultAccess vault = openPrimary(env)) {
             // 2. diff and plan — the other servers' own driver settings included, read through their connections
             DriverSet from = VaultDiff.fromVault(vault, dsDn);
             Servers.readOverrides(from, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
+            String unknown = VaultDiff.unknownDrivers(from, to, o.drivers);
+            if (unknown != null) {
+                r.refusal = unknown;
+                closeServerConnections();
+                return r;
+            }
             ModelDiff diff = VaultDiff.of(from, to, o.drivers);
             r.diffText = diff.text();
             Map<String, List<String>> liveNamed = new LinkedHashMap<>();
@@ -726,17 +754,39 @@ public final class Deployer {
         }
     }
 
-    /** A temp checkout of the tree at a commit, or null. */
+    /**
+     * A temp checkout of the tree at a commit, or null. The commit comes from the deploy log, so it
+     * is accepted only as a full SHA; git and tar are run as argument lists, never through a shell.
+     */
     private Path checkout(String commit) {
-        try {
-            Path dir = Files.createTempDirectory("idm-known");
-            Process p = new ProcessBuilder("/bin/sh", "-c",
-                "git -C '" + o.tree.toAbsolutePath() + "' archive --format=tar " + commit + " | tar -x -C '" + dir + "'")
-                .redirectErrorStream(true).start();
-            p.getInputStream().readAllBytes();
-            return p.waitFor() == 0 ? dir : null;
-        } catch (Exception e) {
+        return checkoutAt(o.tree, commit);
+    }
+
+    static Path checkoutAt(Path tree, String commit) {
+        if (commit == null || !commit.matches("[0-9a-f]{40}")) {
             return null;
+        }
+        Path dir = null;
+        Path tar = null;
+        try {
+            dir = Files.createTempDirectory("idm-known");
+            tar = Files.createTempFile("idm-known", ".tar");
+            run("git", "-C", tree.toAbsolutePath().toString(), "archive", "--format=tar", "-o", tar.toString(), commit);
+            run("tar", "-x", "-f", tar.toString(), "-C", dir.toString());
+            return dir;
+        } catch (Exception e) {
+            if (dir != null) {
+                deleteRecursively(dir);
+            }
+            return null;
+        } finally {
+            if (tar != null) {
+                try {
+                    Files.deleteIfExists(tar);
+                } catch (IOException ignore) {
+                    // best effort
+                }
+            }
         }
     }
 
@@ -753,7 +803,7 @@ public final class Deployer {
         }
     }
 
-    private static void deleteRecursively(Path dir) {
+    static void deleteRecursively(Path dir) {
         try (var s = Files.walk(dir)) {
             for (Path p : s.sorted((a, b) -> b.getNameCount() - a.getNameCount()).toList()) {
                 Files.deleteIfExists(p);
