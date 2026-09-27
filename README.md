@@ -66,11 +66,24 @@ contract. Where an older design note disagrees with it, follow `bin/idm`.
 
 ## Quick start
 
-These assume `bin/idm` is already built and you are in a **client** directory
-(not this repository). Full setup of that directory, including a redacted
-`environments.properties`, is [docs/getting-started.md](docs/getting-started.md).
-Names such as `stg` and `AD Driver` are placeholders for your environment name
-and your driver's name.
+> **Recommended: let a coding agent set this up.** Open
+> [docs/agent-assisted-setup.md](docs/agent-assisted-setup.md), paste
+> [the kickoff prompt](docs/agent-assisted-setup.md#the-kickoff-prompt) into
+> Claude Code, Cursor, Codex or any agent that reads files and runs a shell,
+> and watch. The agent installs JDK 21 and Maven, builds the simulator and
+> `bin/idm`, finds the engine jars, writes your client directory with a
+> redacted `environments.properties`, stores the vault password out of the
+> file, and stops at each checkpoint for you to look. It ends on read-only
+> checks against your vault, under an hour on a machine that has the jars.
+> Nothing is written to the vault during setup. The commands below are what
+> you and the agent run once that is done.
+
+The commands assume `bin/idm` is built and you are in a **client** directory
+(not this repository). Setting that directory up by hand, including a
+redacted `environments.properties`, is
+[docs/getting-started.md](docs/getting-started.md); building from source by
+hand is [docs/install.md](docs/install.md). Names such as `stg` and
+`AD Driver` are placeholders for your environment name and your driver's name.
 
 ```bash
 bin/idm import-live tree/ --env stg
