@@ -49,7 +49,7 @@ public class SecretShimAuthIdTest {
     public void theSecretsFileSuppliesTheIdAndNothingShowsIt() throws Exception {
         DriverSet to = model(null);                 // the tree carries no id
         Secrets s = secrets();
-        assertEquals(List.of("Beeline"), s.applyShimAuthIds(to));
+        assertEquals(List.of("Beeline"), Overrides.applySecretShimAuthIds(to, s));
         assertEquals(CLIENT_ID, to.driver("Beeline").shimAuthId);
         assertTrue(to.driver("Beeline").shimAuthIdSecret);
 
@@ -74,7 +74,7 @@ public class SecretShimAuthIdTest {
     @Test
     public void importNeverWritesTheIdIntoTheTree() throws Exception {
         DriverSet live = model(CLIENT_ID);
-        assertEquals(List.of("Beeline"), secrets().stripShimAuthIds(live));
+        assertEquals(List.of("Beeline"), Overrides.stripSecretShimAuthIds(live, secrets()));
         assertNull(live.driver("Beeline").shimAuthId);
         assertFalse(live.driver("Beeline").shimAuthIdSecret);
     }
