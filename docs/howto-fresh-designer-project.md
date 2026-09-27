@@ -22,7 +22,7 @@ comparison. Both start from the same `tree\` of §2.
 
 ## 1. One-time setup on the Windows workstation
 
-1. JDK 21 and Maven installed; `set JAVA_HOME=C:\Program Files\Zulu\zulu-21`
+1. JDK 21 and Maven 3.9 or newer installed; `set JAVA_HOME=C:\Program Files\Zulu\zulu-21`
    (or `IDM_JAVA_HOME`). Git, and Python 3 if you will use `bin\apps`.
 2. The simulator built once (`mvn install` in its repository, with the engine
    jars in its `lib\`), and DirXMLDev cloned with `lib` pointing at those jars

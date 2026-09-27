@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.edit.FormOps;
@@ -22,7 +23,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -48,15 +48,15 @@ import static org.junit.Assert.assertTrue;
  *       Designer lays one out (AppConfig/container digests, one stock form, one
  *       bound template PRD) — exercises form add/remove and PRD add against a
  *       minimal project without any real Designer install; and</li>
- *   <li>a copy of {@code ~/designer_workspace/test11} (guarded: skipped, not
- *       failed, when absent), exercising the exact typed ops an agent would run
+ *   <li>a copy of the {@code test11} Designer project (guarded: skipped, not
+ *       failed, when absent; {@code -Ddirxml.fixture.test11} or
+ *       {@code DIRXML_FIXTURE_TEST11} names another copy), exercising the exact
+ *       typed ops an agent would run
  *       ({@code form.add}, {@code prd.add}) against the real 11-form/39-PRD
  *       project and asserting exactly which files the writer touched.</li>
  * </ul>
  */
 public class ProvisioningProjectWriterTest {
-
-    private static final String TEST11 = "/Users/jcombs/designer_workspace/test11";
 
     @Rule
     public TemporaryFolder tmp = new TemporaryFolder();
@@ -394,7 +394,7 @@ public class ProvisioningProjectWriterTest {
     // ================================================================================
 
     private Path copyProject() throws IOException {
-        return copyDirectory(Paths.get(TEST11), tmp.newFolder("project" + (seq++)).toPath());
+        return copyDirectory(LocalFixture.test11(), tmp.newFolder("project" + (seq++)).toPath());
     }
 
     private static Path copyDirectory(Path src, Path dst) throws IOException {
@@ -421,7 +421,7 @@ public class ProvisioningProjectWriterTest {
 
     @Test
     public void test11NoChangeTouchesNothing() throws IOException {
-        Assume.assumeTrue(Files.isDirectory(Paths.get(TEST11)));
+        Assume.assumeTrue(Files.isDirectory(LocalFixture.test11()));
         Path project = copyProject();
         Path tree = buildTree(project);
         Map<String, String> before = hashAll(project);
@@ -436,7 +436,7 @@ public class ProvisioningProjectWriterTest {
 
     @Test
     public void test11AddFormAndPrdTouchesOnlyFourFiles() throws IOException {
-        Assume.assumeTrue(Files.isDirectory(Paths.get(TEST11)));
+        Assume.assumeTrue(Files.isDirectory(LocalFixture.test11()));
         Path project = copyProject();
         Path tree = buildTree(project);
 
@@ -477,7 +477,7 @@ public class ProvisioningProjectWriterTest {
 
     @Test
     public void test11ImportThenNoOpUpdateTouchesNothing() throws IOException {
-        Assume.assumeTrue(Files.isDirectory(Paths.get(TEST11)));
+        Assume.assumeTrue(Files.isDirectory(LocalFixture.test11()));
         Path project = copyProject();
         Path tree = buildTree(project);
         Map<String, String> before = hashAll(project);
