@@ -3,83 +3,89 @@ package com.pointblue.dirxml.dev;
 import java.nio.file.Path;
 
 /**
- * Paths of Designer projects and exports that live on a developer's machine and
- * are never committed. A system property wins, then the matching environment
- * variable, then the historical default — so a checkout on the machine that
- * already has the fixture still runs with no extra configuration, and any other
- * machine can point the same tests at its own copy.
- *
- * <p>Callers skip with {@link org.junit.Assume#assumeTrue(boolean)} when the path
- * is absent. They do not fail.
- *
- * <table>
- *   <caption>Overrides</caption>
- *   <tr><th>Fixture</th><th>System property</th><th>Environment variable</th></tr>
- *   <tr><td>test11 Designer project</td><td>{@code dirxml.fixture.test11}</td><td>{@code DIRXML_FIXTURE_TEST11}</td></tr>
- *   <tr><td>Amica PRD project</td><td>{@code dirxml.fixture.amica}</td><td>{@code DIRXML_FIXTURE_AMICA}</td></tr>
- *   <tr><td>e2e {@code tree-test11pf}</td><td>{@code dirxml.fixture.e2e.tree}</td><td>{@code DIRXML_FIXTURE_E2E_TREE}</td></tr>
- *   <tr><td>e2e {@code tree-7c}</td><td>{@code dirxml.fixture.e2e.7c}</td><td>{@code DIRXML_FIXTURE_E2E_7C}</td></tr>
- *   <tr><td>e2e package catalog</td><td>{@code dirxml.fixture.e2e.catalog}</td><td>{@code DIRXML_FIXTURE_E2E_CATALOG}</td></tr>
- *   <tr><td>RFI driver-set export</td><td>{@code dirxml.fixture.rfi}</td><td>{@code DIRXML_FIXTURE_RFI}</td></tr>
- * </table>
+ * Where the tests that need a machine-local fixture look for it: a Designer project, an export,
+ * an e2e tree, Designer's package catalog. None of these is committed. Each has a system property
+ * and an environment variable that point elsewhere ({@code -Ddirxml.fixture.test11=/path} or
+ * {@code DIRXML_FIXTURE_TEST11=/path}; the property wins); with neither set, a path under the
+ * user's home (or Designer's install location) is used. A test skips when the file is absent.
+ * See docs/install.md §2.4.
  */
 public final class LocalFixture {
 
-    private static final String TEST11 = "/Users/jcombs/designer_workspace/test11";
-    private static final String AMICA =
-        "/private/tmp/claude-501/-Users-jcombs-Dev-DirXML-Engine-Analysis/34814343-5cce-492a-8498-a04381e36292"
-            + "/scratchpad/amica-prd/AMICA-PRD-20260627";
-    private static final String E2E_TREE = "/Users/jcombs/IdeaProjects/DirXMLDev-e2e/tree-test11pf";
-    private static final String E2E_7C = "/Users/jcombs/IdeaProjects/DirXMLDev-e2e/tree-7c";
-    private static final String E2E_CATALOG = "/Users/jcombs/IdeaProjects/DirXMLDev-e2e/catalog";
-    private static final String RFI = "/Users/jcombs/tmp/RFI-DriverSet.xml";
+    private static final Path HOME = Path.of(System.getProperty("user.home"));
 
     private LocalFixture() {
     }
 
-    /** The hand-built {@code test11} Designer project. */
+    /** The small Designer project most project tests read and copy. */
     public static Path test11() {
-        return resolve("dirxml.fixture.test11", "DIRXML_FIXTURE_TEST11", TEST11);
+        return resolve("dirxml.fixture.test11", "DIRXML_FIXTURE_TEST11", HOME.resolve("designer_workspace/test11"));
     }
 
-    /** The unzipped Amica PRD Designer project. */
+    /** The read-only Designer project with provisioning content. */
+    public static Path test11pf() {
+        return resolve("dirxml.fixture.test11pf", "DIRXML_FIXTURE_TEST11PF", HOME.resolve("designer_workspace/test11pf"));
+    }
+
+    /** A Designer project with PRDs and forms. */
     public static Path amica() {
-        return resolve("dirxml.fixture.amica", "DIRXML_FIXTURE_AMICA", AMICA);
+        return resolve("dirxml.fixture.amica", "DIRXML_FIXTURE_AMICA", HOME.resolve("tmp/AMICA-PRD-20260627"));
     }
 
-    /** IDM-as-code tree exported from {@code test11pf}, used by {@code export-project --new} tests. */
+    /** The e2e fixtures directory ({@code DirXMLDev-e2e}: trees, LDIFs, the catalog). */
+    public static Path e2eDir() {
+        return resolve("dirxml.fixture.e2e.dir", "DIRXML_FIXTURE_E2E_DIR", HOME.resolve("IdeaProjects/DirXMLDev-e2e"));
+    }
+
+    /** A file under {@link #e2eDir()}. */
+    public static Path e2e(String relative) {
+        return e2eDir().resolve(relative);
+    }
+
     public static Path e2eTree() {
-        return resolve("dirxml.fixture.e2e.tree", "DIRXML_FIXTURE_E2E_TREE", E2E_TREE);
+        return resolve("dirxml.fixture.e2e.tree", "DIRXML_FIXTURE_E2E_TREE", e2eDir().resolve("tree-test11pf"));
     }
 
-    /** IDM-as-code tree whose packages the e2e catalog holds ({@code tree-7c}). */
     public static Path e2e7c() {
-        return resolve("dirxml.fixture.e2e.7c", "DIRXML_FIXTURE_E2E_7C", E2E_7C);
+        return resolve("dirxml.fixture.e2e.7c", "DIRXML_FIXTURE_E2E_7C", e2eDir().resolve("tree-7c"));
     }
 
-    /** Package catalog beside the e2e trees. */
     public static Path e2eCatalog() {
-        return resolve("dirxml.fixture.e2e.catalog", "DIRXML_FIXTURE_E2E_CATALOG", E2E_CATALOG);
+        return resolve("dirxml.fixture.e2e.catalog", "DIRXML_FIXTURE_E2E_CATALOG", e2eDir().resolve("catalog"));
     }
 
-    /** A real driver-set export ({@code RFI-DriverSet.xml}). */
+    /** A driver-set export with a Library, linked policies and an RLand driver. */
     public static Path rfiExport() {
-        return resolve("dirxml.fixture.rfi", "DIRXML_FIXTURE_RFI", RFI);
+        return resolve("dirxml.fixture.rfi", "DIRXML_FIXTURE_RFI", HOME.resolve("tmp/RFI-DriverSet.xml"));
     }
 
-    static Path resolve(String property, String environment, String fallback) {
+    /** A large single-driver export. */
+    public static Path jfwExport() {
+        return resolve("dirxml.fixture.jfw", "DIRXML_FIXTURE_JFW", HOME.resolve("IdeaProjects/DirXMLSimulator/JFW-DEV-UKG.xml"));
+    }
+
+    /** An AD driver export with entitlements. */
+    public static Path adDriverExport() {
+        return resolve("dirxml.fixture.ad", "DIRXML_FIXTURE_AD", HOME.resolve("Downloads/Active Directory Driver.xml"));
+    }
+
+    /** Designer's package catalog (its Eclipse plugins directory). */
+    public static Path designerPlugins() {
+        return resolve("dirxml.fixture.designer.plugins", "DIRXML_FIXTURE_DESIGNER_PLUGINS", Path.of("/Applications/Designer/packages/eclipse/plugins"));
+    }
+
+    static Path resolve(String property, String environment, Path fallback) {
         return choose(System.getProperty(property), System.getenv(environment), fallback);
     }
 
-    /** Property, then environment, then fallback. Blank values are treated as unset. */
-    static Path choose(String propertyValue, String envValue, String fallback) {
+    static Path choose(String propertyValue, String envValue, Path fallback) {
         if (present(propertyValue)) {
             return Path.of(propertyValue.trim());
         }
         if (present(envValue)) {
             return Path.of(envValue.trim());
         }
-        return Path.of(fallback);
+        return fallback;
     }
 
     private static boolean present(String value) {

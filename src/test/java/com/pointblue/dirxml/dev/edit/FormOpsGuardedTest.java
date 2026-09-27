@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.edit;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
@@ -38,9 +39,9 @@ public class FormOpsGuardedTest {
     @Rule
     public TemporaryFolder tmp = new TemporaryFolder();
 
-    private static final Path TEST11 = Path.of(System.getProperty("user.home"), "designer_workspace", "test11");
-    private static final Path UA_LDIF = Path.of(System.getProperty("user.home"), "IdeaProjects", "DirXMLDev-e2e", "ua-driver.ldif");
-    private static final Path UA_LDIF_IDM254 = Path.of(System.getProperty("user.home"), "IdeaProjects", "DirXMLDev-e2e", "ua-driver-idm254.ldif");
+    private static final Path TEST11 = LocalFixture.test11();
+    private static final Path UA_LDIF = LocalFixture.e2e("ua-driver.ldif");
+    private static final Path UA_LDIF_IDM254 = LocalFixture.e2e("ua-driver-idm254.ldif");
 
     private static void assertNoFormCheckErrors(DriverSet ds, String label) {
         Report r = Validator.standard().validate(ds);

@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.json.Json;
@@ -39,11 +40,9 @@ public class ProvisioningGuardedTest {
     @Rule
     public TemporaryFolder tmp = new TemporaryFolder();
 
-    private static final Path TEST11 = Path.of(System.getProperty("user.home"), "designer_workspace", "test11");
-    private static final Path UA_LDIF = Path.of(System.getProperty("user.home"),
-        "IdeaProjects", "DirXMLDev-e2e", "ua-driver.ldif");
-    private static final Path UA_LDIF_IDM254 = Path.of(System.getProperty("user.home"),
-        "IdeaProjects", "DirXMLDev-e2e", "ua-driver-idm254.ldif");
+    private static final Path TEST11 = LocalFixture.test11();
+    private static final Path UA_LDIF = LocalFixture.e2e("ua-driver.ldif");
+    private static final Path UA_LDIF_IDM254 = LocalFixture.e2e("ua-driver-idm254.ldif");
 
     private static final String DRIVER_NAME = "User Application Driver";
 

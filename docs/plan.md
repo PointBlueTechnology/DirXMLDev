@@ -3,7 +3,7 @@
 This is the architecture and the phase history. To use the tool, start at the
 [repository README](../README.md) and [docs/README.md](README.md).
 
-Status: **plan** (2026-09-08). The next horizon beyond the simulator: let an agent do
+Status: **shipped through 0.4.0** (plan written 2026-09-08; phases 0–7 and tracks P and W complete, see the phase history below). The horizon beyond the simulator: let an agent do
 the **whole** IDM development loop — read, design, edit, validate, test, diff,
 deploy, operate — without Designer in the loop, while still being able to hand a
 Designer-compatible project to a human team when they want one.
@@ -16,9 +16,9 @@ Designer does five jobs. Two we've already replaced or exceeded; three are the w
 |---|---|
 | **Read/model** a driver set (policies, GCVs, filters, schema map, resources, mapping tables, packages) | ✅ done — `DesignerProject` / `DriverExport` / `LdifDriverSource` / live LDAP, plus the `dirxml-designer-workspace` skill |
 | **Test** policies (Policy Simulator) | ✅ exceeded — real-engine simulator, regression corpus, compare, coverage |
-| **Edit/author** policies and config, keeping the project's cross-references intact | ❌ the core of this plan |
-| **Deploy / compare** against the live vault | ❌ read is done; write + diff + safeguards are the work |
-| **Operate** drivers (start/stop/restart, migrate, cache, trace, passwords) | ◐ cache read + state done; the rest is wiring ops we already have |
+| **Edit/author** policies and config, keeping the project's cross-references intact | ✅ done — Phase 3 (`edit/*`, `Transaction`, the Designer project writer) |
+| **Deploy / compare** against the live vault | ✅ done — Phase 4 (`vault.diff`, `vault.deploy`, snapshots, the production gate, per-server and per-stage values) |
+| **Operate** drivers (start/stop/restart, migrate, cache, trace, passwords) | ✅ done — Phase 5 (`driver.*`, trace over SSH and LDAP, the trace viewer) |
 
 The realistic target is **Designer-*optional***, not Designer-forbidden: the agent
 can do everything end-to-end, and the artifacts stay interoperable (import into
@@ -513,6 +513,6 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
 ## Non-goals (for now)
 
 - Reusing Designer's Java code or UI.
-- Workflow-activity/flow design and roles/resources modeling (after Track P).
+- Workflow activities beyond the integration activities Track W ships; roles/resources modeling stays typed ops (`role.*`, `resource.*`), not a designer.
 - Native-shim / Remote Loader *installation* (RL config attributes are LDAP and in
   scope; the OS-level install isn't).

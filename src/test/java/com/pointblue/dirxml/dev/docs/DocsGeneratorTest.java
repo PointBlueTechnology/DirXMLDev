@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.docs;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.edit.Packages;
 import com.pointblue.dirxml.dev.model.Driver;
@@ -311,7 +312,7 @@ public class DocsGeneratorTest {
 
     @Test
     public void realRfiDriverSetGeneratesDocs() throws Exception {
-        Path f = Path.of(System.getProperty("user.home"), "tmp", "RFI-DriverSet.xml");
+        Path f = LocalFixture.rfiExport();
         assumeTrue("needs the local RFI-DriverSet.xml export", Files.exists(f));
 
         DriverSet ds = ExportReader.read(f);

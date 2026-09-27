@@ -134,17 +134,40 @@ public final class SecretSource {
         } catch (IOException e) {
             throw new IOException(what + ": cannot run " + command.get(0) + ": " + e.getMessage(), e);
         }
+        // stderr is drained on its own thread so a chatty helper (a keychain prompt, a password
+        // manager's sign-in notice) cannot fill the pipe and block; only its first line is kept,
+        // for the error message — the value itself is on stdout and stderr is never logged
+        StringBuilder err = new StringBuilder();
+        Thread drain = new Thread(() -> {
+            try (InputStream es = p.getErrorStream()) {
+                byte[] buf = new byte[4096];
+                int n;
+                while ((n = es.read(buf)) > 0) {
+                    if (err.length() < 200) {
+                        err.append(new String(buf, 0, n, StandardCharsets.UTF_8));
+                    }
+                }
+            } catch (IOException ignore) {
+                // the process ended
+            }
+        }, "secret-stderr");
+        drain.setDaemon(true);
+        drain.start();
         try (InputStream in = p.getInputStream()) {
             String out = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             int code;
             try {
                 code = p.waitFor();
+                drain.join(2000);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IOException(what + ": interrupted");
             }
             if (code != 0) {
-                throw new IOException(what + ": command exited " + code);
+                String first = err.toString().strip();
+                int nl = first.indexOf('\n');
+                first = nl < 0 ? first : first.substring(0, nl);
+                throw new IOException(what + ": command exited " + code + (first.isEmpty() ? "" : " (" + first + ")"));
             }
             while (out.endsWith("\n") || out.endsWith("\r")) {
                 out = out.substring(0, out.length() - 1);
@@ -153,6 +176,10 @@ public final class SecretSource {
                 throw new IOException(what + ": command printed nothing");
             }
             return out.toCharArray();
+        } finally {
+            if (p.isAlive()) {
+                p.destroyForcibly();
+            }
         }
     }
 

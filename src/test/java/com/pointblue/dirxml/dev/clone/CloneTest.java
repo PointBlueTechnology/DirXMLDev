@@ -407,7 +407,7 @@ public class CloneTest {
         assertTrue(r.plan, r.plan.contains("one to one"));
         // the lab primary mirrors srv1; lab2 got srv2's values through its own connection
         assertEquals("<cfg server=\"srv1\"/>", lab.read("cn=AD,cn=driverset1,o=system").string("DirXML-ShimConfigInfo"));
-        assertEquals("<cfg server=\"srv2\"/>", lab2Conn.read("cn=AD,cn=driverset1,o=system").string("DirXML-ShimConfigInfo"));
+        assertEquals("<cfg server=\"srv2\"/>", lab2Conn.reopen().read("cn=AD,cn=driverset1,o=system").string("DirXML-ShimConfigInfo"));   // the importer closed what it opened
         assertTrue(r.serverValuesWritten > 0);
         assertEquals(List.of("cn=lab1,ou=servers,o=system", "cn=lab2,ou=servers,o=system"), lab.read("cn=driverset1,o=system").strings("DirXML-ServerList"));
         assertTrue(r.notes.toString(), r.notes.stream().anyMatch(n -> n.contains("cn=lab1,ou=servers,o=system, cn=lab2,ou=servers,o=system")));

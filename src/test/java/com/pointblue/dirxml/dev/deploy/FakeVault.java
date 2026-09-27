@@ -43,6 +43,7 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public Vault.Entry read(String dn) {
+        open();
         return byDn.get(key(dn));
     }
 
@@ -53,11 +54,13 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public boolean exists(String dn) {
+        open();
         return byDn.containsKey(key(dn));
     }
 
     @Override
     public List<Vault.Entry> search(String base, String filter, int scope) {
+        open();
         String b = key(base);
         List<Vault.Entry> out = new ArrayList<>();
         for (Map.Entry<String, Vault.Entry> e : byDn.entrySet()) {
@@ -70,6 +73,7 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public void add(String dn, List<String> objectClasses, Map<String, List<byte[]>> attrs) {
+        open();
         if (refuseUserPasswords != null && attrs.keySet().stream().anyMatch(k -> k.equalsIgnoreCase("userPassword"))) {
             throw new Vault.VaultException("add " + dn + ": " + refuseUserPasswords, null);
         }
@@ -93,6 +97,7 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public void addValues(String dn, String attr, List<byte[]> values) {
+        open();
         Vault.Entry e = byDn.get(key(dn));
         if (e == null) {
             throw new Vault.VaultException("modify-add " + dn + " " + attr + ": no such object", null);
@@ -111,6 +116,7 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public void addObjectClasses(String dn, List<String> classes) {
+        open();
         Vault.Entry e = byDn.get(key(dn));
         if (e == null) {
             throw new Vault.VaultException("add object classes " + dn + ": no such object", null);
@@ -126,6 +132,7 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public void removeObjectClasses(String dn, List<String> classes) {
+        open();
         Vault.Entry e = byDn.get(key(dn));
         if (e == null) {
             throw new Vault.VaultException("remove object classes " + dn + ": no such object", null);
@@ -142,6 +149,7 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public void replace(String dn, String attr, List<byte[]> values) {
+        open();
         if (refuseUserPasswords != null && attr.equalsIgnoreCase("userPassword")) {
             throw new Vault.VaultException("modify " + dn + " " + attr + ": " + refuseUserPasswords, null);
         }
@@ -159,6 +167,7 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public void delete(String dn) {
+        open();
         if (byDn.remove(key(dn)) == null) {
             throw new Vault.VaultException("delete " + dn + ": no such object", null);
         }
@@ -177,12 +186,14 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public void restartDriver(String driverDn) {
+        open();
         restarted.add(driverDn);
         driverStates.put(key(driverDn), Vault.STATE_RUNNING);
     }
 
     @Override
     public void setDriverStartOption(String driverDn, int option) {
+        open();
         driverStartOptions.put(key(driverDn), option);
     }
 
@@ -201,17 +212,32 @@ public final class FakeVault implements VaultAccess {
 
     @Override
     public List<String> namedPasswords(String dn) {
+        open();
         return namedPasswords.getOrDefault(key(dn), List.of());
     }
 
     @Override
     public void setNamedPassword(String dn, String name, String displayName, char[] value) {
+        open();
         namedPasswords.computeIfAbsent(key(dn), k -> new ArrayList<>()).add(name);
     }
 
     @Override
     public void close() {
         closed = true;
+    }
+
+    /** For a test that inspects a store the code under test opened and closed itself (a connector's connection): usable again. */
+    public FakeVault reopen() {
+        closed = false;
+        return this;
+    }
+
+    /** A real {@code Vault} throws once closed (its JNDI context is gone); so does the fake, so a test cannot pass through a closed connection. */
+    private void open() {
+        if (closed) {
+            throw new IllegalStateException("this vault connection was closed");
+        }
     }
 
     private static String key(String dn) {
