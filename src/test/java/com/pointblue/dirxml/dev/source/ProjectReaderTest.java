@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -447,8 +448,7 @@ public class ProjectReaderTest {
 
     @Test
     public void realAmicaPrdProjectWhenPresentMatchesSimulatorDriverNames() {
-        Path project = Path.of("/private/tmp/claude-501/-Users-jcombs-Dev-DirXML-Engine-Analysis",
-            "34814343-5cce-492a-8498-a04381e36292", "scratchpad", "amica-prd", "AMICA-PRD-20260627");
+        Path project = LocalFixture.amica();
         assumeTrue("needs the unzipped Amica PRD project", Files.isDirectory(project));
 
         DriverSet ds = ProjectReader.read(project);

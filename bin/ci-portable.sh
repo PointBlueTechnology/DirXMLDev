@@ -27,12 +27,15 @@ javac --release 21 -encoding UTF-8 -cp "$CP" -d "$OUT" \
   src/main/java/com/pointblue/dirxml/dev/operate/TraceViewer.java \
   src/main/java/com/pointblue/dirxml/dev/Doctor.java \
   src/test/java/com/pointblue/dirxml/dev/DoctorTest.java \
+  src/test/java/com/pointblue/dirxml/dev/LocalFixture.java \
+  src/test/java/com/pointblue/dirxml/dev/LocalFixtureTest.java \
   src/test/java/com/pointblue/dirxml/dev/deploy/AgentWriteGateTest.java \
   src/test/java/com/pointblue/dirxml/dev/deploy/TraceViewerArgsTest.java \
   src/test/java/com/pointblue/dirxml/dev/operate/TraceViewerTest.java
 
 java -cp "$OUT:$CP" org.junit.runner.JUnitCore \
   com.pointblue.dirxml.dev.DoctorTest \
+  com.pointblue.dirxml.dev.LocalFixtureTest \
   com.pointblue.dirxml.dev.deploy.AgentWriteGateTest \
   com.pointblue.dirxml.dev.deploy.TraceViewerArgsTest \
   com.pointblue.dirxml.dev.operate.TraceViewerTest

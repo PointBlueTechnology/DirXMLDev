@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
@@ -20,7 +21,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -50,9 +50,6 @@ import static org.junit.Assert.assertTrue;
  */
 public class NewProjectWriterTest {
 
-    private static final String E2E_TREE = "/Users/jcombs/IdeaProjects/DirXMLDev-e2e/tree-test11pf";
-    private static final String E2E_7C = "/Users/jcombs/IdeaProjects/DirXMLDev-e2e/tree-7c";
-    private static final String E2E_CATALOG = "/Users/jcombs/IdeaProjects/DirXMLDev-e2e/catalog";
     private static final String COMPOSER_SHIM = "com.novell.idm.driver.ComposerDriverShim";
 
     @Rule
@@ -515,7 +512,7 @@ public class NewProjectWriterTest {
 
     @Test
     public void realTreeRoundTripsThroughANewProject() throws IOException {
-        Path tree = Paths.get(E2E_TREE);
+        Path tree = LocalFixture.e2eTree();
         Assume.assumeTrue(Files.isDirectory(tree));
         Path project = tmp.newFolder("out" + (seq++)).toPath().resolve("test11new");
 
@@ -899,8 +896,8 @@ public class NewProjectWriterTest {
 
     @Test
     public void realTreeRefusesWhenTheCatalogDoesNotHoldItsPackages() throws IOException {
-        Path tree = Paths.get(E2E_TREE);
-        Path catalog = Paths.get(E2E_CATALOG);
+        Path tree = LocalFixture.e2eTree();
+        Path catalog = LocalFixture.e2eCatalog();
         Assume.assumeTrue(Files.isDirectory(tree) && Files.isDirectory(catalog));
         Path project = tmp.newFolder("out" + (seq++)).toPath().resolve("test11cat");
 
@@ -928,8 +925,8 @@ public class NewProjectWriterTest {
      */
     @Test
     public void aTreeWhosePackagesTheCatalogHoldsIsWrittenWhole() throws IOException {
-        Path source = Paths.get(E2E_7C);
-        Path catalog = Paths.get(E2E_CATALOG);
+        Path source = LocalFixture.e2e7c();
+        Path catalog = LocalFixture.e2eCatalog();
         Assume.assumeTrue(Files.isDirectory(source.resolve("drivers/PkgTest7")) && Files.isDirectory(catalog));
 
         Path tree = tmp.newFolder("pkgtest" + (seq++)).toPath();

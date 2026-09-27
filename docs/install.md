@@ -21,7 +21,7 @@ Identity Applications helper). There is no server, no database and no GUI.
 | Requirement | Why | Check |
 |---|---|---|
 | **JDK 21** | the tool and the policy simulator are Java 21 | `/usr/libexec/java_home -v 21` (macOS) or `java -version` |
-| **Maven 3.9+** | build; 3.6.3 is the oldest the build plugins accept, and the enforcer says so | `mvn -v` |
+| **Maven 3.9+** | build; the enforcer rejects an older Maven | `mvn -v` |
 | **git** | the tree is versioned; the deploy gate reads commits | `git --version` |
 | **Python 3.8+** | only for `bin/apps` (standard library, nothing to install) | `python3 --version` |
 | **The DirXML Policy Simulator** built and installed locally | the engine that validates and simulates policies | `ls ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/` |
@@ -151,11 +151,27 @@ It is checked before any secret is resolved and before LDAP is opened.
 | `engine` | only when the repository variable `RUN_ENGINE_TESTS` is `true` | `bin/require-engine.sh` (failure if jars are missing) and `mvn -B test` |
 
 `idm.portable` compiles doctor, the environment parser, and the write gate against
-a stub LDAP client and runs `DoctorTest` and `AgentWriteGateTest`. It does not
-compile the rest of the tree. A normal `mvn test` is still the full suite: the
-validate check in `pom.xml` stops it with the jar list when `lib/` or the
-simulator is absent, which is what you want on a workstation where you meant to
-compile everything.
+a stub LDAP client and runs `DoctorTest`, `AgentWriteGateTest`, the trace-viewer
+tests, and `LocalFixtureTest`. It does not compile the rest of the tree. A normal
+`mvn test` is still the full suite: the validate check in `pom.xml` stops it with
+the jar list when `lib/` or the simulator is absent, which is what you want on a
+workstation where you meant to compile everything.
+
+A few tests copy a Designer project or an export that is not in this repository.
+They skip when that path is absent, rather than fail. The defaults are paths on
+the maintainer's machine, so those runs are unchanged. To use your own copy:
+
+| Fixture | System property | Environment variable |
+|---|---|---|
+| `test11` Designer project | `-Ddirxml.fixture.test11=/path` | `DIRXML_FIXTURE_TEST11` |
+| Amica PRD project | `-Ddirxml.fixture.amica=/path` | `DIRXML_FIXTURE_AMICA` |
+| e2e `tree-test11pf` | `-Ddirxml.fixture.e2e.tree=/path` | `DIRXML_FIXTURE_E2E_TREE` |
+| e2e `tree-7c` | `-Ddirxml.fixture.e2e.7c=/path` | `DIRXML_FIXTURE_E2E_7C` |
+| e2e package catalog | `-Ddirxml.fixture.e2e.catalog=/path` | `DIRXML_FIXTURE_E2E_CATALOG` |
+| RFI driver-set export | `-Ddirxml.fixture.rfi=/path` | `DIRXML_FIXTURE_RFI` |
+
+A system property wins over the environment variable. Tests that already look
+under your own home (`~/designer_workspace/test11` and similar) are unchanged.
 
 A clean GitHub-hosted runner has no proprietary jars, so `test` is the required
 check and `engine` stays skipped. To run the full suite in Actions, on a
