@@ -509,6 +509,23 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   the single-driver and the driver-set export.
 - ~~`PkgTest7` on ig4~~ — removed 2026-09-16 with `vault.deploy --delete-driver`
   (see the incident in [vault-deploy.md](vault-deploy.md)).
+- **Committed synthetic fixtures for the guarded suites** (from the 0.4.0 review,
+  2026-09-27). The RFI / JFW / UA-LDIF / AD-export tests and the Designer-catalog
+  package suites (`PackageInstallTest`, `PackageLifecycleTest`, `PackageChecksumTest`,
+  `PackageBuildTest`, `PackageStatusTest`, `DesignerCatalogGuardedTest`) skip anywhere
+  but a machine with the private files, so the engine CI job never runs them. Commit a
+  small synthetic driver-set export (one library policy, one entitlement, one form) and
+  a tiny package jar under `src/test/resources`, point one round-trip of each suite at
+  them, and keep a single opt-in test per suite on the real file through `LocalFixture`.
+  Never commit the Amica project, the RFI export or the AD driver export.
+- **Duplicate guarded tests** (same review): `FormOpsGuardedTest`'s three zero-error
+  validation methods repeat `ProvisioningGuardedTest` on the same three sources (keep
+  the edit test); `PlanTest`'s empty-kind guard and `DeployerTest.deleteAllEntitlements…`
+  exercise one refusal at two layers (keep the Deployer one). Cheap duplication; fold
+  when either suite is next touched.
+- **`simulate --env X`** applying `overrides/X.properties` before the tree is rendered
+  for the simulator, so a case runs with a stage's values (item 5 of the 2026-09-27
+  config review).
 
 ## Non-goals (for now)
 
