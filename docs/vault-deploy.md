@@ -323,6 +323,27 @@ what the audit log says was last deployed there (the tree at that commit):
 The pre-deploy snapshot is always taken, so the state immediately before any
 production change is also on disk (and, with `--capture-drift`, in git).
 
+## Values that differ per stage (2026-09-27)
+
+`overrides/<env>.properties` beside the tree, one file per environment, one
+`key = value` line per value that differs from the tree's base
+(docs/getting-started.md §3.1 has the key forms). Where it acts:
+
+- **diff and deploy** read the tree, apply the target environment's file to a
+  throwaway copy of the model, and compare or write that. The plan says
+  `overrides for 'prd': 3 value(s) applied` and names any key it could not
+  place. The known-state gate compares the last deployed commit the same way.
+- **import-live --env X** reads X's vault, then for every key in X's file
+  puts the vault's value into the file (when it differs) and the base's value
+  back into the tree, reading the base from the tree already on disk. The
+  first import into an empty directory has no file and folds nothing.
+- **validate** checks the files: `override-malformed`, `override-unknown`,
+  `override-missing-env`.
+
+Norbert Klasen asked how `<definitions>` that must differ between stages are
+handled (2026-09-25); before this, one tree deployed the same value everywhere
+and an import from one stage overwrote the tree's value.
+
 ## Several servers in a driver set (2026-09-25)
 
 A driver set can be served by more than one server (`DirXML-ServerList`), and

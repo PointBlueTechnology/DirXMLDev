@@ -94,9 +94,14 @@ bin/idm vault.deploy tree/ --env stg --driver "AD Driver" --yes
 ```
 
 Production is the same commands plus the gate. A person types the environment
-name after `--confirm`:
+name after `--confirm`. Values that differ per stage, such as the AD domain
+name, live in one file per environment beside the tree; the deploy applies
+the target's file and the tree keeps the base value
+([docs/getting-started.md §3.1](docs/getting-started.md#31-values-that-differ-per-stage)):
 
 ```bash
+cat overrides/prd.properties
+# drivers/AD Driver.gcv.drv.domain.dns.name = corp.example.com
 bin/idm vault.deploy tree/ --env prd --driver "AD Driver" --dry-run
 bin/idm vault.deploy tree/ --env prd --driver "AD Driver" --yes --confirm prd
 ```
