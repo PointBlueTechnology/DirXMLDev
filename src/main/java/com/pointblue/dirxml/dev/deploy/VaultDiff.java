@@ -33,13 +33,27 @@ public final class VaultDiff {
      * servers that could not be read.
      */
     public static DriverSet readLive(Environments.Environment env, java.util.function.Consumer<String> notes) {
+        java.util.List<Vault> opened = new java.util.ArrayList<>();
         try (Vault v = Vault.connect(env.vaultConfig())) {
             DriverSet ds = fromVault(v, env.driverSetDn, env.url + "/" + env.driverSetDn);
             Servers.readOverrides(ds, env.driverSetDn, v, serverDn -> {
                 String url = Servers.urlOf(env, v, serverDn);
-                return url == null ? null : Vault.connect(env.vaultConfig().withUrl(url));
+                if (url == null) {
+                    return null;
+                }
+                Vault other = Vault.connect(env.vaultConfig().withUrl(url));
+                opened.add(other);
+                return other;
             }, notes);
             return ds;
+        } finally {
+            for (Vault o : opened) {
+                try {
+                    o.close();
+                } catch (RuntimeException ignore) {
+                    // best effort
+                }
+            }
         }
     }
 
@@ -114,7 +128,22 @@ public final class VaultDiff {
         if (onlyDrivers == null || onlyDrivers.isEmpty()) {
             return ModelDiff.of(from, to);
         }
+        String unknown = unknownDrivers(from, to, onlyDrivers);
+        if (unknown != null) {
+            throw new IllegalArgumentException(unknown);
+        }
         return ModelDiff.of(narrow(from, onlyDrivers), narrow(to, onlyDrivers));
+    }
+
+    /** {@code --driver} names that neither side has (a typo would otherwise diff as "no differences"), as a message, or null. */
+    public static String unknownDrivers(DriverSet from, DriverSet to, Collection<String> onlyDrivers) {
+        List<String> missing = new ArrayList<>();
+        for (String name : onlyDrivers) {
+            if (from.driver(name) == null && to.driver(name) == null) {
+                missing.add(name);
+            }
+        }
+        return missing.isEmpty() ? null : "--driver: no driver named " + missing + " in the tree or the vault";
     }
 
     /** A shallow copy of the driver set with only the named drivers (Library and driver set kept). */

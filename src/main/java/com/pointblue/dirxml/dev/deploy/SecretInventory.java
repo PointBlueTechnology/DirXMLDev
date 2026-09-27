@@ -47,7 +47,8 @@ public final class SecretInventory {
         List<Need> out = new ArrayList<>();
         if ((d.shimAuthId != null && !d.shimAuthId.isBlank()) || (d.shimAuthServer != null && !d.shimAuthServer.isBlank())) {
             out.add(new Need(Secrets.shimAuth(d.name), "shim-auth",
-                "the driver authenticates as '" + (d.shimAuthId == null ? "" : d.shimAuthId) + "'"));
+                d.shimAuthIdSecret ? "the driver authenticates (id from the secrets file)"
+                    : "the driver authenticates as '" + (d.shimAuthId == null ? "" : d.shimAuthId) + "'"));
         }
         Element shim = d.config.get(Driver.SHIM_CONFIG_INFO);
         if (shim != null && usesRemoteLoader(shim)) {

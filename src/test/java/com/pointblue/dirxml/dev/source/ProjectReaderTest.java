@@ -395,7 +395,7 @@ public class ProjectReaderTest {
 
     @Test
     public void realTest11WorkspaceWhenPresent() {
-        Path project = Path.of(System.getProperty("user.home"), "designer_workspace", "test11");
+        Path project = LocalFixture.test11();
         assumeTrue("needs the local test11 Designer workspace", Files.isDirectory(project));
 
         DriverSet ds = ProjectReader.read(project);
@@ -426,7 +426,7 @@ public class ProjectReaderTest {
      */
     @Test
     public void realTest11pfCarriesEventLoggersCustomIconThroughTheTree() throws IOException {
-        Path project = Path.of(System.getProperty("user.home"), "designer_workspace", "test11pf");
+        Path project = LocalFixture.test11pf();
         assumeTrue("needs the local test11pf Designer workspace", Files.isDirectory(project));
 
         Driver d = ProjectReader.read(project).driver("EventLogger");

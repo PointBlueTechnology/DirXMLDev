@@ -63,7 +63,7 @@ public class FormBuilderRunnerTest {
         Files.writeString(form, "{}");
         long t0 = System.currentTimeMillis();
         FormBuilderRunner.Outcome o = FormBuilderRunner.run(b, form, null, null, false);
-        assertTrue(System.currentTimeMillis() - t0 < 1500);
+        assertTrue("--no-wait returns before the builder's 2 s sleep ends", System.currentTimeMillis() - t0 < 2000);
         assertNull(o.exitCode);
         assertNull(o.after);
         assertTrue(o.pid > 0);

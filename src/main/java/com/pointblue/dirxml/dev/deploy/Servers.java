@@ -120,7 +120,7 @@ public final class Servers {
             }
             String port = "636";
             String parent = serverDn.indexOf(',') < 0 ? "" : serverDn.substring(serverDn.indexOf(',') + 1);
-            for (Vault.Entry ls : v.search(parent, "(&(objectClass=ldapServer)(ldapHostServer=" + serverDn + "))", SearchControls.SUBTREE_SCOPE)) {
+            for (Vault.Entry ls : v.search(parent, "(&(objectClass=ldapServer)(ldapHostServer=" + filterValue(serverDn) + "))", SearchControls.SUBTREE_SCOPE)) {
                 for (String i : ls.strings("ldapInterfaces")) {
                     if (i.startsWith("ldaps://")) {
                         String p = i.substring(i.lastIndexOf(':') + 1).replace("/", "");
@@ -154,7 +154,8 @@ public final class Servers {
     /**
      * Read every other server's never-sync driver settings and keep, per driver and server, the
      * ones that differ from the primary's — the tree's {@code servers/} overrides. {@code connect}
-     * maps a server DN to an open connection (the caller closes what it opened); a null return
+     * maps a server DN to an open connection, which stays open — the caller closes it — so a
+     * deploy can keep using the connection it cached; a null return
      * means the server cannot be reached and {@code notes} says so. The primary's own DN is skipped.
      */
     public static void readOverrides(DriverSet ds, String driverSetDn, VaultAccess primaryVault,
@@ -211,9 +212,8 @@ public final class Servers {
                     }
                 }
             } finally {
-                if (other != primaryVault) {
-                    other.close();
-                }
+                // the connection is the caller's: a deploy caches one per server and uses it
+                // again for the snapshot, the writes and the verify (it closes them at the end)
             }
         }
     }
@@ -227,6 +227,22 @@ public final class Servers {
             }
         }
         return out;
+    }
+
+    /** An assertion value for an LDAP search filter (RFC 4515 §3): {@code \\ * ( )} and NUL escaped. */
+    static String filterValue(String s) {
+        StringBuilder sb = new StringBuilder(s.length());
+        for (char c : s.toCharArray()) {
+            switch (c) {
+                case '\\': sb.append("\\5c"); break;
+                case '*': sb.append("\\2a"); break;
+                case '(': sb.append("\\28"); break;
+                case ')': sb.append("\\29"); break;
+                case '\0': sb.append("\\00"); break;
+                default: sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     static String blank(String s) {

@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.packages;
 
+import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.edit.DriverOps;
@@ -37,8 +38,8 @@ import static org.junit.Assert.assertTrue;
  */
 public class PackageInstallTest {
 
-    static final Path CATALOG = Paths.get("/Applications/Designer/packages/eclipse/plugins");
-    static final Path TEST11 = Paths.get(System.getProperty("user.home"), "designer_workspace", "test11");
+    static final Path CATALOG = LocalFixture.designerPlugins();
+    static final Path TEST11 = LocalFixture.test11();
     static final List<String> JARS = List.of("NOVLEDIRBASE_2.1.2.20190219130306.jar", "NOVLEDIRDCFG_2.1.0.20120831225140.jar",
         "NOVLPWDSYNC_2.1.2.20190806140123.jar", "NOVLEDIRPSYN_1.0.0.jar");
 
