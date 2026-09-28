@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.simulate;
 
+import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.edit.RuleOps;
 import com.pointblue.dirxml.dev.edit.Transaction;
@@ -131,5 +132,36 @@ public class SimulateTest {
         Path t = Files.createTempDirectory("idm-sim-copy");
         AsCodeWriter.write(com.pointblue.dirxml.dev.ascode.AsCodeReader.read(tree), t);
         return t;
+    }
+
+    @Test
+    public void envAppliesTheStagesOverridesBeforeTheRun() throws IOException {
+        // veto only when the GCV holds prd's value: the base tree lets the modify flow
+        Policy ctp = (Policy) AsCodeReader.read(tree).resolve("drivers/AD/subscriber/sub-ctp");
+        DriverSet ds = AsCodeReader.read(tree);
+        ((Policy) ds.resolve("drivers/AD/subscriber/sub-ctp")).content = ValidatorTest.xml(
+            "<policy><rule><description>veto in prd</description><conditions><and>"
+                + "<if-global-variable name=\"drv.users\" op=\"equal\">prd-users</if-global-variable></and></conditions>"
+                + "<actions><do-veto/></actions></rule></policy>");
+        AsCodeWriter.write(ds, tree);
+        Path rendered = Simulate.render(cases.resolve("veto"), Simulate.load(cases.resolve("veto")),
+            Files.createTempDirectory("r").resolve("veto"), export(tree));
+        String golden = Case.load(rendered).run().finalXds;
+        assertTrue(golden, golden.contains("<modify"));
+        Files.writeString(cases.resolve("veto/expected-output.xds"), golden, StandardCharsets.UTF_8);
+
+        java.util.List<String> notes = new java.util.ArrayList<>();
+        Simulate.Outcome noFile = gate().run(tree, cases, null, "prd", notes::add);
+        assertEquals(noFile.text(), BatchRunner.Outcome.PASS, noFile.cases.get(0).outcome);
+        assertTrue(notes.toString(), notes.get(0).contains("overrides for 'prd': none"));
+
+        Files.createDirectories(tree.resolve("overrides"));
+        Files.writeString(tree.resolve("overrides/prd.properties"), "drivers/AD.gcv.drv.users = prd-users\n", StandardCharsets.UTF_8);
+        notes.clear();
+        Simulate.Outcome prd = gate().run(tree, cases, null, "prd", notes::add);
+        assertTrue(notes.toString(), notes.get(0).contains("overrides for 'prd': 1 value(s) applied"));
+        assertEquals("with prd's value the policy vetoes, so the base golden no longer matches", BatchRunner.Outcome.FAIL, prd.cases.get(0).outcome);
+        assertEquals("the base run still matches", BatchRunner.Outcome.PASS, gate().run(tree, cases, null).cases.get(0).outcome);
+        assertTrue(ctp != null);
     }
 }
