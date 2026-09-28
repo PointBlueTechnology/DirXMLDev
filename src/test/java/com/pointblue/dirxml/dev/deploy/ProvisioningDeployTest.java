@@ -160,14 +160,18 @@ public class ProvisioningDeployTest {
         }
         String base = "cn=AppConfig,cn=UA," + DS;
         assertEquals(List.of(
+            "ENSURE_CONTAINER " + base,
             "ENSURE_CONTAINER cn=WorkflowForms," + base,
             "ENSURE_CONTAINER cn=WorkflowApprovalForms,cn=WorkflowForms," + base,
             "ADD cn=New Appr,cn=WorkflowApprovalForms,cn=WorkflowForms," + base,
             "DELETE cn=Req,cn=WorkflowRequestForms,cn=WorkflowForms," + base), steps);
-        Plan.Step add = plan.steps.get(2);
+        Plan.Step add = plan.steps.get(3);
         assertEquals(List.of("Top", "srvprvJSONForm"), add.objectClasses);
         assertNotNull(add.values.get("srvprvJSONData"));
-        assertEquals(List.of("Top", "srvprvJSONForms"), plan.steps.get(0).objectClasses);
+        assertEquals(List.of("Top", "srvprvAppConfig"), plan.steps.get(0).objectClasses);
+        assertEquals("Version is mandatory on srvprvAppConfig (eDirectory -609 without it)", VaultMapping.APP_CONFIG_VERSION_DEFAULT,
+            new String(plan.steps.get(0).values.get("Version").get(0), StandardCharsets.UTF_8));
+        assertEquals(List.of("Top", "srvprvJSONForms"), plan.steps.get(1).objectClasses);
     }
 
     @Test

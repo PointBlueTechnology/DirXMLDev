@@ -1392,8 +1392,24 @@ public final class FormOps {
         for (Map.Entry<String, List<String>> e : src.properties.entrySet()) {
             out.properties.put(e.getKey(), new ArrayList<>(e.getValue()));
         }
+        // what srvprvRequest makes mandatory, when the template did not carry it: a PRD the tool
+        // creates must be one the vault accepts (eDirectory -609 otherwise; validate's prd-property-missing)
+        defaultProperty(out, "status", "Active");
+        defaultProperty(out, "flow-strategy", "SingleFlow");
+        defaultProperty(out, "grant", "TRUE");
+        defaultProperty(out, "revoke", "FALSE");
+        defaultProperty(out, "category-key", "accounts");
+        defaultProperty(out, "localized-names", "en~" + newName);
+        defaultProperty(out, "localized-descrs", "en~" + newName);
         // src.meta intentionally not copied — a new PRD is not a packaged object.
         return out;
+    }
+
+    private static void defaultProperty(Prd prd, String key, String value) {
+        List<String> v = prd.properties.get(key);
+        if (v == null || v.isEmpty() || v.stream().allMatch(x -> x == null || x.isBlank())) {
+            prd.properties.put(key, new ArrayList<>(List.of(value)));
+        }
     }
 
     private static boolean isChildOf(Element child, Element parent) {

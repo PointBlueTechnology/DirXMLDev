@@ -313,4 +313,28 @@ public class FormCheckTest {
         Report r = run(ds);
         assertTrue(r.text(), r.withCode("prd-mapping-unbound").isEmpty());
     }
+
+    @Test
+    public void prdPropertyMissing() {
+        DriverSet ds = new DriverSet("dvs");
+        Driver d = new Driver("UA");
+        Provisioning p = new Provisioning();
+        Prd bare = new Prd("Bare");
+        bare.definition = BindingSyncTest.el("<prov-req-defn/>");
+        bare.properties.put("status", new java.util.ArrayList<>(java.util.List.of("Active")));
+        p.prds.add(bare);
+        d.provisioning = p;
+        ds.drivers.add(d);
+        Report r = new Report();
+        new FormCheck().run(ds, r);
+        java.util.List<Finding> f = r.withCode("prd-property-missing");
+        assertEquals(r.text(), 1, f.size());
+        assertTrue(f.get(0).message, f.get(0).message.contains("flow-strategy") && f.get(0).message.contains("localized-descrs") && !f.get(0).message.contains("status"));
+        for (String key : FormCheck.PRD_REQUIRED_PROPERTIES) {
+            bare.properties.put(key, new java.util.ArrayList<>(java.util.List.of("x")));
+        }
+        Report clean = new Report();
+        new FormCheck().run(ds, clean);
+        assertTrue(clean.text(), clean.withCode("prd-property-missing").isEmpty());
+    }
 }
