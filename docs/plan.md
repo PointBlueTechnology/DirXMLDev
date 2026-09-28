@@ -433,7 +433,10 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   attributes and package aux classes (new `drop_aux_class` step). Verified live on
   idm254 with a scratch copy of the DCS driver, then deleted.
 
-- **`validate`: DirXML-Script required attributes.** ig4's `Send expiration email`
+- ~~**`validate`: DirXML-Script required attributes**~~ — built 2026-09-28 as
+  `script-required-attribute` (W; `validate/ScriptGrammar` holds the table derived from
+  Designer's dirxmlscript 4.7.5 DTD; calibrated against 848 real policies — only the ig4
+  case fires). Original note: ig4's `Send expiration email`
   (AcctExpNotif, Publisher) has `do-send-email-from-template` with `notification-dn`
   but no `template-dn`; our validator passes it, Designer's importer NPEs and drops the
   policy (found 2026-09-21 importing the clone). A check against the DirXML-Script
@@ -523,9 +526,8 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   the edit test); `PlanTest`'s empty-kind guard and `DeployerTest.deleteAllEntitlements…`
   exercise one refusal at two layers (keep the Deployer one). Cheap duplication; fold
   when either suite is next touched.
-- **`simulate --env X`** applying `overrides/X.properties` before the tree is rendered
-  for the simulator, so a case runs with a stage's values (item 5 of the 2026-09-27
-  config review).
+- ~~**`simulate --env X`**~~ — built 2026-09-28: `overrides/X.properties` applied to the
+  tree and the `--against` tree before rendering (item 5 of the 2026-09-27 config review).
 
 ## Non-goals (for now)
 

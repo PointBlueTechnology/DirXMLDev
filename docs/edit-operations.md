@@ -141,9 +141,12 @@ model, and the simulator must load the written export exactly as it loads
 Designer's. The export is also what Designer imports and what a vault diff will
 be computed from, so it earns its place three times over.
 
-`idm simulate <tree> --cases <dir> [--against <tree-or-export>] [--json]` then:
+`idm simulate <tree> --cases <dir> [--against <tree-or-export>] [--env E] [--json]` then:
 
-1. writes the tree to a temporary driver-set export;
+1. writes the tree to a temporary driver-set export (with `--env E`, after
+   applying `overrides/E.properties` to it and to the `--against` tree, so the
+   cases run with that stage's GCV, shim and engine-control values —
+   [getting-started.md §3.1](getting-started.md#31-values-that-differ-per-stage));
 2. runs the simulator's `BatchRunner` over the case directory with each case's
    config source swapped to that export (the same `CaseProps.render` swap
    `compare` uses) — PASS/FAIL per case against the recorded goldens;
