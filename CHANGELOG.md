@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `validate`: `script-required-attribute` (W) — a DirXML-Script element
+  missing an attribute Designer's grammar (dirxmlscript 4.7.5 DTD) requires.
+  The engine loads such a policy; Designer's importer drops it (ig4's `Send
+  expiration email`, a `do-send-email-from-template` with no `template-dn`,
+  found 2026-09-21). A warning rather than an error so a deploy of a tree
+  that carries one is not refused; the finding names the rule.
+- `simulate --env E`: the corpus runs with `overrides/E.properties` applied
+  to the tree (and to the `--against` tree), so a case sees a stage's values.
+
 ## [0.5.0] - 2026-09-27
 
 ### Fixed
