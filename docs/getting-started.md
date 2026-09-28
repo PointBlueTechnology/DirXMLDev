@@ -164,7 +164,8 @@ shows prd's values and a stg deploy never sees them. `import-live --env prd`
 folds the other way: a value prd's file covers refreshes that file when the
 vault differs and leaves the base alone. `validate` reports a key that names
 nothing (`override-unknown`) and a key set for one environment but not
-another (`override-missing-env`). Secrets are not overrides; they stay in the
+another (`override-missing-env`). `simulate tree/ --cases cases/ --env prd`
+runs the corpus with prd's values applied. Secrets are not overrides; they stay in the
 environment's secrets file. That includes a shim auth id that is a credential
 rather than a user name (an OAuth client id, an API key): put
 `<driver>.shim-auth-id=…` in the secrets file, leave it out of the tree, and

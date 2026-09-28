@@ -186,8 +186,28 @@ public final class Simulate {
 
     /** Run the corpus under {@code cases} against {@code tree}; with {@code against} (another tree), diff each case. */
     public Outcome run(Path tree, Path cases, Path against) throws IOException {
+        return run(tree, cases, against, null, null);
+    }
+
+    /**
+     * The same, with environment {@code env}'s {@code overrides/<env>.properties} applied to the
+     * tree (and to the {@code against} tree) before either is rendered, so a case runs with that
+     * stage's GCV, shim and engine-control values (docs/getting-started.md §3.1). {@code notes}
+     * hears what was applied; null env = the base values.
+     */
+    public Outcome run(Path tree, Path cases, Path against, String env, java.util.function.Consumer<String> notes) throws IOException {
         DriverSet ds = AsCodeReader.read(tree);
         DriverSet other = against == null ? null : AsCodeReader.read(against);
+        if (env != null) {
+            for (DriverSet target : other == null ? List.of(ds) : List.of(ds, other)) {
+                com.pointblue.dirxml.dev.deploy.Overrides.Applied applied = com.pointblue.dirxml.dev.deploy.Overrides.apply(target, env);
+                if (notes != null) {
+                    notes.accept(applied.summary() == null
+                        ? "overrides for '" + env + "': none (" + (target == ds ? tree : against) + " has no " + com.pointblue.dirxml.dev.deploy.Overrides.DIR + "/" + env + com.pointblue.dirxml.dev.deploy.Overrides.EXT + "; base values used)"
+                        : applied.summary() + (target == ds ? "" : " (--against tree)"));
+                }
+            }
+        }
         Path scratch = Files.createTempDirectory("idm-simulate");
         Outcome out = new Outcome();
         try {

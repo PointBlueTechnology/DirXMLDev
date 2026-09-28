@@ -31,6 +31,7 @@ public final class Validator {
         return new Validator(Arrays.asList(
             new LinkCheck(),
             new CompileCheck(),
+            new ScriptCheck(),
             new GcvCheck(),
             new MappingTableCheck(),
             new EcmaScriptCheck(),

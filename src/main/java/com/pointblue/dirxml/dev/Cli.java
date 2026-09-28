@@ -109,21 +109,24 @@ public final class Cli {
                 Path cases = null;
                 Path against = null;
                 boolean json = false;
+                String simEnv = null;
                 for (int i = 2; i < args.length; i++) {
                     if (args[i].equals("--cases") && i + 1 < args.length) {
                         cases = Paths.get(args[++i]);
                     } else if (args[i].equals("--against") && i + 1 < args.length) {
                         against = Paths.get(args[++i]);
+                    } else if (args[i].equals("--env") && i + 1 < args.length) {
+                        simEnv = args[++i];
                     } else if (args[i].equals("--json")) {
                         json = true;
                     }
                 }
                 if (cases == null) {
-                    System.err.println("usage: simulate <asCodeDir> --cases <casesDir> [--against <asCodeDir>] [--json]");
+                    System.err.println("usage: simulate <asCodeDir> --cases <casesDir> [--against <asCodeDir>] [--env E] [--json]");
                     System.exit(2);
                 }
                 com.pointblue.dirxml.dev.simulate.Simulate.Outcome o = new com.pointblue.dirxml.dev.simulate.Simulate(
-                    com.pointblue.dirxml.dev.source.ExportWriter::writeDriver).run(tree, cases, against);
+                    com.pointblue.dirxml.dev.source.ExportWriter::writeDriver).run(tree, cases, against, simEnv, n -> System.err.println(n));
                 System.out.print(json ? o.json() + "\n" : o.text());
                 System.exit(o.ok() ? 0 : 1);
             }
@@ -445,7 +448,7 @@ public final class Cli {
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
         System.err.println("  tree.diff <fromDir> <toDir> [--json]  structured diff of two as-code trees (exit 1 if they differ)");
         System.err.println("  docs <asCodeDir> --out <dir> [--driver D…] [--since <commit>] [--format md|html]  generate documentation from the model");
-        System.err.println("  simulate <asCodeDir> --cases <dir> [--against <asCodeDir>] [--json]  run the regression corpus against the tree; diff vs another tree");
+        System.err.println("  simulate <asCodeDir> --cases <dir> [--against <asCodeDir>] [--env E] [--json]  run the regression corpus against the tree (with E's overrides applied); diff vs another tree");
         System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact");
         System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
         System.err.println("  query <asCodeDir> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver]");
