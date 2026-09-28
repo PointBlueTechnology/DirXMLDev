@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.SyntheticDriverSet;
 import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
@@ -204,5 +205,28 @@ public class ProvisioningGuardedTest {
     /** relative path -> file bytes, binary-safe (a tree can hold a driver icon). */
     private static Map<String, String> snapshot(Path root) throws IOException {
         return com.pointblue.dirxml.dev.ascode.AsCodeRoundTripTest.snapshot(root);
+    }
+
+    // ---- the committed synthetic LDIF: no private file, runs everywhere -----------------
+
+    @Test
+    public void syntheticLdifHasTwoFormsAndOnePrd() throws IOException {
+        Path ldif = SyntheticDriverSet.copy(SyntheticDriverSet.LDIF, Files.createTempDirectory("synth"));
+        assertEquals(18, countLdifEntries(ldif));
+        Driver loop = LdifReader.read(ldif).driver(SyntheticDriverSet.DRIVER);
+        assertNotNull(loop);
+        Provisioning p = loop.provisioning;
+        assertNotNull(p);
+        assertEquals(2, p.forms.size());
+        assertEquals(1, p.prds.size());
+        Prd prd = p.prd(SyntheticDriverSet.PRD);
+        assertNotNull(prd);
+        assertTrue(prd.isJsonForms());
+        List<Prd.FormBinding> bindings = prd.bindings();
+        assertEquals(2, bindings.size());
+        assertEquals(SyntheticDriverSet.REQUEST_FORM, bindings.get(0).formId);
+        assertEquals(null, bindings.get(0).activityId);
+        assertEquals(SyntheticDriverSet.APPROVAL_FORM, bindings.get(1).formId);
+        assertEquals("Approval", bindings.get(1).activityId);
     }
 }

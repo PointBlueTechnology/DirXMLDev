@@ -222,6 +222,14 @@ Identity Applications cache" after touching provisioning objects.
   on the test vault do) — vestigial, out of scope, and not a `prd-binding-stale`
   finding; `FormCheck` skips a PRD's bindings entirely when `isJsonForms()` is
   false.
+- **A PRD must carry what `srvprvRequest` makes mandatory** — `status`,
+  `flow-strategy`, `grant`, `revoke`, `category-key`, `localized-names`,
+  `localized-descrs` — or eDirectory refuses the object (-609 missing
+  mandatory; found deploying a synthetic driver to a lab, 2026-09-28).
+  `FormCheck`'s `prd-property-missing` (E) names the gap, and `prd.add` fills
+  what a template did not carry with plain defaults (SingleFlow, grant TRUE,
+  revoke FALSE, `accounts`, `en~<name>`). A PRD read from a project or a vault
+  has them all.
 - **A handful of stock PRDs' request-binding field order doesn't match what a
   fresh `form.sync` would produce** — same fields, different order (HelpdeskTicket,
   Resource Approval, Resource Provisioning, Role Approval, SoD Conflict

@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.SyntheticDriverSet;
 import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -321,5 +322,19 @@ public class ExportReaderTest {
         int totalLinks = ds.drivers.stream().mapToInt(d -> d.links.size()).sum();
         assertTrue("unresolved link count (" + unresolved.size() + ") should be small relative to total (" + totalLinks + ")",
             unresolved.size() < totalLinks);
+    }
+
+    /** The synthetic driver-set export (committed): the same shape the RFI test checks, with no private file. */
+    @Test
+    public void syntheticDriverSetExport() throws Exception {
+        Path f = SyntheticDriverSet.copy(SyntheticDriverSet.EXPORT, Files.createTempDirectory("synth"));
+        DriverSet ds = ExportReader.read(f);
+        assertEquals(1, ds.drivers.size());
+        assertEquals(1, ds.library.resources.stream().filter(Resource::isMappingTable).count());
+        assertEquals(SyntheticDriverSet.TABLE, ds.library.resources.get(0).name);
+        assertEquals(SyntheticDriverSet.LIBRARY_POLICY, ds.library.policies.get(0).name);
+        assertEquals(1, ds.driver(SyntheticDriverSet.DRIVER).entitlements.size());
+        assertFalse(ds.index().isEmpty());
+        assertTrue(ds.unresolvedLinks().toString(), ds.unresolvedLinks().isEmpty());
     }
 }

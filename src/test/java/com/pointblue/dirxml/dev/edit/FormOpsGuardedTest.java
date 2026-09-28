@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.edit;
 
+import com.pointblue.dirxml.dev.SyntheticDriverSet;
 import com.pointblue.dirxml.dev.LocalFixture;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -114,5 +115,44 @@ public class FormOpsGuardedTest {
         String compact = Json.compact(loc.component);
         assertEquals(loc.component, Json.asMap(Json.parse(compact)));
         assertEquals(compact, Json.compact(Json.parse(compact)));
+    }
+
+    // ---- the committed synthetic LDIF: no private file, runs everywhere -----------------
+
+    @Test
+    public void syntheticLdifValidatesWithZeroFormCheckErrors() throws Exception {
+        Path ldif = SyntheticDriverSet.copy(SyntheticDriverSet.LDIF, tmp.newFolder("synth").toPath());
+        assertNoFormCheckErrors(LdifReader.read(ldif), "synthetic driverset.ldif");
+    }
+
+    /** {@code form.field.add} + {@code prd.map} on the synthetic request form and PRD (the real help-desk case, with no private file). */
+    @Test
+    public void fieldAddAndPrdMapOnTheSyntheticFormAndPrd() throws Exception {
+        Path ldif = SyntheticDriverSet.copy(SyntheticDriverSet.LDIF, tmp.newFolder("synth-src").toPath());
+        Path tree = tmp.newFolder("synth-ua").toPath();
+        AsCodeWriter.write(LdifReader.read(ldif), tree);
+
+        Result added = Transaction.open(tree).run(
+            new FormOps.FieldAdd(null, "request/" + SyntheticDriverSet.REQUEST_FORM, "agentAddedField", "textfield", "Agent Added Field",
+                false, false, false, false, null, null, false, null, null),
+            false, false);
+        assertTrue(added.text(), added.ok());
+        Result mapped = Transaction.open(tree).run(
+            new FormOps.PrdMap(null, SyntheticDriverSet.PRD, "agentAddedField", null, null, null, false),
+            false, false);
+        assertTrue(mapped.text(), mapped.ok());
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        PrintStream old = System.out;
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        try {
+            assertEquals(0, ReadCli.prdShow(new String[]{"prd.show", tree.toString(), SyntheticDriverSet.PRD}));
+        } finally {
+            System.setOut(old);
+        }
+        assertTrue(out.toString(StandardCharsets.UTF_8), out.toString(StandardCharsets.UTF_8).contains("agentAddedField"));
+        DriverSet again = AsCodeReader.read(tree);
+        Form form = again.drivers.get(0).provisioning.formByName(SyntheticDriverSet.REQUEST_FORM);
+        assertTrue("new field not found in the stored form", FormEditor.find(Json.asMap(Json.parse(form.json)), "agentAddedField") != null);
     }
 }

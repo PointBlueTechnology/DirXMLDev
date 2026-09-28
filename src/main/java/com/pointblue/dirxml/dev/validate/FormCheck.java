@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
  * (W), {@code form-conditional-ref} (E), {@code form-script-syntax} (E),
  * {@code form-request-buttons} (W), {@code form-localization-missing} (I),
  * {@code prd-binding-stale} (E), {@code prd-binding-fields-drift} (W),
- * {@code prd-mapping-unbound} (E).
+ * {@code prd-mapping-unbound} (E), {@code prd-property-missing} (E).
  */
 public final class FormCheck implements Check {
 
@@ -63,8 +63,27 @@ public final class FormCheck implements Check {
                 checkForm(d, f, r);
             }
             for (Prd prd : d.provisioning.prds) {
+                checkPrdRequiredProperties(d, prd, r);
                 checkPrd(d, prd, r);
             }
+        }
+    }
+
+    /** The properties {@code srvprvRequest} makes mandatory: a deploy of a PRD without one fails with eDirectory -609. */
+    public static final List<String> PRD_REQUIRED_PROPERTIES = List.of(
+        "status", "flow-strategy", "grant", "revoke", "category-key", "localized-names", "localized-descrs");
+
+    private static void checkPrdRequiredProperties(Driver d, Prd prd, Report r) {
+        List<String> missing = new ArrayList<>();
+        for (String key : PRD_REQUIRED_PROPERTIES) {
+            List<String> v = prd.properties.get(key);
+            if (v == null || v.isEmpty() || v.stream().allMatch(x -> x == null || x.isBlank())) {
+                missing.add(key);
+            }
+        }
+        if (!missing.isEmpty()) {
+            r.add(Finding.error("prd-property-missing", prdPath(d, prd),
+                "PRD lacks " + missing + " — srvprvRequest requires them (the vault refuses the object: -609 missing mandatory); a PRD read from a project or a vault carries them"));
         }
     }
 

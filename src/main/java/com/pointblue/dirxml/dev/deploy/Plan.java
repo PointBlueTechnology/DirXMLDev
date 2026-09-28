@@ -719,6 +719,7 @@ public final class Plan {
             }
             stamps = VaultMapping.provisioningPackageAttributes(f.meta, baseline, p.packageIndex);   // a customized form's checksum is already content-derived in meta
             if (added) {
+                ensureContainer(bucket, ensured, VaultMapping.appConfigDn(dsDn, driver), VaultMapping.OC_APP_CONFIG, VaultMapping.appConfigAttributes(d.provisioning), c, driver);
                 ensureContainer(bucket, ensured, VaultMapping.workflowFormsDn(dsDn, driver), VaultMapping.OC_JSON_FORMS, c, driver);
                 ensureContainer(bucket, ensured, VaultMapping.formContainerDn(dsDn, driver, f.kind), VaultMapping.OC_JSON_FORMS, c, driver);
             }
@@ -751,6 +752,7 @@ public final class Plan {
                 }
             }
             if (added) {
+                ensureContainer(bucket, ensured, VaultMapping.appConfigDn(dsDn, driver), VaultMapping.OC_APP_CONFIG, VaultMapping.appConfigAttributes(d.provisioning), c, driver);
                 ensureContainer(bucket, ensured, VaultMapping.requestDefsDn(dsDn, driver), VaultMapping.OC_REQUEST_DEFS, c, driver);
             }
         }
@@ -1020,9 +1022,14 @@ public final class Plan {
     }
 
     private static void ensureContainer(List<Step> bucket, Set<String> ensured, String dn, String oc, ModelDiff.Change c, String driver) {
+        ensureContainer(bucket, ensured, dn, oc, Vault.attrs(), c, driver);
+    }
+
+    /** The same, with the attributes the container is created with when absent (a class with mandatory attributes, such as {@code srvprvAppConfig}'s Version). */
+    private static void ensureContainer(List<Step> bucket, Set<String> ensured, String dn, String oc, Map<String, List<byte[]>> attrs, ModelDiff.Change c, String driver) {
         if (ensured.add(dn)) {
-            bucket.add(new Step(Op.ENSURE_CONTAINER, dn, null, List.of("Top", oc), Vault.attrs(),
-                dn + "  " + oc + " (created if absent)", c.path, driver));
+            bucket.add(new Step(Op.ENSURE_CONTAINER, dn, null, List.of("Top", oc), attrs,
+                dn + "  " + oc + " (created if absent" + (attrs.isEmpty() ? "" : ", " + String.join(", ", attrs.keySet())) + ")", c.path, driver));
         }
     }
 

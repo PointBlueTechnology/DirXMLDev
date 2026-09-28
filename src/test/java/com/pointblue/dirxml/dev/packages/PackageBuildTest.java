@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.packages;
 
+import com.pointblue.dirxml.dev.SyntheticDriverSet;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.edit.DriverOps;
@@ -113,5 +114,38 @@ public class PackageBuildTest {
         assertTrue(Files.exists(site.resolve("site.xml")));
         assertTrue(Files.readString(site.resolve("site.xml")).contains("PBTTEST.feature_" + p.version + ".jar"));
         assertTrue(Files.exists(site.resolve("plugins").resolve("PBTTEST_" + p.version + ".jar")));
+    }
+
+    /** Build a package from the synthetic tree and install it onto a new driver there: no Designer catalog, no private project. */
+    @Test
+    public void buildsAndInstallsFromTheSyntheticTreeWithoutDesigner() throws Exception {
+        Path tree = Files.createTempDirectory("pbuild-synth");
+        AsCodeWriter.write(SyntheticDriverSet.model(), tree);
+        Path out = Files.createTempDirectory("pbuild-synth-out");
+        PackageBuilder.Options o = new PackageBuilder.Options();
+        o.tree = tree;
+        o.driver = SyntheticDriverSet.DRIVER;
+        o.shortName = "SYNTHLOOP";
+        o.name = "Synthetic loopback policies";
+        o.vendor = "Point Blue";
+        PackageBuilder.Result r = PackageBuilder.build(o, out);
+        assertTrue(r.text(), r.ok);
+        assertTrue(r.text(), r.objects.size() >= 3);   // the schema map, the two channel policies, and what carries their GCVs
+        PackageJar p = PackageJar.read(r.jar);
+        assertTrue(ChecksumAudit.of(p).allMatch());
+        assertEquals("SYNTHLOOP", p.shortName);
+        assertEquals("com.pointblue.synthloop", p.symbolicName);
+        Catalog catalog = Catalog.open(Files.createTempDirectory("pbuild-synth-cat"));
+        Catalog.AddResult a = catalog.add(r.jar, "built");
+        assertTrue(a.refusal, a.ok());
+
+        Result add = Transaction.open(tree).run(new DriverOps.Add("Cust", null, null, false,
+            "com.novell.nds.dirxml.driver.loopback.LoopbackDriverShim", null, null), false, false);
+        assertTrue(add.text(), add.ok());
+        Result in = Transaction.open(tree).run(new PackageInstall(List.of(r.jar), "Cust", Map.of(), true), false, false);
+        assertTrue(in.text(), in.ok());
+        DriverSet ds = AsCodeReader.read(tree);
+        assertNotNull(ds.resolve("drivers/Cust/subscriber/sub-ctp-VetoSurname"));
+        assertNotNull(ds.resolve("drivers/Cust/publisher/pub-etp-Trace"));
     }
 }
