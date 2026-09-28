@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.deploy;
 
+import com.pointblue.dirxml.dev.SyntheticDriverSet;
 import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
@@ -614,5 +615,40 @@ public class ModelDiffTest {
         t.meta.put("dirxml-pkgchecksum", "111");
         t.meta.put("dirxml-pkgguid", "PKG-1;;9.9.9");            // a version that really differs
         assertEquals(1, of(ModelDiff.of(vault, tree), Kind.ARTIFACT_CHANGED).size());
+    }
+
+    @Test
+    public void syntheticDiffAgainstItselfIsEmpty() throws Exception {
+        Path f = SyntheticDriverSet.copy(SyntheticDriverSet.EXPORT, Files.createTempDirectory("synth"));
+        ModelDiff diff = ModelDiff.of(ExportReader.read(f), ExportReader.read(f));
+        assertTrue(diff.text(), diff.isEmpty());
+    }
+
+    @Test
+    public void syntheticDetectsOneLibraryPolicyChange() throws Exception {
+        Path f = SyntheticDriverSet.copy(SyntheticDriverSet.EXPORT, Files.createTempDirectory("synth"));
+        DriverSet from = ExportReader.read(f);
+        DriverSet to = ExportReader.read(f);
+        Policy target = from.library.policies.get(0);
+        assertFalse("the driver links the library policy", linkingDrivers(from, target.path()).isEmpty());
+        Policy targetInTo = findPolicy(to, target.path());
+        targetInTo.content = modified(targetInTo.content);
+        ModelDiff diff = ModelDiff.of(from, to);
+        List<Change> changed = of(diff, Kind.ARTIFACT_CHANGED);
+        assertEquals(diff.text(), 1, changed.size());
+        assertEquals(target.path(), changed.get(0).path);
+        assertEquals(List.of(SyntheticDriverSet.DRIVER), new ArrayList<>(diff.affectedDrivers()));
+    }
+
+    /** A wholly new driver brings its forms, PRDs and AppConfig objects into the diff and so into the plan (found by the synthetic LDIF fixture). */
+    @Test
+    public void aNewDriverDiffsItsProvisioningContentToo() {
+        DriverSet to = SyntheticDriverSet.model();
+        DriverSet from = new DriverSet(to.name);
+        from.dn = to.dn;
+        ModelDiff diff = ModelDiff.of(from, to);
+        assertEquals(1, of(diff, Kind.DRIVER_ADDED).size());
+        assertEquals(2, of(diff, Kind.FORM_ADDED).size());
+        assertEquals(1, of(diff, Kind.PRD_ADDED).size());
     }
 }

@@ -476,6 +476,9 @@ public final class ModelDiff {
 
         for (String name : onlyTo) {
             driverAdded(to.driver(name));
+            // a new driver's forms, PRDs and AppConfig objects: the DRIVER_ADDED change covers its
+            // artifacts, links and entitlements; provisioning has its own change kinds and steps
+            diffProvisioning(new Driver(name), to.driver(name));
         }
         for (String name : onlyFrom) {
             driverRemoved(from.driver(name));

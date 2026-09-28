@@ -258,8 +258,10 @@ public final class ExportWriter {
 
     /**
      * Library mapping-table resources named by a {@code <token-map table=…>} in one
-     * of {@code d}'s own policies (driver, subscriber, or publisher scope) but not
-     * already reached by a link (per {@code alreadyIncluded}, artifact paths).
+     * of {@code d}'s own policies (driver, subscriber, or publisher scope) or in a
+     * Library policy the driver links into a chain, but not already reached by a link
+     * (per {@code alreadyIncluded}, artifact paths). The simulator resolves {@code Map}
+     * tokens from the export, so a table only a linked Library policy reads must be there too.
      */
     private static List<Resource> unlinkedTokenMapTables(DriverSet ds, Driver d, Set<String> alreadyIncluded) {
         List<Resource> out = new ArrayList<>();
@@ -268,6 +270,12 @@ public final class ExportWriter {
         scan.addAll(d.policies);
         scan.addAll(d.subscriber.policies);
         scan.addAll(d.publisher.policies);
+        for (com.pointblue.dirxml.dev.model.PolicyLink l : d.links) {
+            Artifact linked = ds.resolve(l.ref);
+            if (linked instanceof Policy && linked.scope == Scope.LIBRARY) {
+                scan.add((Policy) linked);
+            }
+        }
         for (Policy p : scan) {
             if (p.content == null) {
                 continue;

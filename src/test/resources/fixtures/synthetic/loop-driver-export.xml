@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<driver-configuration dn="cn=Loop,cn=SynthSet,o=synth" driver-set-dn="cn=SynthSet,o=synth" name="Loop">
+  <global-config-values>
+    <configuration-values>
+      <definitions>
+        <definition display-name="Company name" name="synth.company" type="string">
+          <value>Synth Corp</value>
+        </definition>
+      </definitions>
+    </configuration-values>
+  </global-config-values>
+  <attributes>
+    <java-module value="com.novell.nds.dirxml.driver.loopback.LoopbackDriverShim"/>
+    <driver-filter-xml>
+      <filter>
+        <filter-class class-name="User" publisher="sync" subscriber="sync">
+          <filter-attr attr-name="Surname" publisher="sync" subscriber="sync"/>
+          <filter-attr attr-name="Title" publisher="sync" subscriber="sync"/>
+        </filter-class>
+      </filter>
+    </driver-filter-xml>
+    <global-config-values>
+      <configuration-values>
+        <definitions>
+          <definition display-name="Users container" name="drv.users" type="dn">
+            <value>ou=users,o=synth</value>
+          </definition>
+          <definition display-name="Veto surname changes" name="drv.veto.surname" type="boolean">
+            <value>true</value>
+          </definition>
+        </definitions>
+      </configuration-values>
+    </global-config-values>
+    <global-engine-values>
+      <configuration-values>
+        <definitions>
+          <definition display-name="Subscriber channel retry interval in seconds" name="dirxml.engine.retry-interval" type="integer">
+            <value>30</value>
+          </definition>
+        </definitions>
+      </configuration-values>
+    </global-engine-values>
+    <shim-config-info-xml>
+      <driver-config name="Loop">
+        <driver-options>
+          <configuration-values>
+            <definitions>
+              <definition display-name="Heartbeat interval (minutes)" name="pub-heartbeat-interval" type="integer">
+                <value>1</value>
+              </definition>
+            </definitions>
+          </configuration-values>
+        </driver-options>
+        <subscriber-options/>
+        <publisher-options/>
+      </driver-config>
+    </shim-config-info-xml>
+    <policy-linkage>
+      <linkage-item dn="cn=smp,cn=Loop,cn=SynthSet,o=synth" order="0" policy-set="0"/>
+      <linkage-item dn="cn=sub-ctp-VetoSurname,cn=Subscriber,cn=Loop,cn=SynthSet,o=synth" order="0" policy-set="10"/>
+      <linkage-item dn="cn=lib-NormalizeTitle,cn=Subscriber,cn=Loop,cn=SynthSet,o=synth" order="1" policy-set="10"/>
+      <linkage-item dn="cn=pub-etp-Trace,cn=Publisher,cn=Loop,cn=SynthSet,o=synth" order="0" policy-set="5"/>
+    </policy-linkage>
+  </attributes>
+  <children>
+    <rule name="smp">
+      <attr-name-map>
+        <class-name>
+          <app-name>user</app-name>
+          <nds-name>User</nds-name>
+          <attr-name>
+            <app-name>sn</app-name>
+            <nds-name>Surname</nds-name>
+          </attr-name>
+          <attr-name>
+            <app-name>title</app-name>
+            <nds-name>Title</nds-name>
+          </attr-name>
+        </class-name>
+      </attr-name-map>
+    </rule>
+    <resource content-type="application/vnd.novell.dirxml.mapping-table+xml" name="TitleMap">
+      <content contains="xml">
+        <mapping-table>
+          <col-def name="code" type="nocase"/>
+          <col-def name="title" type="nocase"/>
+          <row>
+            <col>eng</col>
+            <col>Engineer</col>
+          </row>
+          <row>
+            <col>mgr</col>
+            <col>Manager</col>
+          </row>
+        </mapping-table>
+      </content>
+    </resource>
+    <entitlement-definition name="GroupMembership">
+      <entitlement conflict-resolution="union" description="Membership of a synthetic group" display-name="Group Membership">
+        <values multi-valued="true">
+          <value>cn=synth-users,ou=groups,o=synth</value>
+        </values>
+      </entitlement>
+    </entitlement-definition>
+    <publisher name="Publisher">
+      <children>
+        <rule name="pub-etp-Trace">
+          <policy>
+            <rule>
+              <description>Trace every publisher event</description>
+              <conditions/>
+              <actions>
+                <do-trace-message level="3">
+                  <arg-string>
+                    <token-text>event for </token-text>
+                    <token-src-dn/>
+                  </arg-string>
+                </do-trace-message>
+              </actions>
+            </rule>
+          </policy>
+        </rule>
+      </children>
+    </publisher>
+    <subscriber name="Subscriber">
+      <children>
+        <rule name="sub-ctp-VetoSurname">
+          <policy>
+            <rule>
+              <description>Veto a surname change when the GCV says so</description>
+              <conditions>
+                <and>
+                  <if-global-variable name="drv.veto.surname" op="equal">true</if-global-variable>
+                  <if-op-attr name="Surname" op="changing"/>
+                </and>
+              </conditions>
+              <actions>
+                <do-veto/>
+              </actions>
+            </rule>
+          </policy>
+        </rule>
+        <rule name="lib-NormalizeTitle">
+          <policy>
+            <rule>
+              <description>Normalize the title from its code</description>
+              <conditions>
+                <and>
+                  <if-op-attr name="Title" op="changing"/>
+                </and>
+              </conditions>
+              <actions>
+                <do-reformat-op-attr name="Title">
+                  <arg-value type="string">
+                    <token-map dest="title" src="code" table="..\\Library\\TitleMap">
+                      <token-local-variable name="current-value"/>
+                    </token-map>
+                  </arg-value>
+                </do-reformat-op-attr>
+              </actions>
+            </rule>
+          </policy>
+        </rule>
+      </children>
+    </subscriber>
+  </children>
+</driver-configuration>

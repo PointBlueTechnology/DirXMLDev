@@ -7,6 +7,37 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- A deploy that adds a new driver now creates its forms, PRDs and AppConfig
+  objects with it, the `cn=AppConfig` container included — created with its
+  mandatory `Version` (and the recorded `srvprvPlugins`), since eDirectory
+  refuses the container without it (-609). Before, the diff only saw the
+  driver, the deploy wrote everything but the provisioning subtree, and the
+  verify after it failed on the forms it then found missing.
+- `prd.add` fills the properties `srvprvRequest` makes mandatory when the
+  template did not carry them, so a PRD the tool creates is one the vault
+  accepts.
+- A single-driver export (what `simulate` hands the simulator) now carries a
+  mapping table that only a linked Library policy reads; the simulator could
+  not resolve that `Map` token before.
+
+### Added
+
+- `validate`: `prd-property-missing` (E) — a PRD lacking a property
+  `srvprvRequest` makes mandatory (status, flow-strategy, grant, revoke,
+  category-key, localized-names, localized-descrs); the vault refuses such an
+  object with -609.
+
+### Changed
+
+- The tests that read files the way a user does run on a committed synthetic
+  driver set (`src/test/resources/fixtures/synthetic/`: a driver-set export, a
+  single-driver export, the LDIF a vault holds after deploying it) instead of
+  skipping without a client export, a Designer project or Designer's package
+  catalog; the real-file tests stay as opt-in extras. The package build and
+  install round trip runs without Designer.
+
 ### Added
 
 - `validate`: `script-required-attribute` (W) — a DirXML-Script element

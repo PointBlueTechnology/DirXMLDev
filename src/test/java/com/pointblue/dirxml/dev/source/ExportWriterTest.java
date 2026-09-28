@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.SyntheticDriverSet;
 import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.model.Driver;
@@ -409,5 +410,38 @@ public class ExportWriterTest {
         String none = xml.replaceAll("<driver-image>[^<]*</driver-image>", "<driver-image delete-value=\"true\"/>");
         Files.writeString(written, none, java.nio.charset.StandardCharsets.UTF_8);
         org.junit.Assert.assertNull(ExportReader.read(written).driver("AD").icon);
+    }
+
+    /** The synthetic export round-trips through the as-code tree exactly (the RFI test, with no private file). */
+    @Test
+    public void syntheticDriverSetRoundTripsThroughAsCode() throws Exception {
+        Path f = SyntheticDriverSet.copy(SyntheticDriverSet.EXPORT, tmp.newFolder().toPath());
+        DriverSet ds1 = ExportReader.read(f);
+        ds1.meta.remove("packages.count");
+        ds1.meta.remove("jobs.count");
+        ds1.meta.remove("rbe-policies.count");
+        Path written = tmp.newFolder().toPath().resolve(SyntheticDriverSet.EXPORT);
+        ExportWriter.write(ds1, written);
+        DriverSet ds2 = ExportReader.read(written);
+        assertAsCodeIdentical(ds1, ds2);
+        assertEquals(1, ds2.drivers.size());
+        assertEquals(1, ds2.library.resources.stream().filter(Resource::isMappingTable).count());
+    }
+
+    /** A single-driver export of the synthetic driver assembles its subscriber chain with the Library policy and the table. */
+    @Test
+    public void syntheticSingleDriverExportAssemblesSubscriberChainWithLibraryPolicyAndTable() throws Exception {
+        DriverSet ds = SyntheticDriverSet.model();
+        Path written = tmp.newFolder().toPath().resolve("Loop.xml");
+        ExportWriter.writeDriver(ds, SyntheticDriverSet.DRIVER, written);
+        DriverExport export = DriverExport.load(written);
+        export.mappingTables().forEach(MappingTableStore::register);
+        EngineContext ctx = EngineContext.create("\\[root]\\SynthSet\\Loop");
+        List<PolicyStage> chain = export.subscriberChain(ctx);
+        assertFalse("expected a non-empty subscriber chain", chain.isEmpty());
+        assertTrue("expected the Library policy stage, got " + stageNames(chain),
+            chain.stream().anyMatch(s -> s.name().contains(SyntheticDriverSet.LIBRARY_POLICY)));
+        assertTrue("expected " + SyntheticDriverSet.TABLE + " among mapping tables, got " + export.mappingTables().keySet(),
+            export.mappingTables().containsKey(SyntheticDriverSet.TABLE));
     }
 }

@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.docs;
 
+import com.pointblue.dirxml.dev.SyntheticDriverSet;
 import com.pointblue.dirxml.dev.LocalFixture;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.edit.Packages;
@@ -329,5 +330,23 @@ public class DocsGeneratorTest {
 
         String library = Files.readString(out.resolve("library.md"));
         assertTrue(library.contains("LocCodeMap"));
+    }
+
+    @Test
+    public void syntheticDriverSetGeneratesDocs() throws Exception {
+        Path f = SyntheticDriverSet.copy(SyntheticDriverSet.EXPORT, tmp.newFolder("synth").toPath());
+        DriverSet ds = ExportReader.read(f);
+        Path tree = tmp.newFolder("synth-tree").toPath();
+        AsCodeWriter.write(ds, tree);
+        Path out = tmp.newFolder("synth-out").toPath();
+        DocsGenerator.generate(tree, out, null, null, "md");
+        long driverPages;
+        try (var s = Files.list(out.resolve("drivers"))) {
+            driverPages = s.filter(p -> p.toString().endsWith(".md")).count();
+        }
+        assertEquals(1, driverPages);
+        String library = Files.readString(out.resolve("library.md"));
+        assertTrue(library, library.contains(SyntheticDriverSet.TABLE));
+        assertTrue(library, library.contains(SyntheticDriverSet.LIBRARY_POLICY));
     }
 }
