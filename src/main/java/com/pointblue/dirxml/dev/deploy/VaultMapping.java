@@ -341,6 +341,34 @@ public final class VaultMapping {
         return "cn=AppConfig," + driverDn(dsDn, driver);
     }
 
+    public static final String OC_APP_CONFIG = "srvprvAppConfig";
+    /** Meta keys the readers record for the container's own attributes ({@code appconfig.Version}, {@code appconfig.srvprvPlugins}). */
+    public static final String APP_CONFIG_META_PREFIX = "appconfig.";
+    /** {@code Version} is mandatory on {@code srvprvAppConfig} (eDirectory -609 without it); every vault seen so far, 4.8.7 and 4.10 alike, holds "4.8". */
+    public static final String APP_CONFIG_VERSION_DEFAULT = "4.8";
+
+    /**
+     * The attributes a driver's {@code cn=AppConfig} container is created with: what the tree
+     * recorded ({@code appconfig.*} meta — Version, srvprvPlugins), else the mandatory Version alone.
+     */
+    public static Map<String, List<byte[]>> appConfigAttributes(com.pointblue.dirxml.dev.model.Provisioning p) {
+        Map<String, List<byte[]>> out = new LinkedHashMap<>();
+        if (p != null) {
+            for (Map.Entry<String, String> m : p.meta.entrySet()) {
+                if (m.getKey().startsWith(APP_CONFIG_META_PREFIX) && m.getValue() != null && !m.getValue().isBlank()) {
+                    String attr = m.getKey().substring(APP_CONFIG_META_PREFIX.length());
+                    if (!attr.equalsIgnoreCase("cn") && !attr.equalsIgnoreCase("objectClass")) {
+                        out.put(attr, Vault.value(m.getValue()));
+                    }
+                }
+            }
+        }
+        if (out.keySet().stream().noneMatch(k -> k.equalsIgnoreCase("Version"))) {
+            out.put("Version", Vault.value(APP_CONFIG_VERSION_DEFAULT));
+        }
+        return out;
+    }
+
     public static String workflowFormsDn(String dsDn, String driver) {
         return "cn=WorkflowForms," + appConfigDn(dsDn, driver);
     }

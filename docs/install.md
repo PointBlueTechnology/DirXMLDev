@@ -150,6 +150,17 @@ It is checked before any secret is resolved and before LDAP is opened.
 | `test` | every push and pull request | workflow YAML, shell syntax (and `bin/apps` compiles), `bin/require-engine.sh --inform` (missing jars are a message, not a failure), the `doctor --json` shell fallback, `mvn -B -Pidm.portable test` (doctor, JSON, the environments and secrets parsers, the write gate, the trace viewer locator), and the MCP server's `npm test` |
 | `engine` | only when the repository variable `RUN_ENGINE_TESTS` is `true` | `bin/require-engine.sh` (failure if jars are missing) and `mvn -B test` |
 
+**Fixtures.** Most tests build their driver sets in code. The ones that read a
+file the way a user would — an export, an LDIF, a package — use the committed
+synthetic driver set under `src/test/resources/fixtures/synthetic/` (a
+Designer driver-set export, a single-driver export and the LDIF a vault holds
+after deploying it; `SyntheticDriverSet` in the test tree is the model and
+regenerates the files, and `SyntheticFixturesTest` fails when they drift from
+it after a writer change). A handful of tests still read a private file
+(a client export, a Designer project, Designer's package catalog) through
+`LocalFixture` and skip when it is absent; `-Ddirxml.fixture.*` or
+`DIRXML_FIXTURE_*` points them at a copy.
+
 `idm.portable` compiles doctor, the environment parser, and the write gate against
 a stub LDAP client and runs `DoctorTest`, `AgentWriteGateTest`, the trace-viewer
 tests, and `LocalFixtureTest`. It does not compile the rest of the tree. A normal

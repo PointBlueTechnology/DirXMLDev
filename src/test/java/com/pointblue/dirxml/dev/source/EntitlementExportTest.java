@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.source;
 
+import com.pointblue.dirxml.dev.SyntheticDriverSet;
 import com.pointblue.dirxml.dev.LocalFixture;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -66,5 +67,18 @@ public class EntitlementExportTest {
         assertEquals("Exchange Mailbox Entitlement", ad.entitlement("ExchangeMailbox").displayName());
         String xml = ExportWriter.toXml(ds);
         assertEquals(3, ExportReader.read(CanonicalXml.parse(xml).getDocumentElement(), "w.xml").driver("Active Directory Driver").entitlements.size());
+    }
+
+    /** The committed single-driver export carries the entitlement the way Designer's does. */
+    @Test
+    public void syntheticSingleDriverExportCarriesTheEntitlement() throws Exception {
+        Path f = SyntheticDriverSet.copy(SyntheticDriverSet.DRIVER_EXPORT, Files.createTempDirectory("synth"));
+        DriverSet ds = ExportReader.read(f);
+        Driver loop = ds.driver(SyntheticDriverSet.DRIVER);
+        assertNotNull(loop);
+        assertEquals(1, loop.entitlements.size());
+        assertEquals("Group Membership", loop.entitlement(SyntheticDriverSet.ENTITLEMENT).displayName());
+        String xml = ExportWriter.toXml(ds);
+        assertEquals(1, ExportReader.read(CanonicalXml.parse(xml).getDocumentElement(), "w.xml").driver(SyntheticDriverSet.DRIVER).entitlements.size());
     }
 }

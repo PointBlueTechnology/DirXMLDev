@@ -512,8 +512,16 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   the single-driver and the driver-set export.
 - ~~`PkgTest7` on ig4~~ — removed 2026-09-16 with `vault.deploy --delete-driver`
   (see the incident in [vault-deploy.md](vault-deploy.md)).
-- **Committed synthetic fixtures for the guarded suites** (from the 0.4.0 review,
-  2026-09-27). The RFI / JFW / UA-LDIF / AD-export tests and the Designer-catalog
+- ~~**Committed synthetic fixtures for the guarded suites**~~ — built 2026-09-28:
+  `SyntheticDriverSet` (test tree) renders one invented driver set three ways under
+  `src/test/resources/fixtures/synthetic/`; every guarded suite gained a variant that
+  runs on it (export reader/writer, diff, docs, entitlements, provisioning, form ops,
+  package build+install without Designer); the real-file tests stay opt-in. Building it
+  found gaps, all fixed and proved on edir3: a deploy that adds a driver never created
+  its forms and PRDs; `cn=AppConfig` needs its mandatory `Version`; a PRD needs the
+  seven properties `srvprvRequest` requires (`prd-property-missing`, and `prd.add`
+  fills them); a single-driver export omitted a table only a linked Library policy reads.
+  Original note (from the 0.4.0 review, 2026-09-27). The RFI / JFW / UA-LDIF / AD-export tests and the Designer-catalog
   package suites (`PackageInstallTest`, `PackageLifecycleTest`, `PackageChecksumTest`,
   `PackageBuildTest`, `PackageStatusTest`, `DesignerCatalogGuardedTest`) skip anywhere
   but a machine with the private files, so the engine CI job never runs them. Commit a
