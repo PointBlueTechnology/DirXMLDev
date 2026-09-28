@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-28
+
 ### Fixed
 
 - A deploy that adds a new driver now creates its forms, PRDs and AppConfig
