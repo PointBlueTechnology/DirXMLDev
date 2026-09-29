@@ -83,6 +83,14 @@ public final class Doctor {
         public String probeEnv;
         /** Null uses {@link Vault#connect}. */
         public Probe probe;
+        /** The running version ({@link Version#current()}), or null when unknown. */
+        public String version = Version.current();
+        /** Ask GitHub for the latest release; false in tests and when the check is off. */
+        public boolean checkRelease;
+        /** Why the release check is off, for the report; null when on. */
+        public String releaseOff;
+        /** A stand-in for GitHub in tests: null = ask GitHub. */
+        public java.util.function.Supplier<ReleaseCheck.Latest> releaseProbe;
 
         public Path simJar() {
             if (simJar != null) {
@@ -197,6 +205,8 @@ public final class Doctor {
         }
         r.checkEngineClasses = "1".equals(System.getProperty("idm.launcher"));
         r.probeEnv = probeEnv;
+        r.releaseOff = ReleaseCheck.disabledReason(System.getenv(), System.console() != null);
+        r.checkRelease = r.releaseOff == null;
         return r;
     }
 
@@ -206,6 +216,7 @@ public final class Doctor {
         checks.add(simulator(req));
         checks.add(lib(req));
         checks.add(traceViewer());
+        checks.add(release(req));
         Environments loaded = null;
         Path envFile = null;
         try {
@@ -324,6 +335,33 @@ public final class Doctor {
     }
 
     /** The DirXML Trace Viewer is optional: found or not, this check never fails the report. */
+    /** The running version against the latest GitHub release; informational, never a failure. */
+    static Check release(Request req) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("version", req.version);
+        String running = req.version == null ? "version unknown" : req.version + " running";
+        if (!req.checkRelease) {
+            String why = req.releaseOff == null ? "not requested" : req.releaseOff;
+            fields.put("skipped", why);
+            return new Check("release", true, "release: OK  " + running + " (release check skipped: " + why + ")", List.of(), fields);
+        }
+        ReleaseCheck.Latest latest = req.releaseProbe != null ? req.releaseProbe.get()
+            : ReleaseCheck.latest(ReleaseCheck.LATEST_URL, System.getenv());
+        if (latest == null) {
+            fields.put("skipped", "GitHub not reachable");
+            return new Check("release", true, "release: OK  " + running + " (latest release unknown: GitHub not reachable within 2 s)", List.of(), fields);
+        }
+        fields.put("latest", latest.version);
+        fields.put("url", latest.url);
+        boolean newer = req.version != null && Version.compare(req.version, latest.version) < 0;
+        fields.put("newer", newer);
+        if (newer) {
+            return new Check("release", true, "release: OK  " + running + " — " + latest.version + " is available: " + latest.url,
+                List.of("git pull && mvn -o package, or download the release jar"), fields);
+        }
+        return new Check("release", true, "release: OK  " + running + ", latest " + latest.version, List.of(), fields);
+    }
+
     private static Check traceViewer() {
         com.pointblue.dirxml.dev.operate.TraceViewer.Status st = com.pointblue.dirxml.dev.operate.TraceViewer.locate();
         Map<String, Object> fields = new LinkedHashMap<>();

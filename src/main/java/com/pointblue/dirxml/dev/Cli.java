@@ -19,13 +19,34 @@ import java.util.List;
  *   import &lt;export.xml&gt; &lt;outDir&gt;   read a driver / driver-set export, write IDM-as-code
  *   check  &lt;asCodeDir&gt;             load an as-code tree, report it, exit 1 on broken links
  *   validate &lt;asCodeDir&gt; [--json]  run every validation check, exit 1 on any error
+ *   version [--check]                the running version, and the latest GitHub release
  *   doctor [--json] [--env NAME]     JDK 21, simulator, lib jars, environments (no secrets)
  * </pre>
  */
 public final class Cli {
 
+    /** {@code version [--check]}: the running version; with {@code --check}, the latest GitHub release beside it. */
+    static int version(String[] args) {
+        String current = Version.current();
+        System.out.println("DirXMLDev " + (current == null ? "(version unknown: built without resources)" : current));
+        if (args.length >= 2 && args[1].equals("--check")) {
+            ReleaseCheck.Latest latest = ReleaseCheck.latest(ReleaseCheck.LATEST_URL, System.getenv());
+            if (latest == null) {
+                System.out.println("latest release: unknown (GitHub not reachable within 2 s)");
+                return 1;
+            }
+            String n = ReleaseCheck.notice(current, latest.version, latest.url);
+            System.out.println(n == null ? "latest release: " + latest.version + (current == null ? "" : " — you are current") : n);
+        }
+        return 0;
+    }
+
     public static void main(String[] args) {
+        ReleaseCheck.schedule(args, System.getenv(), System.console() != null, Version.current(), ReleaseCheck.cacheFile());
         try {
+            if (args.length >= 1 && args[0].equals("version")) {
+                System.exit(version(args));
+            }
             if (args.length >= 3 && args[0].equals("import")) {
                 System.exit(doImport(Paths.get(args[1]), Paths.get(args[2])));
             }
@@ -418,6 +439,7 @@ public final class Cli {
 
     private static void usage() {
         System.err.println("usage:");
+        System.err.println("  version [--check]                     the running version; --check asks GitHub for the latest release");
         System.err.println("  doctor [--json] [--env NAME]          JDK 21, simulator jar, lib/*.jar, environments (names, tiers,");
         System.err.println("                                        whether url/bind/password/driverSet are set — never the values);");
         System.err.println("                                        --env opens one LDAPS connection and does not print the password");
