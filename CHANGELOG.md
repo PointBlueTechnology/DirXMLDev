@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-29
+
 ### Added
 
 - `idm version [--check]`: the running version (from `idm-version.properties`,
