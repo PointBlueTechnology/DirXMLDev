@@ -150,6 +150,29 @@ It is checked before any secret is resolved and before LDAP is opened.
 | `test` | every push and pull request | workflow YAML, shell syntax (and `bin/apps` compiles), `bin/require-engine.sh --inform` (missing jars are a message, not a failure), the `doctor --json` shell fallback, `mvn -B -Pidm.portable test` (doctor, JSON, the environments and secrets parsers, the write gate, the trace viewer locator), and the MCP server's `npm test` |
 | `engine` | only when the repository variable `RUN_ENGINE_TESTS` is `true` | `bin/require-engine.sh` (failure if jars are missing) and `mvn -B test` |
 
+### 2.5 Versions and release notices
+
+`bin/idm version` prints the running version (the pom's, substituted into
+`idm-version.properties` at build time); `bin/idm version --check` asks GitHub
+for the latest release beside it. `doctor` carries the same answer as its
+`release` line, informational and never a failure.
+
+Every other command prints at most one line a day on stderr when a newer
+release is known:
+
+```
+note: DirXMLDev 0.7.0 is available (running 0.6.0): https://github.com/PointBlueTechnology/DirXMLDev/releases/tag/v0.7.0 — git pull && mvn -o package, or the release jar
+```
+
+The check is quiet by design: GitHub is asked at most once a day, in a
+background thread, with a two-second timeout, and the answer is cached in
+`~/.idm/release-check.json`; a failure of any kind is silent. It never runs when
+`IDM_NO_UPDATE_CHECK` is set, when `CI` is set, when there is no console (a
+script or the MCP server reading the output), or with `--json`. Pre-releases
+are ignored. `GITHUB_TOKEN`, when set, is sent along, which lifts GitHub's
+unauthenticated rate limit. Updating is `git pull` and `mvn -o package` (or the
+jar attached to the release); the tool never replaces itself.
+
 **Fixtures.** Most tests build their driver sets in code. The ones that read a
 file the way a user would — an export, an LDIF, a package — use the committed
 synthetic driver set under `src/test/resources/fixtures/synthetic/` (a
