@@ -20,6 +20,8 @@ mkdir -p "$OUT"
 javac --release 21 -encoding UTF-8 -cp "$CP" -d "$OUT" \
   src/stub/java/com/pointblue/dirxml/dev/deploy/Vault.java \
   src/main/java/com/pointblue/dirxml/dev/json/Json.java \
+  src/main/java/com/pointblue/dirxml/dev/Version.java \
+  src/main/java/com/pointblue/dirxml/dev/ReleaseCheck.java \
   src/main/java/com/pointblue/dirxml/dev/deploy/SecretSource.java \
   src/main/java/com/pointblue/dirxml/dev/deploy/Secrets.java \
   src/main/java/com/pointblue/dirxml/dev/deploy/Environments.java \
@@ -27,6 +29,7 @@ javac --release 21 -encoding UTF-8 -cp "$CP" -d "$OUT" \
   src/main/java/com/pointblue/dirxml/dev/operate/TraceViewer.java \
   src/main/java/com/pointblue/dirxml/dev/Doctor.java \
   src/test/java/com/pointblue/dirxml/dev/DoctorTest.java \
+  src/test/java/com/pointblue/dirxml/dev/ReleaseCheckTest.java \
   src/test/java/com/pointblue/dirxml/dev/json/JsonTest.java \
   src/test/java/com/pointblue/dirxml/dev/deploy/EnvironmentsSecretsTest.java \
   src/test/java/com/pointblue/dirxml/dev/LocalFixture.java \
@@ -37,6 +40,7 @@ javac --release 21 -encoding UTF-8 -cp "$CP" -d "$OUT" \
 
 java -cp "$OUT:$CP" org.junit.runner.JUnitCore \
   com.pointblue.dirxml.dev.DoctorTest \
+  com.pointblue.dirxml.dev.ReleaseCheckTest \
   com.pointblue.dirxml.dev.json.JsonTest \
   com.pointblue.dirxml.dev.deploy.EnvironmentsSecretsTest \
   com.pointblue.dirxml.dev.LocalFixtureTest \
