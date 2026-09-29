@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `idm version [--check]`: the running version (from `idm-version.properties`,
+  filled in at build time), and with `--check` the latest GitHub release.
+- Release notices: `doctor` reports the latest release on a `release` line,
+  and every other command prints at most one line a day on stderr when a
+  newer release is known (cached in `~/.idm/release-check.json`, refreshed in
+  the background with a two-second timeout, silent on any failure). Off with
+  `IDM_NO_UPDATE_CHECK`, in CI, without a console, and with `--json`
+  (docs/install.md §2.5).
+
 ## [0.6.0] - 2026-09-28
 
 ### Fixed
