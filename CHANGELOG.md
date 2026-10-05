@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-05
+
 ### Fixed
 
 - Every `flow.*` operation failed with `WRONG_DOCUMENT_ERR` on a PRD read from a tree (its
