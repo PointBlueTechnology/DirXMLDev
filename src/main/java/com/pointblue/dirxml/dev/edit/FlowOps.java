@@ -150,7 +150,8 @@ public final class FlowOps {
         if (defChild == prd.process) {
             return;
         }
-        Element clone = cloneElement(prd.process);
+        // the clone is parsed into a document of its own: adopt it into definition's before it is placed there
+        Element clone = (Element) prd.definition.getOwnerDocument().importNode(cloneElement(prd.process), true);
         if (defChild != null) {
             prd.definition.replaceChild(clone, defChild);
         } else {

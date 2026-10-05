@@ -7,6 +7,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Every `flow.*` operation failed with `WRONG_DOCUMENT_ERR` on a PRD read from a tree (its
+  `process.xml` is a document of its own): the process copy placed in the definition is now
+  imported into the definition's document first.
+
 ### Added
 
 - `Registry.Spec.create(args)` is public: a caller outside the `edit` package can build an
