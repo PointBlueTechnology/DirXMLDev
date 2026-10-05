@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `Registry.Spec.create(args)` is public: a caller outside the `edit` package can build an
+  operation from the catalog and run it through `Transaction` (DirXMLDevWeb does).
+
 ## [0.7.0] - 2026-09-29
 
 ### Added
