@@ -421,6 +421,14 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   vault → [designer-new-project.md](designer-new-project.md) (2026-09-17;
   decisions in its §5).
 
+- **A web workbench (DirXMLDevWeb)** — design note written and decided 2026-10-05:
+  [web-designer.md](web-designer.md). The W0 spike is built in its own repository
+  (`bin/idmweb serve <tree>`: outline, fishbone, two-mode artifact view, validation, every
+  operation from the registry as a form, live follow of the tree). Recommendation: a browser UI over this core
+  running as a local service (`idm serve`), the operation catalog as its API; not a
+  port of Designer, and WebAssembly only for optional pieces (a static viewer, a
+  simulator spike).
+
 ## Follow-ups (small, not scheduled)
 
 - ~~**`package.revert <path>`**~~ — built 2026-09-22 for every kind (docs/appconfig.md §9):
