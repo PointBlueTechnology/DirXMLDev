@@ -525,6 +525,19 @@ public final class Registry {
             drv, opt("nds-class", "eDirectory class name"), opt("nds-attr", "eDirectory attribute name"));
 
         // driver settings
+        register("config.set-content", "replace a whole configuration document (a driver's config-values, shim-config-info, driver-filter or engine-control-values; without --driver, the driver set's config-values)",
+            a -> new ConfigOps.SetContent(a.get("driver"), a.get("kind"), contentOf(a)),
+            req("kind", "config-values|shim-config-info|driver-filter|engine-control-values"),
+            req("content-file", "file holding the new document"),
+            opt("driver", "driver name (omit for the driver set's config-values)"));
+        register("override.set", "set a value for one environment (overrides/<env>.properties); the tree keeps its base value",
+            a -> new OverrideOps.Set(a.get("env"), a.get("key"), a.get("value")),
+            req("env", "environment name"),
+            req("key", "drivers/<driver>.gcv.<name> | .shim.<name> | .ecv.<name> | .shim-auth-server | .shim-auth-id | driverset.gcv.<name>"),
+            req("value", "the environment's value"));
+        register("override.remove", "remove an environment's override, so it takes the tree's base value",
+            a -> new OverrideOps.Remove(a.get("env"), a.get("key")),
+            req("env", "environment name"), req("key", "the override key"));
         register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, param:<shim parameter>, engine:<engine control value>",
             a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.get("value")),
             drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), req("value", "the value"));

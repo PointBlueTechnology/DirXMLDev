@@ -9,6 +9,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- `override.set` / `override.remove`: a stage override as an edit operation (the key must
+  name something the tree defines; removing an environment's last key removes its file).
+- `config.set-content`: replace a whole configuration document (a driver's config-values,
+  shim-config-info, driver-filter or engine-control-values, or the driver set's
+  config-values), for an editor that works on the XML itself.
 - `Registry.Spec.create(args)` is public: a caller outside the `edit` package can build an
   operation from the catalog and run it through `Transaction` (DirXMLDevWeb does).
 
