@@ -51,6 +51,15 @@ public final class Registry {
             this.args = args;
             this.factory = factory;
         }
+
+        /**
+         * The operation for these arguments, as the CLI builds it — for a caller outside this
+         * package that runs operations from the catalog (a server, a UI): check
+         * {@link Registry#missing} first, then hand the result to {@code Transaction.run}.
+         */
+        public Operation create(Map<String, String> args) throws IOException {
+            return factory.create(args);
+        }
     }
 
     private static final Map<String, Spec> SPECS = new LinkedHashMap<>();

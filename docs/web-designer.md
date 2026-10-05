@@ -1,6 +1,6 @@
 # A web Designer: assessment and design
 
-Status: **design note, awaiting decisions** (2026-10-05). Nothing here is built.
+Status: **decided 2026-10-05; the W0 spike is built** in its own repository, DirXMLDevWeb, where this note continues as `docs/design.md`. Jerry's decisions: local first (and hosted second, one server for both), full editing, a structured and an XML-first policy editor, no wasm viewer for now, its own repository, the name DirXMLDevWeb.
 
 The question: build a web version of Designer, perhaps with WebAssembly.
 The answer in one paragraph: **yes to a web workbench, no to porting Designer,
