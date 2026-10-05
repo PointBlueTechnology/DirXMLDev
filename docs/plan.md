@@ -421,6 +421,12 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   vault → [designer-new-project.md](designer-new-project.md) (2026-09-17;
   decisions in its §5).
 
+- **A web Designer** — design note written 2026-10-05, awaiting decisions:
+  [web-designer.md](web-designer.md). Recommendation: a browser UI over this core
+  running as a local service (`idm serve`), the operation catalog as its API; not a
+  port of Designer, and WebAssembly only for optional pieces (a static viewer, a
+  simulator spike).
+
 ## Follow-ups (small, not scheduled)
 
 - ~~**`package.revert <path>`**~~ — built 2026-09-22 for every kind (docs/appconfig.md §9):
