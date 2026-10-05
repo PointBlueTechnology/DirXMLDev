@@ -142,9 +142,27 @@ medium ones, and no new backend to speak of.
   DesignerModernPlatform exists disappears for this tool.
 - **Operations:** nothing to host, patch or multi-tenant.
 
-A hosted team mode (the same server in a container beside a checked-out
-repository, behind OIDC) is a later option with a different security posture. It
-should not shape version one.
+### Local and hosted: one server, two modes
+
+Jerry's requirement (2026-10-05): it must run locally as well as on a server.
+The design gives both from one binary and one front end; only four seams differ,
+and each is an interface with two implementations from the first phase on.
+
+| Seam | Local (`idm serve`) | Hosted (`idm serve --hosted`) |
+|---|---|---|
+| Who is the user | one person; a one-time token on loopback | OIDC sign-in; a session per user |
+| Where the tree is | a directory on the workstation | a workspace per user or branch: a server-side clone of the team's git repository |
+| Vault credentials | the Keychain or secrets file, as today | per-environment secrets in the server's store (or each user's own bind), never sent to the page |
+| Engine jars | the workstation's `lib/` | supplied by the customer on their own server; we never distribute them |
+
+Everything else is the same code: the operation catalog, validation, diff,
+plan, deploy gates, trace, simulator. Local is built and proved first because
+it has no new security surface. Hosted adds authentication, workspaces and an
+audit trail per user, and it is the mode where "an agent and a person on one
+tree" becomes "a team on one repository" — commits and pull requests from the
+UI rather than a shared working directory. A customer runs the hosted mode
+inside their own network, next to their vault; a public multi-tenant service is
+not proposed.
 
 ### Where WebAssembly does fit
 
@@ -173,7 +191,8 @@ Each is usable on its own and stops cleanly.
 | **W4 simulator** | Cases, run, stage-by-stage output, comparison against another tree or stage |
 | **W5 provisioning** | PRD flow diagram (read, then edit through `flow.*`), form builder embedded, roles and resources |
 | **W6 packages** | Status, install, upgrade, build |
-| optional | The static viewer; the CheerpJ simulator spike; hosted mode |
+| **W7 hosted mode** | OIDC, workspaces as git clones, server-side secrets, per-user audit, commit and pull request from the UI. Can move earlier: the four seams exist from W0 |
+| optional | The static viewer; the CheerpJ simulator spike |
 
 W0 through W3 already replace the daily Designer loop for driver work. W2 and
 W5 are where most of the effort sits.
@@ -195,7 +214,8 @@ W5 are where most of the effort sits.
 
 ## 6. Decisions for Jerry
 
-1. Local `idm serve` first (recommended), or hosted first?
+1. Both modes are in the design. Build local first and hosted second
+   (recommended), or the reverse?
 2. Version one scope: the read-only explorer with compare and deploy review
    (W0 + W3), or editing first (W0 + W1)?
 3. Policy builder: full structured editor, or the hybrid?
