@@ -653,4 +653,65 @@ public final class ConfigOps {
         }
         return out;
     }
+
+    // ---- a whole configuration document ----
+
+    /**
+     * {@code config.set-content --kind K [--driver D] --content-file F}: replace one whole
+     * configuration document — a driver's {@code config-values}, {@code shim-config-info},
+     * {@code driver-filter} or {@code engine-control-values}, or (no {@code --driver}) the driver
+     * set's {@code config-values}. For an editor that works on the XML itself; the typed
+     * operations ({@code gcv.set}, {@code filter.set-attr}, {@code driver.set}) change one thing.
+     */
+    public static final class SetContent implements Operation {
+        private static final Map<String, String> ROOTS = Map.of(
+            Driver.CONFIG_VALUES, "configuration-values",
+            Driver.ENGINE_CONTROL_VALUES, "configuration-values",
+            Driver.DRIVER_FILTER, "filter");
+
+        private final String driver;
+        private final String kind;
+        private final String content;
+
+        public SetContent(String driver, String kind, String content) {
+            this.driver = driver;
+            this.kind = kind;
+            this.content = content;
+        }
+
+        @Override
+        public String name() {
+            return "config.set-content";
+        }
+
+        @Override
+        public void apply(DriverSet ds, Transaction tx) throws Refusal, IOException {
+            List<String> kinds = List.of(Driver.CONFIG_VALUES, Driver.SHIM_CONFIG_INFO, Driver.DRIVER_FILTER, Driver.ENGINE_CONTROL_VALUES);
+            if (kind == null || !kinds.contains(kind)) {
+                throw new Refusal("--kind is one of " + String.join(", ", kinds));
+            }
+            if (content == null || content.isBlank()) {
+                throw new Refusal("the content is empty; removing a configuration document is not what this operation does");
+            }
+            Element el;
+            try {
+                el = CanonicalXml.parse(content).getDocumentElement();
+            } catch (RuntimeException e) {
+                throw new Refusal("content is not well-formed XML: " + e.getMessage());
+            }
+            String wanted = ROOTS.get(kind);
+            if (wanted != null && !wanted.equals(el.getNodeName())) {
+                throw new Refusal("the root of " + kind + " is <" + wanted + ">, not <" + el.getNodeName() + ">");
+            }
+            if (driver == null || driver.isBlank()) {
+                if (!Driver.CONFIG_VALUES.equals(kind)) {
+                    throw new Refusal("the driver set has only " + Driver.CONFIG_VALUES + "; name a --driver for " + kind);
+                }
+                ds.configValues = el;
+                return;
+            }
+            Driver d = ArtifactOps.driverOrRefuse(ds, driver);
+            d.config.put(kind, el);
+        }
+    }
 }
