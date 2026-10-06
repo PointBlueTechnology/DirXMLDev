@@ -153,6 +153,8 @@ Start at [docs/README.md](docs/README.md). The short path:
 3. [Day to day](docs/day-to-day.md) — policy change, deploy, packages, forms, operate.
 4. [Examples](docs/examples/) — fictional, sanitized snippets.
 5. [Agent guide](docs/agent-guide.md) — the same loop, written for an agent at the shell.
+6. [Terraform](docs/terraform.md) — secrets held by a manager and read by name; a module that
+   writes an environment and runs the deploy from `terraform apply`.
 
 On a new machine, [agent-assisted setup](docs/agent-assisted-setup.md) hands
 the install to a coding agent. Building from source by hand is
