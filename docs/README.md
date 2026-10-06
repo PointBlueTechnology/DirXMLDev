@@ -68,4 +68,5 @@ Measured facts are
 
 The DirXMLDev source is licensed under the [MIT License](../LICENSE).
 Release notes are [../CHANGELOG.md](../CHANGELOG.md).
+- [secrets.md](secrets.md) — where credentials come from: the four forms, and the line for each secret manager (AWS, Azure, GCP, CyberArk, BeyondTrust, Bitwarden, Vault, 1Password).
 - [terraform.md](terraform.md) — secrets from a manager by name; the `idm-environment` Terraform module.
