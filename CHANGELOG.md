@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- `resource.add` was registered twice — for mapping-table, ECMAScript and GCV-definition
+  resources, and later for the role catalog's resources — and the later one hid the first, so
+  the artifact kinds could not be created through the catalog (CLI, MCP, web). The artifact
+  creator is `artifact.add` now (`--kind mapping-table|ecmascript|gcv`); registering a name
+  twice refuses at start-up.
+
 ## [0.10.0] - 2026-10-06
 
 ### Changed
