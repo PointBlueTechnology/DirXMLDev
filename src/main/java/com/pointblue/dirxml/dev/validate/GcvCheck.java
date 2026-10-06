@@ -58,12 +58,26 @@ public final class GcvCheck implements Check {
         }
     }
 
+    /** {@code <if-global-variable name=…>} conditions read a GCV too; they have no token form, so the reference scan misses them. */
+    private static void conditions(org.w3c.dom.Element e, Set<String> names) {
+        if ("if-global-variable".equals(e.getNodeName()) && !e.getAttribute("name").isEmpty()) {
+            names.add(e.getAttribute("name"));
+        }
+        for (org.w3c.dom.Node c = e.getFirstChild(); c != null; c = c.getNextSibling()) {
+            if (c instanceof org.w3c.dom.Element) {
+                conditions((org.w3c.dom.Element) c, names);
+            }
+        }
+    }
+
     private static List<String> missing(Policy p, Set<String> defined) {
         List<String> out = new ArrayList<>();
         if (p.content == null) {
             return out;
         }
-        for (String name : GcvReferences.referenced(p.content)) {
+        Set<String> names = new java.util.LinkedHashSet<>(GcvReferences.referenced(p.content));
+        conditions(p.content, names);
+        for (String name : names) {
             // A name built from a local variable (drv.x.$entName$) is resolved at run
             // time; nothing static to check.
             if (name.contains("$")) {

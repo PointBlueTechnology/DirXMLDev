@@ -259,7 +259,8 @@ public final class GcvOps {
             if (p.content == null) {
                 continue;
             }
-            if (GcvReferences.referenced(p.content).contains(name) || mentions(CanonicalXml.serialize(p.content), name)) {
+            if (GcvReferences.referenced(p.content).contains(name) || namesGcv(p.content, name)
+                || mentions(CanonicalXml.serialize(p.content), name)) {
                 out.add(new Use("policy", p.path(), p.driver));
             }
         }
@@ -274,6 +275,20 @@ public final class GcvOps {
             }
         }
         return out;
+    }
+
+    /** A condition or token that names the GCV: {@code <if-global-variable name=…>}, {@code <token-global-variable name=…>}. */
+    private static boolean namesGcv(Element root, String name) {
+        String n = root.getNodeName();
+        if (("if-global-variable".equals(n) || "token-global-variable".equals(n)) && name.equals(root.getAttribute("name"))) {
+            return true;
+        }
+        for (Node c = root.getFirstChild(); c != null; c = c.getNextSibling()) {
+            if (c instanceof Element && namesGcv((Element) c, name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean mentions(String text, String name) {

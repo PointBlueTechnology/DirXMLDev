@@ -19,6 +19,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- `sites.properties` names with a space ("Novell Public") were cut at the space; the file is read
+  as `name=url` lines now.
+- GCV readers: an `<if-global-variable>` condition counts as reading the GCV (it has no token
+  form, so `GcvReferences` missed it); `gcv.delete` refuses for it and the validator's
+  undefined-GCV check sees it.
 - `resource.add` was registered twice — for mapping-table, ECMAScript and GCV-definition
   resources, and later for the role catalog's resources — and the later one hid the first, so
   the artifact kinds could not be created through the catalog (CLI, MCP, web). The artifact

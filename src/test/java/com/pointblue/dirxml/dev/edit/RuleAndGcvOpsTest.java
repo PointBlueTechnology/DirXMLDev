@@ -213,6 +213,14 @@ public class RuleAndGcvOpsTest {
         List<GcvOps.Use> tilde = GcvOps.usage(ds, ad, "set.tree");
         assertEquals(1, tilde.size());
         assertEquals("drivers/AD/subscriber/sub-reads", tilde.get(0).path);
+        // a condition on the GCV counts too (if-global-variable, which has no token form)
+        ad.subscriber.policies.add(new Policy("sub-cond", Scope.SUBSCRIBER, "AD", ValidatorTest.xml(
+            "<policy><rule><description>c</description><conditions><and>"
+                + "<if-global-variable name=\"drv.realm\" op=\"equal\">x</if-global-variable></and></conditions><actions><do-veto/></actions></rule></policy>")));
+        List<GcvOps.Use> cond = GcvOps.usage(ds, ad, "drv.realm");
+        assertEquals(cond.toString(), 1, cond.size());
+        assertEquals("drivers/AD/subscriber/sub-cond", cond.get(0).path);
+        ad.subscriber.policies.remove(ad.subscriber.policies.size() - 1);
         assertTrue(GcvOps.usage(ds, ad, "drv.realm").isEmpty());
         assertTrue("undefined: nothing", GcvOps.usage(ds, ad, "no.such").isEmpty());
         // the delete refusal names the shim parameters too
