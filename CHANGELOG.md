@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `query fishbone --json` policies carry `description` (a DirXML Script policy's `<description>`,
+  else the artifact's description meta) so a picture can show it on hover.
+
 ### Fixed
 
 - `resource.add` was registered twice — for mapping-table, ECMAScript and GCV-definition
