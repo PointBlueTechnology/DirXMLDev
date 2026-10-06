@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Terraform: module `terraform/modules/idm-environment` writes an environment's
+  `environments-<name>.properties` and `secrets-<name>.properties` (0600) and, with
+  `deploy_mode = "deploy"`, runs `vault.deploy` for a tree, again whenever the tree or a file
+  changes; literal or command-referenced credentials; examples for a lab and AWS Secrets
+  Manager; `docs/terraform.md`. Helper commands `bin/secrets/cyberark-ccp.sh` and
+  `bin/secrets/beyondtrust.sh` for a `<key>Command=` reference to those managers.
+
 ## [0.8.0] - 2026-10-05
 
 ### Fixed

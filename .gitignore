@@ -44,3 +44,8 @@ extensions/*/*.vsix
 
 # MCP server (sdk is installed locally; lockfile is committed)
 mcp/**/node_modules/
+# Terraform working files (the examples are run from a copy, never in place)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
