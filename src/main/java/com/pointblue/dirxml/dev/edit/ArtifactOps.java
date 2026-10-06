@@ -106,7 +106,7 @@ public final class ArtifactOps {
 
         @Override
         public String name() {
-            return "policy".equals(kind) || "xslt".equals(kind) || "schema-map".equals(kind) ? "policy.add" : "resource.add";
+            return "policy".equals(kind) || "xslt".equals(kind) || "schema-map".equals(kind) ? "policy.add" : "artifact.add";
         }
 
         @Override

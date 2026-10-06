@@ -76,7 +76,11 @@ public final class Registry {
     }
 
     private static void register(String name, String help, Factory f, Arg... args) {
-        SPECS.put(name, new Spec(name, help, Arrays.asList(args), f));
+        // a name registered twice would silently replace the first (it once hid the artifact creator
+        // behind the role catalog's resource.add): refuse at start-up instead
+        if (SPECS.putIfAbsent(name, new Spec(name, help, Arrays.asList(args), f)) != null) {
+            throw new IllegalStateException("operation '" + name + "' is registered twice");
+        }
     }
 
     private static java.nio.file.Path pathOrNull(String dir) {
@@ -122,7 +126,7 @@ public final class Registry {
             req("name", "policy name"), driver, scope, opt("kind", "policy|xslt|schema-map (default policy)"),
             content, link, at, linkDriver);
 
-        register("resource.add", "create a mapping table, ECMAScript or GCV-definition resource and optionally link it",
+        register("artifact.add", "create a mapping table, ECMAScript or GCV-definition resource and optionally link it",
             a -> new ArtifactOps.Add(scopeOf(a), a.get("driver"), a.get("name"),
                 a.getOrDefault("kind", "mapping-table"), contentOf(a), setOf(a.get("link")),
                 a.containsKey("at") ? ArtifactOps.Position.parse(a.get("at")) : null, a.get("link-driver")),
