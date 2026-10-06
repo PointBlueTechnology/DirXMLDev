@@ -68,3 +68,4 @@ Measured facts are
 
 The DirXMLDev source is licensed under the [MIT License](../LICENSE).
 Release notes are [../CHANGELOG.md](../CHANGELOG.md).
+- [terraform.md](terraform.md) — secrets from a manager by name; the `idm-environment` Terraform module.
