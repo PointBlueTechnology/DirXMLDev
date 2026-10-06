@@ -9,6 +9,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- `GcvOps.usage(ds, driver, name)`: every place a GCV is read — policies (tokens and `~name~`) and
+  the driver's configuration documents (shim parameters, engine controls, filter). `gcv.delete`
+  refuses on any of them now, not only policies.
+- `UpdateSite.list(url)`: what an update site offers, for a picker; `package.fetch` is unchanged.
+
 - `query fishbone --json` policies carry `description` (a DirXML Script policy's `<description>`,
   else the artifact's description meta) so a picture can show it on hover.
 
