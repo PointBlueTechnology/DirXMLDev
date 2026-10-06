@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- `docs/secrets.md`: the four credential forms and the exact line for each secret manager
+  (AWS, Azure, GCP, CyberArk CCP, BeyondTrust, Bitwarden, Bitwarden Secrets Manager, Vault,
+  1Password, a Terraform output), what each needs, and the helper scripts; linked from the
+  README, the docs index and vault-deploy.md.
+
 ## [0.9.0] - 2026-10-05
 
 ### Added

@@ -427,7 +427,9 @@ driverset.named.smtp-relay=…
 
 A value can be literal, an environment variable, the output of a command, or
 a macOS Keychain item (so a password manager, the Keychain or a CI secret
-store is the real source and nothing sensitive sits in a file). The same four
+store is the real source and nothing sensitive sits in a file). The command
+form reaches every secret manager — AWS, Azure, GCP, CyberArk, BeyondTrust,
+Bitwarden, Vault, 1Password — with the lines in [secrets.md](secrets.md). The same four
 forms apply to the environments file's `password`, `appsPassword` and
 `appsSecret`; both files trigger a one-line warning when readable by other
 users (keep them at mode 600). See [getting-started.md](getting-started.md#configure-the-vault-target). The deployer never prints a secret and never writes
