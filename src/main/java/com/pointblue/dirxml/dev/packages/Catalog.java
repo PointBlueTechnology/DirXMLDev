@@ -126,12 +126,15 @@ public final class Catalog {
         Path f = dir.resolve("sites.properties");
         Map<String, String> out = new LinkedHashMap<>();
         if (Files.exists(f)) {
-            java.util.Properties p = new java.util.Properties();
-            try (InputStream in = Files.newInputStream(f)) {
-                p.load(in);
-            }
-            for (String name : p.stringPropertyNames()) {
-                out.put(name, p.getProperty(name));
+            // name=url per line, split at the first '=': a site name may hold spaces ("Novell Public"),
+            // which Properties.load would take as the end of the key
+            for (String line : Files.readAllLines(f, StandardCharsets.UTF_8)) {
+                String t = line.trim();
+                int eq = t.indexOf('=');
+                if (t.isEmpty() || t.startsWith("#") || eq <= 0) {
+                    continue;
+                }
+                out.put(t.substring(0, eq).trim(), t.substring(eq + 1).trim());
             }
         }
         return out;
