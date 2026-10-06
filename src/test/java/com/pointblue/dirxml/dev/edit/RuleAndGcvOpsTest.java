@@ -188,6 +188,48 @@ public class RuleAndGcvOpsTest {
     }
 
     @Test
+    public void usageNamesEveryReader() throws IOException {
+        DriverSet ds = AsCodeReader.read(tree);
+        Driver ad = ds.driver("AD");
+        ad.subscriber.policies.add(new Policy("sub-reads", Scope.SUBSCRIBER, "AD", ValidatorTest.xml(
+            "<policy><rule><description>r</description><conditions/><actions><do-set-local-variable name=\"x\">"
+                + "<arg-string><token-global-variable name=\"drv.users\"/><token-xpath expression=\"'~set.tree~'\"/></arg-string>"
+                + "</do-set-local-variable></actions></rule></policy>")));
+        ad.links.add(new PolicyLink(PolicySet.SUB_COMMAND, "drivers/AD/subscriber/sub-reads", 1));
+        // the shim's parameters read a GCV the engine substitutes at start-up
+        ad.config.put(Driver.SHIM_CONFIG_INFO, ValidatorTest.xml(
+            "<shim-config-info><driver-options><host display-name=\"Host\">~drv.users~</host></driver-options></shim-config-info>"));
+        AsCodeWriter.write(ds, tree);
+        ds = AsCodeReader.read(tree);
+        ad = ds.driver("AD");
+
+        List<GcvOps.Use> users = GcvOps.usage(ds, ad, "drv.users");
+        assertEquals(users.toString(), 2, users.size());
+        assertEquals("policy", users.get(0).kind);
+        assertEquals("drivers/AD/subscriber/sub-reads", users.get(0).path);
+        assertEquals(Driver.SHIM_CONFIG_INFO, users.get(1).kind);
+        assertEquals("drivers/AD/shim-config-info", users.get(1).path);
+        assertEquals("AD", users.get(1).driver);
+        List<GcvOps.Use> tilde = GcvOps.usage(ds, ad, "set.tree");
+        assertEquals(1, tilde.size());
+        assertEquals("drivers/AD/subscriber/sub-reads", tilde.get(0).path);
+        // a condition on the GCV counts too (if-global-variable, which has no token form)
+        ad.subscriber.policies.add(new Policy("sub-cond", Scope.SUBSCRIBER, "AD", ValidatorTest.xml(
+            "<policy><rule><description>c</description><conditions><and>"
+                + "<if-global-variable name=\"drv.realm\" op=\"equal\">x</if-global-variable></and></conditions><actions><do-veto/></actions></rule></policy>")));
+        List<GcvOps.Use> cond = GcvOps.usage(ds, ad, "drv.realm");
+        assertEquals(cond.toString(), 1, cond.size());
+        assertEquals("drivers/AD/subscriber/sub-cond", cond.get(0).path);
+        ad.subscriber.policies.remove(ad.subscriber.policies.size() - 1);
+        assertTrue(GcvOps.usage(ds, ad, "drv.realm").isEmpty());
+        assertTrue("undefined: nothing", GcvOps.usage(ds, ad, "no.such").isEmpty());
+        // the delete refusal names the shim parameters too
+        Result r = run(new GcvOps.Delete("AD", "drv.users"));
+        assertFalse(r.ok());
+        assertTrue(r.refusal, r.refusal.contains("drivers/AD/shim-config-info"));
+    }
+
+    @Test
     public void cliRoundTrip() throws Exception {
         Path ruleFile = Files.createTempFile("rule", ".xml");
         Files.writeString(ruleFile, "<rule><description>cli</description><conditions/><actions/></rule>");

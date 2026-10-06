@@ -69,7 +69,7 @@ report, and for package-managed artifacts the override state. Dry-run (`--dry-ru
 | `policy.link` `path driver set order?` | adds a link (order defaults to last; `after`/`before`) | wrong kind for the set (`link-kind`); already linked in that set |
 | `policy.unlink` `path driver set` | removes the link | not linked |
 | `policy.reorder` `driver set order: [paths…]` | sets the full order of a set | a path isn't in the set; a set member is missing from the list |
-| `resource.add / set-content / rename / delete` | the same for mapping tables, ECMAScript, GCV-definition resources | as above; a mapping table still referenced by a `Map` token |
+| `artifact.add` (kind mapping-table, ecmascript, gcv), then `artifact.set-content / rename / delete` | the same for mapping tables, ECMAScript, GCV-definition resources | as above; a mapping table still referenced by a `Map` token |
 
 `rename` and `delete` are the reason the model is reference-aware: the model
 already indexes every link (`DriverSet.index()`, `unresolvedLinks()`); Phase 3
@@ -219,7 +219,7 @@ With `--json` each result is structured for the agent rather than printed.
    (load → validate-before → apply → validate-after → refuse on a *new* error →
    sync-write: only changed files, managed-path deletions, `.git`/baselines/
    client files untouched; `--dry-run`, `--force`); `ArtifactOps`
-   `policy.add` / `resource.add` / `artifact.set-content` / `artifact.rename` /
+   `policy.add` / `artifact.add` / `artifact.set-content` / `artifact.rename` /
    `artifact.delete` / `policy.link` / `policy.unlink` / `policy.reorder`
    (orders renumbered 0..n); `Packages` (baseline snapshot + `customized` mark
    on the first edit of a packaged artifact); `idm refs`. 13 tests, plus a

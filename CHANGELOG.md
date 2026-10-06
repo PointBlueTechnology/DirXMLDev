@@ -7,6 +7,31 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-06
+
+### Added
+
+- `GcvOps.usage(ds, driver, name)`: every place a GCV is read — policies (tokens and `~name~`) and
+  the driver's configuration documents (shim parameters, engine controls, filter). `gcv.delete`
+  refuses on any of them now, not only policies.
+- `UpdateSite.list(url)`: what an update site offers, for a picker; `package.fetch` is unchanged.
+
+- `query fishbone --json` policies carry `description` (a DirXML Script policy's `<description>`,
+  else the artifact's description meta) so a picture can show it on hover.
+
+### Fixed
+
+- `sites.properties` names with a space ("Novell Public") were cut at the space; the file is read
+  as `name=url` lines now.
+- GCV readers: an `<if-global-variable>` condition counts as reading the GCV (it has no token
+  form, so `GcvReferences` missed it); `gcv.delete` refuses for it and the validator's
+  undefined-GCV check sees it.
+- `resource.add` was registered twice — for mapping-table, ECMAScript and GCV-definition
+  resources, and later for the role catalog's resources — and the later one hid the first, so
+  the artifact kinds could not be created through the catalog (CLI, MCP, web). The artifact
+  creator is `artifact.add` now (`--kind mapping-table|ecmascript|gcv`); registering a name
+  twice refuses at start-up.
+
 ## [0.10.0] - 2026-10-06
 
 ### Changed

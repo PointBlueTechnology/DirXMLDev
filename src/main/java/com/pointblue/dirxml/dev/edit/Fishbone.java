@@ -14,6 +14,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 /**
  * The Designer-style policy-flow fishbone of one driver, as the JSON the VS Code / Cursor
@@ -24,7 +26,7 @@ import java.util.Map;
  *   { treeRoot, driverSet: {name, dn}, driver: {name, dn, shimClass, dir},
  *     publisher: [bone…], subscriber: [bone…], spine: [bone…], resources: [bone…], filter?: {id, file} }
  *   bone   = { id: "bone:&lt;key&gt;", key, label, channel, setId, policies: [policy…] }
- *   policy = { id: "policy:&lt;key&gt;:&lt;order&gt;:&lt;ref&gt;", ref, name, order, kind, file?, unresolved }
+ *   policy = { id: "policy:&lt;key&gt;:&lt;order&gt;:&lt;ref&gt;", ref, name, order, kind, file?, description?, unresolved }
  * </pre>
  * Keys are {@link PolicySet}'s, labels Designer's; {@code file} is the content file relative to
  * the tree root, named the way {@link AsCodeWriter} names it, and absent when the link does not
@@ -92,6 +94,20 @@ public final class Fishbone {
         return m;
     }
 
+    /** A DirXML Script policy's {@code <description>}, else the artifact's description meta; null when it has none. */
+    static String description(Artifact a) {
+        if (a instanceof Policy && ((Policy) a).content != null) {
+            for (Node n = ((Policy) a).content.getFirstChild(); n != null; n = n.getNextSibling()) {
+                if (n instanceof Element && "description".equals(n.getNodeName())) {
+                    String t = n.getTextContent().trim();
+                    return t.isEmpty() ? null : t;
+                }
+            }
+        }
+        String m = a.meta.get("description");
+        return m == null || m.isBlank() ? null : m.trim();
+    }
+
     private static List<Object> bones(Driver d, List<Bone> defs, Map<String, Artifact> index, Map<String, String> files) {
         List<Object> out = new ArrayList<>();
         for (Bone b : defs) {
@@ -109,6 +125,10 @@ public final class Fishbone {
                 String file = a == null ? null : files.get(a.path());
                 if (file != null) {
                     p.put("file", file);
+                }
+                String descr = a == null ? null : description(a);
+                if (descr != null) {
+                    p.put("description", descr);
                 }
                 p.put("unresolved", a == null);
                 policies.add(p);

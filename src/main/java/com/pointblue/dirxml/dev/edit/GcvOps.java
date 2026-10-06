@@ -199,37 +199,14 @@ public final class GcvOps {
             if (home == null) {
                 throw new Refusal("GCV '" + name + "' is not defined in " + (d == null ? "the driver set" : "driver '" + d.name + "'"));
             }
-            // who reads it: every policy in reach of the definition
-            List<String> readers = new ArrayList<>();
-            List<Policy> inReach = new ArrayList<>(ds.library.policies);
-            if (d != null && home.owner.startsWith("drivers/")) {
-                inReach.addAll(Model.policies(d));
-            } else {
-                for (Driver x : ds.drivers) {
-                    inReach.addAll(Model.policies(x));
-                }
-            }
-            for (Policy p : inReach) {
-                if (p.content == null) {
-                    continue;
-                }
-                boolean reads = GcvReferences.referenced(p.content).contains(name);
-                if (!reads) {
-                    Matcher m = TILDE.matcher(CanonicalXml.serialize(p.content));
-                    while (m.find()) {
-                        if (m.group(1).equals(name)) {
-                            reads = true;
-                            break;
-                        }
-                    }
-                }
-                if (reads) {
-                    readers.add(p.path());
-                }
-            }
+            List<Use> readers = usage(ds, d, name, home);
             if (!readers.isEmpty()) {
-                throw new Refusal("GCV '" + name + "' is read by " + readers.size() + " polic" + (readers.size() == 1 ? "y" : "ies")
-                    + " — " + String.join(", ", readers));
+                List<String> where = new ArrayList<>();
+                for (Use u : readers) {
+                    where.add(u.path);
+                }
+                throw new Refusal("GCV '" + name + "' is read by " + readers.size() + " place" + (readers.size() == 1 ? "" : "s")
+                    + " — " + String.join(", ", where));
             }
             if (home.resource != null) {
                 tx.touch(home.resource);
@@ -237,6 +214,91 @@ public final class GcvOps {
             Node parent = home.definition.getParentNode();
             parent.removeChild(home.definition);
         }
+    }
+
+    // ---- where a GCV is read ----------------------------------------------------
+
+    /** One place that reads a GCV: a policy (its artifact path) or a driver's configuration document ({@code drivers/<name>/<kind>}). */
+    public static final class Use {
+        /** "policy", or the configuration kind (shim-config-info, engine-control-values, driver-filter, …). */
+        public final String kind;
+        public final String path;
+        /** The driver whose configuration document it is, else null. */
+        public final String driver;
+
+        Use(String kind, String path, String driver) {
+            this.kind = kind;
+            this.path = path;
+            this.driver = driver;
+        }
+    }
+
+    /**
+     * Every place in reach of {@code name}'s definition that reads it: policies (the GCV tokens
+     * and {@code ~name~} in XPath or text) and the driver's configuration documents ({@code ~name~}
+     * in shim parameters, engine controls, filter). Empty when the GCV is not defined in the scope.
+     */
+    public static List<Use> usage(DriverSet ds, Driver d, String name) {
+        Home home = find(ds, d, name, ds.index());
+        return home == null ? List.of() : usage(ds, d, name, home);
+    }
+
+    private static List<Use> usage(DriverSet ds, Driver d, String name, Home home) {
+        List<Use> out = new ArrayList<>();
+        List<Policy> inReach = new ArrayList<>(ds.library.policies);
+        List<Driver> drivers = new ArrayList<>();
+        if (d != null && home.owner.startsWith("drivers/")) {
+            drivers.add(d);
+        } else {
+            drivers.addAll(ds.drivers);
+        }
+        for (Driver x : drivers) {
+            inReach.addAll(Model.policies(x));
+        }
+        for (Policy p : inReach) {
+            if (p.content == null) {
+                continue;
+            }
+            if (GcvReferences.referenced(p.content).contains(name) || namesGcv(p.content, name)
+                || mentions(CanonicalXml.serialize(p.content), name)) {
+                out.add(new Use("policy", p.path(), p.driver));
+            }
+        }
+        for (Driver x : drivers) {
+            for (Map.Entry<String, Element> c : x.config.entrySet()) {
+                if (Driver.CONFIG_VALUES.equals(c.getKey()) || c.getValue() == null) {
+                    continue;   // the definitions themselves
+                }
+                if (mentions(CanonicalXml.serialize(c.getValue()), name)) {
+                    out.add(new Use(c.getKey(), "drivers/" + x.name + "/" + c.getKey(), x.name));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** A condition or token that names the GCV: {@code <if-global-variable name=…>}, {@code <token-global-variable name=…>}. */
+    private static boolean namesGcv(Element root, String name) {
+        String n = root.getNodeName();
+        if (("if-global-variable".equals(n) || "token-global-variable".equals(n)) && name.equals(root.getAttribute("name"))) {
+            return true;
+        }
+        for (Node c = root.getFirstChild(); c != null; c = c.getNextSibling()) {
+            if (c instanceof Element && namesGcv((Element) c, name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean mentions(String text, String name) {
+        Matcher m = TILDE.matcher(text);
+        while (m.find()) {
+            if (m.group(1).equals(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The driver's / driver set's policies (delegates to the validator's model helper via a local copy). */

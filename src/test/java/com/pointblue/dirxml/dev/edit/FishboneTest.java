@@ -10,6 +10,7 @@ import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.json.Json;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
 import java.nio.file.Files;
@@ -68,6 +69,35 @@ public class FishboneTest {
         Map<String, Object> back = Json.asMap(Json.parse(Json.pretty(m)));
         assertEquals(m.keySet(), back.keySet());
         assertTrue(Fishbone.text(m).contains("Schema Mapping (schema-mapping)"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void policyDescriptionRidesAlongForTooltips() throws Exception {
+        DriverSet ds = AsCodeReader.read(SAMPLE);
+        Driver ad = ds.driver("AD Driver");
+        // the sample's policies describe their rules, not themselves: give one a policy-level description
+        Policy p0 = ad.subscriber.policies.get(0);
+        org.w3c.dom.Element descr = p0.content.getOwnerDocument().createElement("description");
+        descr.setTextContent("  Scopes the Subscriber channel to Users  ");
+        p0.content.insertBefore(descr, p0.content.getFirstChild());
+        Policy p1 = ad.subscriber.policies.get(1);
+        p1.meta.put("description", "from the object's description attribute");
+        Map<String, Object> m = Fishbone.model(ds, SAMPLE, ad);
+        Map<String, String> seen = new java.util.HashMap<>();
+        for (String section : List.of("publisher", "subscriber", "spine", "resources")) {
+            for (Object bo : (List<Object>) m.get(section)) {
+                for (Object po : (List<Object>) ((Map<String, Object>) bo).get("policies")) {
+                    Map<String, Object> p = (Map<String, Object>) po;
+                    seen.put(p.get("ref").toString(), (String) p.get("description"));
+                }
+            }
+        }
+        assertEquals("Scopes the Subscriber channel to Users", seen.get(p0.path()));
+        assertEquals("from the object's description attribute", seen.get(p1.path()));
+        // a rule's <description> is not the policy's
+        assertTrue(seen.containsKey(ad.subscriber.policies.get(2).path()));
+        assertEquals(null, seen.get(ad.subscriber.policies.get(2).path()));
     }
 
     @SuppressWarnings("unchecked")

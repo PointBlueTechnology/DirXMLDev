@@ -39,6 +39,40 @@ public final class UpdateSite {
         String version;
     }
 
+    /** One package version an update site offers. */
+    public static final class Offer {
+        public final String shortName;
+        public final String version;
+
+        Offer(String shortName, String version) {
+            this.shortName = shortName;
+            this.version = version;
+        }
+    }
+
+    /** What a site offers ({@code site.xml}), newest version of each package first. */
+    public static List<Offer> list(String siteBaseUrl) throws IOException, InterruptedException {
+        String base = siteBaseUrl.endsWith("/") ? siteBaseUrl : siteBaseUrl + "/";
+        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
+        List<Entry> entries = parseSite(get(client, base + "site.xml"));
+        entries.sort(Comparator.comparing((Entry e) -> e.shortName)
+            .thenComparing(e -> PackageVersion.parse(e.version), Comparator.reverseOrder()));
+        List<Offer> out = new ArrayList<>();
+        for (Entry e : entries) {
+            out.add(new Offer(e.shortName, e.version));
+        }
+        return out;
+    }
+
+    /** {@link #list(String)} on an already-read {@code site.xml} (tests, mirrors). */
+    public static List<Offer> list(Path siteXml) throws IOException {
+        List<Offer> out = new ArrayList<>();
+        for (Entry e : parseSite(Files.readString(siteXml))) {
+            out.add(new Offer(e.shortName, e.version));
+        }
+        return out;
+    }
+
     public static FetchResult fetch(Catalog catalog, String siteBaseUrl, List<String> shortSpecs,
                                      boolean allVersions, boolean dryRun) throws IOException, InterruptedException {
         FetchResult r = new FetchResult();
