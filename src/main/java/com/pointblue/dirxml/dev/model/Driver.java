@@ -19,6 +19,8 @@ public final class Driver {
     public static final String CONFIG_VALUES = "config-values";
     public static final String DRIVER_FILTER = "driver-filter";
     public static final String ENGINE_CONTROL_VALUES = "engine-control-values";
+    /** The application schema the shim reported ({@code <schema-def>}, from {@code vault.app-schema}); never deployed. */
+    public static final String APP_SCHEMA = "app-schema";
     /** Keys of {@link #serverSettings} and the {@code drivers/<d>.<setting>} override keys: the driver's own never-sync settings. */
     public static final String SHIM_AUTH_SERVER = "shim-auth-server";
     public static final String SHIM_AUTH_ID = "shim-auth-id";

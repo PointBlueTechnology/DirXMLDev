@@ -145,6 +145,25 @@ public final class ProjectReader {
         }
 
         DriverSet ds = buildDriverSet(idx, targetId, projectDir);
+        // the project's copy of the vault schema (one per Identity Vault; the largest when several)
+        Path schemaFile = null;
+        for (Path f : idx.schemaFiles) {
+            try {
+                if (schemaFile == null || Files.size(f) > Files.size(schemaFile)) {
+                    schemaFile = f;
+                }
+            } catch (java.io.IOException ignore) {
+                // unreadable: skipped
+            }
+        }
+        if (schemaFile != null) {
+            try {
+                ds.schema = com.pointblue.dirxml.dev.model.VaultSchema.fromDesigner(Xds.parseFile(schemaFile).getDocumentElement(),
+                    "designer-project:" + projectDir.getFileName(), Files.getLastModifiedTime(schemaFile).toInstant());
+            } catch (RuntimeException | java.io.IOException e) {
+                ds.meta.put("project.schema-error", e.getMessage());
+            }
+        }
         if (dsIds.size() > 1) {
             List<String> others = new ArrayList<>();
             for (String id : dsIds) {
@@ -1193,6 +1212,7 @@ public final class ProjectReader {
         /** {@code <ID>_icon.<ext>} beside an {@code <ID>.Driver_} — the driver's icon bytes. */
         final Map<String, Path> iconById = new LinkedHashMap<>();
         final List<Path> configValueFiles = new ArrayList<>();
+        final List<Path> schemaFiles = new ArrayList<>();
         final Map<String, Element> metaCache = new LinkedHashMap<>();
         /** designer id -> (scope, driver, name), populated as artifacts are created, so
          *  Reference-relation linkage (which only carries an id) can resolve to a real path. */
@@ -1207,8 +1227,10 @@ public final class ProjectReader {
                         idx.contentsById.put(fn.substring(0, fn.length() - "_contents.xml".length()), f);
                     } else if (fn.endsWith("_DirXML-ConfigValues.xml")) {
                         idx.configValueFiles.add(f);
-                    } else if (fn.endsWith("_initial_state.xml") || fn.endsWith("_schema.xml")) {
-                        // package baseline / eDir schema — not read by this reader
+                    } else if (fn.endsWith("_schema.xml")) {
+                        idx.schemaFiles.add(f);   // the Identity Vault's schema, read into DriverSet.schema
+                    } else if (fn.endsWith("_initial_state.xml")) {
+                        // package baseline — not read by this reader
                     } else if (iconIdOf(fn) != null) {
                         idx.iconById.putIfAbsent(iconIdOf(fn), f);
                     } else {

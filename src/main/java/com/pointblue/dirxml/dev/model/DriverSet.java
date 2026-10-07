@@ -19,6 +19,8 @@ public final class DriverSet {
     public String dn;
     /** Raw driver-set {@code <configuration-values>} (GCVs), or null. */
     public Element configValues;
+    /** The vault's schema as the tree keeps it ({@code schema/vault.xml}), or null until read. */
+    public VaultSchema schema;
     public final Library library = new Library();
     public final List<Driver> drivers = new ArrayList<>();
     /** The servers that serve this set ({@code DirXML-ServerList}), the connection's own included; empty when unknown. */
