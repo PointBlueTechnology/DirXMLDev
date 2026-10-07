@@ -376,8 +376,8 @@ public final class Doctor {
 
     /** Static-RSA suites: on by default (eDirectory often offers nothing else); says so when opted out. */
     private static Check tls() {
-        boolean wanted = com.pointblue.dirxml.dev.deploy.LegacyTls.wanted();
-        boolean disabled = com.pointblue.dirxml.dev.deploy.LegacyTls.stillDisabled();
+        boolean wanted = LegacyTls.wanted();
+        boolean disabled = LegacyTls.stillDisabled();
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("legacySuites", wanted);
         fields.put("rsaDisabledNow", disabled);
