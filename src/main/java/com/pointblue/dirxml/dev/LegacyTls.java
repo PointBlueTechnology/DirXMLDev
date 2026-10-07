@@ -1,4 +1,4 @@
-package com.pointblue.dirxml.dev.deploy;
+package com.pointblue.dirxml.dev;
 
 import java.security.Security;
 import java.util.Arrays;
