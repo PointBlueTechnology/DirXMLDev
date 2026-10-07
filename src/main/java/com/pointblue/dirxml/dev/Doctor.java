@@ -216,6 +216,7 @@ public final class Doctor {
         checks.add(simulator(req));
         checks.add(lib(req));
         checks.add(traceViewer());
+        checks.add(tls());
         checks.add(release(req));
         Environments loaded = null;
         Path envFile = null;
@@ -371,6 +372,18 @@ public final class Doctor {
         String line = st.ready() ? "trace viewer: OK  " + st.path + (st.version == null ? "" : "  " + st.version)
             : "trace viewer: OK  not installed (optional; bin/idm viewer.install)";
         return new Check("traceViewer", true, line, st.ready() ? List.of() : List.of(st.describe()), fields);
+    }
+
+    /** Static-RSA suites: on by default (eDirectory often offers nothing else); says so when opted out. */
+    private static Check tls() {
+        boolean wanted = LegacyTls.wanted();
+        boolean disabled = LegacyTls.stillDisabled();
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("legacySuites", wanted);
+        fields.put("rsaDisabledNow", disabled);
+        String line = wanted ? "tls: OK  static-RSA suites (TLS_RSA_*) kept enabled for eDirectory LDAPS listeners"
+            : "tls: WARN  static-RSA suites disabled by request (IDM_TLS_LEGACY=false): a vault offering only TLS_RSA_* fails with 'simple bind failed'";
+        return new Check("tls", true, line, List.of(), fields);
     }
 
     private static Check lib(Request req) {
