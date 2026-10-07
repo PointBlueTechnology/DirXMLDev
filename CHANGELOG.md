@@ -11,6 +11,10 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - `driver.set --clear`: make a setting empty. `--value` is optional now; an empty value cannot be
   given on the command line (it reads as missing), so the flag says it.
+- `driver.setting.add` / `driver.setting.remove`: a shim parameter (`param:<name>`, into
+  `driver-options`, `subscriber-options` or `publisher-options` of the shim config) or an engine
+  control value (`engine:<name>`) with its display name, type, value and description — what a
+  shim under development needs without editing the XML.
 
 ## [0.11.0] - 2026-10-06
 
