@@ -1,6 +1,6 @@
 # Event store: design note
 
-Status: **proposed 2026-10-07, for Jerry's confirmation** (section 8). Nothing is built. The
+Status: **decided 2026-10-07** (Jerry took the proposals in section 9). Nothing is built yet; it waits on the logger's 2.0.0 release. The
 overall plan is DirXMLDevWeb's `docs/event-logger.md`; this note is the core's half (C1 there).
 
 The store is the PostgreSQL table the
@@ -147,13 +147,10 @@ which version it reads.
   selector and `events.case --run`; skipped with a notice otherwise. CI runs the unit tests;
   the live script is for the lab.
 
-## 9. Decisions needed
+## 9. Decisions (taken 2026-10-07)
 
-1. **Dependency scope for the JDBC driver**: a normal dependency shipped with the core
-   (proposed), or loaded from a path (`eventsJdbcJar=`) so the core jar stays as it is.
-2. **Case name on save**: given by the caller (proposed; the web suggests
-   `<driver>-<type>-<yyyymmdd-hhmm>`), or generated always.
-3. **`--text` on large stores**: refuse without an indexed selector (proposed), or allow and
-   warn.
-4. **Pseudonymise by store flag** (proposed, section 5), or always for `prd` tier environments
-   regardless of the flag.
+1. **The JDBC driver is a normal dependency** shipped with the core: on the launcher's classpath
+   from `~/.m2` by the pom's version, gathered into the hosted image, attached to the release.
+2. **The caller names the case**; the web suggests `<driver>-<type>-<yyyymmdd-hhmm>`.
+3. **`--text` is refused without an indexed selector** on a store over 100k rows.
+4. **Pseudonymise by the store's flag** (`eventsPseudonymise=true`), not by tier.
