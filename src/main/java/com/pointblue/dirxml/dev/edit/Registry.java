@@ -555,6 +555,23 @@ public final class Registry {
             a -> new ConfigOps.DriverSettingRemove(a.get("driver"), a.get("key")),
             drv, req("key", "param:<name>|engine:<name>"));
 
+        // the vault schema in the tree (schema/vault.xml): custom definitions, pushed by vault.deploy-schema
+        register("schema.add-attribute", "define a custom attribute in the tree's vault schema (vault.deploy-schema pushes it)",
+            a -> new SchemaEditOps.AddAttribute(a.get("name"), a.get("ldap"), a.get("syntax"), a.get("oid"), a.containsKey("single")),
+            req("name", "NDS name"), opt("ldap", "LDAP name (default: the name)"), opt("syntax", "LDAP syntax OID (default Directory String)"),
+            opt("oid", "the attribute's OID (needed to push it)"), opt("single", "flag: single-valued"));
+        register("schema.add-class", "define a custom class in the tree's vault schema",
+            a -> new SchemaEditOps.AddClass(a.get("name"), a.get("ldap"), a.get("kind"), a.get("oid"), a.get("superclasses"), a.get("mandatory"), a.get("optional"), a.get("containment"), a.get("naming")),
+            req("name", "NDS name"), opt("ldap", "LDAP name"), opt("kind", "structural (default) | auxiliary | abstract"), opt("oid", "the class's OID (needed to push it)"),
+            opt("superclasses", "comma-separated (default Top)"), opt("mandatory", "attributes, comma-separated"), opt("optional", "attributes, comma-separated"),
+            opt("containment", "container classes, comma-separated"), opt("naming", "naming attributes, comma-separated"));
+        register("schema.set", "change a custom attribute or class of the tree's vault schema",
+            a -> new SchemaEditOps.Set(a.get("name"), a.get("ldap"), a.get("syntax"), a.get("oid"), boolOrNull(a.get("single")), a.get("kind"), a.get("superclasses"), a.get("mandatory"), a.get("optional"), a.get("containment"), a.get("naming")),
+            req("name", "the attribute's or class's name"), opt("ldap", "LDAP name"), opt("syntax", "attribute syntax OID"), opt("oid", "OID ('' clears)"), opt("single", "true|false"),
+            opt("kind", "class kind"), opt("superclasses", "replaces the list"), opt("mandatory", "replaces the list"), opt("optional", "replaces the list"), opt("containment", "replaces the list"), opt("naming", "replaces the list"));
+        register("schema.remove", "remove a custom attribute or class from the tree's vault schema (never from a vault)",
+            a -> new SchemaEditOps.Remove(a.get("name")), req("name", "the attribute's or class's name"));
+
         // drivers
         register("package.install", "install a package jar onto a driver (type 2) or the Library (type 3), Designer's way",
             a -> new com.pointblue.dirxml.dev.packages.PackageInstall(

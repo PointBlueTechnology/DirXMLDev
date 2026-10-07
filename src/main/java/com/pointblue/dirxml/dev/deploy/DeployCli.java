@@ -100,6 +100,29 @@ public final class DeployCli {
                 System.out.print(json ? r.json() + "\n" : r.text());
                 return r.ok ? 0 : 1;
             }
+            case "vault.schema":
+            case "vault.app-schema":
+            case "vault.deploy-schema": {
+                if (pos.isEmpty()) {
+                    System.err.println("usage: vault.schema <tree> --env <name> | vault.app-schema <tree> --env <name> --driver D | vault.deploy-schema <tree> --env <name> [--yes] [--confirm <name>]  [--json]");
+                    return 2;
+                }
+                Path tree = Paths.get(pos.get(0));
+                SchemaOps.Result r;
+                if (cmd.equals("vault.schema")) {
+                    r = SchemaOps.refreshVault(tree, env);
+                } else if (cmd.equals("vault.app-schema")) {
+                    if (drivers.isEmpty()) {
+                        System.err.println("usage: vault.app-schema <tree> --env <name> --driver D");
+                        return 2;
+                    }
+                    r = SchemaOps.refreshApp(tree, env, drivers.get(0));
+                } else {
+                    r = SchemaOps.deploySchema(tree, env, opts.containsKey("yes"), first(opts, "confirm"));
+                }
+                System.out.print(json ? r.json() + "\n" : r.text());
+                return r.ok ? 0 : 1;
+            }
             case "vault.rollback": {
                 String snap = first(opts, "snapshot");
                 if (snap == null) {

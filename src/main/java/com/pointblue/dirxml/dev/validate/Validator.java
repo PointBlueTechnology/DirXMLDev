@@ -36,6 +36,7 @@ public final class Validator {
             new MappingTableCheck(),
             new EcmaScriptCheck(),
             new FilterCheck(),
+            new SchemaCheck(),
             new FormCheck(),
             new FlowCheck(),
             new EntitlementCheck(),

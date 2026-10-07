@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-07
+
+### Added
+
+- Schema (docs/schema.md): the vault's schema in the tree (`schema/vault.xml`, read by
+  `vault.schema --env E`, by a Designer project import from its `_schema.xml`; `query schema`);
+  schema you define (`schema.add-attribute`, `schema.add-class`, `schema.set`, `schema.remove`)
+  pushed with `vault.deploy-schema` (plan, `--yes`, `--confirm` on production; attributes first,
+  classes in superclass order, never a removal); the application schema from the shim
+  (`vault.app-schema --driver D`, the engine's `DriverGetSchema`, into `drivers/<d>/app-schema.xml`);
+  validation warns about filter and schema-map names the vault schema lacks (`schema-unknown-*`,
+  `schema-attr-not-of-class`). Nothing reads schema on its own: every refresh is explicit.
+
 ## [0.12.0] - 2026-10-07
 
 ### Added

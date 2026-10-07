@@ -614,6 +614,24 @@ public final class Vault implements VaultAccess {
         }
     }
 
+    /**
+     * The application schema the shim reports. {@code DriverGetSchema} makes the engine ask the shim
+     * (starting it for the question when the driver is stopped) and store the answer on the driver
+     * object as {@code DirXML-ApplicationSchema} — the response itself carries nothing, as with
+     * iManager's "Refresh Application Schema" — so that attribute is read afterwards. XML, or "".
+     */
+    public String driverGetSchema(String driverDn) {
+        extOp("DriverGetSchema", driverDn, () -> ops().extendedOperation(new com.novell.nds.dirxml.ldap.DriverGetSchemaRequest(driverDn)));
+        return applicationSchema(driverDn);
+    }
+
+    /** The last application schema the engine stored on the driver ({@code DirXML-ApplicationSchema}), or "". */
+    public String applicationSchema(String driverDn) {
+        Entry e = read(driverDn, "DirXML-ApplicationSchema");
+        String s = e == null ? null : e.string("DirXML-ApplicationSchema");
+        return s == null ? "" : s;
+    }
+
     public void migrateApp(String driverDn, byte[] xds) {
         extOp("MigrateApp", driverDn, () -> ops().extendedOperation(new MigrateAppRequest(driverDn, xds)));
     }
