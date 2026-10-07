@@ -1,6 +1,6 @@
 # Event store: design note
 
-Status: **decided 2026-10-07** (Jerry took the proposals in section 9). Nothing is built yet; it waits on the logger's 2.0.0 release. The
+Status: **built 2026-10-07** against Event Logger 2.0.0's contract (`docs/store.md`). Sections 1–7 describe what is built; section 10 is the CLI as it is. The
 overall plan is DirXMLDevWeb's `docs/event-logger.md`; this note is the core's half (C1 there).
 
 The store is the PostgreSQL table the
@@ -154,3 +154,32 @@ which version it reads.
 2. **The caller names the case**; the web suggests `<driver>-<type>-<yyyymmdd-hhmm>`.
 3. **`--text` is refused without an indexed selector** on a store over 100k rows.
 4. **Pseudonymise by the store's flag** (`eventsPseudonymise=true`), not by tier.
+
+## 10. As built
+
+| Command | What |
+|---|---|
+| `events.describe <tree> --env E [--json]` | rows, newest time, schema versions present, whether the table is migrated (2.0.0's `id`, `policy`, `schemaversion` columns) |
+| `query <tree> events --env E …` | the selectors of section 3 as `--dn`, `--under`, `--name`, `--driver` (a tree driver name, or a slash DN), `--policy`, `--stage`, `--own`/`--logged`, `--type a,b`, `--class`, `--since`/`--until` (`24h`, `7d`, ISO), `--event-id`, `--text`, `--attr`, `--limit N`; `--json`, `--xml` |
+| `query <tree> event <id> --env E [--json] [--xml]` | one row: columns, the modify diff, the other rows of the same engine event; the XML when stored |
+| `events.case <tree> --env E --id N --name NAME [--driver D] [--channel C] [--dir DIR] [--replace] [--dry-run] [--json]` | the row as `cases/NAME/{case.properties,input.xds}`; `--dry-run` shows the files without writing |
+
+Environment keys: `eventsUrl` (a JDBC URL, or `host:port/db`), `eventsUser` (default
+`eventlogger_reader`), `eventsPassword` / `eventsPasswordEnv` / `eventsPasswordCommand` /
+`eventsPasswordKeychain`, `eventsTable` (default `public.dxmlevent`), `eventsPseudonymise`,
+`eventsTree` (default: taken from the store's own driver DNs). DNs are the store's slash form;
+an LDAP DN is converted. A driver named as the tree names it is matched to the store's driver
+DN by its leaf.
+
+Differences from the proposal: `events.case` is a command, not a `Registry` operation, because
+a transaction writes the model and a case directory is beside it; the web previews it with
+`--dry-run` (the files come back as JSON) and writes with the same call. `--run` is not built:
+the web's simulator view runs and records. The `doctor` probe is not built; `events.describe`
+is the check. Free text alone is refused above 100,000 rows. The attribute selector uses
+`jsonb_exists`, since JDBC reads the `?` operator as a parameter marker.
+
+Verification: `bin/smoke-events.sh` starts a throwaway PostgreSQL in Docker, applies the
+logger's DDL and the contract's example rows (`src/test/resources/fixtures/events/`), and runs
+every command above; unit tests cover the SQL builder, the row mapping and the modify diff, the
+pseudonymisation and the case files.
+

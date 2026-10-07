@@ -7,6 +7,24 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- The Event Logger's store (docs/event-store.md): `events.describe`, `query <tree> events --env E`
+  with the contract's query patterns as selectors (object timeline, subtree, name, driver, policy
+  and stage, own or logged rows, types, class, time window, engine event id, free text, modified
+  attribute), `query <tree> event <id>` with the modify diff and the other rows of the same engine
+  event, and `events.case` turning a row into `cases/<name>/{case.properties,input.xds}` (the raw
+  XDS when stored, rebuilt from the JSON with the logger jar otherwise and marked). Per-environment
+  keys `eventsUrl`, `eventsUser`, `eventsPassword…`, `eventsTable`, `eventsPseudonymise`,
+  `eventsTree`; the read-only reader account on a read-only connection. `eventsPseudonymise=true`
+  masks people in everything that leaves the core, with the vault clone's pseudonymiser.
+  `bin/smoke-events.sh` checks it all against a throwaway PostgreSQL in Docker.
+
+### Changed
+
+- `org.postgresql:postgresql` is the core's first runtime dependency that is not an engine jar
+  (BSD-2); `bin/idm` takes it from `~/.m2` by the pom's version, and a release attaches it.
+
 ## [0.13.0] - 2026-10-07
 
 ### Added
