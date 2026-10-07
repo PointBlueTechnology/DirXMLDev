@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-07
+
 ### Added
 
 - `driver.set --clear`: make a setting empty. `--value` is optional now; an empty value cannot be
