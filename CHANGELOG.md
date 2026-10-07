@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-07
+
 ### Added
 
 - Schema (docs/schema.md): the vault's schema in the tree (`schema/vault.xml`, read by
