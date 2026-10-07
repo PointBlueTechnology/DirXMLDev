@@ -179,6 +179,7 @@ public final class Vault implements VaultAccess {
             List<String> binary = new ArrayList<>(BINARY_ATTRS);
             binary.addAll(c.binaryAttrs);
             env.put("java.naming.ldap.attributes.binary", String.join(" ", binary));
+            LegacyTls.enable();   // before the TLS stack initialises: eDirectory often offers static-RSA suites only
             if (c.url.startsWith("ldaps") && c.trustAll) {
                 env.put("java.naming.ldap.factory.socket", "com.pointblue.dirxml.sim.TrustAllSocketFactory");
                 // trust-all also means the certificate's name need not match the URL's host: a lab reached

@@ -42,6 +42,7 @@ public final class Cli {
     }
 
     public static void main(String[] args) {
+        com.pointblue.dirxml.dev.deploy.LegacyTls.enable();   // first thing: the JDK reads its TLS settings once
         ReleaseCheck.schedule(args, System.getenv(), System.console() != null, Version.current(), ReleaseCheck.cacheFile());
         try {
             if (args.length >= 1 && args[0].equals("version")) {
