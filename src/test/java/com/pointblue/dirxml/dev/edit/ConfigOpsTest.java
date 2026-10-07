@@ -140,6 +140,13 @@ public class ConfigOpsTest {
         assertEquals("true", Xds.text(Xds.childrenByName(GcvOps.definition(d.config.get(Driver.SHIM_CONFIG_INFO), "use-ssl"), "value").get(0)));
         assertEquals("60", Xds.text(Xds.childrenByName(GcvOps.definition(d.config.get(Driver.ENGINE_CONTROL_VALUES), "dirxml.engine.retry-interval"), "value").get(0)));
         assertTrue(run(new ConfigOps.DriverSet_("AD", "param:nope", "x")).refusal.contains("use-ssl"));
+        // clearing: an empty value is written; on the command line that needs --clear, since an empty --value reads as missing
+        assertTrue(run(new ConfigOps.DriverSet_("AD", "shim-auth-id", "")).ok());
+        assertTrue(run(new ConfigOps.DriverSet_("AD", "shim-auth-id", null)).refusal.contains("--clear"));
+        Registry.Spec spec = Registry.get("driver.set");
+        assertEquals("missing --key", Registry.missing(spec, java.util.Map.of("driver", "AD", "clear", "true")));
+        assertEquals(null, Registry.missing(spec, java.util.Map.of("driver", "AD", "key", "shim-auth-id", "clear", "true")));
+        assertTrue(spec.create(java.util.Map.of("driver", "AD", "key", "shim-auth-id", "clear", "true")) instanceof ConfigOps.DriverSet_);
         assertTrue(run(new ConfigOps.DriverSet_("AD", "colour", "x")).refusal.contains("key must be"));
     }
 

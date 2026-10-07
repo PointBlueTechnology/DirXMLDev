@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `driver.set --clear`: make a setting empty. `--value` is optional now; an empty value cannot be
+  given on the command line (it reads as missing), so the flag says it.
+
 ## [0.11.0] - 2026-10-06
 
 ### Added

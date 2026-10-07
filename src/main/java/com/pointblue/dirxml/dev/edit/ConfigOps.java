@@ -430,7 +430,7 @@ public final class ConfigOps {
                 throw new Refusal("a key is required");
             }
             if (value == null) {
-                throw new Refusal("a value is required");
+                throw new Refusal("a value is required (--value, or --clear for an empty one)");
             }
             switch (key) {
                 case "shim-class": d.shimClass = value; return;

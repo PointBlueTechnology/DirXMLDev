@@ -543,8 +543,9 @@ public final class Registry {
             a -> new OverrideOps.Remove(a.get("env"), a.get("key")),
             req("env", "environment name"), req("key", "the override key"));
         register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, param:<shim parameter>, engine:<engine control value>",
-            a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.get("value")),
-            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), req("value", "the value"));
+            a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.containsKey("clear") ? "" : a.get("value")),
+            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), opt("value", "the value"),
+            opt("clear", "flag: make the setting empty (an empty --value reads as missing on the command line)"));
 
         // drivers
         register("package.install", "install a package jar onto a driver (type 2) or the Library (type 3), Designer's way",
