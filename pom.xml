@@ -32,9 +32,17 @@
         <!-- systemPath must not name ${project.basedir} directly: Maven warns, and the
              warning prints the uninterpolated expression. This property is that directory. -->
         <idm.lib>${project.basedir}/lib</idm.lib>
+        <postgresql.version>42.7.7</postgresql.version>
     </properties>
 
     <dependencies>
+        <!-- The Event Logger's PostgreSQL store (docs/event-store.md): the one runtime dependency that is
+             not an engine jar. BSD-2. The launcher takes it from ~/.m2 by this version; a release attaches it. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${postgresql.version}</version>
+        </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>

@@ -37,6 +37,8 @@ import java.util.Set;
  *   query <tree> chain <driver> sub|pub       the channel's policy chain in execution order
  *   query <tree> gcvs <driver>                GCVs in the driver's scope, with where each is defined
  *   query <tree> schema [driver]              the vault schema in the tree; with a driver, its application schema
+ *   query <tree> events --env E …             rows of the Event Logger's store (docs/event-store.md)
+ *   query <tree> event <id> --env E           one row, its changes, the other rows of the same engine event
  *   query <tree> tables <driver>              mapping tables in the driver's reach
  *   package.diff <tree> <path>                a customized packaged artifact vs its baseline
  *   form.list <tree> [--driver D]             every JSON form (kind, name, title, #fields, packaged mark)
@@ -117,6 +119,9 @@ public final class ReadCli {
                 return tables(ds, driver);
             case "schema":
                 return schema(ds, driver);
+            case "events":
+            case "event":
+                return com.pointblue.dirxml.dev.events.EventsCli.query(argv);
             default:
                 System.err.println("unknown query '" + what + "'");
                 return 2;

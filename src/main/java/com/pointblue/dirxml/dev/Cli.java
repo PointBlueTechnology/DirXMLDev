@@ -228,6 +228,9 @@ public final class Cli {
             if (args.length >= 1 && args[0].equals("query")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.query(args));
             }
+            if (args.length >= 1 && (args[0].equals("events.case") || args[0].equals("events.describe"))) {
+                System.exit(com.pointblue.dirxml.dev.events.EventsCli.command(args));
+            }
             if (args.length >= 1 && args[0].equals("form.list")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.formList(args));
             }
