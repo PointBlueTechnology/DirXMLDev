@@ -11,6 +11,9 @@ set -e
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 SIM_VER="${IDM_SIM_VERSION:-1.7.0}"
 SIM_JAR="$HOME/.m2/repository/com/pointblue/dirxml/dirxml-simulator/$SIM_VER/dirxml-simulator-$SIM_VER.jar"
+# the PostgreSQL JDBC driver for the event store (the version the pom names; `mvn package` fetches it)
+PG_VER=$(sed -n 's#.*<postgresql.version>\([^<]*\)</postgresql.version>.*#\1#p' "$HERE/pom.xml" | head -1)
+PG_JAR="$HOME/.m2/repository/org/postgresql/postgresql/$PG_VER/postgresql-$PG_VER.jar"
 CMD="${1:-}"
 
 # REQUIRED_JARS: dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar
@@ -189,6 +192,7 @@ CP="$HERE/target/classes"
 if [ -f "$SIM_JAR" ]; then
   CP="$CP:$SIM_JAR"
 fi
+[ -f "$PG_JAR" ] && CP="$CP:$PG_JAR"
 for j in "$HERE"/lib/*.jar; do
   [ -f "$j" ] || continue
   CP="$CP:$j"
