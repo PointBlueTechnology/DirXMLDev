@@ -1,4 +1,4 @@
-package com.pointblue.dirxml.dev.deploy;
+package com.pointblue.dirxml.dev;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
