@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-07
+
 ### Added
 
 - The Event Logger's store (docs/event-store.md): `events.describe`, `query <tree> events --env E`
@@ -24,6 +26,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - `org.postgresql:postgresql` is the core's first runtime dependency that is not an engine jar
   (BSD-2); `bin/idm` takes it from `~/.m2` by the pom's version, and a release attaches it.
+
+- Static-RSA key exchange (`TLS_RSA_*`) stays enabled by default. eDirectory's LDAPS listener
+  often offers only those suites, and recent JDK builds (24+, and the 21 updates from mid-2026)
+  disable them, which made a bind to such a vault fail with "simple bind failed" although the
+  credentials were right. `LegacyTls.enable()` (base package, so the portable build has it) runs at start-up and before every vault
+  connection; opt out with `-Didm.tls.legacy=false` or `IDM_TLS_LEGACY=false`. `doctor` reports
+  when the suites are still disabled.
 
 ## [0.13.0] - 2026-10-07
 

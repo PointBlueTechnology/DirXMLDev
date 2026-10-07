@@ -27,8 +27,10 @@ javac --release 21 -encoding UTF-8 -cp "$CP" -d "$OUT" \
   src/main/java/com/pointblue/dirxml/dev/deploy/Environments.java \
   src/main/java/com/pointblue/dirxml/dev/deploy/AgentWriteGate.java \
   src/main/java/com/pointblue/dirxml/dev/operate/TraceViewer.java \
+  src/main/java/com/pointblue/dirxml/dev/LegacyTls.java \
   src/main/java/com/pointblue/dirxml/dev/Doctor.java \
   src/test/java/com/pointblue/dirxml/dev/DoctorTest.java \
+  src/test/java/com/pointblue/dirxml/dev/LegacyTlsTest.java \
   src/test/java/com/pointblue/dirxml/dev/ReleaseCheckTest.java \
   src/test/java/com/pointblue/dirxml/dev/json/JsonTest.java \
   src/test/java/com/pointblue/dirxml/dev/deploy/EnvironmentsSecretsTest.java \
