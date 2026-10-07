@@ -47,6 +47,9 @@ public final class AsCodeReader {
                 ds.configValues = xml(root.resolve(attr(c, "file")));
             }
         }
+        for (Element c : children(dsm, "schema")) {
+            ds.schema = com.pointblue.dirxml.dev.model.VaultSchema.fromXml(xml(root.resolve(attr(c, "file"))));
+        }
         for (Element s : children(dsm, "server")) {
             if (attr(s, "dn") != null) {
                 ds.servers.add(attr(s, "dn"));

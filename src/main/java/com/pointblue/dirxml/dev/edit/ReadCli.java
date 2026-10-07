@@ -36,6 +36,7 @@ import java.util.Set;
  *   query <tree> artifacts [driver]           every artifact (of a driver)
  *   query <tree> chain <driver> sub|pub       the channel's policy chain in execution order
  *   query <tree> gcvs <driver>                GCVs in the driver's scope, with where each is defined
+ *   query <tree> schema [driver]              the vault schema in the tree; with a driver, its application schema
  *   query <tree> tables <driver>              mapping tables in the driver's reach
  *   package.diff <tree> <path>                a customized packaged artifact vs its baseline
  *   form.list <tree> [--driver D]             every JSON form (kind, name, title, #fields, packaged mark)
@@ -114,10 +115,44 @@ public final class ReadCli {
                 return gcvs(ds, driver);
             case "tables":
                 return tables(ds, driver);
+            case "schema":
+                return schema(ds, driver);
             default:
                 System.err.println("unknown query '" + what + "'");
                 return 2;
         }
+    }
+
+    /** The vault schema in the tree (classes with their attributes), or with a driver its application schema. */
+    private static int schema(DriverSet ds, String driverName) {
+        if (driverName != null) {
+            Driver d = driver(ds, driverName);
+            if (d == null) {
+                return 2;
+            }
+            org.w3c.dom.Element app = d.config.get(Driver.APP_SCHEMA);
+            if (app == null) {
+                System.out.println("no application schema for " + d.name + " (vault.app-schema --env E --driver " + d.name + ")");
+                return 1;
+            }
+            for (org.w3c.dom.Element c : com.pointblue.dirxml.dev.deploy.SchemaOps.children(app, "class-def")) {
+                System.out.println(c.getAttribute("class-name") + (c.hasAttribute("container") ? " (container)" : ""));
+                for (org.w3c.dom.Element a : com.pointblue.dirxml.dev.deploy.SchemaOps.children(c, "attr-def")) {
+                    System.out.println("  " + a.getAttribute("attr-name") + (a.hasAttribute("type") ? "  " + a.getAttribute("type") : "") + ("true".equals(a.getAttribute("multi-valued")) ? "  multi" : ""));
+                }
+            }
+            return 0;
+        }
+        if (ds.schema == null) {
+            System.out.println("no schema in the tree (vault.schema --env E reads the vault's)");
+            return 1;
+        }
+        System.out.println("vault schema: " + ds.schema.attributes.size() + " attributes, " + ds.schema.classes.size() + " classes, "
+            + ds.schema.customAttributes().size() + "+" + ds.schema.customClasses().size() + " custom; from " + ds.schema.meta.get("source") + " at " + ds.schema.meta.get("read-at"));
+        for (com.pointblue.dirxml.dev.model.VaultSchema.ClassDef c : ds.schema.classes) {
+            System.out.println((c.custom ? "* " : "  ") + c.name + " (" + c.ldap + ", " + c.kind + (c.superclasses.isEmpty() ? "" : ", sup " + String.join(", ", c.superclasses)) + ")");
+        }
+        return 0;
     }
 
     private static Driver driver(DriverSet ds, String name) {

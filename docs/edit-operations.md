@@ -263,3 +263,14 @@ transaction semantics and the simulate gate are not.
    to read as-code trees). ✅
 4. **CLI only; no MCP server** — the registry keeps an adapter cheap if a client
    ever needs one. ✅
+
+## Schema (docs/schema.md)
+
+| op | what |
+|---|---|
+| `schema.add-attribute --name N [--ldap L] [--syntax OID] [--oid OID] [--single]` | a custom attribute in the tree's vault schema |
+| `schema.add-class --name N [--ldap L] [--kind structural\|auxiliary\|abstract] [--oid OID] [--superclasses …] [--mandatory …] [--optional …] [--containment …] [--naming …]` | a custom class |
+| `schema.set --name N …` | change a custom definition (the vault's are read-only) |
+| `schema.remove --name N` | a custom definition leaves the tree (never the vault) |
+
+`vault.schema`, `vault.app-schema` and `vault.deploy-schema` are vault commands (DeployCli), not tree operations.
