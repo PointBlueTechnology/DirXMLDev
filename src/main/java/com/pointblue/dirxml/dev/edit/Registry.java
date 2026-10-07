@@ -543,8 +543,17 @@ public final class Registry {
             a -> new OverrideOps.Remove(a.get("env"), a.get("key")),
             req("env", "environment name"), req("key", "the override key"));
         register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, param:<shim parameter>, engine:<engine control value>",
-            a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.get("value")),
-            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), req("value", "the value"));
+            a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.containsKey("clear") ? "" : a.get("value")),
+            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), opt("value", "the value"),
+            opt("clear", "flag: make the setting empty (an empty --value reads as missing on the command line)"));
+        register("driver.setting.add", "add a shim parameter (param:<name>, into a section of the shim config) or an engine control value (engine:<name>): its definition with display name, type and value",
+            a -> new ConfigOps.DriverSettingAdd(a.get("driver"), a.get("key"), a.get("type"), a.get("display"), a.get("value"), a.get("section"), a.get("description")),
+            drv, req("key", "param:<name>|engine:<name>"), opt("type", "string|integer|boolean|dn|enum|password-ref… (default string)"),
+            opt("display", "display name (default: the name)"), opt("value", "the value (default empty)"),
+            opt("section", "for a shim parameter: driver-options (default), subscriber-options, publisher-options"), opt("description", "a description"));
+        register("driver.setting.remove", "remove a shim parameter (param:<name>) or an engine control value (engine:<name>) from a driver",
+            a -> new ConfigOps.DriverSettingRemove(a.get("driver"), a.get("key")),
+            drv, req("key", "param:<name>|engine:<name>"));
 
         // drivers
         register("package.install", "install a package jar onto a driver (type 2) or the Library (type 3), Designer's way",
