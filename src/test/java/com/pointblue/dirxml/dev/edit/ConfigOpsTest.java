@@ -140,6 +140,38 @@ public class ConfigOpsTest {
         assertEquals("true", Xds.text(Xds.childrenByName(GcvOps.definition(d.config.get(Driver.SHIM_CONFIG_INFO), "use-ssl"), "value").get(0)));
         assertEquals("60", Xds.text(Xds.childrenByName(GcvOps.definition(d.config.get(Driver.ENGINE_CONTROL_VALUES), "dirxml.engine.retry-interval"), "value").get(0)));
         assertTrue(run(new ConfigOps.DriverSet_("AD", "param:nope", "x")).refusal.contains("use-ssl"));
+        // clearing: an empty value is written; on the command line that needs --clear, since an empty --value reads as missing
+        assertTrue(run(new ConfigOps.DriverSet_("AD", "shim-auth-id", "")).ok());
+        assertTrue(run(new ConfigOps.DriverSet_("AD", "shim-auth-id", null)).refusal.contains("--clear"));
+        Registry.Spec spec = Registry.get("driver.set");
+        assertEquals("missing --key", Registry.missing(spec, java.util.Map.of("driver", "AD", "clear", "true")));
+        assertEquals(null, Registry.missing(spec, java.util.Map.of("driver", "AD", "key", "shim-auth-id", "clear", "true")));
+        assertTrue(spec.create(java.util.Map.of("driver", "AD", "key", "shim-auth-id", "clear", "true")) instanceof ConfigOps.DriverSet_);
+    }
+
+    @Test
+    public void driverSettingsAreAddedAndRemoved() throws IOException {
+        // a shim under development gets a new parameter, in the publisher section, typed, with a value
+        assertTrue(run(new ConfigOps.DriverSettingAdd("AD", "param:poll-interval", "integer", "Poll interval (s)", "30", "publisher-options", "How often the publisher polls")).ok());
+        Driver d = AsCodeReader.read(tree).driver("AD");
+        Element def = GcvOps.definition(d.config.get(Driver.SHIM_CONFIG_INFO), "poll-interval");
+        assertEquals("30", Xds.text(Xds.childrenByName(def, "value").get(0)));
+        assertEquals("integer", def.getAttribute("type"));
+        assertEquals("Poll interval (s)", def.getAttribute("display-name"));
+        assertEquals("publisher-options", def.getParentNode().getParentNode().getParentNode().getNodeName());
+        assertEquals("How often the publisher polls", Xds.text(Xds.childrenByName(def, "description").get(0)));
+        // then it is settable like any other, and refused as a duplicate
+        assertTrue(run(new ConfigOps.DriverSet_("AD", "param:poll-interval", "60")).ok());
+        assertTrue(run(new ConfigOps.DriverSettingAdd("AD", "param:poll-interval", null, null, "1", null, null)).refusal.contains("already has"));
+        // an engine control value too, in its own document
+        assertTrue(run(new ConfigOps.DriverSettingAdd("AD", "engine:dirxml.engine.custom", "boolean", null, "true", null, null)).ok());
+        assertEquals("true", Xds.text(Xds.childrenByName(GcvOps.definition(AsCodeReader.read(tree).driver("AD").config.get(Driver.ENGINE_CONTROL_VALUES), "dirxml.engine.custom"), "value").get(0)));
+        // removed, and gone
+        assertTrue(run(new ConfigOps.DriverSettingRemove("AD", "param:poll-interval")).ok());
+        assertEquals(null, GcvOps.definition(AsCodeReader.read(tree).driver("AD").config.get(Driver.SHIM_CONFIG_INFO), "poll-interval"));
+        assertTrue(run(new ConfigOps.DriverSettingRemove("AD", "param:poll-interval")).refusal.contains("no shim parameter"));
+        assertTrue(run(new ConfigOps.DriverSettingAdd("AD", "colour", null, null, null, null, null)).refusal.contains("param:<name> or engine:<name>"));
+        assertTrue(run(new ConfigOps.DriverSettingAdd("AD", "param:x", null, null, null, "nowhere", null)).refusal.contains("section"));
         assertTrue(run(new ConfigOps.DriverSet_("AD", "colour", "x")).refusal.contains("key must be"));
     }
 
