@@ -138,3 +138,59 @@ subagent work; 1, 3 and 5 (live vault, SSH, the open semantics) are not.
    tool never copies or stores trace files, only streams them).
 4. **`driver.submit` waits for spike 5c**; it ships only if the live engine
    demonstrably runs the submitted event through the channels.
+
+## Attaching a debugger
+
+Three ways to step through execution, from safest to most invasive. The first needs no server.
+
+### 1. The simulator, in process
+
+`idm simulate` and the simulator CLI run the engine's own policy classes (DirXML Script, XSLT,
+ECMAScript) from the proprietary jars inside a plain JVM. Run the case from IntelliJ, or start it
+with the JDWP agent and attach:
+
+```sh
+JAVA_TOOL_OPTIONS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:5005" bin/idm simulate <case>
+```
+
+Attach the decompiled engine sources (kept outside the repository) as the source root for the
+jars. Breakpoints at method entry and step-over are reliable; line stepping inside a method is
+approximate, because decompiled line numbers do not match the bytecode. With `shim=true` the
+real shim runs too and can be stepped through the same way. What you step through is the policy
+chain against the fake directory, not a live vault.
+
+### 2. The engine itself (lab only)
+
+The engine is a JVM embedded in `ndsd` by `libvrdim.so`, created once when the DirXML module
+loads. That library reads `DHOST_JVM_OPTIONS` from `ndsd`'s environment (with
+`DHOST_JVM_ADD_CLASSPATH`, `DHOST_JVM_INITIAL_HEAP`, `DHOST_JVM_MAX_HEAP`, `DHOST_JVM_VERBOSE_GC`).
+On a lab engine set
+
+```sh
+DHOST_JVM_OPTIONS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:5005"
+```
+
+in `/opt/novell/eDirectory/sbin/pre_ndsd_start` on a host, or in the container's environment for
+a containerised engine, restart `ndsd`, open an SSH tunnel to 5005 and attach with IntelliJ's
+Remote JVM Debug.
+
+Rules:
+
+- Never on a production engine. JDWP has no authentication: bind to loopback and tunnel.
+- Suspend the thread, not the JVM. A breakpoint on a driver thread leaves LDAP and NCP serving,
+  but the engine's timeouts, heartbeats and a Remote Loader link can fire while you wait.
+- The engine jars are stripped: `javap -l` on a class in `dirxml.jar` (IDM 4.10.2) shows neither
+  a `LineNumberTable` nor a `LocalVariableTable`. Expect method-entry breakpoints and variables
+  by slot only; line stepping inside the engine's own classes does not work. Your shim's classes
+  carry whatever your build gives them.
+
+### 3. The Java Remote Loader
+
+A shim under `dirxml_jremote` is a plain `java` command line in its own process. Put the same
+JDWP option on its launcher and debug the shim without touching `ndsd`. For shim development
+this is the simplest live route.
+
+Planned (DirXMLDevWeb `docs/design.md`): an `engine.debug` helper that sets the option on a
+containerised lab engine, restarts it, opens the tunnel and prints the attach settings, refusing
+on the `prd` tier.
+
