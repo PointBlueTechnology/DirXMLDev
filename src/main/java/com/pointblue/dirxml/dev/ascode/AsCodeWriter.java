@@ -46,6 +46,7 @@ public final class AsCodeWriter {
     public static final String LIBRARY_MANIFEST = "library.xml";
     public static final String DRIVER_MANIFEST = "driver.xml";
     public static final String CONFIG_VALUES_FILE = "config-values.xml";
+    public static final String SCHEMA_FILE = "schema/vault.xml";
 
     /** Write the whole driver set under {@code root} (created if needed; files overwritten). */
     public static void write(DriverSet ds, Path root) throws IOException {
@@ -58,6 +59,11 @@ public final class AsCodeWriter {
         if (ds.configValues != null) {
             writeXml(root.resolve(CONFIG_VALUES_FILE), ds.configValues);
             m.child("config").attr("kind", Driver.CONFIG_VALUES).attr("file", CONFIG_VALUES_FILE);
+        }
+        if (ds.schema != null) {
+            Files.createDirectories(root.resolve("schema"));
+            writeXml(root.resolve(SCHEMA_FILE), ds.schema.toXml());
+            m.child("schema").attr("file", SCHEMA_FILE);
         }
         for (String s : ds.servers) {
             m.child("server").attr("dn", s);
