@@ -471,6 +471,124 @@ public final class ConfigOps {
         }
     }
 
+    // ---- driver settings: a shim parameter or an engine control value added or removed ----
+
+    /**
+     * Add a shim parameter ({@code param:<name>}, into {@code driver-options}, {@code subscriber-options}
+     * or {@code publisher-options} of the shim config) or an engine control value ({@code engine:<name>})
+     * — the definition with its display name, type and value. A shim under development gets its new
+     * parameters this way instead of by editing the XML.
+     */
+    public static final class DriverSettingAdd implements Operation {
+        private final String driver;
+        private final String key;
+        private final String type;
+        private final String display;
+        private final String value;
+        private final String section;
+        private final String description;
+
+        public DriverSettingAdd(String driver, String key, String type, String display, String value, String section, String description) {
+            this.driver = driver;
+            this.key = key;
+            this.type = type == null || type.isBlank() ? "string" : type.trim();
+            this.display = display;
+            this.value = value == null ? "" : value;
+            this.section = section == null || section.isBlank() ? "driver-options" : section.trim();
+            this.description = description;
+        }
+
+        @Override
+        public String name() {
+            return "driver.setting.add";
+        }
+
+        @Override
+        public void apply(DriverSet ds, Transaction tx) throws Refusal, IOException {
+            Driver d = ArtifactOps.driverOrRefuse(ds, driver);
+            boolean param = key != null && key.startsWith("param:");
+            if (!param && (key == null || !key.startsWith("engine:"))) {
+                throw new Refusal("key must be param:<name> or engine:<name>, not '" + key + "'");
+            }
+            String name = key.substring(key.indexOf(':') + 1).trim();
+            if (name.isEmpty()) {
+                throw new Refusal("a name is required after " + (param ? "param:" : "engine:"));
+            }
+            Element blob = d.config.get(param ? Driver.SHIM_CONFIG_INFO : Driver.ENGINE_CONTROL_VALUES);
+            if (blob == null) {
+                throw new Refusal("driver '" + d.name + "' has no " + (param ? "shim-config-info" : "engine-control-values") + " document");
+            }
+            if (GcvOps.definition(blob, name) != null) {
+                throw new Refusal("driver '" + d.name + "' already has " + (param ? "a shim parameter" : "an engine control value") + " '" + name + "'");
+            }
+            Element holder = blob;
+            if (param) {
+                if (!List.of("driver-options", "subscriber-options", "publisher-options").contains(section)) {
+                    throw new Refusal("section must be driver-options, subscriber-options or publisher-options, not '" + section + "'");
+                }
+                holder = childOrAdd(blob, section);
+                holder = childOrAdd(holder, "configuration-values");
+            }
+            Element defs = childOrAdd(holder, "definitions");
+            Element def = defs.getOwnerDocument().createElementNS(null, "definition");
+            def.setAttribute("display-name", display == null || display.isBlank() ? name : display);
+            def.setAttribute("name", name);
+            def.setAttribute("type", type);
+            if (description != null && !description.isBlank()) {
+                Element descr = defs.getOwnerDocument().createElementNS(null, "description");
+                descr.setTextContent(description);
+                def.appendChild(descr);
+            }
+            Element v = defs.getOwnerDocument().createElementNS(null, "value");
+            v.setTextContent(value);
+            def.appendChild(v);
+            defs.appendChild(def);
+            tx.note("added " + (param ? "shim parameter " + name + " (" + section + ")" : "engine control value " + name) + " = " + value + " to driver " + d.name);
+        }
+
+        private static Element childOrAdd(Element parent, String name) {
+            for (Element c : Xds.childrenByName(parent, name)) {
+                return c;
+            }
+            Element c = parent.getOwnerDocument().createElementNS(null, name);
+            parent.appendChild(c);
+            return c;
+        }
+    }
+
+    /** Remove a shim parameter ({@code param:<name>}) or an engine control value ({@code engine:<name>}) from a driver. */
+    public static final class DriverSettingRemove implements Operation {
+        private final String driver;
+        private final String key;
+
+        public DriverSettingRemove(String driver, String key) {
+            this.driver = driver;
+            this.key = key;
+        }
+
+        @Override
+        public String name() {
+            return "driver.setting.remove";
+        }
+
+        @Override
+        public void apply(DriverSet ds, Transaction tx) throws Refusal, IOException {
+            Driver d = ArtifactOps.driverOrRefuse(ds, driver);
+            boolean param = key != null && key.startsWith("param:");
+            if (!param && (key == null || !key.startsWith("engine:"))) {
+                throw new Refusal("key must be param:<name> or engine:<name>, not '" + key + "'");
+            }
+            String name = key.substring(key.indexOf(':') + 1).trim();
+            Element blob = d.config.get(param ? Driver.SHIM_CONFIG_INFO : Driver.ENGINE_CONTROL_VALUES);
+            Element def = blob == null ? null : GcvOps.definition(blob, name);
+            if (def == null) {
+                throw new Refusal("no " + (param ? "shim parameter" : "engine control value") + " '" + name + "' in driver '" + d.name + "'");
+            }
+            def.getParentNode().removeChild(def);
+            tx.note("removed " + (param ? "shim parameter " : "engine control value ") + name + " from driver " + d.name);
+        }
+    }
+
     // ---- mapping tables -------------------------------------------------------
 
     static Resource tableOrRefuse(DriverSet ds, String path) throws Operation.Refusal {
