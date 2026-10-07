@@ -24,6 +24,10 @@ import java.util.TreeSet;
  *   stg.secrets=secrets-stg.properties   # optional; see Secrets
  *   prd.requires=stg            # optional: a green STG deploy of the same commit first
  *   stg.sshHost=idm-stg          # optional: the engine host, for driver.trace tail (key-based ssh)
+ *   stg.eventsUrl=jdbc:postgresql://db:5432/idmEvent   # optional: the Event Logger's store (docs/event-store.md)
+ *   stg.eventsUser=eventlogger_reader                  #   read-only account; eventsPassword[Env|Command|Keychain]=
+ *   stg.eventsTable=public.dxmlevent                   #   default; eventsPseudonymise=true masks people in output
+ *   stg.eventsTree=TREE                                #   the tree name DNs in the store start with (default: from the vault)
  *   stg.sshUser=root
  * </pre>
  */
@@ -43,6 +47,8 @@ public final class Environments {
         public final boolean trustAll;
         public final String sshHost;      // may be null: no trace tail
         public final String sshUser;
+        /** The Event Logger's store, or null when the environment has none (docs/event-store.md). */
+        public EventsConfig events;
 
         Environment(String name, String url, String bindDn, String password, String driverSetDn,
                     Tier tier, String requires, Path secretsFile, boolean trustAll, String sshHost, String sshUser) {
@@ -151,6 +157,25 @@ public final class Environments {
         }
     }
 
+    /** Where an environment's event store is and how to read it; the reader account only ever selects. */
+    public static final class EventsConfig {
+        public final String url;
+        public final String user;
+        public final String password;
+        public final String table;
+        public final boolean pseudonymise;
+        public final String tree;   // may be null: taken from the vault
+
+        public EventsConfig(String url, String user, String password, String table, boolean pseudonymise, String tree) {
+            this.url = url;
+            this.user = user;
+            this.password = password;
+            this.table = table;
+            this.pseudonymise = pseudonymise;
+            this.tree = tree;
+        }
+    }
+
     /** Every environment in the file, without resolving secrets. */
     public List<Described> describe() {
         List<Described> out = new ArrayList<>();
@@ -193,10 +218,33 @@ public final class Environments {
         boolean trustAll = "true".equals(props.getProperty(name + ".trustAll"));   // opt in; TLS is verified otherwise
         String sshHost = props.getProperty(name + ".sshHost");
         String sshUser = props.getProperty(name + ".sshUser");
-        return new Environment(name, url, bindDn, password, driverSet, tier,
+        Environment env = new Environment(name, url, bindDn, password, driverSet, tier,
             requires == null || requires.isBlank() ? null : requires.trim(), secretsFile, trustAll,
             sshHost == null || sshHost.isBlank() ? null : sshHost.trim(),
             sshUser == null || sshUser.isBlank() ? null : sshUser.trim());
+        env.events = eventsOf(name);
+        return env;
+    }
+
+    /** The event store settings, or null without {@code <name>.eventsUrl}. */
+    private EventsConfig eventsOf(String name) throws IOException {
+        String url = props.getProperty(name + ".eventsUrl");
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        url = url.trim();
+        if (!url.startsWith("jdbc:")) {
+            url = "jdbc:postgresql://" + url;
+        }
+        String user = props.getProperty(name + ".eventsUser", "eventlogger_reader").trim();
+        char[] pw = SecretSource.has(props, name + ".eventsPassword") ? SecretSource.resolve(props, name + ".eventsPassword", "environment '" + name + "' event store") : null;
+        String table = props.getProperty(name + ".eventsTable", "public.dxmlevent").trim();
+        if (!table.matches("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?")) {
+            throw new IOException("environment '" + name + "': eventsTable must be a plain [schema.]table name");
+        }
+        boolean pseud = "true".equals(props.getProperty(name + ".eventsPseudonymise", "").trim());
+        String tree = props.getProperty(name + ".eventsTree");
+        return new EventsConfig(url, user, pw == null ? "" : new String(pw), table, pseud, tree == null || tree.isBlank() ? null : tree.trim());
     }
 
     /**

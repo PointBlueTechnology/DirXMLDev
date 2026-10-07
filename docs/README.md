@@ -49,7 +49,7 @@ the help.
 | What `export-project --new` writes | [designer-new-project.md](designer-new-project.md) |
 | Updating an existing Designer project | [designer-roundtrip.md](designer-roundtrip.md) |
 | Carry a customer's vault home as a lab clone | [howto-clone-vault.md](howto-clone-vault.md), [vault-clone.md](vault-clone.md) |
-| Read the Event Logger's store; logged events as simulator cases (proposed) | [event-store.md](event-store.md) |
+| Read the Event Logger's store; logged events as simulator cases | [event-store.md](event-store.md) |
 | Read-only policy-flow viewer | [vscode-extension-v1.md](vscode-extension-v1.md), [../extensions/dirxmldev-visual/README.md](../extensions/dirxmldev-visual/README.md) |
 
 ## Architecture and history
