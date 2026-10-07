@@ -12,7 +12,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Static-RSA key exchange (`TLS_RSA_*`) stays enabled by default. eDirectory's LDAPS listener
   often offers only those suites, and recent JDK builds (24+, and the 21 updates from mid-2026)
   disable them, which made a bind to such a vault fail with "simple bind failed" although the
-  credentials were right. `LegacyTls.enable()` runs at start-up and before every vault
+  credentials were right. `LegacyTls.enable()` (base package, so the portable build has it) runs at start-up and before every vault
   connection; opt out with `-Didm.tls.legacy=false` or `IDM_TLS_LEGACY=false`. `doctor` reports
   when the suites are still disabled.
 
