@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- A blank driver (`driver.add --shim-class`) now starts with the documents the engine and
+  Designer expect, as templates: a filter with User and Group and the usual attributes
+  synchronised both ways, shim settings with one example parameter per section (driver,
+  Subscriber, Publisher heartbeat), and an empty configuration-values document — instead of an
+  empty `<filter/>` and bare option groups.
+
 ## [0.14.0] - 2026-10-07
 
 ### Added
