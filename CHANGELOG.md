@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-08
+
 ### Added
 
 - **`schema.diff`** (docs/schema.md): the tree's `schema/vault.xml` against an environment's live
