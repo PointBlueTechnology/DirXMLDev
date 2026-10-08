@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-08
+
 ### Changed
 
 - A blank driver (`driver.add --shim-class`) now starts with the documents the engine and
