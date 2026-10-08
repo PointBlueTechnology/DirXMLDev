@@ -62,9 +62,20 @@ public class DriverOpsTest {
         Driver d = AsCodeReader.read(tree).driver("Loop");
         assertEquals("com.example.Loop", d.shimClass);
         assertEquals("svc", d.shimAuthId);
-        assertNotNull(d.config.get(Driver.DRIVER_FILTER));
-        assertNotNull(d.config.get(Driver.SHIM_CONFIG_INFO));
-        assertTrue(r.report.ok());
+        // the templates: a starting filter, shim settings with an example per section, an empty configuration-values
+        org.w3c.dom.Element filter = d.config.get(Driver.DRIVER_FILTER);
+        assertNotNull(filter);
+        assertEquals(2, filter.getElementsByTagName("filter-class").getLength());
+        assertEquals("User", ((org.w3c.dom.Element) filter.getElementsByTagName("filter-class").item(0)).getAttribute("class-name"));
+        assertTrue(filter.getElementsByTagName("filter-attr").getLength() >= 8);
+        org.w3c.dom.Element shim = d.config.get(Driver.SHIM_CONFIG_INFO);
+        assertNotNull(shim);
+        assertEquals("Loop", shim.getAttribute("name"));
+        assertEquals(3, shim.getElementsByTagName("definition").getLength());
+        assertEquals(1, shim.getElementsByTagName("publisher-options").getLength());
+        assertNotNull(d.config.get(Driver.CONFIG_VALUES));
+        assertEquals("definitions", d.config.get(Driver.CONFIG_VALUES).getElementsByTagName("definitions").item(0).getNodeName());
+        assertTrue(r.report.text(), r.report.ok());
         assertTrue(run(new DriverOps.Add("Blank2", null, null, false, null, null, null)).refusal.contains("--shim-class"));
     }
 

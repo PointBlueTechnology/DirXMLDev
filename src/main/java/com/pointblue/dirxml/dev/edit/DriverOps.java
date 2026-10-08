@@ -27,7 +27,10 @@ import java.util.Map;
  *       artifacts the export carries are added to the tree's Library when absent
  *       (matched by name; an existing one is kept as is);</li>
  *   <li>{@code --copy-of D}: a clone of an existing driver, links re-pointed;</li>
- *   <li>{@code --shim-class C}: a blank driver with an empty filter.</li>
+ *   <li>{@code --shim-class C}: a blank driver with a starting filter (User and Group, the
+ *       usual attributes synchronised both ways), shim settings with one example parameter per
+ *       section, and an empty configuration-values document — every document the engine and
+ *       Designer expect, as templates to edit rather than blanks to invent.</li>
  * </ul>
  * Package meta travels with the copied artifacts, so the deployer treats them as
  * packaged and the project writer will refuse a packaged driver.
@@ -36,6 +39,41 @@ public final class DriverOps {
 
     private DriverOps() {
     }
+
+    /** A starting filter for a blank driver: User and Group, the usual attributes, synchronised both ways. */
+    static final String BLANK_FILTER = "<filter>"
+        + "<filter-class class-name=\"User\" publisher=\"sync\" publisher-create-homedir=\"true\" publisher-track-template-member=\"false\" subscriber=\"sync\">"
+        + "<filter-attr attr-name=\"CN\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "<filter-attr attr-name=\"Surname\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "<filter-attr attr-name=\"Given Name\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "<filter-attr attr-name=\"Full Name\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "<filter-attr attr-name=\"Internet EMail Address\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "<filter-attr attr-name=\"Telephone Number\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "<filter-attr attr-name=\"Login Disabled\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "<filter-attr attr-name=\"Group Membership\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "</filter-class>"
+        + "<filter-class class-name=\"Group\" publisher=\"sync\" publisher-create-homedir=\"false\" publisher-track-template-member=\"false\" subscriber=\"sync\">"
+        + "<filter-attr attr-name=\"CN\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "<filter-attr attr-name=\"Description\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "<filter-attr attr-name=\"Member\" merge-authority=\"default\" publisher=\"sync\" publisher-optimize-modify=\"true\" subscriber=\"sync\"/>"
+        + "</filter-class>"
+        + "</filter>";
+
+    /** Shim settings for a blank driver: the three sections, each with one example parameter in the engine's definition form. */
+    static final String BLANK_SHIM_CONFIG = "<driver-config name=\"%NAME%\">"
+        + "<driver-options><configuration-values><definitions>"
+        + "<definition display-name=\"Example driver option\" name=\"example-option\" type=\"string\">"
+        + "<description>A driver parameter the shim reads from its init document (replace or remove).</description><value/></definition>"
+        + "</definitions></configuration-values></driver-options>"
+        + "<subscriber-options><configuration-values><definitions>"
+        + "<definition display-name=\"Example subscriber option\" name=\"example-sub-option\" type=\"string\">"
+        + "<description>A Subscriber channel parameter (replace or remove).</description><value/></definition>"
+        + "</definitions></configuration-values></subscriber-options>"
+        + "<publisher-options><configuration-values><definitions>"
+        + "<definition display-name=\"Publisher heartbeat interval\" name=\"pub-heartbeat-interval\" type=\"integer\">"
+        + "<description>Minutes of Publisher silence after which the shim sends a status document; 0 disables it.</description><value>1</value></definition>"
+        + "</definitions></configuration-values></publisher-options>"
+        + "</driver-config>";
 
     public static final class Add implements Operation {
         private final String name;
@@ -113,10 +151,10 @@ public final class DriverOps {
                 d.shimClass = shim;
                 d.shimAuthServer = authServer;
                 d.shimAuthId = authId;
-                d.config.put(Driver.DRIVER_FILTER, CanonicalXml.parse("<filter/>").getDocumentElement());
+                d.config.put(Driver.DRIVER_FILTER, CanonicalXml.parse(BLANK_FILTER).getDocumentElement());
                 d.config.put(Driver.SHIM_CONFIG_INFO, CanonicalXml.parse(
-                    "<driver-config name=\"" + name.replace("&", "&amp;").replace("\"", "&quot;") + "\"><driver-options/><subscriber-options/><publisher-options/></driver-config>")
-                    .getDocumentElement());
+                    BLANK_SHIM_CONFIG.replace("%NAME%", name.replace("&", "&amp;").replace("\"", "&quot;"))).getDocumentElement());
+                d.config.put(Driver.CONFIG_VALUES, CanonicalXml.parse("<configuration-values><definitions/></configuration-values>").getDocumentElement());
             }
             if (ds.dn != null && !ds.dn.isBlank()) {
                 d.dn = "cn=" + name + "," + ds.dn;
