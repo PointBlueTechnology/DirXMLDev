@@ -39,6 +39,23 @@ A push needs an OID on each definition (eDirectory requires one over LDAP; use y
 organisation's arc), writes attributes first and classes in superclass order, and skips what the
 vault already has.
 
+## Comparing — `schema.diff`
+
+Schema is per environment: each vault has its own, and the tree's copy is one of them at one
+moment. Nothing here writes anything.
+
+```bash
+idm schema.diff tree/ --env stg                  # schema/vault.xml against stg's live cn=schema
+idm schema.diff --env stg --other prd            # two environments' live schemas
+idm schema.diff tree/ --env prd --json
+```
+
+Definitions match by NDS name, else by LDAP name, case-insensitively. A difference is a definition
+only one side has (`<` left, `>` right), or one both have with another syntax, OID, flag,
+superclass, containment, naming or attribute list (`~`, with each field named; lists compare as
+sets). A field neither side states (Designer's copy carries no OIDs) is not a difference. A
+custom definition the tree has not pushed yet is marked so. Exit status 0 means in sync.
+
 ## The application's schema — `drivers/<driver>/app-schema.xml`
 
 ```bash

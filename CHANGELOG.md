@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`schema.diff`** (docs/schema.md): the tree's `schema/vault.xml` against an environment's live
+  `cn=schema` (`schema.diff <tree> --env E`), or two environments' live schemas (`--env A --other
+  B`); nothing written. Definitions match by NDS or LDAP name; only-here, only-there, and
+  differing syntax, OID, flags, superclasses or attribute lists (as sets) are reported, custom
+  definitions not yet pushed marked. `SchemaDiff.of` for the web's Compare.
+
 ## [0.16.0] - 2026-10-08
 
 ### Added
