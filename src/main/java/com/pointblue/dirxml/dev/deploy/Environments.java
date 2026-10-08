@@ -8,7 +8,9 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 /**
  * Vault targets, from a local, gitignored {@code environments.properties}
@@ -30,6 +32,12 @@ import java.util.TreeSet;
  *   stg.eventsTree=TREE                                #   the tree name DNs in the store start with (default: from the vault)
  *   stg.sshUser=root
  * </pre>
+ * A hosted server keeps two files (DirXMLDevWeb's docs/multi-user.md): the project's
+ * <em>definitions</em> (every key above except the secret ones) and one person's
+ * <em>credentials</em> (their {@code bindDn}, {@code password…}, {@code trustAll},
+ * {@code eventsPassword…}, or whole environments of their own). {@link #load(Path, Path)} merges
+ * them, the person's keys over the definitions', and refuses a definitions file that holds a
+ * secret key.
  */
 public final class Environments {
 
@@ -83,9 +91,66 @@ public final class Environments {
     private final Properties props;
     private final Path file;
 
+    /** Names the definitions file holds, when two files were merged; null for one file. */
+    private final Set<String> defined;
+    /** The directory a relative {@code <env>.secrets} resolves against. */
+    private final Path secretsDir;
+
     private Environments(Properties props, Path file) {
+        this(props, file, null, file == null ? null : file.toAbsolutePath().getParent());
+    }
+
+    private Environments(Properties props, Path file, Set<String> defined, Path secretsDir) {
         this.props = props;
         this.file = file;
+        this.defined = defined;
+        this.secretsDir = secretsDir;
+    }
+
+    /** A key that holds, or points at, a secret: {@code <env>.password}, {@code .eventsPassword}, {@code .appsPassword}, each with its {@code Env|Command|Keychain} form. */
+    private static final Pattern SECRET_KEY = Pattern.compile("[^.]+\\.[A-Za-z0-9_]*[pP]assword(Env|Command|Keychain)?");
+
+    /** The secret keys a file holds, sorted; empty when it holds none or does not exist. */
+    public static List<String> secretKeys(Path file) throws IOException {
+        List<String> out = new ArrayList<>();
+        if (file == null || !Files.isRegularFile(file)) {
+            return out;
+        }
+        for (String k : Secrets.parse(Files.readString(file, StandardCharsets.UTF_8)).stringPropertyNames()) {
+            if (SECRET_KEY.matcher(k).matches()) {
+                out.add(k);
+            }
+        }
+        out.sort(null);
+        return out;
+    }
+
+    /**
+     * The definitions file merged with one person's credentials file: a key in the credentials
+     * file replaces the definition's; a name only in the credentials file is that person's own.
+     * The definitions file must hold no secret key ({@link #secretKeys}); the credentials file
+     * may be absent. A relative {@code <env>.secrets} resolves beside the definitions file.
+     */
+    public static Environments load(Path definitions, Path credentials) throws IOException {
+        List<String> secret = secretKeys(definitions);
+        if (!secret.isEmpty()) {
+            throw new IOException("the environment definitions " + definitions + " hold secret keys that belong in a person's credentials file: " + String.join(", ", secret));
+        }
+        Properties defs = Files.isRegularFile(definitions) ? Secrets.parse(Files.readString(definitions, StandardCharsets.UTF_8)) : new Properties();
+        Properties merged = new Properties();
+        merged.putAll(defs);
+        if (credentials != null && Files.isRegularFile(credentials)) {
+            SecretSource.warnIfShared(credentials);
+            merged.putAll(Secrets.parse(Files.readString(credentials, StandardCharsets.UTF_8)));
+        }
+        Set<String> defined = new TreeSet<>();
+        for (String k : defs.stringPropertyNames()) {
+            int dot = k.indexOf('.');
+            if (dot > 0) {
+                defined.add(k.substring(0, dot));
+            }
+        }
+        return new Environments(merged, credentials == null ? definitions : credentials, defined, definitions.toAbsolutePath().getParent());
     }
 
     /** Where the environments file is looked for, in order. */
@@ -144,9 +209,17 @@ public final class Environments {
         public final boolean bindDnPresent;
         public final boolean passwordConfigured;
         public final boolean driverSetPresent;
+        /** Named only in the person's credentials file (two-file form); false for one file. */
+        public final boolean own;
 
         Described(String name, String tier, boolean tierRecognized, boolean urlPresent,
                   boolean bindDnPresent, boolean passwordConfigured, boolean driverSetPresent) {
+            this(name, tier, tierRecognized, urlPresent, bindDnPresent, passwordConfigured, driverSetPresent, false);
+        }
+
+        Described(String name, String tier, boolean tierRecognized, boolean urlPresent,
+                  boolean bindDnPresent, boolean passwordConfigured, boolean driverSetPresent, boolean own) {
+            this.own = own;
             this.name = name;
             this.tier = tier;
             this.tierRecognized = tierRecognized;
@@ -185,7 +258,8 @@ public final class Environments {
             boolean recognized = tier.equals("dev") || tier.equals("stg") || tier.equals("prd");
             out.add(new Described(name, tier, recognized,
                 present(name, "url"), present(name, "bindDn"),
-                SecretSource.has(props, name + ".password"), present(name, "driverSet")));
+                SecretSource.has(props, name + ".password"), present(name, "driverSet"),
+                defined != null && !defined.contains(name)));
         }
         return out;
     }
@@ -214,7 +288,7 @@ public final class Environments {
         String requires = props.getProperty(name + ".requires");
         String secrets = props.getProperty(name + ".secrets");
         Path secretsFile = secrets == null || secrets.isBlank() ? null
-            : (file == null ? Paths.get(secrets) : file.toAbsolutePath().getParent().resolve(secrets));
+            : (secretsDir == null ? Paths.get(secrets) : secretsDir.resolve(secrets));
         boolean trustAll = "true".equals(props.getProperty(name + ".trustAll"));   // opt in; TLS is verified otherwise
         String sshHost = props.getProperty(name + ".sshHost");
         String sshUser = props.getProperty(name + ".sshUser");
