@@ -57,12 +57,7 @@ public final class Servers {
     /** {@code <env>.servers=<serverDn>=<url>;<serverDn>=<url>} — the tree's other servers, when it cannot describe them. */
     public static Map<String, String> urls(Environments.Environment env) {
         Map<String, String> out = new LinkedHashMap<>();
-        String raw;
-        try {
-            raw = Environments.load().property(env.name, "servers");
-        } catch (Exception e) {
-            return out;
-        }
+        String raw = env.servers;
         if (raw == null) {
             return out;
         }
