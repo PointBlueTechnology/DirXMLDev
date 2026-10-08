@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-08
+
 ### Added
 
 - **Two environment files** for a hosted server (DirXMLDevWeb's `docs/multi-user.md`):
