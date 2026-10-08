@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Two environment files** for a hosted server (DirXMLDevWeb's `docs/multi-user.md`):
+  `Environments.load(definitions, credentials)` merges the project's definitions (no secret keys;
+  the load refuses a file that holds one, `Environments.secretKeys` lists them) with one person's
+  credentials (their `bindDn`, `password…`, `trustAll`, `eventsPassword…`, or whole environments
+  of their own — `Described.own`). A relative `<env>.secrets` resolves beside the definitions. The
+  CLI's one file reads as before.
+
 ## [0.15.0] - 2026-10-08
 
 ### Changed
