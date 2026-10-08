@@ -57,6 +57,8 @@ public final class Environments {
         public final String sshUser;
         /** The Event Logger's store, or null when the environment has none (docs/event-store.md). */
         public EventsConfig events;
+        /** {@code <env>.servers=<serverDn>=<url>;…}, the tree's other servers when it cannot describe them; null when unset. */
+        public String servers;
 
         Environment(String name, String url, String bindDn, String password, String driverSetDn,
                     Tier tier, String requires, Path secretsFile, boolean trustAll, String sshHost, String sshUser) {
@@ -297,6 +299,7 @@ public final class Environments {
             sshHost == null || sshHost.isBlank() ? null : sshHost.trim(),
             sshUser == null || sshUser.isBlank() ? null : sshUser.trim());
         env.events = eventsOf(name);
+        env.servers = property(name, "servers");
         return env;
     }
 
