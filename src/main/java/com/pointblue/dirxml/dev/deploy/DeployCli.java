@@ -123,6 +123,22 @@ public final class DeployCli {
                 System.out.print(json ? r.json() + "\n" : r.text());
                 return r.ok ? 0 : 1;
             }
+            case "schema.diff": {
+                // the tree's schema/vault.xml against the environment's live cn=schema, or two environments' (--other)
+                if (pos.isEmpty() && first(opts, "other") == null) {
+                    System.err.println("usage: schema.diff <tree> --env <name> [--json]  |  schema.diff --env <name> --other <name> [--json]");
+                    return 2;
+                }
+                SchemaDiff.Result r;
+                String other = first(opts, "other");
+                if (other != null) {
+                    r = SchemaDiff.liveVsLive(env, Environments.load().get(other));
+                } else {
+                    r = SchemaDiff.modelVsLive(Paths.get(pos.get(0)), env);
+                }
+                System.out.print(json ? r.json() + "\n" : r.text());
+                return r.inSync() ? 0 : 1;
+            }
             case "vault.rollback": {
                 String snap = first(opts, "snapshot");
                 if (snap == null) {
