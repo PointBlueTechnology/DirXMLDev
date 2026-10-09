@@ -151,6 +151,15 @@ the entitlement refs it grants (`<entitlement-ref>`, the vault's `dn#0#<ref>…<
 the editor's criteria and Designer's display document. Priorities must run 0, 1, 2 … Read from
 the vault, an LDIF, a Designer project and an export; deployed (docs/console-gaps.md §9).
 
+### `templates/`
+
+Beside `driverset.xml`: `<name>.xml` for each e-mail notification template of the vault's
+notification collection (`notfMergeTemplate` under `cn=Default Notification Collection,cn=Security`,
+or the collection `driverset.xml`'s meta `templates.collection` names): the body document; the
+subject and the package stamps are on the manifest's `<template>` entry. They are the vault's,
+not the driver set's, but they travel with the tree: read live and from an LDIF, diffed and
+deployed (docs/console-gaps.md §12). Most come from packages and carry their stamps.
+
 ### `entitlements/`
 
 `<name>.xml` for each `DirXML-Entitlement` on the driver. Workflows grant

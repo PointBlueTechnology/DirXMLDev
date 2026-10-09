@@ -15,6 +15,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - **`driver.log-level [set]`** (§11, G12): the log level of a driver or the driver set as Designer's page
   holds it (`DirXML-DriverTraceLevel`, `DirXML-LogEvents` through `SetLogEvents`, `DirXML-LogLimit`,
   `DirXML-LogEventsType`); `--inherit` puts a driver back on the set's settings.
+- **`vault.email-server [set]`** (§12, G8): the notification collection's SMTP settings, shown and
+  written live (the password from the secrets file or stdin, never shown).
+- **Notification templates in the tree** (§12, G8): the vault's `notfMergeTemplate` objects as
+  `templates/<name>.xml`, read live and from an LDIF, validated, diffed (`TEMPLATE_*`) and deployed
+  (a removal needs `--delete-all templates`).
 - **Secret kinds** (§11, G11): `driver.secrets set|remove --kind named|shim-auth|remote-loader|key|keystore`;
   `vault.deploy --secrets` now sets the Remote Loader password (before: skipped as unsupported) and the
   Remote Loader's mutual-authentication key and keystore passwords when the secrets file has

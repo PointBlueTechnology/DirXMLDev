@@ -303,7 +303,7 @@ public final class Cli {
                 System.out.print(json ? rep.json() + "\n" : rep.text());
                 System.exit(rep.ok() ? 0 : 1);
             }
-            if (args.length >= 2 && (args[0].startsWith("vault.") || args[0].equals("schema.diff"))) {
+            if (args.length >= 2 && !args[0].equals("vault.email-server") && (args[0].startsWith("vault.") || args[0].equals("schema.diff"))) {
                 System.exit(com.pointblue.dirxml.dev.deploy.DeployCli.run(args));
             }
             if (args.length >= 2 && args[0].equals("package.status")) {
@@ -317,7 +317,7 @@ public final class Cli {
             if (args.length >= 1 && args[0].startsWith("viewer.")) {
                 System.exit(com.pointblue.dirxml.dev.operate.ViewerCli.run(args));
             }
-            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].startsWith("job.") || args[0].startsWith("rbe.") || args[0].equals("object.inspect"))) {
+            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].startsWith("job.") || args[0].startsWith("rbe.") || args[0].equals("object.inspect") || args[0].equals("vault.email-server"))) {
                 System.exit(com.pointblue.dirxml.dev.operate.OperateCli.run(args));
             }
             if (args.length >= 3 && args[0].equals("tree.diff")) {
@@ -455,7 +455,7 @@ public final class Cli {
         System.err.println("  vault.diff <tree> --env E [--driver D…] [--json]     the tree vs the live vault (exit 1 if they differ; docs/vault-deploy.md)");
         System.err.println("  vault.verify <tree> --env E [--driver D…] [--json]   same diff, read after a deploy");
         System.err.println("  vault.deploy <tree> --env E [--driver D…] --dry-run|--yes|--step [--confirm E] [--no-restart] [--secrets none|missing|all]");
-        System.err.println("               [--allow-missing-secrets] [--capture-drift] [--delete-driver D…] [--delete-all entitlements|jobs|rbe-policies|forms|prds|roles|entities|<object kind>s…] [--json]");
+        System.err.println("               [--allow-missing-secrets] [--capture-drift] [--delete-driver D…] [--delete-all entitlements|jobs|rbe-policies|templates|forms|prds|roles|entities|<object kind>s…] [--json]");
         System.err.println("                                        plan → snapshot → write → restart → verify → audit line; never deletes a driver without --delete-driver");
         System.err.println("  vault.rollback --env E --snapshot <file.ldif> [--yes] [--json]   restore a deploy's snapshot");
         System.err.println("  vault.schema <tree> --env E [--json]                  cn=schema → schema/vault.xml (a read of the vault; docs/schema.md)");
@@ -533,6 +533,7 @@ public final class Cli {
         System.err.println("  driver.query --env E --driver D [--class C] [--scope subtree|subordinates|entry] [--dn DN] [--association A] [--search name=value…] [--read-attr A…|none]   ask the connected system through the running driver (the engine's query verb)");
         System.err.println("  driver.health [clear] --env E --driver D [--yes]   the Driver Health job's last state per server, the health configuration, the set's health jobs; clear removes the recorded status");
         System.err.println("  job.list --env E [--driver D] | job.status --env E --job J [--driver D] | job.start|abort --env E --job J [--driver D] [--yes]   the set's jobs with the engine's state; start or abort one");
+        System.err.println("  vault.email-server [set] --env E [--host H] [--port N] [--from A] [--user U] [--tls true|false] [--timeout N] [--protocol P] [--password-key K|--stdin]   the notification collection's SMTP settings (the password never shown); set writes them");
         System.err.println("  rbe.list --env E | rbe.members --env E --policy P   the entitlement policies of the set: priority, members, grants; one policy's computed members");
         System.err.println("  engine.version --env E");
         System.err.println("  engine.stats --env E [--driver D…] [--json]");

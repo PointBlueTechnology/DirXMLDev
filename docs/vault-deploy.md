@@ -279,7 +279,7 @@ An individual removal — the tree still has at least one object of the kind —
 is unaffected; it deletes exactly as before. `vault.diff` prints the same
 note under the driver, so the trap is visible before anyone reaches the plan.
 
-**`--delete-all entitlements|jobs|rbe-policies|forms|prds`** (repeatable) is the explicit
+**`--delete-all entitlements|jobs|rbe-policies|templates|forms|prds`** (repeatable) is the explicit
 override: it re-enables the deletes for that kind, for every driver the guard
 would otherwise hold back. It goes through the same gate as any other
 deploy (`--yes`/`--step`, `--confirm <env>` in production), shows in the plan
