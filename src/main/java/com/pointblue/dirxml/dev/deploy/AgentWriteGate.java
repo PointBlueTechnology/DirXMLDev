@@ -69,6 +69,7 @@ public final class AgentWriteGate {
             case "job.abort":
                 return true;
             case "driver.cache":
+            case "driver.health":
                 return "clear".equals(sub);
             case "driver.secrets":
                 return "set".equals(sub) || "remove".equals(sub);
