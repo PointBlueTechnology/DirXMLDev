@@ -39,7 +39,7 @@ import java.util.Map;
  * {@code SCIM-Driver} whose application Designer typed {@code GenericApp}, even though a
  * {@code SCIM} application type exists.
  */
-final class ApplicationType {
+public final class ApplicationType {
 
     /** The Remote Loader proxy — never the application's own shim. */
     static final String REMOTE_LOADER_SHIM = "com.novell.nds.dirxml.remote.driver.DriverShimImpl";
