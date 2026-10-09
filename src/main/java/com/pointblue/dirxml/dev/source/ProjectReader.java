@@ -205,6 +205,12 @@ public final class ProjectReader {
         if (!jobs.isEmpty()) {
             ds.meta.put("jobs.count", String.valueOf(jobs.size()));
         }
+        for (String key : jobs) {
+            com.pointblue.dirxml.dev.model.Job j = readJob(idx, idOf(key));
+            if (j != null) {
+                ds.jobs.add(j);
+            }
+        }
 
         for (String libKey : relationKeys(m, "Idm:Libraries")) {
             readLibrary(idx, idOf(libKey), ds);
@@ -793,6 +799,12 @@ public final class ProjectReader {
                 d.entitlements.add(e);
             }
         }
+        for (String key : relationKeys(m, "Idm:Jobs")) {
+            com.pointblue.dirxml.dev.model.Job j = readJob(idx, idOf(key));
+            if (j != null) {
+                d.jobs.add(j);
+            }
+        }
 
         // driver-scope policies: every owned policy, whether or not linked below
         for (String key : relationKeys(m, "Idm:Policies")) {
@@ -949,6 +961,48 @@ public final class ProjectReader {
      * (docs/entitlements.md §1.2). Not registered in the artifact registry — nothing
      * else references an entitlement by Designer id.
      */
+    /**
+     * A {@code .Job_} CObject (docs/console-gaps.md §1): {@code name="<cn>" type="Job"}, its
+     * {@code contents} heavy data the job document, {@code IdmParameter:*} attributes as meta,
+     * {@code Idm:JobServers} the servers it runs on (their CObject names: a project records no DN
+     * for a server).
+     */
+    private static com.pointblue.dirxml.dev.model.Job readJob(Index idx, String id) {
+        Element m = idx.parseMeta(id);
+        if (m == null || isRefStub(m)) {
+            return null;
+        }
+        String name = attr(m, "name", null);
+        if (name == null) {
+            return null;
+        }
+        Element content = null;
+        Path c = idx.contentsById.get(id);
+        if (c != null) {
+            try {
+                content = Xds.parseFile(c).getDocumentElement();
+            } catch (Exception e) {
+                // leave content null
+            }
+        }
+        com.pointblue.dirxml.dev.model.Job j = new com.pointblue.dirxml.dev.model.Job(name, content);
+        j.meta.put("designer.id", id);
+        j.meta.put("designer.type", idx.typeById.getOrDefault(id, "Job"));
+        for (String p : new String[] { "InheritTraceFile", "InheritTraceSize", "InheritTraceLevel", "InheritTraceFileEncoding", "TraceLevel", "TraceFile", "TraceSize" }) {
+            String v = attrValue(m, "IdmParameter:" + p);
+            if (v != null) {
+                j.meta.put("designer." + p, v);
+            }
+        }
+        for (String key : relationKeys(m, "Idm:JobServers")) {
+            Element server = idx.metaById.containsKey(idOf(key)) ? idx.parseMeta(idOf(key)) : null;
+            String sn = server == null ? null : attr(server, "name", null);
+            j.servers.add(sn != null ? sn : idOf(key));
+        }
+        copyPackageMeta(m, j.meta, idx);
+        return j;
+    }
+
     private static Entitlement readEntitlement(Index idx, String id) {
         Element m = idx.parseMeta(id);
         if (m == null || isRefStub(m)) {

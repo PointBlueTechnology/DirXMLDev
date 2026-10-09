@@ -50,6 +50,7 @@ the help.
 | Updating an existing Designer project | [designer-roundtrip.md](designer-roundtrip.md) |
 | Carry a customer's vault home as a lab clone | [howto-clone-vault.md](howto-clone-vault.md), [vault-clone.md](vault-clone.md) |
 | Read the Event Logger's store; logged events as simulator cases | [event-store.md](event-store.md) |
+| What the Identity Console can do that the CLI cannot yet: jobs, entitlement policies, the medium gaps, and the order | [console-gaps.md](console-gaps.md) (design note; the first set and jobs are built) |
 | Read-only policy-flow viewer | [vscode-extension-v1.md](vscode-extension-v1.md), [../extensions/dirxmldev-visual/README.md](../extensions/dirxmldev-visual/README.md) |
 
 ## Architecture and history

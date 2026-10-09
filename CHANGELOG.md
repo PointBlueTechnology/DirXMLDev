@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Jobs in the model** (docs/console-gaps.md §1, phase J1): `DirXML-Job` objects under a driver
+  or the driver set — the configuration document, the servers, the scopes, the trace settings —
+  read from the vault and an LDIF, a Designer project (`Idm:Jobs`, `.Job_`) and an export
+  (`<jobs>`), kept as `drivers/<driver>/jobs/<name>.xml` and `jobs/<name>.xml`, written back to an
+  export; `validate` checks them (`job-no-document`, `job-wrong-root`, `job-no-class`,
+  `job-no-server`, `job-unknown-server`, `job-disabled`). Diff and deploy follow in J2.
+
 ## [0.19.0] - 2026-10-09
 
 ### Added

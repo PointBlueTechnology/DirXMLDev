@@ -68,6 +68,7 @@ public final class AsCodeWriter {
         for (String s : ds.servers) {
             m.child("server").attr("dn", s);
         }
+        writeJobs(ds.jobs, root, m);
         List<Driver> drivers = new ArrayList<>(ds.drivers);
         drivers.sort(Comparator.comparing(d -> d.name));
         for (Driver d : drivers) {
@@ -180,6 +181,7 @@ public final class AsCodeWriter {
                 em.meta(e.meta);
             }
         }
+        writeJobs(d.jobs, dir, m);
         writeText(dir.resolve(DRIVER_MANIFEST), m.toXml());
 
         if (d.provisioning != null) {
@@ -371,6 +373,35 @@ public final class AsCodeWriter {
     }
 
     /** A filesystem-safe file/dir name; the manifest keeps the real name. */
+    /**
+     * Jobs ({@code DirXML-Job}, docs/console-gaps.md §1): {@code jobs/<name>.xml} holds the document;
+     * the manifest's {@code <job>} carries the servers, scopes and trace settings.
+     */
+    private static void writeJobs(List<com.pointblue.dirxml.dev.model.Job> jobs, Path owner, Manifest m) throws IOException {
+        if (jobs.isEmpty()) {
+            return;
+        }
+        Path jobDir = owner.resolve("jobs");
+        Files.createDirectories(jobDir);
+        Set<String> used = new HashSet<>();
+        List<com.pointblue.dirxml.dev.model.Job> sorted = new ArrayList<>(jobs);
+        sorted.sort(Comparator.comparing(j -> j.name));
+        for (com.pointblue.dirxml.dev.model.Job j : sorted) {
+            String file = uniqueFile(fileSafe(j.name) + ".xml", used);
+            if (j.definition != null) {
+                writeXml(jobDir.resolve(file), j.definition);
+            }
+            Manifest jm = m.child("job").attr("name", j.name).attr("file", "jobs/" + file);
+            for (String s : j.servers) {
+                jm.child("server").attr("dn", s);
+            }
+            for (String s : j.scopes) {
+                jm.child("scope").attr("value", s);
+            }
+            jm.meta(j.meta);
+        }
+    }
+
     public static String fileSafe(String name) {
         StringBuilder sb = new StringBuilder();
         for (char c : name.toCharArray()) {
