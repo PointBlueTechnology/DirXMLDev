@@ -7,6 +7,24 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Role-based entitlement policies** (docs/console-gaps.md §9, phase R1, grounded on edir3 with the
+  Entitlements Service driver): `DirXML-SharedProfile` policies in the driver set's
+  `DirXML-SharedProfileSet` container, read from the vault and an LDIF, a Designer export
+  (`<rbe-policies>`) and project (`Idm:RbePolicies`, unverified), kept as `rbe-policies/<name>.xml`,
+  written back to an export; `validate` checks them (`rbe-no-priority`, `rbe-duplicate-priority`,
+  `rbe-priorities-not-sequential`, `rbe-legacy-entitlements-xml`, `rbe-no-membership`,
+  `rbe-no-entitlement`, `rbe-unknown-entitlement`, `rbe-no-service-driver`); `vault.diff` reports
+  `RBE_ADDED` / `RBE_REMOVED` / `RBE_CHANGED`; `vault.deploy` creates the container, writes the policy,
+  rewrites the priority list and restarts the Entitlements Service driver (a removal needs
+  `--delete-all rbe-policies`); `rbe.list`, `rbe.members`.
+
+### Fixed
+
+- A deploy no longer prints the Identity Applications cache note for a job change; the driver set's own
+  removals (jobs, policies) no longer trip the empty-kind guard with a null driver.
+
 ## [0.21.0] - 2026-10-09
 
 ### Added
