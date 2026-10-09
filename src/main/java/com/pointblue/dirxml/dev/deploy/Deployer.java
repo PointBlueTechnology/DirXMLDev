@@ -510,8 +510,14 @@ public final class Deployer {
                     } else if (key.contains(".named.")) {
                         String name = key.substring(key.indexOf(".named.") + 7);
                         vault.setNamedPassword(s.dn, name, name, value.clone());
+                    } else if (key.endsWith("." + Secrets.REMOTE_LOADER)) {
+                        vault.setRemoteLoaderPassword(s.dn, value.clone());
+                    } else if (key.endsWith("." + Secrets.KEY)) {
+                        vault.setMutualAuthKeyPassword(s.dn, value.clone());
+                    } else if (key.endsWith("." + Secrets.KEYSTORE)) {
+                        vault.setMutualAuthKeystorePassword(s.dn, value.clone());
                     } else {
-                        r.skipped.add(s.description + " — Remote Loader passwords are not supported yet");
+                        r.skipped.add(s.description + " — unknown secret kind");
                         return;
                     }
                 } finally {

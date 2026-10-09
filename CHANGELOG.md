@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`driver.migrate --direction vault`** (docs/console-gaps.md §11, G5): migrate vault objects into the
+  application — an LDAP search, then one `<sync>` per object through the running driver's subscriber
+  channel; `--dry-run` lists them; `--direction app` is the old `MigrateApp` path.
+- **`driver.log-level [set]`** (§11, G12): the log level of a driver or the driver set as Designer's page
+  holds it (`DirXML-DriverTraceLevel`, `DirXML-LogEvents` through `SetLogEvents`, `DirXML-LogLimit`,
+  `DirXML-LogEventsType`); `--inherit` puts a driver back on the set's settings.
+- **Secret kinds** (§11, G11): `driver.secrets set|remove --kind named|shim-auth|remote-loader|key|keystore`;
+  `vault.deploy --secrets` now sets the Remote Loader password (before: skipped as unsupported) and the
+  Remote Loader's mutual-authentication key and keystore passwords when the secrets file has
+  `<driver>.mutual-auth-key-password` / `<driver>.mutual-auth-keystore-password`.
+
 ## [0.23.0] - 2026-10-09
 
 ### Added
