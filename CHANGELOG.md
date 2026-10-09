@@ -18,7 +18,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   (an object's classes, associations across drivers, password-sync status). Read-only ones need
   no `--yes`.
 - The usage text now lists `vault.schema`, `vault.app-schema`, `vault.deploy-schema`,
-  `schema.diff`, `driver.app-schema.set`, `events.describe`, `query … events|event` and
+  `schema.diff`, `events.describe`, `query … events|event` and
   `events.case`, which existed without a line.
 
 ## [0.18.0] - 2026-10-09
