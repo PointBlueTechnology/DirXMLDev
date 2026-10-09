@@ -190,15 +190,18 @@ public final class Plan {
         List<Step> deletes = new ArrayList<>();
         List<Step> secretSteps = new ArrayList<>();
         List<Step> provisioning = new ArrayList<>();
+        List<Step> engineObjects = new ArrayList<>();   // jobs and entitlement policies: the engine's, not the Identity Applications'
         List<Step> objectAdds = new ArrayList<>();      // AppConfig objects: parents before children
         List<Step> objectDeletes = new ArrayList<>();   // AppConfig objects: children before parents
         Set<String> ensuredContainers = new LinkedHashSet<>();
         Set<String> driversNeedingLinkage = new LinkedHashSet<>();
+        boolean rbeChanged = false;
 
         for (ModelDiff.Change c : diff.changes()) {
             String guardKind = ModelDiff.removalKind(c);
             if (guardKind != null) {
-                ModelDiff.EmptyKind ek = emptyKinds.getOrDefault(c.driver, Map.of()).get(guardKind);
+                Map<String, ModelDiff.EmptyKind> byKind = emptyKinds.get(c.driver);
+                ModelDiff.EmptyKind ek = byKind == null ? null : byKind.get(guardKind);
                 if (ek != null && !p.deleteAllKinds.contains(guardKind)) {
                     if (notedEmptyKinds.computeIfAbsent(c.driver, k -> new LinkedHashSet<>()).add(guardKind)) {
                         p.notes.add(ek.note());
@@ -219,7 +222,12 @@ public final class Plan {
                 continue;
             }
             if (c.kind.isJob()) {
-                jobSteps(p, c, to, dsDn, provisioning, deletes);
+                jobSteps(p, c, to, dsDn, engineObjects, deletes);
+                continue;
+            }
+            if (c.kind.isRbe()) {
+                rbeSteps(p, c, to, dsDn, engineObjects, deletes, ensuredContainers);
+                rbeChanged = true;
                 continue;
             }
             switch (c.kind) {
@@ -510,6 +518,9 @@ public final class Plan {
                     break;
             }
         }
+        if (rbeChanged) {
+            rbePrioritySteps(p, to, dsDn, engineObjects, ensuredContainers);
+        }
 
         // --delete-driver names that never matched a DRIVER_REMOVED change: in the tree (refuse —
         // remove it from the tree first) or not in the vault at all (refuse — unknown driver)
@@ -587,6 +598,7 @@ public final class Plan {
         objectAdds.sort(Comparator.comparingInt(st -> depth(st.dn)));
         p.steps.addAll(objectAdds);
         p.steps.addAll(provisioning);
+        p.steps.addAll(engineObjects);
         p.steps.addAll(driverAttrs);
         p.steps.addAll(driverSet);
         p.steps.addAll(deletes);
@@ -1066,6 +1078,59 @@ public final class Plan {
             }
         }
         bucket.add(new Step(Op.NOTIFY_JOB, dn, null, null, null, dn + "  NotifyJobUpdate (the scheduler re-reads the job)", c.path, driver));
+    }
+
+    /**
+     * A role-based entitlement policy (docs/console-gaps.md §9): the set's container is created when absent,
+     * an added policy is one add with every attribute, a changed one a modify per attribute (an attribute the
+     * tree dropped is cleared), a removed one a delete held by the empty-kind guard ({@code --delete-all
+     * rbe-policies}). The container's priority list is rewritten once after the policy steps
+     * ({@link #rbePrioritySteps}); the Entitlements Service driver restarts through {@code affectedDrivers}.
+     */
+    private static void rbeSteps(Plan p, ModelDiff.Change c, DriverSet to, String dsDn, List<Step> bucket, List<Step> deletes, Set<String> ensured) {
+        if (c.kind == ModelDiff.Kind.RBE_REMOVED) {
+            String dn = VaultMapping.rbePathDn(dsDn, to, c.path);
+            p.touchedDns.add(dn);
+            deletes.add(new Step(Op.DELETE, dn, null, null, null, dn, c.path, null));
+            return;
+        }
+        String name = c.path.substring("rbe-policies/".length());
+        com.pointblue.dirxml.dev.model.EntitlementPolicy pol = to.rbePolicy(name);
+        if (pol == null) {
+            p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
+            return;
+        }
+        ensureContainer(bucket, ensured, VaultMapping.rbeContainerDn(dsDn, to), VaultMapping.OC_RBE_SET, c, null);
+        String dn = VaultMapping.rbePolicyDn(dsDn, to, pol.name);
+        Map<String, List<byte[]>> attrs = VaultMapping.rbeAttributes(pol);
+        p.touchedDns.add(dn);
+        if (c.kind == ModelDiff.Kind.RBE_ADDED) {
+            Map<String, List<byte[]>> present = new LinkedHashMap<>();
+            for (Map.Entry<String, List<byte[]>> en : attrs.entrySet()) {
+                if (!en.getValue().isEmpty()) {
+                    present.put(en.getKey(), en.getValue());
+                }
+            }
+            bucket.add(new Step(Op.ADD, dn, null, List.of("Top", VaultMapping.OC_RBE_POLICY), present, dn + "  " + VaultMapping.OC_RBE_POLICY + " (" + size(present) + ")", c.path, null));
+        } else if (!"settings".equals(c.what)) {
+            // a priority-only change leaves the policy object alone: the container's priority list is rewritten below
+            for (Map.Entry<String, List<byte[]>> en : attrs.entrySet()) {
+                bucket.add(new Step(Op.MODIFY, dn, en.getKey(), null, Map.of(en.getKey(), en.getValue()),
+                    dn + "  " + en.getKey() + (en.getValue().isEmpty() ? " (cleared)" : " (" + size(Map.of(en.getKey(), en.getValue())) + ")"), c.path, null));
+            }
+        }
+    }
+
+    /** The container's {@code DirXML-SPPriority}, rewritten from the tree's priorities once any policy changed. */
+    private static void rbePrioritySteps(Plan p, DriverSet to, String dsDn, List<Step> bucket, Set<String> ensured) {
+        String dn = VaultMapping.rbeContainerDn(dsDn, to);
+        if (ensured.add(dn)) {
+            bucket.add(new Step(Op.ENSURE_CONTAINER, dn, null, List.of("Top", VaultMapping.OC_RBE_SET), Vault.attrs(), dn + "  " + VaultMapping.OC_RBE_SET + " (created if absent)", "rbe-policies", null));
+        }
+        List<byte[]> values = VaultMapping.rbePriorityValues(dsDn, to);
+        p.touchedDns.add(dn);
+        bucket.add(new Step(Op.MODIFY, dn, "DirXML-SPPriority", null, Map.of("DirXML-SPPriority", values),
+            dn + "  DirXML-SPPriority (" + values.size() + " value(s): the policies in priority order)", "rbe-policies", null));
     }
 
     private static void ensureContainer(List<Step> bucket, Set<String> ensured, String dn, String oc, ModelDiff.Change c, String driver) {
