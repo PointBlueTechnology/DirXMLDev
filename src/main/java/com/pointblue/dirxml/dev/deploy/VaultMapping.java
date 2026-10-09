@@ -563,6 +563,54 @@ public final class VaultMapping {
         return m;
     }
 
+    // ---- jobs (DirXML-Job objects under a driver or the driver set) ----
+
+    public static final String OC_JOB = "DirXML-Job";
+
+    /** {@code cn=<name>,<driver dn>} or {@code cn=<name>,<driver set dn>} for the set's own. */
+    public static String jobDn(String dsDn, String driver, String name) {
+        return "cn=" + escapeRdn(name) + "," + (driver == null ? dsDn : driverDn(dsDn, driver));
+    }
+
+    /** The DN for a job diff path ({@code drivers/<d>/jobs/<name>} or {@code jobs/<name>}). */
+    public static String jobPathDn(String dsDn, String path) {
+        if (path.startsWith("jobs/")) {
+            return jobDn(dsDn, null, path.substring("jobs/".length()));
+        }
+        String rest = path.substring("drivers/".length());
+        int i = rest.indexOf("/jobs/");
+        return jobDn(dsDn, rest.substring(0, i), rest.substring(i + "/jobs/".length()));
+    }
+
+    /** Every attribute an add of a job writes: the document, the servers, the scopes, the trace settings it carries. */
+    public static Map<String, List<byte[]>> jobAttributes(com.pointblue.dirxml.dev.model.Job j) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        if (j.definition != null) {
+            m.put(XML_DATA, List.of(xmlBytes(j.definition)));
+        }
+        if (!j.servers.isEmpty()) {
+            List<byte[]> v = new ArrayList<>();
+            for (String s : j.servers) {
+                v.add(s.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            m.put("DirXML-ServerList", v);
+        }
+        if (!j.scopes.isEmpty()) {
+            List<byte[]> v = new ArrayList<>();
+            for (String s : j.scopes) {
+                v.add(s.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            m.put("DirXML-Scope", v);
+        }
+        String[][] trace = { { "trace-level", "DirXML-TraceLevel" }, { "trace-file", "DirXML-TraceFile" }, { "trace-size-limit", "DirXML-TraceSizeLimit" } };
+        for (String[] t : trace) {
+            if (j.meta.get(t[0]) != null) {
+                m.put(t[1], List.of(j.meta.get(t[0]).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            }
+        }
+        return m;
+    }
+
     /** The DNs of every driver whose linkage references an artifact path. */
     public static List<String> linkingDrivers(DriverSet ds, String path) {
         List<String> out = new ArrayList<>();

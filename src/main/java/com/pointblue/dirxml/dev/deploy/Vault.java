@@ -441,6 +441,7 @@ public final class Vault implements VaultAccess {
         if (ops == null) {
             try {
                 GetDriverStateResponse.register();
+                com.novell.nds.dirxml.ldap.GetJobStateResponse.register();
                 GetDriverStartOptionResponse.register();
                 ListNamedPasswordsResponse.register();
                 ViewCacheEntriesResponse.register();
@@ -493,6 +494,48 @@ public final class Vault implements VaultAccess {
 
     public void startDriver(String driverDn) {
         extOp("StartDriver", driverDn, () -> ops().extendedOperation(new StartDriverRequest(driverDn)));
+    }
+
+    // ---- jobs (DirXML-Job; docs/console-gaps.md §1) ----
+
+    /** {@code StartJob}: run the job now. */
+    public void startJob(String jobDn) {
+        extOp("StartJob", jobDn, () -> ops().extendedOperation(new com.novell.nds.dirxml.ldap.StartJobRequest(jobDn)));
+    }
+
+    /** {@code AbortJob}: stop a running job. */
+    public void abortJob(String jobDn) {
+        extOp("AbortJob", jobDn, () -> ops().extendedOperation(new com.novell.nds.dirxml.ldap.AbortJobRequest(jobDn)));
+    }
+
+    /** {@code NotifyJobUpdate}: tell the scheduler the job object changed. */
+    @Override
+    public void notifyJobUpdate(String jobDn) {
+        extOp("NotifyJobUpdate", jobDn, () -> ops().extendedOperation(new com.novell.nds.dirxml.ldap.NotifyJobUpdateRequest(jobDn)));
+    }
+
+    /** What the engine says about a job: {@code GetJobState} — running state, configuration state, whether it is scheduled and when it next runs. */
+    public static final class JobState {
+        public final int runningState;
+        public final int configurationState;
+        public final boolean scheduled;
+        public final java.util.Date nextRun;
+
+        public JobState(int runningState, int configurationState, boolean scheduled, java.util.Date nextRun) {
+            this.runningState = runningState;
+            this.configurationState = configurationState;
+            this.scheduled = scheduled;
+            this.nextRun = nextRun;
+        }
+    }
+
+    public JobState jobState(String jobDn) {
+        try {
+            com.novell.nds.dirxml.ldap.GetJobStateResponse resp = (com.novell.nds.dirxml.ldap.GetJobStateResponse) ops().extendedOperation(new com.novell.nds.dirxml.ldap.GetJobStateRequest(jobDn));
+            return new JobState(resp.getRunningState(), resp.getConfigurationState(), resp.isScheduled(), resp.getNextRunTime());
+        } catch (Exception e) {
+            throw new VaultException("GetJobState " + jobDn + ": " + e.getMessage(), e);
+        }
     }
 
     public void stopDriver(String driverDn) {
