@@ -8,6 +8,8 @@ lib
 
 # client artifacts & operational data — never commit
 *.ldif
+# the synthetic fixture is generated, not a client export: it travels with the tests
+!src/test/resources/fixtures/synthetic/driverset.ldif
 *.trace
 *.log
 TraceLog*.txt
