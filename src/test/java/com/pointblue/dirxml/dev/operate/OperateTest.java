@@ -904,4 +904,32 @@ public class OperateTest {
         Operate.Result stopped = Operate.migrateIntoApp(fake, env, DRIVER, "ou=users,o=data", "(employeeType=contractor)", "User", 500, false, true, null, tree);
         assertTrue(stopped.text(), !stopped.ok && stopped.text().contains("needs a running driver"));
     }
+
+    @Test
+    public void emailServerShowsAndSetsTheCollectionsSmtpSettings() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        String coll = "cn=Default Notification Collection,cn=Security";
+        Vault.Entry c = FakeEngine.entry(coll, "Default Notification Collection", List.of("Top", "notfTemplateCollection"));
+        FakeEngine.put(c, "notfSMTPEmailHost", List.of("mail.example.com"));
+        fake.entries.put(coll, c);
+        fake.searches.put("(objectClass=notfTemplateCollection)", List.of(c));
+        Environments.Environment env = env("dev", Environments.Tier.DEV);
+        Operate.Result show = Operate.emailServerShow(fake, env);
+        assertTrue(show.text(), show.ok && show.text().contains("host      mail.example.com") && show.text().contains("password  -"));
+        Path tree = Files.createTempDirectory("op");
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("port", "587");
+        values.put("from", "idm@example.com");
+        values.put("tls", "true");
+        Operate.Result set = Operate.emailServerSet(fake, env, values, "pw".toCharArray(), false, null, tree);
+        assertTrue(set.text(), set.ok);
+        assertEquals("587", c.string("notfSMTPPort"));
+        assertEquals("true", c.string("notfSMTPUseTLS"));
+        assertEquals("pw", c.string("notfSMTPMailPassword"));
+        Operate.Result again = Operate.emailServerShow(fake, env);
+        assertTrue(again.text(), again.text().contains("password  (set)") && again.json().contains("\"passwordSet\":true"));
+        assertTrue(again.text(), !again.text().contains("pw\n"));
+        Operate.Result nothing = Operate.emailServerSet(fake, env, Map.of(), null, false, null, tree);
+        assertTrue(nothing.text(), !nothing.ok && nothing.text().contains("nothing to set"));
+    }
 }

@@ -92,6 +92,16 @@ public final class VaultDiff {
                 driverImages.put(e.dn.toLowerCase(), image);
             }
         }
+        // the vault's notification templates live outside the driver set (cn=Security): read them too
+        try {
+            for (Vault.Entry c : v.search("cn=Security", "(objectClass=notfTemplateCollection)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE)) {
+                for (Vault.Entry t : v.search(c.dn, "(objectClass=notfMergeTemplate)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE)) {
+                    entries.add(toSourceEntry(t));
+                }
+            }
+        } catch (RuntimeException e) {
+            // no cn=Security, or no rights to it: a tree without templates
+        }
         return LdifReader.fromEntries(entries, sourceName, driverImages);
     }
 

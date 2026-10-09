@@ -45,7 +45,7 @@ public final class OperateCli {
         String cmd = argv[0];
         String sub = null;
         int optStart = 1;
-        if ((cmd.equals("driver.log-level") || cmd.equals("driver.health")) && argv.length >= 2 && !argv[1].startsWith("--")) {
+        if ((cmd.equals("driver.log-level") || cmd.equals("driver.health") || cmd.equals("vault.email-server")) && argv.length >= 2 && !argv[1].startsWith("--")) {
             sub = argv[1];   // optional: "set" / "clear"; without it the command shows
             optStart = 2;
         }
@@ -159,6 +159,33 @@ public final class OperateCli {
                     }
                     byte[] xds = Files.readAllBytes(Paths.get(first(opts, "xds")));
                     result = Operate.migrate(engine, env, driver, xds, yes, confirm, tree);
+                    break;
+                }
+
+                case "vault.email-server": {
+                    if ("set".equals(sub)) {
+                        Map<String, String> values = new LinkedHashMap<>();
+                        for (String[] a : Operate.EMAIL_SERVER_ATTRS) {
+                            if (opts.containsKey(a[0])) {
+                                values.put(a[0], first(opts, a[0]));
+                            }
+                        }
+                        char[] password = null;
+                        if (opts.containsKey("stdin")) {
+                            String line = new java.io.BufferedReader(new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8)).readLine();
+                            password = line == null ? null : line.toCharArray();
+                        } else if (opts.containsKey("password-key")) {
+                            Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
+                            password = secrets.get(first(opts, "password-key"));
+                            if (password == null) {
+                                System.err.println("no secret '" + first(opts, "password-key") + "' in the environment's secrets file");
+                                return 2;
+                            }
+                        }
+                        result = Operate.emailServerSet(engine, env, values, password, yes, confirm, tree);
+                    } else {
+                        result = Operate.emailServerShow(engine, env);
+                    }
                     break;
                 }
 
@@ -522,6 +549,7 @@ public final class OperateCli {
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
         System.err.println("  driver.trace show|set|reset|tail|view --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]   (view: the desktop viewer, or view --file F)");
+        System.err.println("  vault.email-server [set] --env E [--host H] [--port N] [--from A] [--user U] [--tls true|false] [--timeout N] [--protocol P] [--auth M] [--password-key K|--stdin]   the notification collection's SMTP settings; set writes them");
         System.err.println("  driver.migrate --env E --driver D --direction vault --base DN --filter F --class C [--max N] [--dry-run] --yes   send vault objects into the application (one <sync> per object through the running driver)");
         System.err.println("  driver.log-level [set] --env E [--driver D] [--level errors|errors-and-warnings|last-log-time|off|specific-events] [--events id,…] [--limit N] [--events-type N] [--inherit]   the log level of a driver or the driver set; set writes it live, --inherit makes a driver use the set's");
         System.err.println("  driver.secrets set|remove --env E --driver D [--kind named|shim-auth|remote-loader|key|keystore] [--name X] [--stdin]   one secret live; key and keystore are the Remote Loader's mutual-authentication passwords");

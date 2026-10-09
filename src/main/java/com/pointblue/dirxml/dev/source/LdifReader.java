@@ -300,6 +300,24 @@ public final class LdifReader {
             }
         }
 
+        // 3e. notification templates: notfMergeTemplate objects of the vault's notification collection
+        // (docs/console-gaps.md §12), wherever the entries carry them
+        for (Entry e : entries) {
+            if (!e.hasClass("notfMergeTemplate")) {
+                continue;
+            }
+            String collection = parentDn(e.dn);
+            if (!collection.equalsIgnoreCase(com.pointblue.dirxml.dev.model.NotificationTemplate.DEFAULT_COLLECTION_DN)
+                && !ds.meta.containsKey(DriverSet.TEMPLATES_COLLECTION_META)) {
+                ds.meta.put(DriverSet.TEMPLATES_COLLECTION_META, collection);
+            }
+            com.pointblue.dirxml.dev.model.NotificationTemplate t = new com.pointblue.dirxml.dev.model.NotificationTemplate(rdn(e.dn), xmlOrNull(e.first("notfMergeTemplateData")));
+            t.subject = e.first("notfMergeTemplateSubject");
+            t.meta.put("dn", e.dn);
+            copyMeta(e, t.meta, "notfMergeTemplate");
+            ds.templates.add(t);
+        }
+
         // 4. linkage: DirXML-Policies = "<policyDN>#<order>#<setId>"
         for (Entry e : entries) {
             if (!e.hasClass("DirXML-Driver")) {

@@ -1,6 +1,6 @@
 # Identity Console gaps: design note
 
-Status: **decided 2026-10-09** (section 5); J1, J2, R1, M1 built and M2 in progress (G5, G12, G11 built; G8 next). Basis: *DirXMLDev CLI vs Identity
+Status: **decided 2026-10-09** (section 5); J1, J2, R1, M1 and M2 built (G5, G12, G11 in §11; G8 in §12); L1 as needed. Basis: *DirXMLDev CLI vs Identity
 Console API: Capability Gaps* (2026-10-09, 208 `edirapi` routes against DirXMLDev 0.18.0). The
 first set — **G3** association and object inspection, **G4** password-sync diagnostics, **G6**
 queue/submit event, **G10** the live start option — is built (`docs/operate.md`, release 0.19.0)
@@ -255,4 +255,33 @@ sets all three where before it skipped Remote Loader passwords as unsupported.
 **Left for later.** G8 (the e-mail server and the notification templates). The event ids' names (the
 engine's audit event table) are shown as numbers. The migrate-into-application path is tested against the
 fake engine only.
+
+## 12. As built (M2, second part): the e-mail server and the notification templates
+
+**Grounding (edir3, 2026-10-09).** The vault's one `notfTemplateCollection`,
+`cn=Default Notification Collection,cn=Security`, carries the SMTP settings (`notfSMTPEmailHost`,
+`notfSMTPPort`, `notfSMTPEmailFrom`, `notfSMTPEmailUserName`, `notfSMTPMailPassword`, `notfSMTPUseTLS`,
+`notfSMTPTimeout`, `notfSMTPMailProtocol`, `notfSMTPAuthMechanisms`, and the OAuth ones) and 351
+`notfMergeTemplate` children, 344 of them package-stamped: each a subject
+(`notfMergeTemplateSubject`) and a body (`notfMergeTemplateData`: an `<html>` document with
+`form:token-descriptions` and `$token$` markers). Designer models the templates under the Identity
+Vault (`Idm:NotfTemplates`), not in the driver set export.
+
+**Built.**
+
+- **`vault.email-server [set] --env E`**: the SMTP settings shown, the password as set or not;
+  `set` writes the ones given (an empty value clears one) and the password from the secrets file
+  (`--password-key`, suggested key `email-server.password`) or stdin. The console's test send has no
+  engine operation behind it (the console mails from its own process), so none is offered.
+- **Templates in the tree**: `NotificationTemplate` (name, subject, body, meta), `DriverSet.templates`
+  with the collection's DN in meta when it is not the default; `templates/<name>.xml` beside
+  `driverset.xml`, the subject and stamps on the manifest's `<template>`. Read live (the import also
+  reads the collection under `cn=Security`) and from an LDIF; `validate` (`template-no-data`,
+  `template-no-subject`, `template-name-blank`); `vault.diff` `TEMPLATE_ADDED / REMOVED / CHANGED` (no
+  driver restart); `vault.deploy` creates the collection when absent, adds a template with its package
+  stamps, modifies the subject and body, deletes behind `--delete-all templates`. A `--driver`-scoped
+  diff leaves them out, as it does the set's jobs.
+
+**Left for later.** Designer's project (`Idm:NotfTemplates`) and export are not read for templates;
+the package installer's type-4 (template) packages stay as noted in docs/packages.md §7.
 

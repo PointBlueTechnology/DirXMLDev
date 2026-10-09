@@ -2127,6 +2127,98 @@ public final class Operate {
         return r;
     }
 
+    // ---- G8: the e-mail server ----------------------------------------------------------------------
+
+    /** The notification collection's SMTP attributes, in the order shown ({@code notfSMTPMailPassword} is never read back). */
+    public static final String[][] EMAIL_SERVER_ATTRS = {
+        { "host", "notfSMTPEmailHost" }, { "port", "notfSMTPPort" }, { "from", "notfSMTPEmailFrom" }, { "user", "notfSMTPEmailUserName" },
+        { "tls", "notfSMTPUseTLS" }, { "timeout", "notfSMTPTimeout" }, { "protocol", "notfSMTPMailProtocol" }, { "auth", "notfSMTPAuthMechanisms" },
+    };
+    public static final String EMAIL_SERVER_PASSWORD_ATTR = "notfSMTPMailPassword";
+    /** The secrets-file key the password comes from. */
+    public static final String EMAIL_SERVER_PASSWORD_KEY = "email-server.password";
+
+    /** The vault's one notification collection ({@code notfTemplateCollection} under {@code cn=Security}), or null. */
+    static Vault.Entry emailCollection(Engine engine) {
+        try {
+            List<Vault.Entry> found = engine.search("cn=Security", "(objectClass=notfTemplateCollection)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+            return found.isEmpty() ? null : found.get(0);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** The SMTP settings the engine sends notification mail with (docs/console-gaps.md §12). Read-only; the password is reported as set or not. */
+    public static Result emailServerShow(Engine engine, Environments.Environment env) {
+        Vault.Entry c = emailCollection(engine);
+        if (c == null) {
+            return Result.refused("no notification collection under cn=Security (notfTemplateCollection)");
+        }
+        Vault.Entry e = engine.read(c.dn);
+        StringBuilder t = new StringBuilder(c.dn).append('\n');
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"dn\":").append(q(c.dn));
+        for (String[] a : EMAIL_SERVER_ATTRS) {
+            String v = e == null ? null : e.string(a[1]);
+            t.append(String.format("  %-9s %s", a[0], v == null ? "-" : v)).append('\n');
+            j.append(",").append(q(a[0])).append(":").append(v == null ? "null" : q(v));
+        }
+        boolean pw = e != null && e.bytes(EMAIL_SERVER_PASSWORD_ATTR) != null;
+        t.append("  password  ").append(pw ? "(set)" : "-").append('\n');
+        j.append(",\"passwordSet\":").append(pw).append("}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /**
+     * Write the SMTP settings given ({@code host}, {@code port}, {@code from}, {@code user}, {@code tls}, {@code timeout},
+     * {@code protocol}, {@code auth}; an empty value clears one) and the password when it is given. Light write, audited.
+     */
+    public static Result emailServerSet(Engine engine, Environments.Environment env, Map<String, String> values, char[] password,
+            boolean yes, String confirm, Path tree) throws IOException {
+        if (values.isEmpty() && password == null) {
+            return Result.refused("nothing to set: give --host, --port, --from, --user, --tls, --timeout, --protocol, --auth or a password");
+        }
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        Vault.Entry c = emailCollection(engine);
+        if (c == null) {
+            return Result.refused("no notification collection under cn=Security (notfTemplateCollection)");
+        }
+        List<String> done = new ArrayList<>();
+        String error = null;
+        try {
+            for (String[] a : EMAIL_SERVER_ATTRS) {
+                if (!values.containsKey(a[0])) {
+                    continue;
+                }
+                String v = values.get(a[0]);
+                engine.replace(c.dn, a[1], v == null || v.isEmpty() ? List.of() : List.of(v.getBytes(StandardCharsets.UTF_8)));
+                done.add(a[0] + "=" + (v == null || v.isEmpty() ? "(cleared)" : v));
+            }
+            if (password != null) {
+                engine.replace(c.dn, EMAIL_SERVER_PASSWORD_ATTR, List.of(new String(password).getBytes(StandardCharsets.UTF_8)));
+                Arrays.fill(password, '\0');
+                done.add("password=(set)");
+            }
+        } catch (RuntimeException e) {
+            error = e.getMessage();
+        }
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = error == null ? "ok" : "failed";
+        rec.detail = "vault.email-server set: " + String.join(", ", done) + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = error == null;
+        r.text = error == null ? "e-mail server: " + String.join(", ", done) + "\n" : "FAILED   " + error + " (done before it: " + String.join(", ", done) + ")\n";
+        r.json = "{\"ok\":" + r.ok + ",\"done\":" + q(String.join(", ", done)) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
     // ---- G5: migrate into the application --------------------------------------------------------
 
     /**
