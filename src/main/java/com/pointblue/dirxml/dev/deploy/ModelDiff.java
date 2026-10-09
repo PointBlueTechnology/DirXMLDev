@@ -51,7 +51,13 @@ public final class ModelDiff {
         DRIVERSET_GCVS, DRIVERSET_LINKAGE, DRIVERSET_STAMPS,
         FORM_ADDED, FORM_REMOVED, FORM_CHANGED, PRD_ADDED, PRD_REMOVED, PRD_CHANGED,
         OBJECT_ADDED, OBJECT_REMOVED, OBJECT_CHANGED,
-        ENTITLEMENT_ADDED, ENTITLEMENT_REMOVED, ENTITLEMENT_CHANGED;
+        ENTITLEMENT_ADDED, ENTITLEMENT_REMOVED, ENTITLEMENT_CHANGED,
+        JOB_ADDED, JOB_REMOVED, JOB_CHANGED;
+
+        /** A job is read by the engine's scheduler, told of a change by {@code NotifyJobUpdate}: no driver restart. */
+        public boolean isJob() {
+            return this == JOB_ADDED || this == JOB_REMOVED || this == JOB_CHANGED;
+        }
 
         /** Provisioning objects (JSON forms, PRDs, the rest of AppConfig) are read by the Identity Applications, not the engine: no driver restart. */
         public boolean isProvisioning() {
@@ -83,7 +89,7 @@ public final class ModelDiff {
 
         /** None of these kinds needs the owning driver restarted. */
         public boolean noRestart() {
-            return isProvisioning() || isEntitlement() || isIcon() || this == DRIVERSET_STAMPS;
+            return isProvisioning() || isEntitlement() || isJob() || isIcon() || this == DRIVERSET_STAMPS;
         }
     }
 
@@ -254,6 +260,9 @@ public final class ModelDiff {
         if (k == Kind.ENTITLEMENT_REMOVED) {
             return "entitlements";
         }
+        if (k == Kind.JOB_REMOVED) {
+            return "jobs";
+        }
         if (k == Kind.FORM_REMOVED) {
             return "forms";
         }
@@ -277,6 +286,9 @@ public final class ModelDiff {
     }
 
     private boolean treeHasNoneOfKind(String driver, String kind) {
+        if (driver == null) {
+            return "jobs".equals(kind) && to.jobs.isEmpty();   // the driver set's own jobs
+        }
         Driver d = to.driver(driver);
         if (d == null) {
             return true;   // the driver itself only exists on the vault side (DRIVER_REMOVED handles that)
@@ -284,6 +296,8 @@ public final class ModelDiff {
         switch (kind) {
             case "entitlements":
                 return d.entitlements.isEmpty();
+            case "jobs":
+                return d.jobs.isEmpty();
             case "forms":
                 return d.provisioning == null || d.provisioning.forms.isEmpty();
             case "prds":
@@ -495,9 +509,11 @@ public final class ModelDiff {
             diffDriverLinkage(a, b);
             diffProvisioning(a, b);
             diffEntitlements(a, b);
+            diffJobs(a.name, a.jobs, b.jobs);
         }
 
         diffDriverSetGcvs();
+        diffJobs(null, from.jobs, to.jobs);
         diffDriverSetLinkage();
         diffDriverSetStamps();
     }
@@ -943,6 +959,69 @@ public final class ModelDiff {
             changes.add(new Change(Kind.ENTITLEMENT_CHANGED, d.name, entitlementPath(d, y), "package-stamps",
                 "~ package stamps entitlement " + entitlementPath(d, y), String.join("\n", lines)));
         }
+    }
+
+    // ---- jobs (DirXML-Job objects under a driver or the driver set; docs/console-gaps.md §1) ----
+
+    /** Path: {@code drivers/<d>/jobs/<name>}, or {@code jobs/<name>} for the driver set's own. */
+    public static String jobPath(String driver, com.pointblue.dirxml.dev.model.Job j) {
+        return (driver == null ? "jobs/" : "drivers/" + driver + "/jobs/") + j.name;
+    }
+
+    private void diffJobs(String driver, List<com.pointblue.dirxml.dev.model.Job> fromJobs, List<com.pointblue.dirxml.dev.model.Job> toJobs) {
+        Map<String, com.pointblue.dirxml.dev.model.Job> x = new TreeMap<>();
+        Map<String, com.pointblue.dirxml.dev.model.Job> y = new TreeMap<>();
+        for (com.pointblue.dirxml.dev.model.Job j : fromJobs) {
+            x.put(j.name, j);
+        }
+        for (com.pointblue.dirxml.dev.model.Job j : toJobs) {
+            y.put(j.name, j);
+        }
+        Set<String> names = new TreeSet<>(x.keySet());
+        names.addAll(y.keySet());
+        for (String n : names) {
+            com.pointblue.dirxml.dev.model.Job a = x.get(n);
+            com.pointblue.dirxml.dev.model.Job b = y.get(n);
+            if (a == null) {
+                changes.add(new Change(Kind.JOB_ADDED, driver, jobPath(driver, b), null, "+ added job " + jobPath(driver, b), null));
+            } else if (b == null) {
+                changes.add(new Change(Kind.JOB_REMOVED, driver, jobPath(driver, a), null, "- removed job " + jobPath(driver, a), null));
+            } else {
+                String oldText = jobText(a, true);
+                String newText = jobText(b, true);
+                if (!Objects.equals(oldText, newText)) {
+                    // the document only when it changed; otherwise just the servers, scopes and trace lines
+                    boolean docChanged = !Objects.equals(serializeOrNull(a.definition), serializeOrNull(b.definition));
+                    String detail = docChanged ? textDiff(oldText, newText) : textDiff(jobText(a, false), jobText(b, false));
+                    changes.add(new Change(Kind.JOB_CHANGED, driver, jobPath(driver, b), docChanged ? null : "settings", "~ changed job " + jobPath(driver, b) + (docChanged ? "" : " (servers, scopes or trace)"), detail));
+                }
+            }
+        }
+    }
+
+    /** What a job deploys, as text: its document, then its servers, scopes and trace settings one per line. */
+    static String jobText(com.pointblue.dirxml.dev.model.Job j, boolean withDocument) {
+        StringBuilder sb = new StringBuilder();
+        if (withDocument) {
+            String doc = serializeOrNull(j.definition);
+            sb.append(doc == null ? "" : doc).append('\n');
+        }
+        List<String> servers = new ArrayList<>(j.servers);
+        servers.sort(String.CASE_INSENSITIVE_ORDER);
+        for (String s : servers) {
+            sb.append("server: ").append(s).append('\n');
+        }
+        List<String> scopes = new ArrayList<>(j.scopes);
+        scopes.sort(String.CASE_INSENSITIVE_ORDER);
+        for (String s : scopes) {
+            sb.append("scope: ").append(s).append('\n');
+        }
+        for (String k : new String[] { "trace-level", "trace-file", "trace-size-limit" }) {
+            if (j.meta.get(k) != null) {
+                sb.append(k).append(": ").append(j.meta.get(k)).append('\n');
+            }
+        }
+        return sb.toString();
     }
 
     private void kindChanged(Artifact a, Artifact b) {

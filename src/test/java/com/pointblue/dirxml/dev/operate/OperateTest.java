@@ -79,6 +79,28 @@ public class OperateTest {
         public List<Vault.Entry> search(String base, String filter, int scope) {
             return searches.getOrDefault(filter, List.of());
         }
+
+        final Map<String, Vault.JobState> jobStates = new LinkedHashMap<>();
+        final List<String> jobCalls = new ArrayList<>();
+
+        @Override
+        public void startJob(String jobDn) {
+            jobCalls.add("start " + jobDn);
+        }
+
+        @Override
+        public void abortJob(String jobDn) {
+            jobCalls.add("abort " + jobDn);
+        }
+
+        @Override
+        public Vault.JobState jobState(String jobDn) {
+            Vault.JobState st = jobStates.get(jobDn);
+            if (st == null) {
+                throw new RuntimeException("no state for " + jobDn);
+            }
+            return st;
+        }
         final Map<String, String> driverStats = new LinkedHashMap<>();
         final Map<String, List<String>> events = new LinkedHashMap<>();   // dn -> raw event element strings
         final Map<String, List<String>> namedPasswords = new LinkedHashMap<>();
