@@ -1,6 +1,6 @@
 # Identity Console gaps: design note
 
-Status: **decided 2026-10-09** (section 5); J1, J2 and R1 built (jobs everywhere; entitlement policies grounded on edir3 and modelled, diffed, deployed, `rbe.*`); M1 next. Basis: *DirXMLDev CLI vs Identity
+Status: **decided 2026-10-09** (section 5); J1, J2, R1 and M1 built (jobs; entitlement policies; `driver.query`, `driver.health`); M2 next. Basis: *DirXMLDev CLI vs Identity
 Console API: Capability Gaps* (2026-10-09, 208 `edirapi` routes against DirXMLDev 0.18.0). The
 first set — **G3** association and object inspection, **G4** password-sync diagnostics, **G6**
 queue/submit event, **G10** the live start option — is built (`docs/operate.md`, release 0.19.0)
@@ -185,4 +185,39 @@ list — the first start failed on `priority=1` for the only policy, hence the s
 above. The web has no policies panel yet (an R2, with the outline and the Developer tree). The
 Designer project reader for policies is from the model code only. `dgIdentity` is left to the author:
 the lab policy ran without one.
+
+## 10. As built (M1): the application query and driver health
+
+**G9 `driver.query --env E --driver D [--class C] [--scope subtree|subordinates|entry] [--dn DN]
+[--association A] [--search name=value…] [--read-attr A…|none]`.** The engine's query verb, sent as a
+command into the running driver's subscriber channel (`SubmitCommand`, the same door `driver.submit`
+uses): `<query class-name scope dest-dn>` with `<search-class>`, `<search-attr>` and `<read-attr>`
+children; the shim answers `<instance class-name src-dn><association/><attr attr-name><value/>`,
+printed one instance per block and as JSON. The verb takes DNs in slash form, so an LDAP `--dn` is
+converted (`cn=x,ou=users,o=data` → `data\users\x`). Proven on edir3 through the Loopback driver,
+whose shim answers from the vault: a search by CN under `ou=users,o=data` returned the user with its
+Surname and Given Name, an entry-scope query with `--read-attr none` returned the bare instance. A
+stopped driver is refused up front. Gated light and audited: it reads the application, but it takes
+the driver's channel to do so.
+
+**G7 `driver.health [clear] --env E --driver D`.** Grounded on the Driver Health job itself
+(`ckdrvhealthjob.jar`, `CheckDriverHealthJob`, read 2026-10-09): the job runs at the driver set,
+scoped to drivers; it reads each driver's health configuration from the driver's
+`DirXML-ConfigManifest` (`<health-config>` with `<green>`, `<yellow>`, `<red>` and `<custom-state
+unique-id>` elements, each conditions plus `<actions>`), evaluates it per server, and writes the result
+to the driver object's `DirXML-uiXMLSmall` (adding the aux class `DirXML-uiExtensions`):
+`<dirxml-ui><health-config-status><last-state><driver dn><server dn last-state="green|yellow|red"/>` and
+one `<custom-state unique-id>` block per custom state with true/false. `driver.health` prints the three:
+the last state per server, the configured states with their condition-group and action counts, and the
+set's health jobs with whether this driver is in their scope (or that nothing evaluates it). `clear`
+removes `DirXML-uiXMLSmall`, which is what the console's `clearDriverHealthStatus` amounts to. No lab
+driver carries a health configuration yet, so the read was checked against the job's own document
+shapes in tests and live only for the empty case.
+
+**Left for later.** The health configuration is not in the tree: the model does not carry
+`DirXML-ConfigManifest`, so `<health-config>` is read live only (modelling the manifest is its own
+piece). The health job's actions (start, stop, restart, clear the cache, send e-mail, a workflow) are
+listed by count, not by kind. The web's Objects tab is to get "ask the application" beside the vault's
+answer (an R2/M1b web change). Custom shims that are not installed on a lab engine refuse to start,
+which is the engine's doing, not the query's.
 

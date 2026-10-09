@@ -530,6 +530,10 @@ public final class Cli {
         System.err.println("  driver.trace view --env E [--driver D] | --file FILE   open the DirXML Trace Viewer (desktop) connected to the vault, or on a file");
         System.err.println("  viewer.check | viewer.install [--version TAG] [--source] [--dir DIR]   the viewer: where it is; download a release or build from https://github.com/PointBlueTechnology/DirXMLTraceViewer");
         System.err.println("  driver.submit --env E --driver D --xds <file> --yes [--tree DIR]   SubmitCommand into the running driver; with --tree, the simulator canary first");
+        System.err.println("  driver.query --env E --driver D [--class C] [--scope subtree|subordinates|entry] [--dn DN] [--association A] [--search name=value…] [--read-attr A…|none]   ask the connected system through the running driver (the engine's query verb)");
+        System.err.println("  driver.health [clear] --env E --driver D [--yes]   the Driver Health job's last state per server, the health configuration, the set's health jobs; clear removes the recorded status");
+        System.err.println("  job.list --env E [--driver D] | job.status --env E --job J [--driver D] | job.start|abort --env E --job J [--driver D] [--yes]   the set's jobs with the engine's state; start or abort one");
+        System.err.println("  rbe.list --env E | rbe.members --env E --policy P   the entitlement policies of the set: priority, members, grants; one policy's computed members");
         System.err.println("  engine.version --env E");
         System.err.println("  engine.stats --env E [--driver D…] [--json]");
         System.err.println("edit operations (each: load → apply → validate → write unless a new error; --dry-run, --force, --json):");
