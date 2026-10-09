@@ -255,7 +255,81 @@ final class ApplicationType {
      * application, else the Designer driver type the tree recorded (which is the only thing
      * a Remote Loader driver has), else {@code GenericApp}.
      */
-    static String of(Driver d) {
+    /** The display name of an application type, as a diagram labels it ({@code ActiveDirectory} → "Active Directory"); null for the generic type. */
+    public static String displayName(String type) {
+        if (type == null || GENERIC.equals(type)) {
+            return null;
+        }
+        String n = NAMES.get(type);
+        if (n != null) {
+            return n;
+        }
+        // CamelCase and dashes to words: "BlackboardREST" → "Blackboard REST", "SAP-Portal" → "SAP Portal"
+        return type.replace('-', ' ').replaceAll("([a-z])([A-Z])", "$1 $2").replaceAll("([A-Z]+)([A-Z][a-z])", "$1 $2");
+    }
+
+    /** True for a driver with no external system: it serves the vault itself (User Application, Loopback, Entitlements Service, …). */
+    public static boolean vaultOnly(String type) {
+        return type != null && VAULT_ONLY.contains(type);
+    }
+
+    private static final Map<String, String> NAMES = new HashMap<>();
+    private static final java.util.Set<String> VAULT_ONLY = java.util.Set.of(
+        "NProv", "NrfApp", "Entitlement", "LoopBack", "Null", "MSGATEWAY", "IDMDCS", "ManualTask", "WorkOrder", "StateMachine", "Workflow", "PIVWorkflow", "PIVLifeCycle");
+
+    static {
+        Map<String, String> n = NAMES;
+        n.put("ActiveDirectory", "Active Directory");
+        n.put("MultiDomainActiveDirectory", "Multi-Domain Active Directory");
+        n.put("ADAM", "AD LDS");
+        n.put("AZURE", "Azure AD");
+        n.put("Office365", "Office 365");
+        n.put("GenericDatabase", "JDBC");
+        n.put("GenericDirectory", "LDAP");
+        n.put("DelimitedTextApp", "Delimited Text");
+        n.put("eDirectory", "eDirectory");
+        n.put("NDS", "eDirectory");
+        n.put("NProv", "User Application");
+        n.put("NrfApp", "Role and Resource Service");
+        n.put("Entitlement", "Entitlements Service");
+        n.put("LoopBack", "Loopback");
+        n.put("Null", "Null");
+        n.put("MSGATEWAY", "Managed System Gateway");
+        n.put("IDMDCS", "Data Collection Service");
+        n.put("ManualTask", "Manual Task");
+        n.put("WorkOrder", "Work Order");
+        n.put("StateMachine", "State Machine");
+        n.put("SAP-HR", "SAP HR");
+        n.put("SAP-User", "SAP User Management");
+        n.put("SAP-Portal", "SAP Portal");
+        n.put("SAP-HANA", "SAP HANA");
+        n.put("SAP-GRCAC", "SAP GRC Access Control");
+        n.put("SAP-BizLogic", "SAP Business Logic");
+        n.put("SalesForce", "Salesforce");
+        n.put("GoogleApps", "Google Workspace");
+        n.put("Notes", "Lotus Notes");
+        n.put("i5OS", "IBM i");
+        n.put("OS400", "OS/400");
+        n.put("Linux", "Linux and UNIX");
+        n.put("HTTP-Server", "HTTP");
+        n.put("IGIM", "Identity Governance");
+        n.put("NPUM", "Privileged User Manager");
+        n.put("IDProvider", "ID Provider");
+        n.put("ActivIdentityCMS", "ActivIdentity CMS");
+        n.put("HoneywellPACS", "Honeywell PACS");
+        n.put("HoneywellBioEnrollment", "Honeywell Bio Enrollment");
+        n.put("Oracle-EBSUser", "Oracle EBS User");
+        n.put("Oracle-EBSHR", "Oracle EBS HR");
+        n.put("Oracle-EBSTCA", "Oracle EBS TCA");
+        n.put("EPICEMP", "Epic EMP");
+        n.put("BlackboardREST", "Blackboard");
+        n.put("PIVWorkflow", "PIV Workflow");
+        n.put("PIVLifeCycle", "PIV Life Cycle");
+        n.put("TopSecret", "Top Secret");
+        n.put("AccessReview", "Access Review");
+    }
+
+    public static String of(Driver d) {
         if (isScimShim(d.shimClass)) {
             return GENERIC;
         }
