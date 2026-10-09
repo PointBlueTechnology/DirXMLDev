@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-09
+
 ### Added
 
 - **Jobs deploy and operate** (docs/console-gaps.md §8, phase J2): `vault.diff` reports
