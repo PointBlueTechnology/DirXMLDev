@@ -288,6 +288,37 @@ public final class OperateCli {
                     break;
                 }
 
+                case "driver.query": {
+                    if (driver == null) {
+                        System.err.println("usage: driver.query --env E --driver D [--class C] [--scope subtree|subordinates|entry] [--dn DN] [--association A] [--search name=value…] [--read-attr A…|none] [--yes] [--confirm E] [--json]");
+                        return 2;
+                    }
+                    Operate.Query q = new Operate.Query();
+                    q.className = first(opts, "class");
+                    if (opts.containsKey("scope")) {
+                        q.scope = first(opts, "scope");
+                        if (!List.of("subtree", "subordinates", "entry").contains(q.scope)) {
+                            System.err.println("--scope is subtree, subordinates or entry");
+                            return 2;
+                        }
+                    }
+                    q.destDn = first(opts, "dn");
+                    q.association = first(opts, "association");
+                    q.searchAttrs.addAll(opts.getOrDefault("search", List.of()));
+                    q.readAttrs.addAll(opts.getOrDefault("read-attr", List.of()));
+                    result = Operate.driverQuery(engine, env, driver, q, yes, confirm, tree);
+                    break;
+                }
+
+                case "driver.health": {
+                    if (driver == null) {
+                        System.err.println("usage: driver.health [clear] --env E --driver D [--yes] [--confirm E] [--json]");
+                        return 2;
+                    }
+                    result = "clear".equals(sub) ? Operate.driverHealthClear(engine, env, driver, yes, confirm, tree) : Operate.driverHealth(engine, env, driver);
+                    break;
+                }
+
                 case "driver.submit": {
                     String xdsFile = first(opts, "xds");
                     String mode = opts.containsKey("mode") ? first(opts, "mode") : "command";
@@ -451,6 +482,8 @@ public final class OperateCli {
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
         System.err.println("  driver.trace show|set|reset|tail|view --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]   (view: the desktop viewer, or view --file F)");
+        System.err.println("  driver.query --env E --driver D [--class C] [--scope subtree|subordinates|entry] [--dn DN] [--association A] [--search name=value…] [--read-attr A…|none]   ask the connected system through the running driver (the engine's query verb); the <instance>s it answers");
+        System.err.println("  driver.health [clear] --env E --driver D [--yes]   the Driver Health job's last state per server, the health configuration on the driver, the set's health jobs; clear removes the recorded status");
         System.err.println("  driver.submit --env E --driver D --xds <file> [--mode command|event|queue] --yes [--tree DIR]   SubmitCommand (subscriber), SubmitEvent (publisher) or QueueEvent (into the cache); with --tree, the simulator canary");
         System.err.println("  driver.start-option --env E --driver D --option auto|manual|disabled [--yes] [--confirm E]   the start option, live");
         System.err.println("  driver.associations --env E --driver D [--state processed|disabled|pending|manual|migrate] [--base DN] [--limit N] [--json]   the objects associated with the driver");

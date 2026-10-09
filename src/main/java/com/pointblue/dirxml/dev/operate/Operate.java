@@ -99,6 +99,11 @@ public final class Operate {
             throw new UnsupportedOperationException("jobState");
         }
 
+        /** {@code SubmitCommand}: an XDS document into the subscriber channel of a running driver; the result document (docs/console-gaps.md §10). */
+        default String submitCommand(String driverDn, byte[] xds) {
+            throw new UnsupportedOperationException("submitCommand");
+        }
+
         void startDriver(String dn);
 
         void stopDriver(String dn);
@@ -137,6 +142,11 @@ public final class Operate {
     /** Adapts a real, connected {@link Vault} to {@link Engine}. */
     public static Engine vaultEngine(Vault v) {
         return new Engine() {
+            @Override
+            public String submitCommand(String driverDn, byte[] xds) {
+                return v.submitCommand(driverDn, xds);
+            }
+
             public int driverState(String dn) {
                 return v.driverState(dn);
             }
@@ -926,6 +936,382 @@ public final class Operate {
         r.ok = true;
         r.text = t.toString();
         r.json = j.toString();
+        return r;
+    }
+
+    // ---- G9: query the connected system through the driver ---------------------------------------
+
+    /** What {@link #driverQuery} asks: the class, the scope, a DN or an association to start from, search attributes, the attributes to read. */
+    public static final class Query {
+        public String className;
+        /** {@code subtree} (the default), {@code subordinates} or {@code entry}. */
+        public String scope = "subtree";
+        public String destDn;
+        public String association;
+        /** {@code name=value} search attributes. */
+        public final List<String> searchAttrs = new ArrayList<>();
+        /** Attributes to read; empty reads every attribute, {@code none} reads none (a match test). */
+        public final List<String> readAttrs = new ArrayList<>();
+
+        /** The {@code <query>} document the engine's query verb takes (NDS DTD 4.0). */
+        public String xds() {
+            StringBuilder sb = new StringBuilder("<nds dtdversion=\"4.0\" ndsversion=\"8.x\"><source><product>DirXMLDev</product><contact>Point Blue</contact></source><input>");
+            sb.append("<query event-id=\"dirxmldev-query\" scope=\"").append(xmlAttr(scope)).append('"');
+            if (className != null && !className.isBlank()) {
+                sb.append(" class-name=\"").append(xmlAttr(className)).append('"');
+            }
+            if (destDn != null && !destDn.isBlank()) {
+                sb.append(" dest-dn=\"").append(xmlAttr(slashDn(destDn))).append('"');
+            }
+            sb.append('>');
+            if (association != null && !association.isBlank()) {
+                sb.append("<association>").append(xmlText(association)).append("</association>");
+            }
+            if (className != null && !className.isBlank() && !"entry".equals(scope)) {
+                sb.append("<search-class class-name=\"").append(xmlAttr(className)).append("\"/>");
+            }
+            for (String sa : searchAttrs) {
+                int eq = sa.indexOf('=');
+                String n = eq < 0 ? sa : sa.substring(0, eq);
+                String v = eq < 0 ? "" : sa.substring(eq + 1);
+                sb.append("<search-attr attr-name=\"").append(xmlAttr(n)).append("\"><value>").append(xmlText(v)).append("</value></search-attr>");
+            }
+            if (readAttrs.size() == 1 && "none".equalsIgnoreCase(readAttrs.get(0))) {
+                sb.append("<read-attr/>");
+            } else {
+                for (String ra : readAttrs) {
+                    sb.append("<read-attr attr-name=\"").append(xmlAttr(ra)).append("\"/>");
+                }
+            }
+            sb.append("</query></input></nds>");
+            return sb.toString();
+        }
+    }
+
+    /**
+     * Ask the connected system a question through the driver (the console's {@code queryValues},
+     * docs/console-gaps.md §10): the {@code <query>} goes down the subscriber channel of the running
+     * driver as a command, the shim answers with {@code <instance>} elements. A read of the application
+     * that occupies the driver's channel: gated light and audited.
+     */
+    public static Result driverQuery(Engine engine, Environments.Environment env, String driver, Query q,
+            boolean yes, String confirm, Path tree) throws IOException {
+        String dn = driverDn(env, driver);
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        int state = engine.driverState(dn);
+        if (state != Vault.STATE_RUNNING) {
+            return Result.refused("driver '" + driver + "' is " + Vault.stateName(state) + "; a query needs a running driver");
+        }
+        String xds = q.xds();
+        String answer = null;
+        String error = null;
+        try {
+            answer = engine.submitCommand(dn, xds.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (RuntimeException e) {
+            error = e.getMessage();
+        }
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = error == null ? "ok" : "failed";
+        rec.detail = "driver.query '" + driver + "': " + (q.className == null ? "any class" : q.className) + " " + q.scope
+            + (q.destDn == null ? "" : " from " + q.destDn) + (q.association == null ? "" : " association " + q.association)
+            + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        if (error != null) {
+            r.ok = false;
+            r.text = "FAILED   " + error + "\n";
+            r.json = "{\"ok\":false,\"error\":" + q(error) + "}";
+            return r;
+        }
+        List<QueryInstance> instances = parseInstances(answer);
+        String status = queryStatus(answer);
+        StringBuilder t = new StringBuilder();
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"driver\":").append(q(driver)).append(",\"count\":").append(instances.size()).append(",\"instances\":[");
+        int n = 0;
+        for (QueryInstance in : instances) {
+            t.append(in.className == null ? "instance" : in.className);
+            if (in.srcDn != null) {
+                t.append("  ").append(in.srcDn);
+            }
+            if (in.association != null) {
+                t.append("  [").append(in.association).append(']');
+            }
+            t.append('\n');
+            j.append(n++ > 0 ? "," : "").append("{\"className\":").append(q(in.className == null ? "" : in.className)).append(",\"srcDn\":").append(q(in.srcDn == null ? "" : in.srcDn))
+             .append(",\"association\":").append(q(in.association == null ? "" : in.association)).append(",\"attrs\":{");
+            int a = 0;
+            for (Map.Entry<String, List<String>> en : in.attrs.entrySet()) {
+                t.append("    ").append(en.getKey()).append(" = ").append(String.join(" | ", en.getValue())).append('\n');
+                j.append(a++ > 0 ? "," : "").append(q(en.getKey())).append(":[");
+                for (int i = 0; i < en.getValue().size(); i++) {
+                    j.append(i > 0 ? "," : "").append(q(en.getValue().get(i)));
+                }
+                j.append(']');
+            }
+            j.append("}}");
+        }
+        if (n == 0) {
+            t.append("  no instances\n");
+        }
+        if (status != null && !status.isBlank()) {
+            t.append("status: ").append(status).append('\n');
+        }
+        j.append("],\"status\":").append(q(status == null ? "" : status)).append(",\"xds\":").append(q(xds)).append("}");
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /**
+     * The engine's query verb takes DNs in slash form ({@code data\\users\\jdoe}); an LDAP DN
+     * ({@code cn=jdoe,ou=users,o=data}) is converted, one given in slash form is kept.
+     */
+    public static String slashDn(String dn) {
+        if (dn == null || dn.indexOf('=') < 0) {
+            return dn;
+        }
+        List<String> values = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean escaped = false;
+        for (char ch : dn.toCharArray()) {
+            if (escaped) {
+                cur.append(ch);
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == ',') {
+                values.add(cur.toString());
+                cur.setLength(0);
+            } else {
+                cur.append(ch);
+            }
+        }
+        values.add(cur.toString());
+        StringBuilder sb = new StringBuilder();
+        for (int i = values.size() - 1; i >= 0; i--) {
+            String v = values.get(i).trim();
+            int eq = v.indexOf('=');
+            if (eq >= 0) {
+                v = v.substring(eq + 1).trim();
+            }
+            if (v.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append('\\');
+            }
+            sb.append(v);
+        }
+        return sb.toString();
+    }
+
+    /** One {@code <instance>} of a query answer. */
+    public static final class QueryInstance {
+        public String className;
+        public String srcDn;
+        public String association;
+        public final Map<String, List<String>> attrs = new LinkedHashMap<>();
+    }
+
+    /** The {@code <instance>} elements of a result document, in order; empty when it has none or does not parse. */
+    public static List<QueryInstance> parseInstances(String xml) {
+        List<QueryInstance> out = new ArrayList<>();
+        org.w3c.dom.Element root = parseOrNull(xml);
+        if (root == null) {
+            return out;
+        }
+        for (org.w3c.dom.Element in : com.pointblue.dirxml.sim.Xds.descendantsByName(root, "instance")) {
+            QueryInstance qi = new QueryInstance();
+            qi.className = emptyToNull(in.getAttribute("class-name"));
+            qi.srcDn = emptyToNull(in.getAttribute("src-dn"));
+            for (org.w3c.dom.Element a : com.pointblue.dirxml.sim.Xds.childrenByName(in, "association")) {
+                qi.association = emptyToNull(com.pointblue.dirxml.sim.Xds.text(a).trim());
+            }
+            for (org.w3c.dom.Element a : com.pointblue.dirxml.sim.Xds.childrenByName(in, "attr")) {
+                List<String> values = new ArrayList<>();
+                for (org.w3c.dom.Element v : com.pointblue.dirxml.sim.Xds.childrenByName(a, "value")) {
+                    values.add(com.pointblue.dirxml.sim.Xds.text(v));
+                }
+                qi.attrs.put(a.getAttribute("attr-name"), values);
+            }
+            out.add(qi);
+        }
+        return out;
+    }
+
+    /** The {@code <status>} of a result document as {@code level: description}, or null. */
+    static String queryStatus(String xml) {
+        org.w3c.dom.Element root = parseOrNull(xml);
+        if (root == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (org.w3c.dom.Element st : com.pointblue.dirxml.sim.Xds.descendantsByName(root, "status")) {
+            String level = st.getAttribute("level");
+            String desc = com.pointblue.dirxml.sim.Xds.text(st).trim();
+            if (sb.length() > 0) {
+                sb.append("; ");
+            }
+            sb.append(level.isEmpty() ? "?" : level).append(desc.isEmpty() ? "" : ": " + desc.replaceAll("\\s+", " "));
+        }
+        return sb.length() == 0 ? null : sb.toString();
+    }
+
+    private static String emptyToNull(String s) {
+        return s == null || s.isEmpty() ? null : s;
+    }
+
+    private static String xmlText(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private static String xmlAttr(String s) {
+        return xmlText(s).replace("\"", "&quot;");
+    }
+
+    // ---- G7: driver health -----------------------------------------------------------------------
+
+    /** The attribute the Driver Health job writes its last evaluation to, on the driver object (aux class {@code DirXML-uiExtensions}). */
+    public static final String HEALTH_STATUS_ATTR = "DirXML-uiXMLSmall";
+    /** The job class whose job holds the schedule and the login the checks run as. */
+    public static final String HEALTH_JOB_CLASS = "com.novell.nds.dirxml.job.ckdrvhealth.CheckDriverHealthJob";
+
+    /**
+     * A driver's health (docs/console-gaps.md §10): the last state the Driver Health job recorded per server
+     * ({@code DirXML-uiXMLSmall}: {@code <dirxml-ui><health-config-status><last-state><driver dn><server dn
+     * last-state="green|yellow|red"/>}, plus each custom state's true/false), the health configuration on the
+     * driver's manifest ({@code DirXML-ConfigManifest}'s {@code <health-config>}: the states and their actions),
+     * and the set's Driver Health jobs with whether this driver is in their scope. Read-only.
+     */
+    public static Result driverHealth(Engine engine, Environments.Environment env, String driver) {
+        String dn = driverDn(env, driver);
+        Vault.Entry e = engine.read(dn);
+        if (e == null) {
+            return Result.refused("no such driver '" + driver + "' under " + env.driverSetDn);
+        }
+        StringBuilder t = new StringBuilder(driver).append('\n');
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"driver\":").append(q(driver)).append(",\"dn\":").append(q(dn));
+        // 1. the last evaluation
+        org.w3c.dom.Element status = parseOrNull(e.string(HEALTH_STATUS_ATTR));
+        j.append(",\"states\":[");
+        int n = 0;
+        if (status == null) {
+            t.append("  health status   none recorded (the Driver Health job has not evaluated this driver)\n");
+        } else {
+            for (org.w3c.dom.Element hcs : com.pointblue.dirxml.sim.Xds.childrenByName(status, "health-config-status")) {
+                for (org.w3c.dom.Element last : com.pointblue.dirxml.sim.Xds.childrenByName(hcs, "last-state")) {
+                    for (org.w3c.dom.Element d : com.pointblue.dirxml.sim.Xds.childrenByName(last, "driver")) {
+                        for (org.w3c.dom.Element s : com.pointblue.dirxml.sim.Xds.childrenByName(d, "server")) {
+                            t.append("  health status   ").append(s.getAttribute("last-state")).append("  on ").append(s.getAttribute("dn")).append('\n');
+                            j.append(n++ > 0 ? "," : "").append("{\"server\":").append(q(s.getAttribute("dn"))).append(",\"state\":").append(q(s.getAttribute("last-state"))).append("}");
+                        }
+                    }
+                }
+                for (org.w3c.dom.Element cs : com.pointblue.dirxml.sim.Xds.childrenByName(hcs, "custom-state")) {
+                    for (org.w3c.dom.Element last : com.pointblue.dirxml.sim.Xds.childrenByName(cs, "last-state")) {
+                        for (org.w3c.dom.Element d : com.pointblue.dirxml.sim.Xds.childrenByName(last, "driver")) {
+                            for (org.w3c.dom.Element s : com.pointblue.dirxml.sim.Xds.childrenByName(d, "server")) {
+                                t.append("  custom state    ").append(cs.getAttribute("unique-id")).append(" = ").append(s.getAttribute("last-state")).append("  on ").append(s.getAttribute("dn")).append('\n');
+                                j.append(n++ > 0 ? "," : "").append("{\"server\":").append(q(s.getAttribute("dn"))).append(",\"customState\":").append(q(cs.getAttribute("unique-id"))).append(",\"state\":").append(q(s.getAttribute("last-state"))).append("}");
+                            }
+                        }
+                    }
+                }
+            }
+            if (n == 0) {
+                t.append("  health status   recorded, but no server state in it\n");
+            }
+        }
+        j.append("],\"configured\":[");
+        // 2. the configuration on the manifest
+        org.w3c.dom.Element manifest = parseOrNull(e.string("DirXML-ConfigManifest"));
+        org.w3c.dom.Element hc = manifest == null ? null : com.pointblue.dirxml.sim.Xds.firstByName(manifest, "health-config");
+        int c = 0;
+        if (hc == null) {
+            t.append("  health config   none on the driver (DirXML-ConfigManifest has no <health-config>)\n");
+        } else {
+            for (org.w3c.dom.Element st : com.pointblue.dirxml.sim.Xds.childElements(hc)) {
+                String name = st.getLocalName() != null ? st.getLocalName() : st.getNodeName();
+                if ("custom-state".equals(name) && !st.getAttribute("unique-id").isEmpty()) {
+                    name = "custom-state " + st.getAttribute("unique-id");
+                }
+                int actions = 0;
+                for (org.w3c.dom.Element acts : com.pointblue.dirxml.sim.Xds.childrenByName(st, "actions")) {
+                    actions += com.pointblue.dirxml.sim.Xds.childElements(acts).size();
+                }
+                int conditions = com.pointblue.dirxml.sim.Xds.descendantsByName(st, "and").size() + com.pointblue.dirxml.sim.Xds.descendantsByName(st, "or").size();
+                t.append("  health config   ").append(name).append(": ").append(conditions).append(" condition group(s), ").append(actions).append(" action(s)\n");
+                j.append(c++ > 0 ? "," : "").append("{\"state\":").append(q(name)).append(",\"conditionGroups\":").append(conditions).append(",\"actions\":").append(actions).append("}");
+            }
+        }
+        j.append("],\"jobs\":[");
+        // 3. the set's health jobs
+        int k = 0;
+        List<Vault.Entry> jobs;
+        try {
+            jobs = engine.search(env.driverSetDn, "(objectClass=DirXML-Job)", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+        } catch (RuntimeException ex) {
+            jobs = List.of();
+        }
+        for (Vault.Entry je : jobs) {
+            String xml = je.string("XmlData");
+            if (xml == null || !xml.contains(HEALTH_JOB_CLASS)) {
+                continue;
+            }
+            com.pointblue.dirxml.dev.model.Job job = new com.pointblue.dirxml.dev.model.Job(je.dn.substring(je.dn.indexOf('=') + 1, je.dn.indexOf(',')), parseOrNull(xml));
+            boolean inScope = false;
+            for (String sc : je.strings("DirXML-Scope")) {
+                String scopeDn = sc.indexOf('#') < 0 ? sc : sc.substring(0, sc.indexOf('#'));
+                if (scopeDn.equalsIgnoreCase(dn) || scopeDn.equalsIgnoreCase(env.driverSetDn)) {
+                    inScope = true;
+                }
+            }
+            t.append("  health job      ").append(job.name).append(job.disabled() ? " (disabled)" : "").append(inScope ? ", this driver in scope" : ", this driver NOT in scope").append('\n');
+            j.append(k++ > 0 ? "," : "").append("{\"name\":").append(q(job.name)).append(",\"dn\":").append(q(je.dn)).append(",\"disabled\":").append(job.disabled()).append(",\"inScope\":").append(inScope).append("}");
+        }
+        if (k == 0) {
+            t.append("  health job      none in the driver set (nothing evaluates the health configuration)\n");
+        }
+        j.append("]}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /** Clear the recorded health status (the console's {@code clearDriverHealthStatus}): the driver's {@code DirXML-uiXMLSmall} is removed. Gated light, audited. */
+    public static Result driverHealthClear(Engine engine, Environments.Environment env, String driver, boolean yes, String confirm, Path tree) throws IOException {
+        String dn = driverDn(env, driver);
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        Vault.Entry e = engine.read(dn);
+        if (e == null) {
+            return Result.refused("no such driver '" + driver + "' under " + env.driverSetDn);
+        }
+        boolean had = e.string(HEALTH_STATUS_ATTR) != null;
+        String error = null;
+        if (had) {
+            try {
+                engine.replace(dn, HEALTH_STATUS_ATTR, List.of());
+            } catch (RuntimeException ex) {
+                error = ex.getMessage();
+            }
+        }
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = error == null ? "ok" : "failed";
+        rec.detail = "driver.health clear '" + driver + "': " + (had ? "status cleared" : "nothing recorded") + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = error == null;
+        r.text = error == null ? (had ? "health status cleared for '" + driver + "'\n" : "no health status recorded for '" + driver + "'; nothing to clear\n") : "FAILED   " + error + "\n";
+        r.json = "{\"ok\":" + (error == null) + ",\"cleared\":" + (had && error == null) + (error != null ? ",\"error\":" + q(error) : "") + "}";
         return r;
     }
 
