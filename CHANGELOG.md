@@ -7,6 +7,18 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`driver.query`** (docs/console-gaps.md §10, G9): ask the connected system through the running
+  driver with the engine's query verb — class, scope, a DN (LDAP form converted to slash form) or an
+  association, search attributes, the attributes to read (`none` for a match test); the shim's
+  `<instance>`s as text or JSON. Light write gate, audited.
+- **`driver.health [clear]`** (§10, G7): the Driver Health job's last state per server from the
+  driver's `DirXML-uiXMLSmall`, the health configuration on its `DirXML-ConfigManifest` (states,
+  condition groups, actions), the set's health jobs and whether the driver is in scope; `clear`
+  removes the recorded status.
+- The main usage now lists `job.*` and `rbe.*` beside the other operate commands.
+
 ## [0.22.0] - 2026-10-09
 
 ### Added

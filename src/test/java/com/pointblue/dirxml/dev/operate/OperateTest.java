@@ -69,6 +69,15 @@ public class OperateTest {
         final Map<String, Integer> states = new LinkedHashMap<>();
         final Map<String, Integer> startOptions = new LinkedHashMap<>();
         final Map<String, List<Vault.Entry>> searches = new LinkedHashMap<>();   // filter -> entries
+        final List<String> submitted = new java.util.ArrayList<>();                // the XDS documents submitCommand saw
+        String submitAnswer = "";
+        final Map<String, Map<String, List<byte[]>>> replaced = new LinkedHashMap<>();   // dn -> attr -> values
+
+        @Override
+        public String submitCommand(String driverDn, byte[] xds) {
+            submitted.add(new String(xds, java.nio.charset.StandardCharsets.UTF_8));
+            return submitAnswer;
+        }
 
         @Override
         public void setDriverStartOption(String dn, int option) {
@@ -658,5 +667,103 @@ public class OperateTest {
         Path f = Files.createTempFile("env-live", ".properties");
         Files.writeString(f, props);
         return Environments.load(f).get("live");
+    }
+
+    // ---- M1: driver.query and driver.health (docs/console-gaps.md §10) ----------------------------
+
+    @Test
+    public void driverQueryBuildsTheQueryVerbAndParsesTheInstances() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        fake.entries.put(DRIVER_DN, FakeEngine.entry(DRIVER_DN, DRIVER, List.of("Top", "DirXML-Driver")));
+        fake.states.put(DRIVER_DN, Vault.STATE_RUNNING);
+        fake.submitAnswer = "<nds dtdversion=\"4.0\"><output><instance class-name=\"User\" src-dn=\"\\\\T\\\\data\\\\users\\\\jdoe\"><association>a1</association>"
+            + "<attr attr-name=\"Surname\"><value>Doe</value></attr><attr attr-name=\"Group Membership\"><value>g1</value><value>g2</value></attr></instance>"
+            + "<status level=\"success\"/></output></nds>";
+        Operate.Query q = new Operate.Query();
+        q.className = "User";
+        q.searchAttrs.add("CN=jdoe");
+        q.readAttrs.add("Surname");
+        q.readAttrs.add("Group Membership");
+        Operate.Result r = Operate.driverQuery(fake, env("dev", Environments.Tier.DEV), DRIVER, q, false, null, Files.createTempDirectory("op"));
+        assertTrue(r.text(), r.ok);
+        assertEquals(1, fake.submitted.size());
+        String xds = fake.submitted.get(0);
+        assertTrue(xds, xds.contains("<query event-id=\"dirxmldev-query\" scope=\"subtree\" class-name=\"User\">"));
+        assertTrue(xds, xds.contains("<search-class class-name=\"User\"/>"));
+        assertTrue(xds, xds.contains("<search-attr attr-name=\"CN\"><value>jdoe</value></search-attr>"));
+        assertTrue(xds, xds.contains("<read-attr attr-name=\"Surname\"/><read-attr attr-name=\"Group Membership\"/>"));
+        assertTrue(r.text(), r.text().contains("Group Membership = g1 | g2"));
+        assertTrue(r.text(), r.text().contains("[a1]"));
+        assertTrue(r.json(), r.json().contains("\"count\":1"));
+        assertTrue(r.json(), r.json().contains("\"status\":\"success\""));
+    }
+
+    @Test
+    public void driverQueryNeedsARunningDriverAndReadNoneIsAMatchTest() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        fake.entries.put(DRIVER_DN, FakeEngine.entry(DRIVER_DN, DRIVER, List.of("Top", "DirXML-Driver")));
+        fake.states.put(DRIVER_DN, Vault.STATE_STOPPED);
+        Operate.Query q = new Operate.Query();
+        q.scope = "entry";
+        q.association = "a1";
+        q.readAttrs.add("none");
+        Operate.Result r = Operate.driverQuery(fake, env("dev", Environments.Tier.DEV), DRIVER, q, false, null, Files.createTempDirectory("op"));
+        assertTrue(r.text(), !r.ok);
+        assertTrue(r.text(), r.text().contains("needs a running driver"));
+        assertTrue(fake.submitted.isEmpty());
+        String xds = q.xds();
+        assertTrue(xds, xds.contains("<association>a1</association><read-attr/>"));
+        assertTrue(xds, !xds.contains("search-class"));
+        assertEquals("data\\users\\jdoe", Operate.slashDn("cn=jdoe,ou=users,o=data"));
+        assertEquals("data\\users\\a, b", Operate.slashDn("cn=a\\, b,ou=users,o=data"));
+        assertEquals("data\\users", Operate.slashDn("data\\users"));
+        Operate.Query byDn = new Operate.Query();
+        byDn.destDn = "ou=users,o=data";
+        assertTrue(byDn.xds(), byDn.xds().contains("dest-dn=\"data\\users\""));
+    }
+
+    private static final String HEALTH_STATUS = "<dirxml-ui><health-config-status><last-state><driver dn=\"" + DRIVER_DN + "\"><server dn=\"cn=s1,o=system\" last-state=\"yellow\"/></driver></last-state>"
+        + "<custom-state unique-id=\"cs1\"><last-state><driver dn=\"" + DRIVER_DN + "\"><server dn=\"cn=s1,o=system\" last-state=\"true\"/></driver></last-state></custom-state></health-config-status></dirxml-ui>";
+    private static final String MANIFEST = "<configuration-manifest><health-config><green><and><cache/></and><actions><start-driver/></actions></green><red><or/><actions><stop-driver/><send-email/></actions></red></health-config></configuration-manifest>";
+
+    @Test
+    public void driverHealthReadsTheLastStateTheConfigurationAndTheHealthJobs() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        Vault.Entry d = FakeEngine.entry(DRIVER_DN, DRIVER, List.of("Top", "DirXML-Driver", "DirXML-uiExtensions"));
+        FakeEngine.put(d, Operate.HEALTH_STATUS_ATTR, List.of(HEALTH_STATUS));
+        FakeEngine.put(d, "DirXML-ConfigManifest", List.of(MANIFEST));
+        fake.entries.put(DRIVER_DN, d);
+        String jobDn = "cn=Driver Health," + DS_DN;
+        Vault.Entry job = FakeEngine.entry(jobDn, "Driver Health", List.of("Top", "DirXML-Job"));
+        FakeEngine.put(job, "XmlData", List.of("<job-aggregation><job-definition disabled=\"false\"><java-class>" + Operate.HEALTH_JOB_CLASS + "</java-class></job-definition></job-aggregation>"));
+        FakeEngine.put(job, "DirXML-Scope", List.of(DRIVER_DN + "#0#<scope-def scope=\"entry\"/>"));
+        fake.searches.put("(objectClass=DirXML-Job)", List.of(job));
+        Operate.Result r = Operate.driverHealth(fake, env("dev", Environments.Tier.DEV), DRIVER);
+        assertTrue(r.text(), r.ok);
+        assertTrue(r.text(), r.text().contains("health status   yellow  on cn=s1,o=system"));
+        assertTrue(r.text(), r.text().contains("custom state    cs1 = true"));
+        assertTrue(r.text(), r.text().contains("health config   green: 1 condition group(s), 1 action(s)"));
+        assertTrue(r.text(), r.text().contains("health config   red: 1 condition group(s), 2 action(s)"));
+        assertTrue(r.text(), r.text().contains("health job      Driver Health, this driver in scope"));
+        assertTrue(r.json(), r.json().contains("\"state\":\"yellow\""));
+        assertTrue(r.json(), r.json().contains("\"inScope\":true"));
+    }
+
+    @Test
+    public void driverHealthClearRemovesTheRecordedStatusAndSaysWhenThereIsNone() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        Vault.Entry d = FakeEngine.entry(DRIVER_DN, DRIVER, List.of("Top", "DirXML-Driver"));
+        FakeEngine.put(d, Operate.HEALTH_STATUS_ATTR, List.of(HEALTH_STATUS));
+        fake.entries.put(DRIVER_DN, d);
+        Operate.Result r = Operate.driverHealthClear(fake, env("dev", Environments.Tier.DEV), DRIVER, false, null, Files.createTempDirectory("op"));
+        assertTrue(r.text(), r.ok);
+        assertTrue(r.text(), r.text().contains("cleared"));
+        assertTrue(d.string(Operate.HEALTH_STATUS_ATTR) == null);
+        Operate.Result again = Operate.driverHealthClear(fake, env("dev", Environments.Tier.DEV), DRIVER, false, null, Files.createTempDirectory("op"));
+        assertTrue(again.text(), again.ok);
+        assertTrue(again.text(), again.text().contains("nothing to clear"));
+        Operate.Result none = Operate.driverHealth(fake, env("dev", Environments.Tier.DEV), DRIVER);
+        assertTrue(none.text(), none.text().contains("none recorded"));
+        assertTrue(none.text(), none.text().contains("health job      none in the driver set"));
     }
 }
