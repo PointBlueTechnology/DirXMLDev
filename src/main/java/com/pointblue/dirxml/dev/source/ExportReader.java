@@ -152,7 +152,10 @@ public final class ExportReader {
                     // a driver-set-level GCV definition object: a real, linkable
                     // artifact (policy set 14) that lives beside the Library
                     ds.library.resources.add(gcvDefResource(c, Scope.LIBRARY, null));
-                } else if (ln.equals("jobs") || ln.equals("rbe-policies")) {
+                } else if (ln.equals("jobs")) {
+                    ds.meta.put("jobs.count", String.valueOf(Xds.childElements(c).size()));
+                    readJobs(c, ds.jobs);
+                } else if (ln.equals("rbe-policies")) {
                     ds.meta.put(ln + ".count", String.valueOf(Xds.childElements(c).size()));
                 }
             }
@@ -339,6 +342,19 @@ public final class ExportReader {
                     // a real, linkable object (policy set 14) — model it so links resolve
                     d.resources.add(gcvDefResource(child, scope, d.name));
                     break;
+                case "jobs":
+                    if (scope == Scope.DRIVER) {
+                        readJobs(child, d.jobs);
+                    }
+                    break;
+                case "job":
+                    if (scope == Scope.DRIVER) {
+                        com.pointblue.dirxml.dev.model.Job j = readJob(child);
+                        if (j != null) {
+                            d.jobs.add(j);
+                        }
+                    }
+                    break;
                 case "entitlement-definition":
                     // a DirXML-Entitlement object: <entitlement-definition name=…><entitlement …>the XmlData</entitlement>
                     // (seen 2026-09-22 in a Designer export of an Active Directory driver: three of them)
@@ -384,6 +400,50 @@ public final class ExportReader {
         Policy p = new Policy(name, scope, driverName, kids.get(0));
         copyArtifactMeta(wrapper, p.meta);
         return p;
+    }
+
+    /** {@code <jobs>}: one {@code <job name=…>} per job — its document inside, {@code <server dn>} and {@code <scope value>} beside it. */
+    private static void readJobs(Element jobsEl, List<com.pointblue.dirxml.dev.model.Job> into) {
+        for (Element c : Xds.childElements(jobsEl)) {
+            com.pointblue.dirxml.dev.model.Job j = readJob(c);
+            if (j != null) {
+                into.add(j);
+            }
+        }
+    }
+
+    private static com.pointblue.dirxml.dev.model.Job readJob(Element jobEl) {
+        String name = attr(jobEl, "name", "");
+        if (name.isEmpty()) {
+            return null;
+        }
+        Element doc = null;
+        com.pointblue.dirxml.dev.model.Job j = new com.pointblue.dirxml.dev.model.Job(name, null);
+        for (Element c : Xds.childElements(jobEl)) {
+            String ln = localName(c);
+            if (ln.equals("server")) {
+                String dn = c.getAttribute("dn");
+                if (!dn.isEmpty()) {
+                    j.servers.add(dn);
+                }
+            } else if (ln.equals("scope")) {
+                String v = c.getAttribute("value");
+                if (!v.isEmpty()) {
+                    j.scopes.add(v);
+                }
+            } else if (doc == null) {
+                doc = c;
+            }
+        }
+        j.definition = doc == null ? null : CanonicalXml.normalize(doc);
+        for (String a : new String[] { "trace-level", "trace-file", "trace-size-limit" }) {
+            String v = jobEl.getAttribute(a);
+            if (!v.isEmpty()) {
+                j.meta.put(a, v);
+            }
+        }
+        copyArtifactMeta(jobEl, j.meta);
+        return j;
     }
 
     private static Entitlement readEntitlement(Element defEl) {

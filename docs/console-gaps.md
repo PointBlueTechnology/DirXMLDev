@@ -1,6 +1,6 @@
 # Identity Console gaps: design note
 
-Status: **decided 2026-10-09** (section 5); J1 in progress. Basis: *DirXMLDev CLI vs Identity
+Status: **decided 2026-10-09** (section 5); J1 built (the Job model in every reader, the tree, validation), J2 next. Basis: *DirXMLDev CLI vs Identity
 Console API: Capability Gaps* (2026-10-09, 208 `edirapi` routes against DirXMLDev 0.18.0). The
 first set — **G3** association and object inspection, **G4** password-sync diagnostics, **G6**
 queue/submit event, **G10** the live start option — is built (`docs/operate.md`, release 0.19.0)
@@ -92,3 +92,21 @@ clone already carries; they follow the medium set.
 | M1 | G9, G7 |
 | M2 | G5, G12, G11, G8 |
 | L1 | the low set as needed |
+
+## 7. As built (J1)
+
+- `model/Job`: name, the configuration document (`<job-aggregation>` or Designer's
+  `<job-definition>`), `servers`, `scopes`, meta (`trace-level`, `trace-file`, `trace-size-limit`,
+  `dn`, Designer id and parameters, package stamps); `javaClass()`, `disabled()`, `displayName()`.
+  `Driver.jobs` and `DriverSet.jobs`.
+- Readers: the vault and an LDIF (`DirXML-Job` under a driver or directly under the set; under an
+  unknown driver, dropped), a Designer project (`Idm:Jobs` on the set and each driver; a `.Job_`
+  CObject's `contents`, its `IdmParameter:*`, its `Idm:JobServers` as server names — a project
+  records no server DN), an export (`<jobs><job name=… trace-level=…><server dn/><scope value/>
+  the document</job></jobs>` at the set and under a driver's children; Designer's own shape for
+  jobs in an export is still to be seen — the reader also takes any `<job>` child).
+- The tree: `drivers/<driver>/jobs/<name>.xml`, `jobs/<name>.xml`, the manifest `<job>` entries;
+  written back to an export the same way. `validate`: `jobs` check (section 1's codes).
+- Verified: `import-live` of edir3 puts `drivers/CyberArk/jobs/process ent Refs.xml` and
+  `jobs/StatisticsJob.xml` in the tree; `validate` says the first is disabled.
+- Not yet: diff, deploy, the `job.*` operations, the web's Jobs panel (J2).
