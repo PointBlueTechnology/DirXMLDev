@@ -7,6 +7,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `ApplicationType.of(driver)` is public, with `displayName(type)` (what a diagram labels an
+  application: "Active Directory", "JDBC", "User Application"…) and `vaultOnly(type)` (a driver
+  with no external system), for DirXMLDevWeb's Architecture view (#32 there).
+
 ## [0.17.0] - 2026-10-08
 
 ### Added
