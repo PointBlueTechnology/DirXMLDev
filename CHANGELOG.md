@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-09
+
 ### Added
 
 - **`driver.query`** (docs/console-gaps.md §10, G9): ask the connected system through the running
