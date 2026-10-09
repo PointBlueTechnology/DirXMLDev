@@ -34,7 +34,7 @@ public final class Deployer {
     static final List<String> VALID_DELETE_ALL_KINDS = validDeleteAllKinds();
 
     private static List<String> validDeleteAllKinds() {
-        List<String> out = new ArrayList<>(List.of("entitlements", "jobs", "forms", "prds"));
+        List<String> out = new ArrayList<>(List.of("entitlements", "jobs", "rbe-policies", "forms", "prds"));
         for (com.pointblue.dirxml.dev.model.AppObject.Kind k : com.pointblue.dirxml.dev.model.AppObject.Kind.values()) {
             if (k != com.pointblue.dirxml.dev.model.AppObject.Kind.PRD && k != com.pointblue.dirxml.dev.model.AppObject.Kind.FORM) {
                 out.add(k.plural());

@@ -250,6 +250,56 @@ public final class LdifReader {
             // a job under an unknown driver is dropped, as an entitlement would be
         }
 
+        // 3d. role-based entitlement policies: the set's DirXML-SharedProfileSet container and its
+        // DirXML-SharedProfile children (docs/console-gaps.md §9)
+        Entry rbeSet = null;
+        for (Entry e : entries) {
+            if (e.hasClass("DirXML-SharedProfileSet") && parentDn(e.dn).equalsIgnoreCase(dsDn)) {
+                rbeSet = e;
+                break;
+            }
+        }
+        if (rbeSet != null) {
+            String container = rdn(rbeSet.dn);
+            if (!container.equalsIgnoreCase(DriverSet.DEFAULT_RBE_CONTAINER)) {
+                ds.meta.put(DriverSet.RBE_CONTAINER_META, container);
+            }
+            Map<String, Integer> levels = new LinkedHashMap<>();   // lower(policy dn) -> level
+            for (String tn : rbeSet.all("DirXML-SPPriority")) {
+                String[] parts = tn.split("#", 3);
+                if (parts.length >= 2) {
+                    try {
+                        levels.put(parts[0].toLowerCase(), Integer.parseInt(parts[1].trim()));
+                    } catch (NumberFormatException ex) {
+                        // an unreadable level: the policy stays unordered
+                    }
+                }
+            }
+            for (Entry e : entries) {
+                if (!e.hasClass("DirXML-SharedProfile") || !parentDn(e.dn).equalsIgnoreCase(rbeSet.dn)) {
+                    continue;
+                }
+                com.pointblue.dirxml.dev.model.EntitlementPolicy p = new com.pointblue.dirxml.dev.model.EntitlementPolicy(rdn(e.dn));
+                p.description = e.first("Description");
+                // the LDAP name is memberQueryURL (NDS: memberQuery); an LDIF may carry either
+                p.memberQuery = e.first("memberQueryURL") != null ? e.first("memberQueryURL") : e.first("memberQuery");
+                p.identity = e.first("dgIdentity");
+                p.criteria = xmlOrNull(e.first("DirXML-SPFilterXML"));
+                p.members.addAll(e.all("Member"));
+                p.excludedMembers.addAll(e.all("excludedMember"));
+                p.entitlementRefs.addAll(e.all("DirXML-EntitlementRef"));
+                p.displayEntitlements = xmlOrNull(e.first("DirXML-SPDisplayEntitlements"));
+                p.priority = levels.get(e.dn.toLowerCase());
+                String legacy = e.first("DirXML-SPEntitlementsXML");
+                if (legacy != null && !legacy.isBlank()) {
+                    p.meta.put("legacy-entitlements-xml", "true");
+                }
+                p.meta.put("dn", e.dn);
+                copyMeta(e, p.meta, "DirXML-SharedProfile");
+                ds.rbePolicies.add(p);
+            }
+        }
+
         // 4. linkage: DirXML-Policies = "<policyDN>#<order>#<setId>"
         for (Entry e : entries) {
             if (!e.hasClass("DirXML-Driver")) {

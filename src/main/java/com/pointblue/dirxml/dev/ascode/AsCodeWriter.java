@@ -69,6 +69,7 @@ public final class AsCodeWriter {
             m.child("server").attr("dn", s);
         }
         writeJobs(ds.jobs, root, m);
+        writeRbePolicies(ds.rbePolicies, root, m);
         List<Driver> drivers = new ArrayList<>(ds.drivers);
         drivers.sort(Comparator.comparing(d -> d.name));
         for (Driver d : drivers) {
@@ -400,6 +401,81 @@ public final class AsCodeWriter {
             }
             jm.meta(j.meta);
         }
+    }
+
+    /**
+     * Role-based entitlement policies ({@code DirXML-SharedProfile}, docs/console-gaps.md §9):
+     * {@code rbe-policies/<name>.xml} holds the whole policy — description, membership query, identity,
+     * static and excluded members, entitlement refs, criteria, Designer's display document, priority;
+     * the manifest's {@code <rbe-policy>} carries the name, the file and the meta.
+     */
+    private static void writeRbePolicies(List<com.pointblue.dirxml.dev.model.EntitlementPolicy> policies, Path root, Manifest m) throws IOException {
+        if (policies.isEmpty()) {
+            return;
+        }
+        Path dir = root.resolve("rbe-policies");
+        Files.createDirectories(dir);
+        Set<String> used = new HashSet<>();
+        List<com.pointblue.dirxml.dev.model.EntitlementPolicy> sorted = new ArrayList<>(policies);
+        sorted.sort(Comparator.comparing((com.pointblue.dirxml.dev.model.EntitlementPolicy p) -> p.priority == null ? Integer.MAX_VALUE : p.priority).thenComparing(p -> p.name));
+        for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : sorted) {
+            String file = uniqueFile(fileSafe(p.name) + ".xml", used);
+            writeText(dir.resolve(file), rbePolicyXml(p));
+            Manifest pm = m.child("rbe-policy").attr("name", p.name).attr("file", "rbe-policies/" + file);
+            pm.meta(p.meta);
+        }
+    }
+
+    /** The policy file: an {@code <rbe-policy>} document (see {@link com.pointblue.dirxml.dev.model.EntitlementPolicy}). */
+    public static String rbePolicyXml(com.pointblue.dirxml.dev.model.EntitlementPolicy p) {
+        StringBuilder sb = new StringBuilder("<rbe-policy name=\"").append(xmlAttr(p.name)).append('"');
+        if (p.priority != null) {
+            sb.append(" priority=\"").append(p.priority).append('"');
+        }
+        sb.append(">\n");
+        if (p.description != null && !p.description.isEmpty()) {
+            sb.append("  <description>").append(xmlText(p.description)).append("</description>\n");
+        }
+        if (p.memberQuery != null && !p.memberQuery.isEmpty()) {
+            sb.append("  <member-query>").append(xmlText(p.memberQuery)).append("</member-query>\n");
+        }
+        if (p.identity != null && !p.identity.isEmpty()) {
+            sb.append("  <identity>").append(xmlText(p.identity)).append("</identity>\n");
+        }
+        for (String s : p.members) {
+            sb.append("  <member dn=\"").append(xmlAttr(s)).append("\"/>\n");
+        }
+        for (String s : p.excludedMembers) {
+            sb.append("  <excluded-member dn=\"").append(xmlAttr(s)).append("\"/>\n");
+        }
+        for (String s : p.entitlementRefs) {
+            sb.append("  <entitlement-ref>").append(xmlText(s)).append("</entitlement-ref>\n");
+        }
+        if (p.criteria != null) {
+            sb.append("  <criteria>").append(fragment(p.criteria)).append("</criteria>\n");
+        }
+        if (p.displayEntitlements != null) {
+            sb.append("  <display-entitlements>").append(fragment(p.displayEntitlements)).append("</display-entitlements>\n");
+        }
+        return sb.append("</rbe-policy>\n").toString();
+    }
+
+    /** An element serialized as a fragment: no XML declaration, so it can nest inside the policy file. */
+    private static String fragment(org.w3c.dom.Element e) {
+        String s = com.pointblue.dirxml.dev.xml.CanonicalXml.serialize(e);
+        if (s.startsWith("<?xml")) {
+            int end = s.indexOf("?>");
+            s = end < 0 ? s : s.substring(end + 2);
+        }
+        return s.strip();
+    }
+
+    private static String xmlText(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private static String xmlAttr(String s) {
+        return xmlText(s).replace("\"", "&quot;");
     }
 
     public static String fileSafe(String name) {

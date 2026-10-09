@@ -27,6 +27,16 @@ public final class DriverSet {
     public final List<String> servers = new ArrayList<>();
     /** The set's own jobs ({@code DirXML-Job} objects directly under it, e.g. a statistics job). */
     public final List<Job> jobs = new ArrayList<>();
+    /**
+     * The role-based entitlement policies of the set's Entitlements Service driver ({@code DirXML-SharedProfile}
+     * objects in the set's one {@code DirXML-SharedProfileSet} container, docs/console-gaps.md §9). The
+     * container's name is {@link #rbeContainerName()}.
+     */
+    public final List<EntitlementPolicy> rbePolicies = new ArrayList<>();
+    /** Meta key holding the policy container's name when it is not the default. */
+    public static final String RBE_CONTAINER_META = "rbe.container";
+    /** iManager's and Designer's name for the policy container. */
+    public static final String DEFAULT_RBE_CONTAINER = "Entitlement Policies";
     /** Per environment, the values that differ from the tree's base ({@code overrides/<env>.properties}; see {@code deploy.Overrides}). */
     public final java.util.Map<String, java.util.Map<String, String>> overrides = new java.util.TreeMap<>();
     public final Map<String, String> meta = new LinkedHashMap<>();
@@ -88,5 +98,32 @@ public final class DriverSet {
     public String toString() {
         return "driverset " + name + " (" + drivers.size() + " drivers, "
             + library.artifacts().size() + " library artifacts)";
+    }
+
+    /** The name of the {@code DirXML-SharedProfileSet} container the policies live in. */
+    public String rbeContainerName() {
+        String n = meta.get(RBE_CONTAINER_META);
+        return n == null || n.isBlank() ? DEFAULT_RBE_CONTAINER : n;
+    }
+
+    /** A policy by name (case-insensitive), or null. */
+    public EntitlementPolicy rbePolicy(String name) {
+        for (EntitlementPolicy p : rbePolicies) {
+            if (p.name.equalsIgnoreCase(name)) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /** The drivers running the Entitlements Service shim: the ones the policies belong to (normally one). */
+    public List<Driver> entitlementServiceDrivers() {
+        List<Driver> out = new ArrayList<>();
+        for (Driver d : drivers) {
+            if (EntitlementPolicy.SERVICE_SHIM_CLASS.equals(d.shimClass)) {
+                out.add(d);
+            }
+        }
+        return out;
     }
 }

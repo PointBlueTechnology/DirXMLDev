@@ -140,6 +140,17 @@ on the manifest's `<job>` entry. The driver set's own jobs (a statistics job) ar
 vault, an LDIF, a Designer project (`Idm:Jobs`) and an export (`<jobs>`); not deployed
 yet (docs/console-gaps.md §1, phase J2).
 
+### `rbe-policies/`
+
+Beside `driverset.xml`: `<name>.xml` for each role-based entitlement policy of the set's
+Entitlements Service driver (`DirXML-SharedProfile` in the set's one `DirXML-SharedProfileSet`
+container, `cn=Entitlement Policies` unless `driverset.xml`'s meta `rbe.container` says
+otherwise). One `<rbe-policy name priority>` document holds the description, the membership
+query (`<member-query>`, an LDAP URL), the identity it runs as, static and excluded members,
+the entitlement refs it grants (`<entitlement-ref>`, the vault's `dn#0#<ref>…</ref>` values),
+the editor's criteria and Designer's display document. Priorities must run 0, 1, 2 … Read from
+the vault, an LDIF, a Designer project and an export; deployed (docs/console-gaps.md §9).
+
 ### `entitlements/`
 
 `<name>.xml` for each `DirXML-Entitlement` on the driver. Workflows grant

@@ -611,6 +611,66 @@ public final class VaultMapping {
         return m;
     }
 
+    public static final String OC_RBE_SET = "DirXML-SharedProfileSet";
+    public static final String OC_RBE_POLICY = "DirXML-SharedProfile";
+
+    /** {@code cn=<container>,<driver set dn>}: the set's one policy container. */
+    public static String rbeContainerDn(String dsDn, com.pointblue.dirxml.dev.model.DriverSet ds) {
+        return "cn=" + escapeRdn(ds.rbeContainerName()) + "," + dsDn;
+    }
+
+    /** {@code cn=<policy>,cn=<container>,<driver set dn>}. */
+    public static String rbePolicyDn(String dsDn, com.pointblue.dirxml.dev.model.DriverSet ds, String name) {
+        return "cn=" + escapeRdn(name) + "," + rbeContainerDn(dsDn, ds);
+    }
+
+    /** The DN for a policy diff path ({@code rbe-policies/<name>}). */
+    public static String rbePathDn(String dsDn, com.pointblue.dirxml.dev.model.DriverSet ds, String path) {
+        return rbePolicyDn(dsDn, ds, path.substring("rbe-policies/".length()));
+    }
+
+    /**
+     * Every attribute a policy carries, including the empty ones (so a modify clears what the tree dropped):
+     * Description, memberQueryURL (LDAP's name for memberQuery), dgIdentity, Member, excludedMember, DirXML-EntitlementRef, DirXML-SPFilterXML,
+     * DirXML-SPDisplayEntitlements.
+     */
+    public static Map<String, List<byte[]>> rbeAttributes(com.pointblue.dirxml.dev.model.EntitlementPolicy p) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        m.put("Description", utf8(p.description == null ? List.of() : List.of(p.description)));
+        m.put("memberQueryURL", utf8(p.memberQuery == null ? List.of() : List.of(p.memberQuery)));   // LDAP's name for memberQuery
+        m.put("dgIdentity", utf8(p.identity == null ? List.of() : List.of(p.identity)));
+        m.put("Member", utf8(p.members));
+        m.put("excludedMember", utf8(p.excludedMembers));
+        m.put("DirXML-EntitlementRef", utf8(p.entitlementRefs));
+        m.put("DirXML-SPFilterXML", p.criteria == null ? List.of() : List.of(xmlBytes(p.criteria)));
+        m.put("DirXML-SPDisplayEntitlements", p.displayEntitlements == null ? List.of() : List.of(xmlBytes(p.displayEntitlements)));
+        return m;
+    }
+
+    /** The container's {@code DirXML-SPPriority} typed names, {@code <policy dn>#<level>#0}, lowest level first. */
+    public static List<byte[]> rbePriorityValues(String dsDn, com.pointblue.dirxml.dev.model.DriverSet ds) {
+        List<com.pointblue.dirxml.dev.model.EntitlementPolicy> ordered = new ArrayList<>();
+        for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : ds.rbePolicies) {
+            if (p.priority != null) {
+                ordered.add(p);
+            }
+        }
+        ordered.sort(java.util.Comparator.comparing((com.pointblue.dirxml.dev.model.EntitlementPolicy p) -> p.priority).thenComparing(p -> p.name));
+        List<byte[]> out = new ArrayList<>();
+        for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : ordered) {
+            out.add((rbePolicyDn(dsDn, ds, p.name) + "#" + p.priority + "#0").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return out;
+    }
+
+    private static List<byte[]> utf8(List<String> values) {
+        List<byte[]> out = new ArrayList<>();
+        for (String v : values) {
+            out.add(v.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return out;
+    }
+
     /** The DNs of every driver whose linkage references an artifact path. */
     public static List<String> linkingDrivers(DriverSet ds, String path) {
         List<String> out = new ArrayList<>();

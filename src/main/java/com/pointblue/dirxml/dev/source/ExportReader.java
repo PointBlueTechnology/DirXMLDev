@@ -18,6 +18,7 @@ import org.w3c.dom.Node;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -156,7 +157,7 @@ public final class ExportReader {
                     ds.meta.put("jobs.count", String.valueOf(Xds.childElements(c).size()));
                     readJobs(c, ds.jobs);
                 } else if (ln.equals("rbe-policies")) {
-                    ds.meta.put(ln + ".count", String.valueOf(Xds.childElements(c).size()));
+                    readRbePolicies(c, ds);
                 }
             }
             // tolerate an export shape that nests driver-configurations under <children>
@@ -444,6 +445,130 @@ public final class ExportReader {
         }
         copyArtifactMeta(jobEl, j.meta);
         return j;
+    }
+
+    /**
+     * Designer's {@code <rbe-policies>} (docs/console-gaps.md §9): the policy container as a
+     * {@code <ds-object ds-object-class="DirXML-SharedProfileSet">} whose {@code DirXML-SPPriority}
+     * values are {@code <typed-name-level>}, {@code <typed-name-interval>} and {@code <rbe-policy>}
+     * (the deploy shape) or {@code <rbe-priority><value value="name#level#interval"/>} (the import
+     * shape), and each policy a nested {@code <ds-object ds-object-class="DirXML-SharedProfile">}
+     * with {@code Description}, {@code DirXML-SPDisplayEntitlements} and {@code DirXML-SPFilterXML}
+     * (base64 {@code ds-value}s), {@code dgIdentity}, {@code memberQuery}, {@code Member},
+     * {@code excludedMember}; the entitlement refs when present, else derived from the display
+     * document as Designer does at deploy time.
+     */
+    private static void readRbePolicies(Element rbeEl, DriverSet ds) {
+        for (Element set : Xds.descendantsByName(rbeEl, "ds-object")) {
+            if (!"DirXML-SharedProfileSet".equalsIgnoreCase(set.getAttribute("ds-object-class"))) {
+                continue;
+            }
+            String container = attr(set, "ds-object-name", "");
+            if (!container.isEmpty() && !container.equalsIgnoreCase(DriverSet.DEFAULT_RBE_CONTAINER)) {
+                ds.meta.put(DriverSet.RBE_CONTAINER_META, container);
+            }
+            Map<String, Integer> levels = new LinkedHashMap<>();   // lower(policy name) -> level
+            for (Element attr : dsAttributes(set)) {
+                if (!"DirXML-SPPriority".equalsIgnoreCase(attr.getAttribute("ds-attr-name"))) {
+                    continue;
+                }
+                for (Element v : Xds.childrenByName(attr, "ds-value")) {
+                    Element lvl = Xds.firstByName(v, "typed-name-level");
+                    Element pol = Xds.firstByName(v, "rbe-policy");
+                    if (lvl != null && pol != null) {
+                        putLevel(levels, leafName(Xds.text(pol).trim()), Xds.text(lvl).trim());
+                    }
+                }
+            }
+            for (Element pr : Xds.childrenByName(set, "rbe-priority")) {
+                for (Element v : Xds.childrenByName(pr, "value")) {
+                    String[] parts = v.getAttribute("value").split("#", 3);
+                    if (parts.length >= 2) {
+                        putLevel(levels, leafName(parts[0]), parts[1]);
+                    }
+                }
+            }
+            for (Element pe : Xds.childrenByName(set, "ds-object")) {
+                if (!"DirXML-SharedProfile".equalsIgnoreCase(pe.getAttribute("ds-object-class"))) {
+                    continue;
+                }
+                String name = attr(pe, "ds-object-name", "");
+                if (name.isEmpty()) {
+                    continue;
+                }
+                com.pointblue.dirxml.dev.model.EntitlementPolicy p = new com.pointblue.dirxml.dev.model.EntitlementPolicy(name);
+                for (Element attr : dsAttributes(pe)) {
+                    String an = attr.getAttribute("ds-attr-name");
+                    List<String> values = new ArrayList<>();
+                    for (Element v : Xds.childrenByName(attr, "ds-value")) {
+                        String t = Xds.text(v);
+                        values.add("true".equalsIgnoreCase(v.getAttribute("base64-encoded"))
+                            ? new String(java.util.Base64.getMimeDecoder().decode(t.trim()), java.nio.charset.StandardCharsets.UTF_8) : t);
+                    }
+                    if (values.isEmpty()) {
+                        continue;
+                    }
+                    switch (an) {
+                        case "Description": p.description = values.get(0); break;
+                        case "memberQuery": p.memberQuery = values.get(0); break;
+                        case "dgIdentity": p.identity = values.get(0); break;
+                        case "DirXML-SPFilterXML": p.criteria = parseOrNull(values.get(0)); break;
+                        case "DirXML-SPDisplayEntitlements": p.displayEntitlements = parseOrNull(values.get(0)); break;
+                        case "Member": p.members.addAll(values); break;
+                        case "excludedMember": p.excludedMembers.addAll(values); break;
+                        case "DirXML-EntitlementRef": p.entitlementRefs.addAll(values); break;
+                        case "DirXML-SPEntitlementsXML": if (!values.get(0).isBlank()) { p.meta.put("legacy-entitlements-xml", "true"); } break;
+                        default: break;
+                    }
+                }
+                if (p.entitlementRefs.isEmpty()) {
+                    p.entitlementRefs.addAll(p.refsFromDisplay());
+                }
+                p.priority = levels.get(name.toLowerCase());
+                String guid = pe.getAttribute("designer-guid");
+                if (!guid.isEmpty()) {
+                    p.meta.put("designer.guid", guid);
+                }
+                ds.rbePolicies.add(p);
+            }
+        }
+    }
+
+    private static List<Element> dsAttributes(Element dsObject) {
+        List<Element> out = new ArrayList<>();
+        for (Element attrs : Xds.childrenByName(dsObject, "ds-attributes")) {
+            out.addAll(Xds.childrenByName(attrs, "ds-attribute"));
+        }
+        return out;
+    }
+
+    private static void putLevel(Map<String, Integer> levels, String name, String level) {
+        try {
+            levels.put(name.toLowerCase(), Integer.parseInt(level.trim()));
+        } catch (NumberFormatException e) {
+            // an unreadable level: the policy stays unordered
+        }
+    }
+
+    /** {@code cn=X,…} → {@code X}; a bare name stays as it is. */
+    private static String leafName(String dnOrName) {
+        int eq = dnOrName.indexOf('=');
+        int comma = dnOrName.indexOf(',');
+        if (eq < 0 || (comma >= 0 && comma < eq)) {
+            return dnOrName;
+        }
+        return comma < 0 ? dnOrName.substring(eq + 1) : dnOrName.substring(eq + 1, comma);
+    }
+
+    private static Element parseOrNull(String xml) {
+        if (xml == null || xml.isBlank()) {
+            return null;
+        }
+        try {
+            return CanonicalXml.normalize(CanonicalXml.parse(xml).getDocumentElement());
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private static Entitlement readEntitlement(Element defEl) {

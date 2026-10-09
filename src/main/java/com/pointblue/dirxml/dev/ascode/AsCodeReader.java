@@ -56,6 +56,7 @@ public final class AsCodeReader {
             }
         }
         readJobs(dsm, root, ds.jobs);
+        readRbePolicies(dsm, root, ds.rbePolicies);
         ds.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(root));
 
         // library
@@ -332,6 +333,74 @@ public final class AsCodeReader {
             readMeta(je, j.meta);
             into.add(j);
         }
+    }
+
+    private static void readRbePolicies(Element manifest, Path root, List<com.pointblue.dirxml.dev.model.EntitlementPolicy> into) throws IOException {
+        for (Element pe : children(manifest, "rbe-policy")) {
+            Path file = attr(pe, "file") == null ? null : root.resolve(attr(pe, "file"));
+            Element doc = file != null && Files.exists(file) ? xml(file) : null;
+            com.pointblue.dirxml.dev.model.EntitlementPolicy p = rbePolicyFrom(attr(pe, "name"), doc);
+            readMeta(pe, p.meta);
+            into.add(p);
+        }
+    }
+
+    /** An {@code <rbe-policy>} document (see {@link AsCodeWriter#rbePolicyXml}) as a policy; {@code name} wins over the document's when given. */
+    public static com.pointblue.dirxml.dev.model.EntitlementPolicy rbePolicyFrom(String name, Element doc) {
+        String n = name != null ? name : (doc == null ? null : attr(doc, "name"));
+        com.pointblue.dirxml.dev.model.EntitlementPolicy p = new com.pointblue.dirxml.dev.model.EntitlementPolicy(n);
+        if (doc == null) {
+            return p;
+        }
+        String pr = attr(doc, "priority");
+        if (pr != null && !pr.isBlank()) {
+            try {
+                p.priority = Integer.parseInt(pr.trim());
+            } catch (NumberFormatException e) {
+                p.meta.put("priority.invalid", pr);
+            }
+        }
+        for (Element c : children(doc, "description")) {
+            p.description = c.getTextContent();
+        }
+        for (Element c : children(doc, "member-query")) {
+            p.memberQuery = c.getTextContent();
+        }
+        for (Element c : children(doc, "identity")) {
+            p.identity = c.getTextContent();
+        }
+        for (Element c : children(doc, "member")) {
+            if (attr(c, "dn") != null) {
+                p.members.add(attr(c, "dn"));
+            }
+        }
+        for (Element c : children(doc, "excluded-member")) {
+            if (attr(c, "dn") != null) {
+                p.excludedMembers.add(attr(c, "dn"));
+            }
+        }
+        for (Element c : children(doc, "entitlement-ref")) {
+            String v = c.getTextContent();
+            if (v != null && !v.isBlank()) {
+                p.entitlementRefs.add(v.trim());
+            }
+        }
+        for (Element c : children(doc, "criteria")) {
+            p.criteria = firstElementChild(c);
+        }
+        for (Element c : children(doc, "display-entitlements")) {
+            p.displayEntitlements = firstElementChild(c);
+        }
+        return p;
+    }
+
+    private static Element firstElementChild(Element parent) {
+        for (org.w3c.dom.Node c = parent.getFirstChild(); c != null; c = c.getNextSibling()) {
+            if (c.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE) {
+                return (Element) c;
+            }
+        }
+        return null;
     }
 
     private static Element xml(Path file) throws IOException {

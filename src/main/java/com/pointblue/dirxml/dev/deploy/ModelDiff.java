@@ -52,11 +52,17 @@ public final class ModelDiff {
         FORM_ADDED, FORM_REMOVED, FORM_CHANGED, PRD_ADDED, PRD_REMOVED, PRD_CHANGED,
         OBJECT_ADDED, OBJECT_REMOVED, OBJECT_CHANGED,
         ENTITLEMENT_ADDED, ENTITLEMENT_REMOVED, ENTITLEMENT_CHANGED,
-        JOB_ADDED, JOB_REMOVED, JOB_CHANGED;
+        JOB_ADDED, JOB_REMOVED, JOB_CHANGED,
+        RBE_ADDED, RBE_REMOVED, RBE_CHANGED;
 
         /** A job is read by the engine's scheduler, told of a change by {@code NotifyJobUpdate}: no driver restart. */
         public boolean isJob() {
             return this == JOB_ADDED || this == JOB_REMOVED || this == JOB_CHANGED;
+        }
+
+        /** A role-based entitlement policy (docs/console-gaps.md §9): the Entitlements Service driver caches them at start, so it restarts. */
+        public boolean isRbe() {
+            return this == RBE_ADDED || this == RBE_REMOVED || this == RBE_CHANGED;
         }
 
         /** Provisioning objects (JSON forms, PRDs, the rest of AppConfig) are read by the Identity Applications, not the engine: no driver restart. */
@@ -166,7 +172,7 @@ public final class ModelDiff {
 
         /** {@code driver 'X': the tree has no <kind> but the vault has N — …}. */
         public String note() {
-            return "driver '" + driver + "': the tree has no " + kind + " but the vault has " + count
+            return (driver == null ? "driver set" : "driver '" + driver + "'") + ": the tree has no " + kind + " but the vault has " + count
                 + " — an older tree? re-import (import-live) to adopt them, or pass --delete-all " + kind + " to delete them";
         }
     }
@@ -232,7 +238,8 @@ public final class ModelDiff {
      * stable report. {@link Plan} uses the same list to decide which deletes to hold back.
      */
     public List<EmptyKind> emptyKinds() {
-        Map<String, Map<String, Integer>> counts = new TreeMap<>();   // driver -> kind -> count
+        // driver -> kind -> count; the driver set's own kinds (jobs, rbe-policies) key on null, first
+        Map<String, Map<String, Integer>> counts = new TreeMap<>(java.util.Comparator.nullsFirst(String::compareTo));
         for (Change c : changes) {
             String kind = removalKind(c);
             if (kind != null) {
@@ -263,6 +270,9 @@ public final class ModelDiff {
         if (k == Kind.JOB_REMOVED) {
             return "jobs";
         }
+        if (k == Kind.RBE_REMOVED) {
+            return "rbe-policies";
+        }
         if (k == Kind.FORM_REMOVED) {
             return "forms";
         }
@@ -287,7 +297,8 @@ public final class ModelDiff {
 
     private boolean treeHasNoneOfKind(String driver, String kind) {
         if (driver == null) {
-            return "jobs".equals(kind) && to.jobs.isEmpty();   // the driver set's own jobs
+            return ("jobs".equals(kind) && to.jobs.isEmpty())   // the driver set's own jobs
+                || ("rbe-policies".equals(kind) && to.rbePolicies.isEmpty());
         }
         Driver d = to.driver(driver);
         if (d == null) {
@@ -347,6 +358,20 @@ public final class ModelDiff {
             if (c.driver == null && c.path.startsWith("library/") && isArtifactKind(c.kind)) {
                 addLinkingDrivers(from, c.path, affected);
                 addLinkingDrivers(to, c.path, affected);
+            }
+        }
+        // the Entitlements Service driver caches the policies when it starts: a policy change restarts it
+        for (Change c : changes) {
+            if (c.kind.isRbe()) {
+                for (Driver d : to.entitlementServiceDrivers()) {
+                    affected.add(d.name);
+                }
+                for (Driver d : from.entitlementServiceDrivers()) {
+                    if (to.driver(d.name) != null) {
+                        affected.add(d.name);
+                    }
+                }
+                break;
             }
         }
         return new ArrayList<>(affected);
@@ -514,6 +539,7 @@ public final class ModelDiff {
 
         diffDriverSetGcvs();
         diffJobs(null, from.jobs, to.jobs);
+        diffRbePolicies();
         diffDriverSetLinkage();
         diffDriverSetStamps();
     }
@@ -1022,6 +1048,78 @@ public final class ModelDiff {
             }
         }
         return sb.toString();
+    }
+
+    public static String rbePath(com.pointblue.dirxml.dev.model.EntitlementPolicy p) {
+        return "rbe-policies/" + p.name;
+    }
+
+    /** Role-based entitlement policies, by name, at the set (docs/console-gaps.md §9); a priority change alone reports as settings. */
+    private void diffRbePolicies() {
+        Map<String, com.pointblue.dirxml.dev.model.EntitlementPolicy> x = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, com.pointblue.dirxml.dev.model.EntitlementPolicy> y = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : from.rbePolicies) {
+            x.put(p.name, p);
+        }
+        for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : to.rbePolicies) {
+            y.put(p.name, p);
+        }
+        Set<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        names.addAll(x.keySet());
+        names.addAll(y.keySet());
+        for (String n : names) {
+            com.pointblue.dirxml.dev.model.EntitlementPolicy a = x.get(n);
+            com.pointblue.dirxml.dev.model.EntitlementPolicy b = y.get(n);
+            if (a == null) {
+                changes.add(new Change(Kind.RBE_ADDED, null, rbePath(b), null, "+ added entitlement policy " + rbePath(b), null));
+            } else if (b == null) {
+                changes.add(new Change(Kind.RBE_REMOVED, null, rbePath(a), null, "- removed entitlement policy " + rbePath(a), null));
+            } else {
+                String oldText = rbeText(a, true);
+                String newText = rbeText(b, true);
+                if (!Objects.equals(oldText, newText)) {
+                    boolean docChanged = !Objects.equals(rbeText(a, false), rbeText(b, false));
+                    String detail = docChanged ? textDiff(rbeText(a, false), rbeText(b, false)) : textDiff(oldText, newText);
+                    changes.add(new Change(Kind.RBE_CHANGED, null, rbePath(b), docChanged ? null : "settings", "~ changed entitlement policy " + rbePath(b) + (docChanged ? "" : " (priority or display only)"), detail));
+                }
+            }
+        }
+    }
+
+    /**
+     * What a policy deploys, as text, one line each: description, membership query, identity, static and
+     * excluded members, entitlement refs, criteria; with {@code withOrdering}, the priority and Designer's
+     * display document too (they do not change what the driver grants).
+     */
+    static String rbeText(com.pointblue.dirxml.dev.model.EntitlementPolicy p, boolean withOrdering) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("description: ").append(p.description == null ? "" : p.description).append('\n');
+        // eDirectory re-cases the DN components of the query (OU=users,O=data): compare it case-folded
+        sb.append("member-query: ").append(p.memberQuery == null ? "" : p.memberQuery.toLowerCase(java.util.Locale.ROOT)).append('\n');
+        sb.append("identity: ").append(p.identity == null ? "" : p.identity).append('\n');
+        for (String s : sorted(p.members)) {
+            sb.append("member: ").append(s).append('\n');
+        }
+        for (String s : sorted(p.excludedMembers)) {
+            sb.append("excluded-member: ").append(s).append('\n');
+        }
+        for (String s : sorted(p.entitlementRefs)) {
+            sb.append("entitlement-ref: ").append(s).append('\n');
+        }
+        String crit = serializeOrNull(p.criteria);
+        sb.append("criteria: ").append(crit == null ? "" : crit).append('\n');
+        if (withOrdering) {
+            sb.append("priority: ").append(p.priority == null ? "" : p.priority).append('\n');
+            String disp = serializeOrNull(p.displayEntitlements);
+            sb.append("display-entitlements: ").append(disp == null ? "" : disp).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static List<String> sorted(List<String> in) {
+        List<String> out = new ArrayList<>(in);
+        out.sort(String.CASE_INSENSITIVE_ORDER);
+        return out;
     }
 
     private void kindChanged(Artifact a, Artifact b) {

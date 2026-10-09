@@ -28,7 +28,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Phase 5 — operate: day-two operation of a driver set (docs/operate.md): what
@@ -818,6 +820,109 @@ public final class Operate {
         }
         j.append("]}");
         Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /**
+     * The role-based entitlement policies of the driver set (docs/console-gaps.md §9): the set's
+     * {@code DirXML-SharedProfileSet} container's order, each {@code DirXML-SharedProfile} with its membership
+     * query, static members, the entitlements it grants and the member count the directory computes.
+     * Read-only.
+     */
+    public static Result rbeList(Engine engine, Environments.Environment env) {
+        List<Vault.Entry> sets = engine.search(env.driverSetDn, "(objectClass=DirXML-SharedProfileSet)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+        StringBuilder t = new StringBuilder();
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"policies\":[");
+        Result r = new Result();
+        r.ok = true;
+        if (sets.isEmpty()) {
+            r.text = "  no entitlement policy container under " + env.driverSetDn + "\n";
+            r.json = "{\"ok\":true,\"container\":null,\"policies\":[]}";
+            return r;
+        }
+        Vault.Entry set = sets.get(0);
+        Map<String, Integer> levels = new LinkedHashMap<>();
+        for (String tn : set.strings("DirXML-SPPriority")) {
+            String[] parts = tn.split("#", 3);
+            if (parts.length >= 2) {
+                try {
+                    levels.put(parts[0].toLowerCase(), Integer.parseInt(parts[1].trim()));
+                } catch (NumberFormatException ex) {
+                    // unordered
+                }
+            }
+        }
+        List<Vault.Entry> found = engine.search(set.dn, "(objectClass=DirXML-SharedProfile)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+        found.sort(java.util.Comparator.comparing((Vault.Entry e) -> levels.getOrDefault(e.dn.toLowerCase(), Integer.MAX_VALUE)).thenComparing(e -> e.dn, String.CASE_INSENSITIVE_ORDER));
+        t.append("container ").append(set.dn).append('\n');
+        t.append(String.format("%-8s %-32s %-8s %-8s %s", "priority", "policy", "members", "grants", "membership")).append('\n');
+        int n = 0;
+        for (Vault.Entry e : found) {
+            String name = e.dn.substring(e.dn.indexOf('=') + 1, e.dn.indexOf(','));
+            Integer level = levels.get(e.dn.toLowerCase());
+            List<String> members = e.strings("Member");
+            List<String> refs = e.strings("DirXML-EntitlementRef");
+            String query = e.string("memberQueryURL");
+            String membership = query != null && !query.isBlank() ? query : (members.isEmpty() ? "none" : "static only");
+            t.append(String.format("%-8s %-32s %-8d %-8d %s", level == null ? "-" : level, name, members.size(), refs.size(), membership)).append('\n');
+            for (String ref : refs) {
+                t.append("    grants ").append(com.pointblue.dirxml.dev.model.EntitlementPolicy.refDn(ref));
+                String xml = com.pointblue.dirxml.dev.model.EntitlementPolicy.refXml(ref);
+                if (!xml.equals("<ref/>")) {
+                    t.append("  ").append(xml);
+                }
+                t.append('\n');
+            }
+            j.append(n++ > 0 ? "," : "").append("{\"name\":").append(q(name)).append(",\"dn\":").append(q(e.dn))
+             .append(",\"priority\":").append(level == null ? "null" : level).append(",\"members\":").append(members.size())
+             .append(",\"memberQuery\":").append(q(query == null ? "" : query)).append(",\"grants\":[");
+            int g = 0;
+            for (String ref : refs) {
+                j.append(g++ > 0 ? "," : "").append("{\"entitlement\":").append(q(com.pointblue.dirxml.dev.model.EntitlementPolicy.refDn(ref)))
+                 .append(",\"ref\":").append(q(com.pointblue.dirxml.dev.model.EntitlementPolicy.refXml(ref))).append("}");
+            }
+            j.append("]}");
+        }
+        if (n == 0) {
+            t.append("  no policies\n");
+        }
+        j.append("],\"container\":").append(q(set.dn)).append("}");
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /** The members the directory computes for one policy (its static members plus the membership query's). Read-only. */
+    public static Result rbeMembers(Engine engine, Environments.Environment env, String policy) {
+        List<Vault.Entry> sets = engine.search(env.driverSetDn, "(objectClass=DirXML-SharedProfileSet)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+        Result r = new Result();
+        if (sets.isEmpty()) {
+            r.ok = false;
+            r.text = "no entitlement policy container under " + env.driverSetDn;
+            r.json = "{\"ok\":false,\"error\":" + q(r.text) + "}";
+            return r;
+        }
+        String dn = "cn=" + policy + "," + sets.get(0).dn;
+        Vault.Entry e = engine.read(dn);
+        if (e == null) {
+            r.ok = false;
+            r.text = "no policy " + dn;
+            r.json = "{\"ok\":false,\"error\":" + q(r.text) + "}";
+            return r;
+        }
+        List<String> members = e.strings("Member");
+        List<String> statics = new ArrayList<>();
+        StringBuilder t = new StringBuilder(dn).append(": ").append(members.size()).append(" member(s)\n");
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"dn\":").append(q(dn)).append(",\"members\":[");
+        int n = 0;
+        for (String m : members) {
+            t.append("  ").append(m).append('\n');
+            j.append(n++ > 0 ? "," : "").append(q(m));
+        }
+        j.append("]}");
         r.ok = true;
         r.text = t.toString();
         r.json = j.toString();

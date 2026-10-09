@@ -1,6 +1,6 @@
 # Identity Console gaps: design note
 
-Status: **decided 2026-10-09** (section 5); J1 and J2 built (the Job model everywhere, diff and deploy, `job.*`, the web); R1 next. Basis: *DirXMLDev CLI vs Identity
+Status: **decided 2026-10-09** (section 5); J1, J2 and R1 built (jobs everywhere; entitlement policies grounded on edir3 and modelled, diffed, deployed, `rbe.*`); M1 next. Basis: *DirXMLDev CLI vs Identity
 Console API: Capability Gaps* (2026-10-09, 208 `edirapi` routes against DirXMLDev 0.18.0). The
 first set — **G3** association and object inspection, **G4** password-sync diagnostics, **G6**
 queue/submit event, **G10** the live start option — is built (`docs/operate.md`, release 0.19.0)
@@ -48,11 +48,10 @@ so the object class and attribute shape are not grounded yet; Designer's export 
 `<rbe-policies>` and the readers count them.
 
 **Plan.** Ground first: a lab with the Entitlements Service driver and one policy (edir3 can take
-it), read its objects, then model exactly as jobs: `EntitlementPolicy { name, dn, members[],
-dynamicFilter, entitlements[], priority }` under the Entitlements Service driver,
-`drivers/<driver>/rbe-policies/<name>.xml`, diff and deploy, Designer and export round-trip.
-Operate: `rbe.list`, and the console's policy-driver stop/restart is `driver.stop/restart`
-already.
+it), read its objects, then model as jobs. *Grounded 2026-10-09 (section 9): the policies do not
+hang off the driver — they live in one container at the driver set — so the layout is
+`rbe-policies/<name>.xml` beside `driverset.xml`, not under the driver.* Operate: `rbe.list`,
+`rbe.members`; the console's policy-driver stop/restart is `driver.stop/restart` already.
 
 ## 3. Medium gaps
 
@@ -123,3 +122,67 @@ clone already carries; they follow the medium set.
   a **Jobs** tab, the outline and the Developer tree list jobs.
 - Not yet: writing jobs into a Designer project (`ProjectWriter`) — read works; `CheckJobConfig`
   and `DiscoverJobs` (the console's job wizard) are not offered.
+
+## 9. As built (R1): role-based entitlement policies
+
+**Grounding (2026-10-09).** No lab held a policy, so the shape was taken from three sources and then
+proven live on edir3: Designer's RBE editor and deploy code (`com.novell.idm.rbe`,
+`DeployRBEContainer`/`DeployRBEPolicy`, `RBEPolicyImpl`), the Entitlements Service shim itself
+(`EntitlementServiceShim.jar`, `Directory.cacheEntitlementPolicies` / `checkPriorities`), and the
+vault schema. Then the RBE base package (`NOVLRBEBASE` 2.0.0, fetched into the catalog) built an
+Entitlements Service driver on edir3 with `driver.add`, one policy was written with `vault.deploy`,
+the driver started and cached it (trace: *number of policies cached: 1*), the policy was changed,
+removed with `--delete-all rbe-policies`, and the driver deleted again. What the vault holds:
+
+- **One container per driver set**, `cn=Entitlement Policies,<driver set>` (`DirXML-SharedProfileSet`;
+  iManager's and Designer's name). Its `DirXML-SPPriority` typed names (`<policy dn>#<level>#0`) order
+  the policies. The shim finds it by class under the driver set and reads only this attribute.
+- **Each policy** is a `DirXML-SharedProfile`, a dynamic group: `Description`; `memberQueryURL`
+  (NDS name `memberQuery`: `ldap:///<base>??<one|sub>?<rfc2254 filter>?x-sparse` — eDirectory
+  re-cases the DN components, so the diff compares it case-folded); `dgIdentity`; `Member` and
+  `excludedMember` (static); `DirXML-SPFilterXML` (the editor's `<selection-criterion>`, groups of rows
+  with `AS.Op.*` operations); `DirXML-EntitlementRef` path values `<entitlement dn>#0#<ref>…</ref>`
+  (what it grants — the shim reads these, not the display document); `DirXML-SPDisplayEntitlements`
+  (Designer's `<Drivers><Driver><Entitlement>…` display copy; Designer derives the refs from it at
+  deploy time, so an export without refs gets them derived the same way). A non-empty legacy
+  `DirXML-SPEntitlementsXML` makes the shim refuse the policy ("unconverted policy").
+- **The shim's rules**, now validation errors: every policy needs exactly one priority entry and the
+  levels must run 0, 1, 2 … with no gap, or the driver refuses to start ("Entitlement Policy
+  priorities are non-sequential"). The shim caches policies at start, so a policy change restarts the
+  Entitlements Service driver (the one whose shim is
+  `com.novell.nds.dirxml.driver.entitlement.EntitlementServiceDriver`); the console's
+  `/rbe/restartRBEDriver` exists for the same reason.
+
+**Built.**
+
+- Model: `EntitlementPolicy` (name, description, memberQuery, identity, criteria, members,
+  excludedMembers, entitlementRefs, displayEntitlements, priority, meta); `DriverSet.rbePolicies`,
+  `rbeContainerName()` (meta `rbe.container` when not the default), `entitlementServiceDrivers()`.
+- Tree: `rbe-policies/<name>.xml`, one `<rbe-policy name priority>` document holding everything;
+  the manifest's `<rbe-policy name file>` entries (docs/tree-layout.md).
+- Readers: the vault and an LDIF (`DirXML-SharedProfileSet` under the set, its `DirXML-SharedProfile`
+  children), Designer's export (`<rbe-policies>` holding the container `ds-object` with nested policy
+  `ds-object`s, the two XML attributes base64 as Designer writes them; both the deploy shape's
+  `<typed-name-level>` and the import shape's `<rbe-priority>` are read), a Designer project
+  (`Idm:RbePolicies` on the driver set — from Designer's model code; no project with a policy was at
+  hand, so this one is unverified), and back to an export.
+- `validate`: `rbe-name-blank`, `rbe-legacy-entitlements-xml`, `rbe-no-priority`,
+  `rbe-duplicate-priority`, `rbe-priorities-not-sequential` (errors); `rbe-no-membership`,
+  `rbe-no-entitlement`, `rbe-unknown-entitlement`, `rbe-no-service-driver` (warnings).
+- `vault.diff`: `RBE_ADDED` / `RBE_REMOVED` / `RBE_CHANGED` (`rbe-policies/<name>`); a change of the
+  priority or the display document alone is `settings`. `vault.deploy`: the container is created when
+  absent, an added policy is one add (`Top`, `DirXML-SharedProfile` — the directory supplies the
+  dynamic-group superclasses), a changed one a modify per attribute (a dropped attribute is cleared),
+  the container's `DirXML-SPPriority` is rewritten once after the policy steps, a removal is held by
+  the empty-kind guard until `--delete-all rbe-policies`; the Entitlements Service driver restarts
+  when running. Scoped to `--driver <the Entitlements Service driver>`, the policies travel with it.
+- Operate: `rbe.list --env E` (priority, member count the directory computes, grants, the query),
+  `rbe.members --env E --policy P` (the computed members). Read-only.
+
+**Left open.** `driver.add` from the RBE base package creates the driver but no server association
+is needed for it to run (the engine runs every driver of the set); what it did need was a priority
+list — the first start failed on `priority=1` for the only policy, hence the sequential-from-0 rule
+above. The web has no policies panel yet (an R2, with the outline and the Developer tree). The
+Designer project reader for policies is from the model code only. `dgIdentity` is left to the author:
+the lab policy ran without one.
+
