@@ -1,6 +1,6 @@
 # Identity Console gaps: design note
 
-Status: **proposed 2026-10-09**, for Jerry to confirm. Basis: *DirXMLDev CLI vs Identity
+Status: **decided 2026-10-09** (section 5); J1 in progress. Basis: *DirXMLDev CLI vs Identity
 Console API: Capability Gaps* (2026-10-09, 208 `edirapi` routes against DirXMLDev 0.18.0). The
 first set — **G3** association and object inspection, **G4** password-sync diagnostics, **G6**
 queue/submit event, **G10** the live start option — is built (`docs/operate.md`, release 0.19.0)
@@ -73,15 +73,14 @@ tree objects, the metrics routes as `engine.metrics`, and effective rights as a 
 the driver's security-equivalent identity. Each is one read or one write on an attribute the
 clone already carries; they follow the medium set.
 
-## 5. Decisions for Jerry
+## 5. Decisions (taken 2026-10-09, "proceed as you suggested")
 
-1. **Jobs first** (G1, section 1), then RBE policies once grounded (G2)?
-2. **Tree layout** for jobs as proposed (`drivers/<driver>/jobs/<name>.xml`, `jobs/<name>.xml`
-   at the set), mirroring entitlements?
-3. **RBE grounding on edir3**: install the Entitlements Service driver there with one policy, so
-   the model is read from a real object, not from Designer's export alone?
-4. **Order of the medium set**: G9 (query the application) and G7 (health) first, since they are
-   operational; then G5, G12, G11, G8?
+1. **Jobs first** (G1), then RBE policies once grounded (G2).
+2. **Tree layout** for jobs as proposed: `drivers/<driver>/jobs/<name>.xml`, `jobs/<name>.xml`
+   at the set, mirroring entitlements.
+3. **RBE grounding on edir3**: the Entitlements Service driver with one policy, read from a real
+   object before modelling.
+4. **Medium set in the order** G9, G7, then G5, G12, G11, G8.
 
 ## 6. Phases
 
