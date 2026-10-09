@@ -68,6 +68,17 @@ public class OperateTest {
         final Map<String, List<Vault.Entry>> childrenOf = new LinkedHashMap<>();
         final Map<String, Integer> states = new LinkedHashMap<>();
         final Map<String, Integer> startOptions = new LinkedHashMap<>();
+        final Map<String, List<Vault.Entry>> searches = new LinkedHashMap<>();   // filter -> entries
+
+        @Override
+        public void setDriverStartOption(String dn, int option) {
+            startOptions.put(dn, option);
+        }
+
+        @Override
+        public List<Vault.Entry> search(String base, String filter, int scope) {
+            return searches.getOrDefault(filter, List.of());
+        }
         final Map<String, String> driverStats = new LinkedHashMap<>();
         final Map<String, List<String>> events = new LinkedHashMap<>();   // dn -> raw event element strings
         final Map<String, List<String>> namedPasswords = new LinkedHashMap<>();

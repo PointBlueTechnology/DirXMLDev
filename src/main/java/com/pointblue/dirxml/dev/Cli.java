@@ -317,7 +317,7 @@ public final class Cli {
             if (args.length >= 1 && args[0].startsWith("viewer.")) {
                 System.exit(com.pointblue.dirxml.dev.operate.ViewerCli.run(args));
             }
-            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine."))) {
+            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].equals("object.inspect"))) {
                 System.exit(com.pointblue.dirxml.dev.operate.OperateCli.run(args));
             }
             if (args.length >= 3 && args[0].equals("tree.diff")) {
@@ -458,6 +458,13 @@ public final class Cli {
         System.err.println("               [--allow-missing-secrets] [--capture-drift] [--delete-driver D…] [--delete-all entitlements|forms|prds|roles|entities|<object kind>s…] [--json]");
         System.err.println("                                        plan → snapshot → write → restart → verify → audit line; never deletes a driver without --delete-driver");
         System.err.println("  vault.rollback --env E --snapshot <file.ldif> [--yes] [--json]   restore a deploy's snapshot");
+        System.err.println("  vault.schema <tree> --env E [--json]                  cn=schema → schema/vault.xml (a read of the vault; docs/schema.md)");
+        System.err.println("  vault.app-schema <tree> --env E --driver D [--json]   the application's schema from the shim → drivers/<driver>/app-schema.xml (driver stopped)");
+        System.err.println("  vault.deploy-schema <tree> --env E [--yes] [--confirm E] [--json]   push the tree's custom schema definitions (plan without --yes)");
+        System.err.println("  schema.diff <tree> --env E [--json] | schema.diff --env A --other B [--json]   the model vs an environment's live schema, or two environments'");
+        System.err.println("  events.describe <tree> --env E [--json]                the Event Logger's store: rows, newest, schema versions (docs/event-store.md)");
+        System.err.println("  query <tree> events|event --env E …                   rows of the store, one row (see docs/event-store.md)");
+        System.err.println("  events.case <tree> --env E --id N --name NAME [--driver D] [--channel C] [--dir DIR] [--replace] [--dry-run] [--json]   a row as a simulator case");
         System.err.println("  vault.export-clone --env E --out DIR [--rbs] [--keep-driver-state] [--data C,…] [--pseudonymise]   read a vault into a clone bundle (docs/vault-clone.md)");
         System.err.println("  vault.import-clone --env E --from DIR [--server DN] [--map src=dst] [--driver-server d=srv] [--user-password KEY] [--replace-driverset] [--yes]   create it in a lab tree");
         System.err.println("  export <asCodeDir> <out.xml>          write the tree as a Designer driver-set export (Designer imports it)");
