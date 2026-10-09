@@ -103,6 +103,8 @@ public final class Driver {
     }
     /** {@code DirXML-Entitlement} objects hanging directly off this driver, in read order. */
     public final List<Entitlement> entitlements = new ArrayList<>();
+    /** The driver's jobs ({@code DirXML-Job} objects under it, docs/console-gaps.md §1). */
+    public final List<Job> jobs = new ArrayList<>();
 
     public Driver(String name) {
         this.name = Objects.requireNonNull(name, "name");
@@ -121,6 +123,15 @@ public final class Driver {
     }
 
     /** The entitlement of this name, or null. */
+    public Job job(String name) {
+        for (Job j : jobs) {
+            if (j.name.equalsIgnoreCase(name)) {
+                return j;
+            }
+        }
+        return null;
+    }
+
     public Entitlement entitlement(String name) {
         for (Entitlement e : entitlements) {
             if (e.name.equals(name)) {

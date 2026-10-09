@@ -55,6 +55,7 @@ public final class AsCodeReader {
                 ds.servers.add(attr(s, "dn"));
             }
         }
+        readJobs(dsm, root, ds.jobs);
         ds.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(root));
 
         // library
@@ -120,6 +121,7 @@ public final class AsCodeReader {
             }
         }
         promoteKnownUnknownLinkage(d);
+        readJobs(m, dir, d.jobs);
         for (Element ee : children(m, "entitlement")) {
             Path file = dir.resolve(attr(ee, "file"));
             Entitlement e = new Entitlement(attr(ee, "name"), Files.exists(file) ? xml(file) : null);
@@ -310,6 +312,26 @@ public final class AsCodeReader {
             throw new IOException("missing manifest: " + file);
         }
         return xml(file);
+    }
+
+    /** The manifest's {@code <job>} entries: the document from its file, servers, scopes and meta from the manifest. */
+    private static void readJobs(Element manifest, Path owner, List<com.pointblue.dirxml.dev.model.Job> into) throws IOException {
+        for (Element je : children(manifest, "job")) {
+            Path file = attr(je, "file") == null ? null : owner.resolve(attr(je, "file"));
+            com.pointblue.dirxml.dev.model.Job j = new com.pointblue.dirxml.dev.model.Job(attr(je, "name"), file != null && Files.exists(file) ? xml(file) : null);
+            for (Element s : children(je, "server")) {
+                if (attr(s, "dn") != null) {
+                    j.servers.add(attr(s, "dn"));
+                }
+            }
+            for (Element s : children(je, "scope")) {
+                if (attr(s, "value") != null) {
+                    j.scopes.add(attr(s, "value"));
+                }
+            }
+            readMeta(je, j.meta);
+            into.add(j);
+        }
     }
 
     private static Element xml(Path file) throws IOException {

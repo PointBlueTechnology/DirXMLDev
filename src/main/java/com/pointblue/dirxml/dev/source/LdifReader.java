@@ -218,6 +218,38 @@ public final class LdifReader {
             d.entitlements.add(ent);
         }
 
+        // 3c. jobs: DirXML-Job objects under a driver or directly under the set (docs/console-gaps.md §1)
+        for (Entry e : entries) {
+            if (!e.hasClass("DirXML-Job")) {
+                continue;
+            }
+            Placement p = place(e.dn, dsDn);
+            Driver d = p.driver == null ? null : driversByLowerName.get(p.driver.toLowerCase());
+            com.pointblue.dirxml.dev.model.Job job = new com.pointblue.dirxml.dev.model.Job(rdn(e.dn), xmlOrNull(e.first("XmlData")));
+            job.servers.addAll(e.all("DirXML-ServerList"));
+            job.scopes.addAll(e.all("DirXML-Scope"));
+            job.meta.put("dn", e.dn);
+            copyMeta(e, job.meta, "DirXML-Job");
+            String tl = e.first("DirXML-TraceLevel");
+            String tf = e.first("DirXML-TraceFile");
+            String ts = e.first("DirXML-TraceSizeLimit");
+            if (tl != null) {
+                job.meta.put("trace-level", tl);
+            }
+            if (tf != null) {
+                job.meta.put("trace-file", tf);
+            }
+            if (ts != null) {
+                job.meta.put("trace-size-limit", ts);
+            }
+            if (d != null) {
+                d.jobs.add(job);
+            } else if (p.driver == null) {
+                ds.jobs.add(job);
+            }
+            // a job under an unknown driver is dropped, as an entitlement would be
+        }
+
         // 4. linkage: DirXML-Policies = "<policyDN>#<order>#<setId>"
         for (Entry e : entries) {
             if (!e.hasClass("DirXML-Driver")) {

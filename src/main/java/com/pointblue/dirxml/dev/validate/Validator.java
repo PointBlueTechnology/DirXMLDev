@@ -40,6 +40,7 @@ public final class Validator {
             new FormCheck(),
             new FlowCheck(),
             new EntitlementCheck(),
+            new JobCheck(),
             new AppConfigCheck(),
             new PackageLinkageCheck(),
             new OverridesCheck()));
