@@ -78,10 +78,12 @@ public class DeployLogAndInventoryTest {
 
         List<SecretInventory.Need> needs = SecretInventory.forDriver(ds, ad);
         List<String> keys = needs.stream().map(n -> n.key).toList();
-        assertEquals(List.of("AD.shim-auth-password", "AD.remote-loader-password", "AD.named.exchange-service",
-            "AD.named.shared-secret", "AD.named.smtp-relay", "AD.named.api-key"), keys);
+        assertEquals(List.of("AD.shim-auth-password", "AD.remote-loader-password", "AD.mutual-auth-key-password",
+            "AD.mutual-auth-keystore-password", "AD.named.exchange-service", "AD.named.shared-secret", "AD.named.smtp-relay", "AD.named.api-key"), keys);
         assertEquals("shim-auth", needs.get(0).kind);
-        assertTrue(needs.get(2).because.contains("drivers/AD/subscriber/sub-pw"));
+        // the Remote Loader's mutual-authentication passwords are optional: no missing-secret note when the file lacks them
+        assertTrue(!needs.get(1).optional && needs.get(2).optional && needs.get(3).optional);
+        assertTrue(needs.get(4).because.contains("drivers/AD/subscriber/sub-pw"));
 
         // a driver with none
         Driver plain = new Driver("Loopback");
