@@ -462,7 +462,6 @@ public final class Cli {
         System.err.println("  vault.app-schema <tree> --env E --driver D [--json]   the application's schema from the shim → drivers/<driver>/app-schema.xml (driver stopped)");
         System.err.println("  vault.deploy-schema <tree> --env E [--yes] [--confirm E] [--json]   push the tree's custom schema definitions (plan without --yes)");
         System.err.println("  schema.diff <tree> --env E [--json] | schema.diff --env A --other B [--json]   the model vs an environment's live schema, or two environments'");
-        System.err.println("  driver.app-schema.set <tree> --driver D --file F [--dry-run] [--json]   an application schema from a file into the tree");
         System.err.println("  events.describe <tree> --env E [--json]                the Event Logger's store: rows, newest, schema versions (docs/event-store.md)");
         System.err.println("  query <tree> events|event --env E …                   rows of the store, one row (see docs/event-store.md)");
         System.err.println("  events.case <tree> --env E --id N --name NAME [--driver D] [--channel C] [--dir DIR] [--replace] [--dry-run] [--json]   a row as a simulator case");
