@@ -7,6 +7,20 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Identity Console gaps, first set** (docs/operate.md): `driver.start-option --option
+  auto|manual|disabled` (`SetDriverStartOption`, live, gated and audited); `driver.submit --mode
+  command|event|queue` (`SubmitCommand`, `SubmitEvent`, `QueueEvent` into the cache of a running
+  or stopped driver); `driver.associations --driver D [--state …]` (the objects associated with a
+  driver, by state, through `(DirXML-Associations=<driver>#<state>#*)`); `driver.password-sync`
+  (the driver set's sync timeout, the driver's password-related settings); `object.inspect --dn`
+  (an object's classes, associations across drivers, password-sync status). Read-only ones need
+  no `--yes`.
+- The usage text now lists `vault.schema`, `vault.app-schema`, `vault.deploy-schema`,
+  `schema.diff`, `events.describe`, `query … events|event` and
+  `events.case`, which existed without a line.
+
 ## [0.18.0] - 2026-10-09
 
 ### Added

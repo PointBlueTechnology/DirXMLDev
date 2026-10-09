@@ -72,6 +72,16 @@ public final class Operate {
 
         int driverStartOption(String dn);
 
+        /** {@code SetDriverStartOption}: auto, manual or disabled, live (docs/operate.md). */
+        default void setDriverStartOption(String dn, int option) {
+            throw new UnsupportedOperationException("setDriverStartOption");
+        }
+
+        /** An LDAP search, for the association and password-sync reads. */
+        default List<Vault.Entry> search(String base, String filter, int scope) {
+            throw new UnsupportedOperationException("search");
+        }
+
         void startDriver(String dn);
 
         void stopDriver(String dn);
@@ -116,6 +126,14 @@ public final class Operate {
 
             public int driverStartOption(String dn) {
                 return v.driverStartOption(dn);
+            }
+
+            public void setDriverStartOption(String dn, int option) {
+                v.setDriverStartOption(dn, option);
+            }
+
+            public List<Vault.Entry> search(String base, String filter, int scope) {
+                return v.search(base, filter, scope);
             }
 
             public void startDriver(String dn) {
@@ -433,6 +451,274 @@ public final class Operate {
         r.json = "{\"ok\":" + ok + ",\"driver\":" + q(driver) + ",\"before\":" + q(Vault.stateName(before))
             + ",\"after\":" + q(Vault.stateName(after)) + ",\"seen\":" + q(seen == null ? "" : seen)
             + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    // ---- driver.start-option (G10) ------------------------------------------------------------
+
+    /** The start option as the CLI names it → the vault's number; -1 when not a name. */
+    static int startOptionOf(String name) {
+        switch (name == null ? "" : name.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "auto": return Vault.START_AUTO;
+            case "manual": return Vault.START_MANUAL;
+            case "disabled": return Vault.START_DISABLED;
+            default: return -1;
+        }
+    }
+
+    /** Set a driver's start option live ({@code SetDriverStartOption}): a light write, gated and audited like start/stop. */
+    public static Result startOption(Engine engine, Environments.Environment env, String driver, String option,
+            boolean yes, String confirm, Path tree) throws IOException {
+        int wanted = startOptionOf(option);
+        if (wanted < 0) {
+            return Result.refused("start option is auto, manual or disabled, not '" + option + "'");
+        }
+        String dn = driverDn(env, driver);
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        int before = engine.driverStartOption(dn);
+        String error = null;
+        try {
+            engine.setDriverStartOption(dn, wanted);
+        } catch (RuntimeException e) {
+            error = e.getMessage();
+        }
+        int after = engine.driverStartOption(dn);
+        boolean ok = error == null && after == wanted;
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = ok ? "ok" : "failed";
+        rec.detail = "driver.start-option '" + driver + "': " + startOptionName(before) + " → " + startOptionName(after) + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = ok;
+        r.text = "driver.start-option '" + driver + "': " + startOptionName(before) + " → " + startOptionName(after) + "\n" + (error != null ? "FAILED   " + error + "\n" : ok ? "OK\n" : "FAILED   the vault still says " + startOptionName(after) + "\n");
+        r.json = "{\"ok\":" + ok + ",\"driver\":" + q(driver) + ",\"before\":" + q(startOptionName(before)) + ",\"after\":" + q(startOptionName(after)) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    // ---- object.inspect, driver.associations, driver.password-sync (G3, G4) --------------------
+
+    /** The association states eDirectory records on {@code DirXML-Associations}. */
+    static String associationState(int state) {
+        switch (state) {
+            case 0: return "disabled";
+            case 1: return "processed";
+            case 2: return "pending";
+            case 3: return "manual";
+            case 4: return "migrate";
+            default: return "state-" + state;
+        }
+    }
+
+    static int associationStateOf(String name) {
+        switch (name == null ? "" : name.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "disabled": return 0;
+            case "processed": return 1;
+            case "pending": return 2;
+            case "manual": return 3;
+            case "migrate": return 4;
+            default: return -1;
+        }
+    }
+
+    /** One {@code DirXML-Associations} value: {@code <driver dn>#<state>#<value>}. */
+    static final class Association {
+        final String driverDn;
+        final int state;
+        final String value;
+
+        Association(String driverDn, int state, String value) {
+            this.driverDn = driverDn;
+            this.state = state;
+            this.value = value;
+        }
+
+        String driverName() {
+            return driverDn.replaceFirst("^[^=]+=", "").replaceFirst(",.*$", "");
+        }
+    }
+
+    /** {@code <driver dn>#<state>#<value>}; null when the value is not of that shape. */
+    static Association parseAssociation(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        int a = raw.indexOf('#');
+        int b = a < 0 ? -1 : raw.indexOf('#', a + 1);
+        if (a < 0 || b < 0) {
+            return null;
+        }
+        int state;
+        try {
+            state = Integer.parseInt(raw.substring(a + 1, b).trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        return new Association(raw.substring(0, a), state, raw.substring(b + 1));
+    }
+
+    /** One {@code DirXML-PasswordSyncStatus} value: {@code <driver dn>#<yyyyMMddHHmmss…>#<status>} (the engine's own form). */
+    static String[] parsePasswordSync(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        int a = raw.indexOf('#');
+        int b = a < 0 ? -1 : raw.indexOf('#', a + 1);
+        if (a < 0 || b < 0) {
+            return new String[] { raw, "", "" };
+        }
+        return new String[] { raw.substring(0, a), raw.substring(a + 1, b), raw.substring(b + 1) };
+    }
+
+    /** What the vault says about one object: its classes, its associations across drivers, its password-sync status. Read-only. */
+    public static Result inspectObject(Engine engine, Environments.Environment env, String dn) {
+        Vault.Entry e = engine.read(dn);
+        Result r = new Result();
+        if (e == null) {
+            r.ok = false;
+            r.text = "no object " + dn + "\n";
+            r.json = "{\"ok\":false,\"dn\":" + q(dn) + ",\"error\":\"not found\"}";
+            return r;
+        }
+        StringBuilder t = new StringBuilder();
+        StringBuilder j = new StringBuilder();
+        t.append(dn).append("\n");
+        List<String> classes = e.strings("objectClass");
+        t.append("  class           ").append(String.join(", ", classes)).append("\n");
+        j.append("{\"ok\":true,\"dn\":").append(q(dn)).append(",\"objectClass\":[");
+        for (int i = 0; i < classes.size(); i++) {
+            j.append(i > 0 ? "," : "").append(q(classes.get(i)));
+        }
+        j.append("],\"associations\":[");
+        List<String> assoc = e.strings("DirXML-Associations");
+        t.append("  associations    ").append(assoc.size()).append("\n");
+        int n = 0;
+        for (String raw : assoc) {
+            Association a = parseAssociation(raw);
+            if (a == null) {
+                t.append("    ").append(raw).append("\n");
+                j.append(n++ > 0 ? "," : "").append("{\"raw\":").append(q(raw)).append("}");
+                continue;
+            }
+            t.append("    ").append(String.format("%-28s %-10s %s", a.driverName(), associationState(a.state), a.value)).append("\n");
+            j.append(n++ > 0 ? "," : "").append("{\"driver\":").append(q(a.driverName())).append(",\"driverDn\":").append(q(a.driverDn))
+             .append(",\"state\":").append(q(associationState(a.state))).append(",\"value\":").append(q(a.value)).append("}");
+        }
+        j.append("],\"passwordSync\":[");
+        List<String> ps = e.strings("DirXML-PasswordSyncStatus");
+        t.append("  password sync   ").append(ps.isEmpty() ? "no status recorded" : ps.size() + " status value(s)").append("\n");
+        n = 0;
+        for (String raw : ps) {
+            String[] p = parsePasswordSync(raw);
+            String drv = p[0].replaceFirst("^[^=]+=", "").replaceFirst(",.*$", "");
+            t.append("    ").append(String.format("%-28s %-16s %s", drv, p[1], p[2])).append("\n");
+            j.append(n++ > 0 ? "," : "").append("{\"driver\":").append(q(drv)).append(",\"driverDn\":").append(q(p[0])).append(",\"time\":").append(q(p[1])).append(",\"status\":").append(q(p[2])).append("}");
+        }
+        j.append("]}");
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /**
+     * The objects associated with a driver, by state ({@code DirXML-Associations=<driver>#<state>#*}
+     * — eDirectory indexes the path syntax that way; a bare {@code #*} is refused). Read-only.
+     */
+    public static Result driverAssociations(Engine engine, Environments.Environment env, String driver, String stateName, String base, int limit) {
+        String dn = driverDn(env, driver);
+        int only = stateName == null || stateName.isBlank() ? -1 : associationStateOf(stateName);
+        if (stateName != null && !stateName.isBlank() && only < 0) {
+            return Result.refused("state is processed, disabled, pending, manual or migrate, not '" + stateName + "'");
+        }
+        StringBuilder t = new StringBuilder();
+        StringBuilder j = new StringBuilder();
+        t.append("associations of '").append(driver).append("'").append(base == null || base.isBlank() ? "" : " under " + base).append("\n");
+        j.append("{\"ok\":true,\"driver\":").append(q(driver)).append(",\"counts\":{");
+        int total = 0;
+        StringBuilder rows = new StringBuilder();
+        StringBuilder jrows = new StringBuilder();
+        int listed = 0;
+        for (int state = 0; state <= 4; state++) {
+            if (only >= 0 && state != only) {
+                continue;
+            }
+            List<Vault.Entry> found = engine.search(base == null ? "" : base, "(DirXML-Associations=" + dn + "#" + state + "#*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+            j.append(state > 0 && j.charAt(j.length() - 1) != '{' ? "," : "").append(q(associationState(state))).append(":").append(found.size());
+            t.append("  ").append(String.format("%-10s %d", associationState(state), found.size())).append("\n");
+            total += found.size();
+            for (Vault.Entry e : found) {
+                if (listed >= limit) {
+                    break;
+                }
+                String value = "";
+                for (String raw : e.strings("DirXML-Associations")) {
+                    Association a = parseAssociation(raw);
+                    if (a != null && a.driverDn.equalsIgnoreCase(dn)) {
+                        value = a.value;
+                        break;
+                    }
+                }
+                rows.append("    ").append(String.format("%-10s %-50s %s", associationState(state), e.dn, value)).append("\n");
+                jrows.append(listed > 0 ? "," : "").append("{\"dn\":").append(q(e.dn)).append(",\"state\":").append(q(associationState(state))).append(",\"value\":").append(q(value)).append("}");
+                listed++;
+            }
+        }
+        t.append("  total      ").append(total).append(listed < total ? " (first " + listed + " listed; --limit N for more)" : "").append("\n");
+        if (rows.length() > 0) {
+            t.append(rows);
+        }
+        j.append("},\"total\":").append(total).append(",\"listed\":").append(listed).append(",\"objects\":[").append(jrows).append("]}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /**
+     * Password synchronisation as the vault has it for a driver: the driver set's
+     * {@code DirXML-PasswordSyncTimeout} and every password-related GCV of the driver's live
+     * configuration ({@code DirXML-ConfigValues}, by name). Read-only.
+     */
+    public static Result passwordSync(Engine engine, Environments.Environment env, String driver) {
+        String dn = driverDn(env, driver);
+        Vault.Entry ds = engine.read(env.driverSetDn);
+        Vault.Entry d = engine.read(dn);
+        Result r = new Result();
+        if (d == null) {
+            r.ok = false;
+            r.text = "no driver " + dn + "\n";
+            r.json = "{\"ok\":false,\"error\":\"no driver\"}";
+            return r;
+        }
+        String timeout = ds == null ? "" : String.join(",", ds.strings("DirXML-PasswordSyncTimeout"));
+        StringBuilder t = new StringBuilder();
+        StringBuilder j = new StringBuilder();
+        t.append("password sync of '").append(driver).append("'\n");
+        t.append("  driver set timeout   ").append(timeout.isEmpty() ? "not set (the engine's default)" : timeout + " min").append("\n");
+        j.append("{\"ok\":true,\"driver\":").append(q(driver)).append(",\"driverSetTimeout\":").append(q(timeout)).append(",\"settings\":[");
+        String xml = d.string("DirXML-ConfigValues");
+        int n = 0;
+        if (xml != null) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("<definition[^>]*\\sname=\"([^\"]*[Pp]assword[^\"]*)\"[^>]*>(.*?)</definition>", java.util.regex.Pattern.DOTALL).matcher(xml);
+            while (m.find()) {
+                String name = m.group(1);
+                java.util.regex.Matcher v = java.util.regex.Pattern.compile("<value>(.*?)</value>", java.util.regex.Pattern.DOTALL).matcher(m.group(2));
+                String value = v.find() ? v.group(1).trim() : "";
+                t.append("  ").append(String.format("%-44s %s", name, value)).append("\n");
+                j.append(n++ > 0 ? "," : "").append("{\"name\":").append(q(name)).append(",\"value\":").append(q(value)).append("}");
+            }
+        }
+        if (n == 0) {
+            t.append("  no password-related settings in the driver's live configuration\n");
+        }
+        j.append("]}");
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
         return r;
     }
 
@@ -1206,7 +1492,7 @@ public final class Operate {
         return s == null ? "null" : q(s);
     }
 
-    private static String q(String s) {
+    static String q(String s) {
         StringBuilder sb = new StringBuilder("\"");
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
