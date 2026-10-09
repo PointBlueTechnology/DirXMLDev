@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-09
+
 ### Added
 
 - **Role-based entitlement policies** (docs/console-gaps.md §9, phase R1, grounded on edir3 with the
