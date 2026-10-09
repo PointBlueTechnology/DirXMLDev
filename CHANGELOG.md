@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-09
+
 ### Added
 
 - **Jobs in the model** (docs/console-gaps.md §1, phase J1): `DirXML-Job` objects under a driver
