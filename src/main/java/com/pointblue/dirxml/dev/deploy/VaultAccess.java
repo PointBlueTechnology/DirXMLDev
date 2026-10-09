@@ -46,6 +46,11 @@ public interface VaultAccess extends AutoCloseable {
 
     void setDriverStartOption(String driverDn, int option);
 
+    /** {@code NotifyJobUpdate}: the engine's scheduler re-reads a job object after a deploy wrote it. */
+    default void notifyJobUpdate(String jobDn) {
+        throw new UnsupportedOperationException("notifyJobUpdate");
+    }
+
     /** The engine's packed version through its GetVersion extended operation; throws when no engine answers. */
     int engineVersion();
 

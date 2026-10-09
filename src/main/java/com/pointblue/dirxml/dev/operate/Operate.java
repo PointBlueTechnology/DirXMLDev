@@ -82,6 +82,21 @@ public final class Operate {
             throw new UnsupportedOperationException("search");
         }
 
+        /** {@code StartJob} (docs/console-gaps.md §1). */
+        default void startJob(String jobDn) {
+            throw new UnsupportedOperationException("startJob");
+        }
+
+        /** {@code AbortJob}. */
+        default void abortJob(String jobDn) {
+            throw new UnsupportedOperationException("abortJob");
+        }
+
+        /** {@code GetJobState}; null when the engine will not say. */
+        default Vault.JobState jobState(String jobDn) {
+            throw new UnsupportedOperationException("jobState");
+        }
+
         void startDriver(String dn);
 
         void stopDriver(String dn);
@@ -134,6 +149,18 @@ public final class Operate {
 
             public List<Vault.Entry> search(String base, String filter, int scope) {
                 return v.search(base, filter, scope);
+            }
+
+            public void startJob(String jobDn) {
+                v.startJob(jobDn);
+            }
+
+            public void abortJob(String jobDn) {
+                v.abortJob(jobDn);
+            }
+
+            public Vault.JobState jobState(String jobDn) {
+                return v.jobState(jobDn);
             }
 
             public void startDriver(String dn) {
@@ -720,6 +747,162 @@ public final class Operate {
         r.text = t.toString();
         r.json = j.toString();
         return r;
+    }
+
+    // ---- job.list | status | start | abort (docs/console-gaps.md §1) --------------------------
+
+    /** The engine's running-state code of a job as a word: 0 is not running, 1 running (the codes `GetJobState` returns). */
+    static String jobRunningState(int code) {
+        switch (code) {
+            case 0: return "not running";
+            case 1: return "running";
+            default: return "state-" + code;
+        }
+    }
+
+    static String jobConfigState(int code) {
+        switch (code) {
+            case 0: return "ok";
+            default: return "config-" + code;
+        }
+    }
+
+    /** {@code cn=<job>,<driver dn>} or {@code cn=<job>,<driver set dn>} when no driver is named. */
+    static String jobDn(Environments.Environment env, String job, String driver) {
+        return VaultMapping.jobDn(env.driverSetDn, driver == null || driver.isBlank() ? null : driver, job);
+    }
+
+    private static String owner(String jobDn, Environments.Environment env) {
+        String parent = jobDn.substring(jobDn.indexOf(',') + 1);
+        return parent.equalsIgnoreCase(env.driverSetDn) ? "driver set" : parent.replaceFirst("^[^=]+=", "").replaceFirst(",.*$", "");
+    }
+
+    /** Every job of the driver set (or of one driver) with what the engine says about it. Read-only. */
+    public static Result jobList(Engine engine, Environments.Environment env, String driver) {
+        String base = driver == null || driver.isBlank() ? env.driverSetDn : driverDn(env, driver);
+        List<Vault.Entry> found = engine.search(base, "(objectClass=DirXML-Job)", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+        StringBuilder t = new StringBuilder();
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"jobs\":[");
+        t.append(String.format("%-28s %-26s %-12s %-10s %-9s %s", "job", "owner", "running", "config", "scheduled", "next run")).append('\n');
+        int n = 0;
+        for (Vault.Entry e : found) {
+            String name = e.dn.substring(e.dn.indexOf('=') + 1, e.dn.indexOf(','));
+            String own = owner(e.dn, env);
+            com.pointblue.dirxml.dev.model.Job job = new com.pointblue.dirxml.dev.model.Job(name, parseOrNull(e.string("XmlData")));
+            String running = "?";
+            String config = "?";
+            String scheduled = "?";
+            String next = "";
+            try {
+                Vault.JobState st = engine.jobState(e.dn);
+                if (st != null) {
+                    running = jobRunningState(st.runningState);
+                    config = jobConfigState(st.configurationState);
+                    scheduled = st.scheduled ? "yes" : "no";
+                    next = st.nextRun == null ? "" : st.nextRun.toInstant().toString();
+                }
+            } catch (RuntimeException ex) {
+                running = "unknown (" + ex.getMessage() + ")";
+            }
+            t.append(String.format("%-28s %-26s %-12s %-10s %-9s %s", name, own, running, config, scheduled, next)).append('\n');
+            if (job.disabled()) {
+                t.append("    disabled in its configuration\n");
+            }
+            j.append(n++ > 0 ? "," : "").append("{\"name\":").append(q(name)).append(",\"dn\":").append(q(e.dn)).append(",\"owner\":").append(q(own))
+             .append(",\"driver\":").append(own.equals("driver set") ? "null" : q(own)).append(",\"javaClass\":").append(q(job.javaClass() == null ? "" : job.javaClass()))
+             .append(",\"disabled\":").append(job.disabled()).append(",\"servers\":").append(e.strings("DirXML-ServerList").size())
+             .append(",\"running\":").append(q(running)).append(",\"config\":").append(q(config)).append(",\"scheduled\":").append(q(scheduled)).append(",\"nextRun\":").append(q(next)).append("}");
+        }
+        if (n == 0) {
+            t.append("  no jobs\n");
+        }
+        j.append("]}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /** What the engine says about one job. Read-only. */
+    public static Result jobStatus(Engine engine, Environments.Environment env, String job, String driver) {
+        String dn = jobDn(env, job, driver);
+        Vault.Entry e = engine.read(dn);
+        Result r = new Result();
+        if (e == null) {
+            r.ok = false;
+            r.text = "no job " + dn + "\n";
+            r.json = "{\"ok\":false,\"error\":\"no job\",\"dn\":" + q(dn) + "}";
+            return r;
+        }
+        com.pointblue.dirxml.dev.model.Job model = new com.pointblue.dirxml.dev.model.Job(job, parseOrNull(e.string("XmlData")));
+        Vault.JobState st = engine.jobState(dn);
+        StringBuilder t = new StringBuilder();
+        t.append(dn).append('\n');
+        t.append("  class           ").append(model.javaClass() == null ? "?" : model.javaClass()).append('\n');
+        t.append("  disabled        ").append(model.disabled()).append('\n');
+        t.append("  servers         ").append(String.join(", ", e.strings("DirXML-ServerList"))).append('\n');
+        t.append("  running         ").append(st == null ? "?" : jobRunningState(st.runningState)).append('\n');
+        t.append("  configuration   ").append(st == null ? "?" : jobConfigState(st.configurationState)).append('\n');
+        t.append("  scheduled       ").append(st == null ? "?" : st.scheduled ? "yes" : "no").append('\n');
+        t.append("  next run        ").append(st == null || st.nextRun == null ? "-" : st.nextRun.toInstant().toString()).append('\n');
+        r.ok = true;
+        r.text = t.toString();
+        r.json = "{\"ok\":true,\"dn\":" + q(dn) + ",\"javaClass\":" + q(model.javaClass() == null ? "" : model.javaClass()) + ",\"disabled\":" + model.disabled()
+            + ",\"running\":" + q(st == null ? "?" : jobRunningState(st.runningState)) + ",\"config\":" + q(st == null ? "?" : jobConfigState(st.configurationState))
+            + ",\"scheduled\":" + (st != null && st.scheduled) + ",\"nextRun\":" + q(st == null || st.nextRun == null ? "" : st.nextRun.toInstant().toString()) + "}";
+        return r;
+    }
+
+    /** {@code StartJob} / {@code AbortJob}: a light write, gated and audited like the driver lifecycle. */
+    public static Result jobAction(Engine engine, Environments.Environment env, String job, String driver, String action,
+            boolean yes, String confirm, Path tree) throws IOException {
+        if (!"start".equals(action) && !"abort".equals(action)) {
+            return Result.refused("action is start or abort, not '" + action + "'");
+        }
+        String dn = jobDn(env, job, driver);
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        String error = null;
+        try {
+            if ("start".equals(action)) {
+                engine.startJob(dn);
+            } else {
+                engine.abortJob(dn);
+            }
+        } catch (RuntimeException e) {
+            error = e.getMessage();
+        }
+        String after = "?";
+        try {
+            Vault.JobState st = engine.jobState(dn);
+            after = st == null ? "?" : jobRunningState(st.runningState);
+        } catch (RuntimeException ignore) {
+            // the state read is informative only
+        }
+        boolean ok = error == null;
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = ok ? "ok" : "failed";
+        rec.detail = "job." + action + " '" + job + "'" + (driver == null || driver.isBlank() ? "" : " of '" + driver + "'") + ": " + after + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = ok;
+        r.text = "job." + action + " '" + job + "': " + (ok ? "OK, now " + after : "FAILED   " + error) + "\n";
+        r.json = "{\"ok\":" + ok + ",\"job\":" + q(job) + ",\"dn\":" + q(dn) + ",\"running\":" + q(after) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    private static org.w3c.dom.Element parseOrNull(String xml) {
+        if (xml == null || xml.isBlank()) {
+            return null;
+        }
+        try {
+            return com.pointblue.dirxml.dev.xml.CanonicalXml.parse(xml).getDocumentElement();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     // ---- driver.cache view | clear ------------------------------------------------------------

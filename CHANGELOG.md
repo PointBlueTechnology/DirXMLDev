@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Jobs deploy and operate** (docs/console-gaps.md §8, phase J2): `vault.diff` reports
+  `JOB_ADDED` / `JOB_REMOVED` / `JOB_CHANGED`; `vault.deploy` writes the `DirXML-Job` object and
+  sends `NotifyJobUpdate` so the scheduler re-reads it (no driver restart; a removal needs
+  `--delete-all jobs`); `job.list`, `job.status` (`GetJobState`: running, configuration,
+  scheduled, next run), `job.start`, `job.abort`.
+
 ## [0.20.0] - 2026-10-09
 
 ### Added

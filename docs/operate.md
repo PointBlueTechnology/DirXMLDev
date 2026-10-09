@@ -62,6 +62,8 @@ Remote Loader lifecycle (the RL process is outside the vault), `--delete-driver`
 | `driver.start-option` | `SetDriverStartOption` (auto, manual, disabled), live; read back and audited like start/stop (`LIGHT`) | what iManager's driver properties set; the tree's own value wins at the next deploy |
 | `driver.associations` | an LDAP search `(DirXML-Associations=<driver dn>#<state>#*)` per state — eDirectory indexes the path syntax by driver and state (a bare `#*` is refused with -306); counts per state (disabled, processed, pending, manual, migrate) and the objects with their association values | read-only; the Identity Console's *driver inspector* |
 | `driver.password-sync` | the driver set's `DirXML-PasswordSyncTimeout` and every password-related definition of the driver's live `DirXML-ConfigValues` | read-only; what the console's password sync pages read |
+| `job.list` / `job.status` | an LDAP search for `DirXML-Job` under the set (or one driver), each with `GetJobState` (running state, configuration state, scheduled, next run) | read-only; the console's jobs page |
+| `job.start` / `job.abort` | `StartJob` / `AbortJob`, gated as a light write and audited | a deploy of a changed job sends `NotifyJobUpdate` itself (Plan step `NOTIFY_JOB`) |
 | `object.inspect` | one object's `objectClass`, its `DirXML-Associations` (driver, state, value) and `DirXML-PasswordSyncStatus` (driver, time, status) | read-only; the console's *object inspector*: "what state is this user in on each driver" |
 
 ## Safeguards

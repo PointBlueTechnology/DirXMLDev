@@ -32,7 +32,7 @@ import java.util.TreeSet;
  */
 public final class Plan {
 
-    public enum Op { ADD, MODIFY, DELETE, DELETE_SUBTREE, SET_SECRET, RESTART, START_OPTION, AUX_CLASS, DROP_AUX_CLASS, ENSURE_CONTAINER }
+    public enum Op { ADD, MODIFY, DELETE, DELETE_SUBTREE, SET_SECRET, RESTART, START_OPTION, AUX_CLASS, DROP_AUX_CLASS, ENSURE_CONTAINER, NOTIFY_JOB }
 
     /** One operation. {@code values} is what to write (null for DELETE/RESTART; secrets carry only the key). */
     public static final class Step {
@@ -216,6 +216,10 @@ public final class Plan {
             }
             if (c.kind.isEntitlement()) {
                 entitlementSteps(p, c, to, diff.from(), dsDn, tree, provisioning, deletes);
+                continue;
+            }
+            if (c.kind.isJob()) {
+                jobSteps(p, c, to, dsDn, provisioning, deletes);
                 continue;
             }
             switch (c.kind) {
@@ -1019,6 +1023,49 @@ public final class Plan {
                 p.notes.add(c.path + ": package stamps removed (the driver was stripped of its packages)");
             }
         }
+    }
+
+    /**
+     * Steps for a job change (a {@code DirXML-Job} object under the driver or the set, no container to
+     * ensure): add/modify/delete, then {@code NotifyJobUpdate} so the engine's scheduler re-reads it
+     * (no driver restart). A removed job needs {@code --delete-all jobs}, as entitlements do.
+     */
+    private static void jobSteps(Plan p, ModelDiff.Change c, DriverSet to, String dsDn, List<Step> bucket, List<Step> deletes) {
+        String driver = c.driver;
+        if (c.kind == ModelDiff.Kind.JOB_REMOVED) {
+            String dn = VaultMapping.jobPathDn(dsDn, c.path);
+            p.touchedDns.add(dn);
+            deletes.add(new Step(Op.DELETE, dn, null, null, null, dn, c.path, driver));
+            return;
+        }
+        String name = c.path.substring(c.path.lastIndexOf("/jobs/") + "/jobs/".length());
+        com.pointblue.dirxml.dev.model.Job j = null;
+        if (driver == null) {
+            for (com.pointblue.dirxml.dev.model.Job x : to.jobs) {
+                if (x.name.equalsIgnoreCase(name)) {
+                    j = x;
+                }
+            }
+        } else {
+            Driver d = to.driver(driver);
+            j = d == null ? null : d.job(name);
+        }
+        if (j == null) {
+            p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
+            return;
+        }
+        String dn = VaultMapping.jobDn(dsDn, driver, j.name);
+        Map<String, List<byte[]>> attrs = VaultMapping.jobAttributes(j);
+        p.touchedDns.add(dn);
+        if (c.kind == ModelDiff.Kind.JOB_ADDED) {
+            bucket.add(new Step(Op.ADD, dn, null, List.of("Top", VaultMapping.OC_JOB), attrs, dn + "  " + VaultMapping.OC_JOB + " (" + size(attrs) + ")", c.path, driver));
+        } else {
+            for (Map.Entry<String, List<byte[]>> en : attrs.entrySet()) {
+                bucket.add(new Step(Op.MODIFY, dn, en.getKey(), null, Map.of(en.getKey(), en.getValue()),
+                    dn + "  " + en.getKey() + " (" + size(Map.of(en.getKey(), en.getValue())) + ")", c.path, driver));
+            }
+        }
+        bucket.add(new Step(Op.NOTIFY_JOB, dn, null, null, null, dn + "  NotifyJobUpdate (the scheduler re-reads the job)", c.path, driver));
     }
 
     private static void ensureContainer(List<Step> bucket, Set<String> ensured, String dn, String oc, ModelDiff.Change c, String driver) {

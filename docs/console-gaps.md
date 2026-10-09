@@ -1,6 +1,6 @@
 # Identity Console gaps: design note
 
-Status: **decided 2026-10-09** (section 5); J1 built (the Job model in every reader, the tree, validation), J2 next. Basis: *DirXMLDev CLI vs Identity
+Status: **decided 2026-10-09** (section 5); J1 and J2 built (the Job model everywhere, diff and deploy, `job.*`, the web); R1 next. Basis: *DirXMLDev CLI vs Identity
 Console API: Capability Gaps* (2026-10-09, 208 `edirapi` routes against DirXMLDev 0.18.0). The
 first set — **G3** association and object inspection, **G4** password-sync diagnostics, **G6**
 queue/submit event, **G10** the live start option — is built (`docs/operate.md`, release 0.19.0)
@@ -110,3 +110,16 @@ clone already carries; they follow the medium set.
 - Verified: `import-live` of edir3 puts `drivers/CyberArk/jobs/process ent Refs.xml` and
   `jobs/StatisticsJob.xml` in the tree; `validate` says the first is disabled.
 - Not yet: diff, deploy, the `job.*` operations, the web's Jobs panel (J2).
+
+## 8. As built (J2)
+
+- `vault.diff`: `JOB_ADDED` / `JOB_REMOVED` / `JOB_CHANGED` (paths `drivers/<d>/jobs/<name>`,
+  `jobs/<name>`), comparing the document, the servers, the scopes and the trace settings; no
+  driver restart (the scheduler is told instead). A removed job needs `--delete-all jobs`.
+- `vault.deploy`: `ADD` with `DirXML-Job` and every attribute, or one `MODIFY` per attribute, then
+  a `NOTIFY_JOB` step (`NotifyJobUpdate`) so the engine's scheduler re-reads the object; the
+  snapshot covers the job DN; `vault.verify` re-reads it like everything else.
+- `job.list`, `job.status`, `job.start`, `job.abort` (docs/operate.md); the web's Vault view gets
+  a **Jobs** tab, the outline and the Developer tree list jobs.
+- Not yet: writing jobs into a Designer project (`ProjectWriter`) — read works; `CheckJobConfig`
+  and `DiscoverJobs` (the console's job wizard) are not offered.
