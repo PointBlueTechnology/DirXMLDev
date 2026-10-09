@@ -64,6 +64,7 @@ public final class AgentWriteGate {
             case "driver.migrate":
             case "driver.resync":
             case "driver.submit":
+            case "driver.start-option":
                 return true;
             case "driver.cache":
                 return "clear".equals(sub);

@@ -210,10 +210,50 @@ public final class OperateCli {
                     break;
                 }
 
+                case "driver.start-option": {
+                    String option = first(opts, "option");
+                    if (driver == null || option == null) {
+                        System.err.println("usage: driver.start-option --env E --driver D --option auto|manual|disabled [--yes] [--confirm E] [--json]");
+                        return 2;
+                    }
+                    result = Operate.startOption(engine, env, driver, option, yes, confirm, tree);
+                    break;
+                }
+
+                case "driver.associations": {
+                    if (driver == null) {
+                        System.err.println("usage: driver.associations --env E --driver D [--state processed|disabled|pending|manual|migrate] [--base DN] [--limit N] [--json]");
+                        return 2;
+                    }
+                    int limit = opts.containsKey("limit") ? Integer.parseInt(first(opts, "limit")) : 50;
+                    result = Operate.driverAssociations(engine, env, driver, first(opts, "state"), first(opts, "base"), limit);
+                    break;
+                }
+
+                case "driver.password-sync": {
+                    if (driver == null) {
+                        System.err.println("usage: driver.password-sync --env E --driver D [--json]");
+                        return 2;
+                    }
+                    result = Operate.passwordSync(engine, env, driver);
+                    break;
+                }
+
+                case "object.inspect": {
+                    String dn = first(opts, "dn");
+                    if (dn == null) {
+                        System.err.println("usage: object.inspect --env E --dn <object DN> [--json]");
+                        return 2;
+                    }
+                    result = Operate.inspectObject(engine, env, dn);
+                    break;
+                }
+
                 case "driver.submit": {
                     String xdsFile = first(opts, "xds");
-                    if (driver == null || xdsFile == null) {
-                        System.err.println("usage: driver.submit --env E --driver D --xds <file> --yes [--confirm E] [--tree DIR] [--json]");
+                    String mode = opts.containsKey("mode") ? first(opts, "mode") : "command";
+                    if (driver == null || xdsFile == null || !List.of("command", "event", "queue").contains(mode)) {
+                        System.err.println("usage: driver.submit --env E --driver D --xds <file> [--mode command|event|queue] --yes [--confirm E] [--tree DIR] [--json]");
                         return 2;
                     }
                     String gate = Operate.gate(env, Operate.OpClass.HEAVY, yes, confirm);
@@ -222,6 +262,32 @@ public final class OperateCli {
                         return 1;
                     }
                     String xds = java.nio.file.Files.readString(Paths.get(xdsFile), java.nio.charset.StandardCharsets.UTF_8);
+                    if (!mode.equals("command")) {
+                        // event: the publisher channel of a running driver; queue: into the subscriber cache, even of a stopped driver
+                        String driverDn = com.pointblue.dirxml.dev.deploy.VaultMapping.driverDn(env.driverSetDn, driver);
+                        byte[] bytes = xds.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                        String answer = null;
+                        String error = null;
+                        try {
+                            if (mode.equals("event")) {
+                                answer = vault.submitEvent(driverDn, bytes);
+                            } else {
+                                vault.queueEvent(driverDn, bytes);
+                            }
+                        } catch (RuntimeException e) {
+                            error = e.getMessage();
+                        }
+                        com.pointblue.dirxml.dev.deploy.DeployLog.Record rec = com.pointblue.dirxml.dev.deploy.DeployLog.record(env.name, "operate");
+                        rec.outcome = error == null ? "ok" : "failed";
+                        rec.detail = "driver.submit '" + driver + "': " + (mode.equals("event") ? "SubmitEvent" : "QueueEvent") + " from " + xdsFile + (error != null ? " — " + error : "");
+                        com.pointblue.dirxml.dev.deploy.DeployLog.append(tree, rec);
+                        if (json) {
+                            System.out.println("{\"ok\":" + (error == null) + ",\"mode\":\"" + mode + "\"" + (error != null ? ",\"error\":" + Operate.q(error) : "") + (answer != null ? ",\"result\":" + Operate.q(answer) : "") + "}");
+                        } else {
+                            System.out.print(error == null ? (mode.equals("event") ? "event submitted (" + bytes.length + " bytes)\n" + (answer == null || answer.isBlank() ? "" : answer + "\n") : "event queued into the cache (" + bytes.length + " bytes)\n") : "FAILED   " + error + "\n");
+                        }
+                        return error == null ? 0 : 1;
+                    }
                     Path simTree = opts.containsKey("tree") ? tree : null;
                     Submit.Outcome o = Submit.run(vault, env, driver,
                         com.pointblue.dirxml.dev.deploy.VaultMapping.driverDn(env.driverSetDn, driver), xds, simTree);
@@ -346,7 +412,11 @@ public final class OperateCli {
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
         System.err.println("  driver.trace show|set|reset|tail|view --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]   (view: the desktop viewer, or view --file F)");
-        System.err.println("  driver.submit --env E --driver D --xds <file> --yes [--tree DIR]   SubmitCommand; with --tree, the simulator canary");
+        System.err.println("  driver.submit --env E --driver D --xds <file> [--mode command|event|queue] --yes [--tree DIR]   SubmitCommand (subscriber), SubmitEvent (publisher) or QueueEvent (into the cache); with --tree, the simulator canary");
+        System.err.println("  driver.start-option --env E --driver D --option auto|manual|disabled [--yes] [--confirm E]   the start option, live");
+        System.err.println("  driver.associations --env E --driver D [--state processed|disabled|pending|manual|migrate] [--base DN] [--limit N] [--json]   the objects associated with the driver");
+        System.err.println("  driver.password-sync --env E --driver D [--json]   the driver set's sync timeout and the driver's password settings, live");
+        System.err.println("  object.inspect --env E --dn <object DN> [--json]   an object's classes, its associations across drivers, its password-sync status");
         System.err.println("  engine.version --env E");
         System.err.println("  engine.stats --env E [--driver D…] [--json]");
     }
