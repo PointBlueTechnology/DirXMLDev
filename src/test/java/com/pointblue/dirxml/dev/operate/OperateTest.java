@@ -72,6 +72,49 @@ public class OperateTest {
         final List<String> submitted = new java.util.ArrayList<>();                // the XDS documents submitCommand saw
         String submitAnswer = "";
         final Map<String, Map<String, List<byte[]>>> replaced = new LinkedHashMap<>();   // dn -> attr -> values
+        final List<String> calls = new java.util.ArrayList<>();                           // the secret and log-event operations, as "op dn [detail]"
+
+        @Override
+        public void setRemoteLoaderPassword(String dn, char[] value) {
+            calls.add("setRemoteLoaderPassword " + dn + " " + value.length);
+        }
+
+        @Override
+        public void setMutualAuthKeyPassword(String dn, char[] value) {
+            calls.add("setMutualAuthKeyPassword " + dn + " " + value.length);
+        }
+
+        @Override
+        public void setMutualAuthKeystorePassword(String dn, char[] value) {
+            calls.add("setMutualAuthKeystorePassword " + dn + " " + value.length);
+        }
+
+        @Override
+        public void clearRemoteLoaderPassword(String dn) {
+            calls.add("clearRemoteLoaderPassword " + dn);
+        }
+
+        @Override
+        public void clearMutualAuthKeyPassword(String dn) {
+            calls.add("clearMutualAuthKeyPassword " + dn);
+        }
+
+        @Override
+        public void clearMutualAuthKeystorePassword(String dn) {
+            calls.add("clearMutualAuthKeystorePassword " + dn);
+        }
+
+        @Override
+        public void setLogEvents(String dn, int[] eventIds) {
+            calls.add("setLogEvents " + dn + " " + java.util.Arrays.toString(eventIds));
+            put(entries.get(dn), "DirXML-LogEvents", java.util.Arrays.stream(eventIds).mapToObj(String::valueOf).toList());
+        }
+
+        @Override
+        public void clearLogEvents(String dn) {
+            calls.add("clearLogEvents " + dn);
+            entries.get(dn).attrs.remove("DirXML-LogEvents");
+        }
 
         @Override
         public String submitCommand(String driverDn, byte[] xds) {
@@ -765,5 +808,100 @@ public class OperateTest {
         Operate.Result none = Operate.driverHealth(fake, env("dev", Environments.Tier.DEV), DRIVER);
         assertTrue(none.text(), none.text().contains("none recorded"));
         assertTrue(none.text(), none.text().contains("health job      none in the driver set"));
+    }
+
+    // ---- M2: secret kinds, the log level, migrate into the application (docs/console-gaps.md §11) ----
+
+    private static Secrets secretsWith(String... kv) throws Exception {
+        Path f = Files.createTempFile("secrets", ".properties");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < kv.length; i += 2) {
+            sb.append(kv[i]).append('=').append(kv[i + 1]).append('\n');
+        }
+        Files.writeString(f, sb.toString());
+        return Secrets.load(f);
+    }
+
+    @Test
+    public void secretsSetAndRemoveDispatchByKind() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        fake.entries.put(DRIVER_DN, FakeEngine.entry(DRIVER_DN, DRIVER, List.of("Top", "DirXML-Driver")));
+        Secrets secrets = secretsWith(DRIVER + ".remote-loader-password", "rl1", DRIVER + ".mutual-auth-key-password", "k1",
+            DRIVER + ".mutual-auth-keystore-password", "ks1", DRIVER + ".shim-auth-password", "sa1");
+        Path tree = Files.createTempDirectory("op");
+        Environments.Environment env = env("dev", Environments.Tier.DEV);
+        assertTrue(Operate.secretsSet(fake, env, DRIVER, "remote-loader", null, secrets, false, false, null, tree).ok);
+        assertTrue(Operate.secretsSet(fake, env, DRIVER, "key", null, secrets, false, false, null, tree).ok);
+        assertTrue(Operate.secretsSet(fake, env, DRIVER, "keystore", null, secrets, false, false, null, tree).ok);
+        assertTrue(Operate.secretsSet(fake, env, DRIVER, "shim-auth", null, secrets, false, false, null, tree).ok);
+        assertEquals(List.of("setRemoteLoaderPassword " + DRIVER_DN + " 3", "setMutualAuthKeyPassword " + DRIVER_DN + " 2", "setMutualAuthKeystorePassword " + DRIVER_DN + " 3"), fake.calls);
+        assertEquals("sa1", fake.entries.get(DRIVER_DN).string("DirXML-ShimAuthPassword"));
+        fake.calls.clear();
+        assertTrue(Operate.secretsRemove(fake, env, DRIVER, "remote-loader", null, false, null, tree).ok);
+        assertTrue(Operate.secretsRemove(fake, env, DRIVER, "key", null, false, null, tree).ok);
+        assertTrue(Operate.secretsRemove(fake, env, DRIVER, "keystore", null, false, null, tree).ok);
+        assertEquals(List.of("clearRemoteLoaderPassword " + DRIVER_DN, "clearMutualAuthKeyPassword " + DRIVER_DN, "clearMutualAuthKeystorePassword " + DRIVER_DN), fake.calls);
+        Operate.Result bad = Operate.secretsSet(fake, env, DRIVER, "nope", null, secrets, false, false, null, tree);
+        assertTrue(bad.text(), !bad.ok && bad.text().contains("--kind is one of"));
+        Operate.Result noName = Operate.secretsSet(fake, env, DRIVER, "named", null, secrets, false, false, null, tree);
+        assertTrue(noName.text(), !noName.ok && noName.text().contains("--name"));
+    }
+
+    @Test
+    public void logLevelShowsAndSetsADriverAndTheSet() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        Vault.Entry d = FakeEngine.entry(DRIVER_DN, DRIVER, List.of("Top", "DirXML-Driver"));
+        fake.entries.put(DRIVER_DN, d);
+        Vault.Entry ds = FakeEngine.entry(DS_DN, "driverset1", List.of("Top", "DirXML-DriverSet"));
+        FakeEngine.put(ds, "DirXML-DriverTraceLevel", List.of("1"));
+        FakeEngine.put(ds, "DirXML-LogEvents", List.of("3", "4", "5", "35", "38", "39"));
+        FakeEngine.put(ds, "DirXML-LogLimit", List.of("50"));
+        fake.entries.put(DS_DN, ds);
+        Environments.Environment env = env("dev", Environments.Tier.DEV);
+        Operate.Result show = Operate.logLevelShow(fake, env, DRIVER);
+        assertTrue(show.text(), show.text().contains("uses the driver set's settings"));
+        Operate.Result setShow = Operate.logLevelShow(fake, env, null);
+        assertTrue(setShow.text(), setShow.text().contains("1 (errors-and-warnings)"));
+        assertTrue(setShow.json(), setShow.json().contains("\"events\":[3,4,5,35,38,39]"));
+        Path tree = Files.createTempDirectory("op");
+        Operate.Result set = Operate.logLevelSet(fake, env, DRIVER, 0, null, 20, null, false, null, tree);
+        assertTrue(set.text(), set.ok);
+        assertEquals("0", d.string("DirXML-DriverTraceLevel"));
+        assertEquals("20", d.string("DirXML-LogLimit"));
+        assertTrue(fake.calls.toString(), fake.calls.contains("setLogEvents " + DRIVER_DN + " [4, 5, 38]"));
+        Operate.Result off = Operate.logLevelSet(fake, env, DRIVER, 3, null, null, null, false, null, tree);
+        assertTrue(off.text(), off.ok);
+        assertTrue(fake.calls.toString(), fake.calls.contains("clearLogEvents " + DRIVER_DN));
+        Operate.Result specific = Operate.logLevelSet(fake, env, DRIVER, 5, null, null, null, false, null, tree);
+        assertTrue(specific.text(), !specific.ok && specific.text().contains("needs --events"));
+        Operate.Result inherit = Operate.logLevelSet(fake, env, DRIVER, null, null, null, null, true, false, null, tree);
+        assertTrue(inherit.text(), inherit.ok);
+        assertTrue(d.string("DirXML-DriverTraceLevel") == null && d.string("DirXML-LogLimit") == null);
+        assertEquals(0, Operate.logLevelValue("errors"));
+        assertEquals(5, Operate.logLevelValue("specific-events"));
+        assertEquals(-1, Operate.logLevelValue("loud"));
+    }
+
+    @Test
+    public void migrateIntoTheApplicationSendsOneSyncPerObject() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        fake.entries.put(DRIVER_DN, FakeEngine.entry(DRIVER_DN, DRIVER, List.of("Top", "DirXML-Driver")));
+        fake.states.put(DRIVER_DN, Vault.STATE_RUNNING);
+        fake.searches.put("(employeeType=contractor)", List.of(
+            FakeEngine.entry("cn=a,ou=users,o=data", "a", List.of("Top", "User")),
+            FakeEngine.entry("cn=b,ou=users,o=data", "b", List.of("Top", "User"))));
+        fake.submitAnswer = "<nds><output><status level=\"success\"/></output></nds>";
+        Environments.Environment env = env("dev", Environments.Tier.DEV);
+        Path tree = Files.createTempDirectory("op");
+        Operate.Result dry = Operate.migrateIntoApp(fake, env, DRIVER, "ou=users,o=data", "(employeeType=contractor)", "User", 500, true, false, null, tree);
+        assertTrue(dry.text(), dry.ok && dry.text().contains("2 object(s) would be migrated") && fake.submitted.isEmpty());
+        Operate.Result r = Operate.migrateIntoApp(fake, env, DRIVER, "ou=users,o=data", "(employeeType=contractor)", "User", 1, false, true, null, tree);
+        assertTrue(r.text(), r.ok);
+        assertEquals(1, fake.submitted.size());
+        assertTrue(fake.submitted.get(0), fake.submitted.get(0).contains("<sync class-name=\"User\" event-id=\"dirxmldev-migrate\" src-dn=\"data\\users\\a\"/>"));
+        assertTrue(r.text(), r.text().contains("1 object(s) sent into 'Querytest': 1 ok, 0 failed"));
+        fake.states.put(DRIVER_DN, Vault.STATE_STOPPED);
+        Operate.Result stopped = Operate.migrateIntoApp(fake, env, DRIVER, "ou=users,o=data", "(employeeType=contractor)", "User", 500, false, true, null, tree);
+        assertTrue(stopped.text(), !stopped.ok && stopped.text().contains("needs a running driver"));
     }
 }

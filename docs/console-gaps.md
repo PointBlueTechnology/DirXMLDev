@@ -1,6 +1,6 @@
 # Identity Console gaps: design note
 
-Status: **decided 2026-10-09** (section 5); J1, J2, R1 and M1 built (jobs; entitlement policies; `driver.query`, `driver.health`); M2 next. Basis: *DirXMLDev CLI vs Identity
+Status: **decided 2026-10-09** (section 5); J1, J2, R1, M1 built and M2 in progress (G5, G12, G11 built; G8 next). Basis: *DirXMLDev CLI vs Identity
 Console API: Capability Gaps* (2026-10-09, 208 `edirapi` routes against DirXMLDev 0.18.0). The
 first set — **G3** association and object inspection, **G4** password-sync diagnostics, **G6**
 queue/submit event, **G10** the live start option — is built (`docs/operate.md`, release 0.19.0)
@@ -220,4 +220,39 @@ piece). The health job's actions (start, stop, restart, clear the cache, send e-
 listed by count, not by kind. The web's Objects tab is to get "ask the application" beside the vault's
 answer (an R2/M1b web change). Custom shims that are not installed on a lab engine refuse to start,
 which is the engine's doing, not the query's.
+
+## 11. As built (M2, first part): migrate into the application, the log level, the extra secrets
+
+**G5 `driver.migrate --direction vault --base DN --filter F --class C [--max N] [--dry-run]`.** The engine
+has no verb for it: the console's `migrateFromNDS` searches the vault itself and then migrates object by
+object (`migrateObject`, with `migrateStatus` for the progress). The command does the same: an LDAP search,
+then one `<sync class-name src-dn>` command per object through the running driver's subscriber channel
+(`SubmitCommand`), which makes the engine read the object and send its add or modify to the shim; each
+object's status is reported and the run is audited as one line. `--dry-run` lists the objects. The old
+`driver.migrate --xds` (the engine's `MigrateApp`, from the application) stays as `--direction app`, the
+default when `--xds` is given. Not proven live: the only lab driver that would run safely is a Loopback
+whose publisher policy writes an association back onto the user, so the live check stopped at the dry run.
+
+**G12 `driver.log-level [set] --env E [--driver D]`.** Grounded on Designer's log level page
+(`com.novell.idm.config`, `LogLevelComposite`, and `DSUtil.LOG_LEVEL_n_EVENTS`, read 2026-10-09): the
+page's radio lands in `DirXML-DriverTraceLevel` — 0 log errors, 1 errors and warnings, 2 only update the
+last log time, 3 logging off, 5 log specific events (6 was XDAS events before 4.8) — and the event ids it
+implies in `DirXML-LogEvents` (0 → 4 5 38; 1 → 3 4 5 35 38 39; 2 → -1; 3 → none). That attribute is
+engine-written, so it is set through `SetLogEvents` / `ClearLogEvents`. `DirXML-LogLimit` is the most
+log entries kept (0 turns the set's logging off), `DirXML-LogEventsType` the page's format choice. A driver
+without its own values uses the driver set's; `--inherit` clears a driver's four. The command shows all of
+this for a driver or the set and sets it live; `--level specific-events` needs `--events`. The trace
+settings were never in the tree (they are operational, `driver.trace`), and the log level follows them
+rather than the note's earlier idea of a tree attribute.
+
+**G11 `driver.secrets set|remove --kind named|shim-auth|remote-loader|key|keystore`.** The engine's
+`SetRemoteLoaderPassword`, `SetMutualAuthKeyPassword` and `SetMutualAuthKSPassword` (and their Clear
+operations) are what the console's `rlPassword`, `keyPassword` and `keystorePassword` call. Two new
+secret kinds, `<driver>.mutual-auth-key-password` and `<driver>.mutual-auth-keystore-password`, join the
+inventory as optional needs of a Remote Loader driver (no missing-secret note when absent); the deployer
+sets all three where before it skipped Remote Loader passwords as unsupported.
+
+**Left for later.** G8 (the e-mail server and the notification templates). The event ids' names (the
+engine's audit event table) are shown as numbers. The migrate-into-application path is tested against the
+fake engine only.
 

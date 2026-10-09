@@ -482,7 +482,9 @@ public final class Plan {
                             secretSteps.add(new Step(Op.SET_SECRET, dn, need.key, null, null,
                                 "set secret " + need.key + " (" + need.kind + ")", c.path, c.driver));
                         } else {
-                            p.missingSecrets.add(need.key + " — " + need.because);
+                            if (!need.optional) {
+                                p.missingSecrets.add(need.key + " — " + need.because);
+                            }
                         }
                     }
                     break;
@@ -573,7 +575,9 @@ public final class Plan {
                         secretSteps.add(new Step(Op.SET_SECRET, dn, need.key, null, null,
                             "set secret " + need.key + " (" + need.kind + ")", "secrets#" + d.name, d.name));
                     } else {
-                        p.missingSecrets.add(need.key + " — " + need.because);
+                        if (!need.optional) {
+                                p.missingSecrets.add(need.key + " — " + need.because);
+                            }
                     }
                 }
             }
