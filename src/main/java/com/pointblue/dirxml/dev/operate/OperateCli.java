@@ -243,6 +243,20 @@ public final class OperateCli {
                     result = Operate.jobList(engine, env, driver);
                     break;
 
+                case "rbe.list":
+                    result = Operate.rbeList(engine, env);
+                    break;
+
+                case "rbe.members": {
+                    String policy = first(opts, "policy");
+                    if (policy == null) {
+                        System.err.println("usage: rbe.members --env E --policy P [--json]");
+                        return 2;
+                    }
+                    result = Operate.rbeMembers(engine, env, policy);
+                    break;
+                }
+
                 case "job.status": {
                     String job = first(opts, "job");
                     if (job == null) {
@@ -442,6 +456,8 @@ public final class OperateCli {
         System.err.println("  driver.associations --env E --driver D [--state processed|disabled|pending|manual|migrate] [--base DN] [--limit N] [--json]   the objects associated with the driver");
         System.err.println("  driver.password-sync --env E --driver D [--json]   the driver set's sync timeout and the driver's password settings, live");
         System.err.println("  object.inspect --env E --dn <object DN> [--json]   an object's classes, its associations across drivers, its password-sync status");
+        System.err.println("  rbe.list --env E [--json]                          the entitlement policies of the driver set: priority, membership, grants, member count");
+        System.err.println("  rbe.members --env E --policy P [--json]            the members the directory computes for one policy (static and dynamic)");
         System.err.println("  job.list --env E [--driver D] [--json]             every job of the driver set (or one driver) with the engine's state");
         System.err.println("  job.status --env E --job J [--driver D] [--json]   one job: class, servers, running, configuration, scheduled, next run");
         System.err.println("  job.start|abort --env E --job J [--driver D] [--yes] [--confirm E]   StartJob / AbortJob, live");

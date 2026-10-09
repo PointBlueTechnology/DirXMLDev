@@ -93,6 +93,9 @@ public final class ExportWriter {
         if (!ds.jobs.isEmpty()) {
             children.appendChild(jobsElement(doc, ds.jobs));
         }
+        if (!ds.rbePolicies.isEmpty()) {
+            children.appendChild(rbePoliciesElement(doc, ds));
+        }
         if (!ds.library.policies.isEmpty() || !libraryResources.isEmpty()) {
             Element lib = doc.createElement("policy-library");
             lib.setAttribute("name", "Library");
@@ -554,6 +557,85 @@ public final class ExportWriter {
 
     /** {@code <entitlement-definition name=…>} holding the entitlement document, the way Designer's export carries one. */
     /** {@code <jobs>}: one {@code <job name=… trace-level=…>} per job with its document, {@code <server dn>} and {@code <scope value>} children. */
+    /**
+     * {@code <rbe-policies>} as Designer's deploy writes it (docs/console-gaps.md §9): the container
+     * {@code ds-object} with its {@code DirXML-SPPriority} typed names, the policies nested, the two
+     * XML attributes base64-encoded as Designer does.
+     */
+    private static Element rbePoliciesElement(Document doc, DriverSet ds) {
+        Element rbeEl = doc.createElement("rbe-policies");
+        Element set = doc.createElement("ds-object");
+        set.setAttribute("ds-object-class", "DirXML-SharedProfileSet");
+        set.setAttribute("ds-object-name", ds.rbeContainerName());
+        rbeEl.appendChild(set);
+        Element setAttrs = doc.createElement("ds-attributes");
+        set.appendChild(setAttrs);
+        String setDn = "cn=" + ds.rbeContainerName() + "," + dsDn(ds);
+        List<com.pointblue.dirxml.dev.model.EntitlementPolicy> ordered = new ArrayList<>(ds.rbePolicies);
+        ordered.sort(java.util.Comparator.comparing((com.pointblue.dirxml.dev.model.EntitlementPolicy p) -> p.priority == null ? Integer.MAX_VALUE : p.priority).thenComparing(p -> p.name));
+        Element prio = null;
+        for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : ordered) {
+            if (p.priority == null) {
+                continue;
+            }
+            if (prio == null) {
+                prio = doc.createElement("ds-attribute");
+                prio.setAttribute("ds-attr-name", "DirXML-SPPriority");
+                setAttrs.appendChild(prio);
+            }
+            Element v = doc.createElement("ds-value");
+            prio.appendChild(v);
+            v.appendChild(textEl(doc, "typed-name-level", String.valueOf(p.priority)));
+            v.appendChild(textEl(doc, "typed-name-interval", "0"));
+            v.appendChild(textEl(doc, "rbe-policy", "cn=" + p.name + "," + setDn));
+        }
+        for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : ordered) {
+            Element pe = doc.createElement("ds-object");
+            pe.setAttribute("ds-object-class", "DirXML-SharedProfile");
+            pe.setAttribute("ds-object-name", p.name);
+            if (p.meta.get("designer.guid") != null) {
+                pe.setAttribute("designer-guid", p.meta.get("designer.guid"));
+            }
+            Element attrs = doc.createElement("ds-attributes");
+            pe.appendChild(attrs);
+            dsValue(doc, attrs, "Description", p.description == null ? List.of() : List.of(p.description), false);
+            dsValue(doc, attrs, "DirXML-SPDisplayEntitlements", p.displayEntitlements == null ? List.of() : List.of(CanonicalXml.serialize(p.displayEntitlements)), true);
+            dsValue(doc, attrs, "DirXML-SPFilterXML", p.criteria == null ? List.of() : List.of(CanonicalXml.serialize(p.criteria)), true);
+            dsValue(doc, attrs, "dgIdentity", p.identity == null ? List.of() : List.of(p.identity), false);
+            dsValue(doc, attrs, "memberQuery", p.memberQuery == null ? List.of() : List.of(p.memberQuery), false);
+            dsValue(doc, attrs, "Member", p.members, false);
+            dsValue(doc, attrs, "excludedMember", p.excludedMembers, false);
+            dsValue(doc, attrs, "DirXML-EntitlementRef", p.entitlementRefs, false);
+            set.appendChild(pe);
+        }
+        return rbeEl;
+    }
+
+    private static void dsValue(Document doc, Element attrs, String name, List<String> values, boolean base64) {
+        if (values.isEmpty()) {
+            return;
+        }
+        Element a = doc.createElement("ds-attribute");
+        a.setAttribute("ds-attr-name", name);
+        attrs.appendChild(a);
+        for (String v : values) {
+            Element ve = doc.createElement("ds-value");
+            if (base64) {
+                ve.setAttribute("base64-encoded", "true");
+                ve.appendChild(doc.createCDATASection(java.util.Base64.getEncoder().encodeToString(v.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+            } else {
+                ve.appendChild(doc.createCDATASection(v));
+            }
+            a.appendChild(ve);
+        }
+    }
+
+    private static Element textEl(Document doc, String name, String text) {
+        Element e = doc.createElement(name);
+        e.appendChild(doc.createCDATASection(text));
+        return e;
+    }
+
     private static Element jobsElement(Document doc, List<com.pointblue.dirxml.dev.model.Job> jobs) {
         Element jobsEl = doc.createElement("jobs");
         for (com.pointblue.dirxml.dev.model.Job j : jobs) {

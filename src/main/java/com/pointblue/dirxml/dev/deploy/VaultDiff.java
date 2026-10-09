@@ -165,6 +165,13 @@ public final class VaultDiff {
                 missing.add(name);
             }
         }
+        // the entitlement policies belong with the Entitlements Service driver: scoped to it, they travel too
+        for (Driver d : n.drivers) {
+            if (com.pointblue.dirxml.dev.model.EntitlementPolicy.SERVICE_SHIM_CLASS.equals(d.shimClass)) {
+                n.rbePolicies.addAll(ds.rbePolicies);
+                break;
+            }
+        }
         return n;
     }
 }

@@ -317,7 +317,7 @@ public final class Cli {
             if (args.length >= 1 && args[0].startsWith("viewer.")) {
                 System.exit(com.pointblue.dirxml.dev.operate.ViewerCli.run(args));
             }
-            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].startsWith("job.") || args[0].equals("object.inspect"))) {
+            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].startsWith("job.") || args[0].startsWith("rbe.") || args[0].equals("object.inspect"))) {
                 System.exit(com.pointblue.dirxml.dev.operate.OperateCli.run(args));
             }
             if (args.length >= 3 && args[0].equals("tree.diff")) {
@@ -455,7 +455,7 @@ public final class Cli {
         System.err.println("  vault.diff <tree> --env E [--driver D…] [--json]     the tree vs the live vault (exit 1 if they differ; docs/vault-deploy.md)");
         System.err.println("  vault.verify <tree> --env E [--driver D…] [--json]   same diff, read after a deploy");
         System.err.println("  vault.deploy <tree> --env E [--driver D…] --dry-run|--yes|--step [--confirm E] [--no-restart] [--secrets none|missing|all]");
-        System.err.println("               [--allow-missing-secrets] [--capture-drift] [--delete-driver D…] [--delete-all entitlements|forms|prds|roles|entities|<object kind>s…] [--json]");
+        System.err.println("               [--allow-missing-secrets] [--capture-drift] [--delete-driver D…] [--delete-all entitlements|jobs|rbe-policies|forms|prds|roles|entities|<object kind>s…] [--json]");
         System.err.println("                                        plan → snapshot → write → restart → verify → audit line; never deletes a driver without --delete-driver");
         System.err.println("  vault.rollback --env E --snapshot <file.ldif> [--yes] [--json]   restore a deploy's snapshot");
         System.err.println("  vault.schema <tree> --env E [--json]                  cn=schema → schema/vault.xml (a read of the vault; docs/schema.md)");

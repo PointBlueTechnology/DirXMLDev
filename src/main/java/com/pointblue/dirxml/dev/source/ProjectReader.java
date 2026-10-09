@@ -212,6 +212,10 @@ public final class ProjectReader {
             }
         }
 
+        for (String key : relationKeys(m, "Idm:RbePolicies")) {
+            readRbeContainer(idx, idOf(key), ds);
+        }
+
         for (String libKey : relationKeys(m, "Idm:Libraries")) {
             readLibrary(idx, idOf(libKey), ds);
         }
@@ -1001,6 +1005,117 @@ public final class ProjectReader {
         }
         copyPackageMeta(m, j.meta, idx);
         return j;
+    }
+
+    /**
+     * Designer's RBE container ({@code Idm:RbePolicies} on the driver set, docs/console-gaps.md §9), from
+     * its model code ({@code RBEContainerImpl}, {@code RBEPolicyImpl}; no sample project held one when this
+     * was written): the container CObject carries {@code Priority} values {@code <policy>#<level>#<interval>}
+     * and the {@code Idm:RbePolicies} relation to its policies, each a CObject with the vault's own
+     * attribute names ({@code Description}, {@code memberQuery}, {@code dgIdentity}, {@code Member},
+     * {@code excludedMember}, {@code DirXML-SPFilterXML}, {@code DirXML-SPDisplayEntitlements}) — the
+     * display document possibly as the CObject's contents.
+     */
+    private static void readRbeContainer(Index idx, String id, DriverSet ds) {
+        Element m = idx.parseMeta(id);
+        if (m == null || isRefStub(m)) {
+            return;
+        }
+        String container = attr(m, "name", null);
+        if (container != null && !container.isEmpty() && !container.equalsIgnoreCase(DriverSet.DEFAULT_RBE_CONTAINER)) {
+            ds.meta.put(DriverSet.RBE_CONTAINER_META, container);
+        }
+        Map<String, Integer> levels = new java.util.LinkedHashMap<>();
+        for (String v : attrValues(m, "Priority")) {
+            String[] parts = v.split("#", 3);
+            if (parts.length >= 2) {
+                try {
+                    String n = parts[0];
+                    int eq = n.indexOf('=');
+                    int comma = n.indexOf(',');
+                    if (eq >= 0 && (comma < 0 || eq < comma)) {
+                        n = comma < 0 ? n.substring(eq + 1) : n.substring(eq + 1, comma);
+                    }
+                    levels.put(n.toLowerCase(), Integer.parseInt(parts[1].trim()));
+                } catch (NumberFormatException e) {
+                    // unordered
+                }
+            }
+        }
+        for (String key : relationKeys(m, "Idm:RbePolicies")) {
+            Element pm = idx.parseMeta(idOf(key));
+            if (pm == null || isRefStub(pm)) {
+                continue;
+            }
+            String name = attr(pm, "name", null);
+            if (name == null) {
+                continue;
+            }
+            com.pointblue.dirxml.dev.model.EntitlementPolicy p = new com.pointblue.dirxml.dev.model.EntitlementPolicy(name);
+            p.meta.put("designer.id", idOf(key));
+            p.meta.put("designer.type", idx.typeById.getOrDefault(idOf(key), "RBEPolicy"));
+            p.description = attrValue(pm, "Description");
+            p.memberQuery = attrValue(pm, "memberQuery");
+            p.identity = attrValue(pm, "dgIdentity");
+            p.members.addAll(attrValues(pm, "Member"));
+            p.excludedMembers.addAll(attrValues(pm, "excludedMember"));
+            p.entitlementRefs.addAll(attrValues(pm, "DirXML-EntitlementRef"));
+            String crit = attrValue(pm, "DirXML-SPFilterXML");
+            if (crit != null) {
+                try {
+                    p.criteria = CanonicalXml.normalize(CanonicalXml.parse(crit).getDocumentElement());
+                } catch (RuntimeException e) {
+                    p.meta.put("criteria.unreadable", "true");
+                }
+            }
+            String disp = attrValue(pm, "DirXML-SPDisplayEntitlements");
+            Element dispEl = null;
+            if (disp != null) {
+                try {
+                    dispEl = CanonicalXml.normalize(CanonicalXml.parse(disp).getDocumentElement());
+                } catch (RuntimeException e) {
+                    // fall through to the contents file
+                }
+            }
+            if (dispEl == null) {
+                Path c = idx.contentsById.get(idOf(key));
+                if (c != null) {
+                    try {
+                        dispEl = Xds.parseFile(c).getDocumentElement();
+                    } catch (Exception e) {
+                        // no display document
+                    }
+                }
+            }
+            p.displayEntitlements = dispEl;
+            if (p.entitlementRefs.isEmpty()) {
+                p.entitlementRefs.addAll(p.refsFromDisplay());
+            }
+            p.priority = levels.get(name.toLowerCase());
+            copyPackageMeta(pm, p.meta, idx);
+            ds.rbePolicies.add(p);
+        }
+    }
+
+    /** Every value of a CObject attribute: its {@code value} attribute and any {@code <values>}/{@code <value>} children. */
+    private static List<String> attrValues(Element cobject, String attrName) {
+        List<String> out = new ArrayList<>();
+        Element a = attrElement(cobject, attrName);
+        if (a == null) {
+            return out;
+        }
+        String v = a.getAttribute("value");
+        if (!v.isEmpty()) {
+            out.add(v);
+        }
+        for (Element c : Xds.childElements(a)) {
+            String ln = c.getLocalName() != null ? c.getLocalName() : c.getNodeName();
+            if (ln.equals("values") || ln.equals("value")) {
+                String cv = c.getAttribute("value");
+                out.add(cv.isEmpty() ? Xds.text(c) : cv);
+            }
+        }
+        return out;
     }
 
     private static Entitlement readEntitlement(Index idx, String id) {
