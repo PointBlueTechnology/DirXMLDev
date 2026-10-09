@@ -25,6 +25,8 @@ public final class DriverSet {
     public final List<Driver> drivers = new ArrayList<>();
     /** The servers that serve this set ({@code DirXML-ServerList}), the connection's own included; empty when unknown. */
     public final List<String> servers = new ArrayList<>();
+    /** The set's own jobs ({@code DirXML-Job} objects directly under it, e.g. a statistics job). */
+    public final List<Job> jobs = new ArrayList<>();
     /** Per environment, the values that differ from the tree's base ({@code overrides/<env>.properties}; see {@code deploy.Overrides}). */
     public final java.util.Map<String, java.util.Map<String, String>> overrides = new java.util.TreeMap<>();
     public final Map<String, String> meta = new LinkedHashMap<>();

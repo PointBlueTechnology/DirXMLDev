@@ -90,6 +90,9 @@ public final class ExportWriter {
             }
         }
 
+        if (!ds.jobs.isEmpty()) {
+            children.appendChild(jobsElement(doc, ds.jobs));
+        }
         if (!ds.library.policies.isEmpty() || !libraryResources.isEmpty()) {
             Element lib = doc.createElement("policy-library");
             lib.setAttribute("name", "Library");
@@ -199,6 +202,9 @@ public final class ExportWriter {
         }
         for (Entitlement ent : d.entitlements) {
             children.appendChild(entitlementElement(doc, ent));
+        }
+        if (!d.jobs.isEmpty()) {
+            children.appendChild(jobsElement(doc, d.jobs));
         }
         children.appendChild(channelElement(doc, "publisher", "Publisher", d.publisher.policies,
             d.resources, Scope.PUBLISHER, publisherIncludes));
@@ -412,6 +418,9 @@ public final class ExportWriter {
         for (Entitlement ent : d.entitlements) {
             children.appendChild(entitlementElement(doc, ent));
         }
+        if (!d.jobs.isEmpty()) {
+            children.appendChild(jobsElement(doc, d.jobs));
+        }
         children.appendChild(channelElement(doc, "publisher", "Publisher", d.publisher.policies,
             d.resources, Scope.PUBLISHER));
         children.appendChild(channelElement(doc, "subscriber", "Subscriber", d.subscriber.policies,
@@ -544,6 +553,36 @@ public final class ExportWriter {
     }
 
     /** {@code <entitlement-definition name=…>} holding the entitlement document, the way Designer's export carries one. */
+    /** {@code <jobs>}: one {@code <job name=… trace-level=…>} per job with its document, {@code <server dn>} and {@code <scope value>} children. */
+    private static Element jobsElement(Document doc, List<com.pointblue.dirxml.dev.model.Job> jobs) {
+        Element jobsEl = doc.createElement("jobs");
+        for (com.pointblue.dirxml.dev.model.Job j : jobs) {
+            Element je = doc.createElement("job");
+            je.setAttribute("name", j.name);
+            for (String a : new String[] { "trace-level", "trace-file", "trace-size-limit" }) {
+                if (j.meta.get(a) != null) {
+                    je.setAttribute(a, j.meta.get(a));
+                }
+            }
+            copyArtifactMetaAttrs(je, j.meta);
+            for (String sdn : j.servers) {
+                Element se = doc.createElement("server");
+                se.setAttribute("dn", sdn);
+                je.appendChild(se);
+            }
+            for (String sc : j.scopes) {
+                Element se = doc.createElement("scope");
+                se.setAttribute("value", sc);
+                je.appendChild(se);
+            }
+            if (j.definition != null) {
+                je.appendChild(doc.importNode(j.definition, true));
+            }
+            jobsEl.appendChild(je);
+        }
+        return jobsEl;
+    }
+
     private static Element entitlementElement(Document doc, Entitlement ent) {
         Element e = doc.createElement("entitlement-definition");
         e.setAttribute("name", ent.name);

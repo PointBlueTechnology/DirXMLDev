@@ -131,6 +131,15 @@ path. Quote it when the driver name contains spaces.
 
 Passwords are not in these files. They live in `secrets-<env>.properties`.
 
+### `jobs/`
+
+`<name>.xml` for each `DirXML-Job` on the driver: the job's configuration document
+(`<job-aggregation>`). The servers it runs on, its scopes and its trace settings are
+on the manifest's `<job>` entry. The driver set's own jobs (a statistics job) are
+`jobs/<name>.xml` beside `driverset.xml`, listed in it the same way. Read from the
+vault, an LDIF, a Designer project (`Idm:Jobs`) and an export (`<jobs>`); not deployed
+yet (docs/console-gaps.md §1, phase J2).
+
 ### `entitlements/`
 
 `<name>.xml` for each `DirXML-Entitlement` on the driver. Workflows grant
