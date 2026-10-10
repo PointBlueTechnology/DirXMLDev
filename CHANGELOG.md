@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-10
+
 ### Added
 
 - **`Vault.open`** for services that sign a person in and must not keep the password (Directory
