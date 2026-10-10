@@ -13,6 +13,9 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   Console): it borrows the caller's bound JNDI connection (left open by `close`) and binds the
   extended-operation connection once, through the caller's TLS socket factory. The password is used
   for that bind only. A missing `dirxml_misc.jar` is now reported as such.
+- **`Operate.Engine` and `Operate.CachePage` are public**, and `Environments.Environment.forService`
+  builds an environment from a name, a driver set and a tier: a service can call `Operate` with its
+  own connections (`Operate.vaultEngine(Vault.open(…))`) and test against a fake engine.
 
 ## [0.26.0] - 2026-10-09
 

@@ -56,20 +56,23 @@ public final class Operate {
      * A page of a driver's event cache — decoupled from {@link Vault.CachePage} (whose
      * constructor is package-private to {@code deploy}) so a test fake can build one.
      */
-    static final class CachePage {
-        final String xds;
-        final int nextToken;
-        final boolean empty;
+    public static final class CachePage {
+        public final String xds;
+        public final int nextToken;
+        public final boolean empty;
 
-        CachePage(String xds, int nextToken) {
+        public CachePage(String xds, int nextToken) {
             this.xds = xds == null ? "" : xds;
             this.nextToken = nextToken;
             this.empty = this.xds.isEmpty();
         }
     }
 
-    /** Package-private so tests can supply a fake without touching the real (final) {@link Vault}. */
-    interface Engine {
+    /**
+     * Everything this class needs from a live vault. Public so a service (Directory Console) can pass
+     * {@link #vaultEngine} results around and its tests can supply a fake without the real (final) {@link Vault}.
+     */
+    public interface Engine {
         int driverState(String dn);
 
         int driverStartOption(String dn);
