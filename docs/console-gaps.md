@@ -1,6 +1,6 @@
 # Identity Console gaps: design note
 
-Status: **decided 2026-10-09** (section 5); J1, J2, R1, M1 and M2 built (G5, G12, G11 in §11; G8 in §12); L1 as needed. Basis: *DirXMLDev CLI vs Identity
+Status: **decided 2026-10-09** (section 5); J1, J2, R1, M1, M2 and L1 built (§7–§13). Done, except where §13 says otherwise. Basis: *DirXMLDev CLI vs Identity
 Console API: Capability Gaps* (2026-10-09, 208 `edirapi` routes against DirXMLDev 0.18.0). The
 first set — **G3** association and object inspection, **G4** password-sync diagnostics, **G6**
 queue/submit event, **G10** the live start option — is built (`docs/operate.md`, release 0.19.0)
@@ -284,4 +284,30 @@ Vault (`Idm:NotfTemplates`), not in the driver set export.
 
 **Left for later.** Designer's project (`Idm:NotfTemplates`) and export are not read for templates;
 the package installer's type-4 (template) packages stay as noted in docs/packages.md §7.
+
+## 13. As built (L1): the low set
+
+- **G13 driver set administration.** `driverset.activation` shows the activation as the engine reports
+  it: `ViewActivation` when it answers (edir3 and idm254 answer "Other" — their activation is the
+  installation's), and the set's own attributes either way (`DirXML-Act1/2/3` as present, with the
+  timestamp `DirXML-Act2` opens with — 2026-12-22 on edir3 —, `DirXML-ActivationDate`); `apply --file`
+  sends a vendor credential through `ApplyActivation`. `driverset.servers` lists `DirXML-ServerList`
+  and what the connected server reports running (`GetDriverSet`); `add` / `remove --server DN` go to
+  that server and call `SetDriverSet` / `ClearDriverSet` (heavy write; refused when the server runs
+  another set; not exercised live — edir3 has one server, and clearing it would stop everything).
+  Server-specific attributes were already the tree's `servers/` overrides; version discovery (`VDT`)
+  is `engine.version` plus the version each server's trace shows.
+- **G15 metrics.** `engine.metrics`: users, users with an association, the enabled ones among them
+  (the console's licensing count, its own filter), and each driver's associations by state —
+  all counts, read with no attributes (`Vault.count`). edir3: 13154 users under `o=data`, 21
+  associated, 20 enabled.
+- **G16 effective rights.** `driver.rights --driver D --dn O [--attr A…]`: eDirectory's
+  `GetEffectivePrivileges` for the driver object as trustee — `[Entry Rights]`,
+  `[All Attributes Rights]` and the attributes named (LDAP names; the NDS name is "No Such
+  Attribute"). Not a `doctor` check yet: a rule set of which rights a driver needs where is a
+  separate piece of thinking.
+- **G14 work orders.** `workorder.list [--base DN]`: the `DirXML-WorkOrder` objects with status, due
+  date and description. Listed, not modelled: they are the Work Order driver's runtime records, not
+  configuration, so the note's "tree objects" idea was dropped. **Excluded objects**: this schema has no
+  attribute for them and the console's route could not be grounded on a lab object; left out.
 

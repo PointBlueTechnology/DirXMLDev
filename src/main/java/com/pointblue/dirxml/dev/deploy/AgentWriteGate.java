@@ -74,6 +74,10 @@ public final class AgentWriteGate {
             case "driver.log-level":
             case "vault.email-server":
                 return "set".equals(sub);
+            case "driverset.activation":
+                return "apply".equals(sub);
+            case "driverset.servers":
+                return "add".equals(sub) || "remove".equals(sub);
             case "driver.secrets":
                 return "set".equals(sub) || "remove".equals(sub);
             case "driver.trace":
