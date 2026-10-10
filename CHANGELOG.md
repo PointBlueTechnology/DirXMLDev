@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`Vault.open`** for services that sign a person in and must not keep the password (Directory
+  Console): it borrows the caller's bound JNDI connection (left open by `close`) and binds the
+  extended-operation connection once, through the caller's TLS socket factory. The password is used
+  for that bind only. A missing `dirxml_misc.jar` is now reported as such.
+
 ## [0.26.0] - 2026-10-09
 
 ### Fixed
