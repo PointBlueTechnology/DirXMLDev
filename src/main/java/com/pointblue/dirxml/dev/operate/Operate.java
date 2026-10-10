@@ -114,6 +114,11 @@ public final class Operate {
 
         Vault.Entry read(String dn);
 
+        /** A read of named attributes only: the way to get an engine-written (no-user-modification) attribute such as {@code DirXML-LogEvents}. */
+        default Vault.Entry read(String dn, String... attrs) {
+            return read(dn);
+        }
+
         List<Vault.Entry> children(String base);
 
         void replace(String dn, String attr, List<byte[]> values);
@@ -135,6 +140,40 @@ public final class Operate {
         List<String> namedPasswords(String dn);
 
         void setNamedPassword(String dn, String name, String displayName, char[] value);
+
+        /** The Remote Loader password and the mutual-authentication key and keystore passwords (docs/console-gaps.md §11). */
+        default void setRemoteLoaderPassword(String dn, char[] value) {
+            throw new UnsupportedOperationException("setRemoteLoaderPassword");
+        }
+
+        default void setMutualAuthKeyPassword(String dn, char[] value) {
+            throw new UnsupportedOperationException("setMutualAuthKeyPassword");
+        }
+
+        default void setMutualAuthKeystorePassword(String dn, char[] value) {
+            throw new UnsupportedOperationException("setMutualAuthKeystorePassword");
+        }
+
+        default void clearRemoteLoaderPassword(String dn) {
+            throw new UnsupportedOperationException("clearRemoteLoaderPassword");
+        }
+
+        default void clearMutualAuthKeyPassword(String dn) {
+            throw new UnsupportedOperationException("clearMutualAuthKeyPassword");
+        }
+
+        default void clearMutualAuthKeystorePassword(String dn) {
+            throw new UnsupportedOperationException("clearMutualAuthKeystorePassword");
+        }
+
+        /** {@code SetLogEvents} / {@code ClearLogEvents} (docs/console-gaps.md §11). */
+        default void setLogEvents(String dn, int[] eventIds) {
+            throw new UnsupportedOperationException("setLogEvents");
+        }
+
+        default void clearLogEvents(String dn) {
+            throw new UnsupportedOperationException("clearLogEvents");
+        }
 
         void removeNamedPassword(String dn, String name);
     }
@@ -236,6 +275,51 @@ public final class Operate {
                 return v.namedPasswords(dn);
             }
 
+            public Vault.Entry read(String dn, String... attrs) {
+                return v.read(dn, attrs);
+            }
+
+            @Override
+            public void setRemoteLoaderPassword(String dn, char[] value) {
+                v.setRemoteLoaderPassword(dn, value);
+            }
+
+            @Override
+            public void setMutualAuthKeyPassword(String dn, char[] value) {
+                v.setMutualAuthKeyPassword(dn, value);
+            }
+
+            @Override
+            public void setMutualAuthKeystorePassword(String dn, char[] value) {
+                v.setMutualAuthKeystorePassword(dn, value);
+            }
+
+            @Override
+            public void clearRemoteLoaderPassword(String dn) {
+                v.clearRemoteLoaderPassword(dn);
+            }
+
+            @Override
+            public void clearMutualAuthKeyPassword(String dn) {
+                v.clearMutualAuthKeyPassword(dn);
+            }
+
+            @Override
+            public void clearMutualAuthKeystorePassword(String dn) {
+                v.clearMutualAuthKeystorePassword(dn);
+            }
+
+            @Override
+            public void setLogEvents(String dn, int[] eventIds) {
+                v.setLogEvents(dn, eventIds);
+            }
+
+            @Override
+            public void clearLogEvents(String dn) {
+                v.clearLogEvents(dn);
+            }
+
+            @Override
             public void setNamedPassword(String dn, String name, String displayName, char[] value) {
                 v.setNamedPassword(dn, name, displayName, value);
             }
@@ -1733,6 +1817,38 @@ public final class Operate {
 
     public static Result secretsSet(Engine engine, Environments.Environment env, String driver, String name,
             Secrets secrets, boolean stdin, boolean yes, String confirm, Path tree) throws IOException {
+        return secretsSet(engine, env, driver, "named", name, secrets, stdin, yes, confirm, tree);
+    }
+
+    /** The secret kinds {@code driver.secrets} knows: a named password, the shim's authentication password, the Remote Loader password, its mutual-authentication key and keystore passwords. */
+    public static final List<String> SECRET_KINDS = List.of("named", "shim-auth", "remote-loader", "key", "keystore");
+
+    /** The Secrets key of a kind for a driver ({@code named} needs the name). */
+    public static String secretKey(String kind, String driver, String name) {
+        switch (kind) {
+            case "named": return Secrets.named(driver, name);
+            case "shim-auth": return Secrets.shimAuth(driver);
+            case "remote-loader": return Secrets.remoteLoader(driver);
+            case "key": return Secrets.key(driver);
+            case "keystore": return Secrets.keystore(driver);
+            default: throw new IllegalArgumentException("secret kind: " + kind);
+        }
+    }
+
+    /**
+     * Set one secret of a driver live (docs/console-gaps.md §11): a named password ({@code SetNamedPassword}),
+     * the shim's authentication password ({@code DirXML-ShimAuthPassword}), the Remote Loader password or
+     * its mutual-authentication key and keystore passwords (the engine's extended operations). The value
+     * comes from the environment's secrets file by its key, or from stdin. Light write, audited.
+     */
+    public static Result secretsSet(Engine engine, Environments.Environment env, String driver, String kind, String name,
+            Secrets secrets, boolean stdin, boolean yes, String confirm, Path tree) throws IOException {
+        if (!SECRET_KINDS.contains(kind)) {
+            return Result.refused("--kind is one of " + String.join(", ", SECRET_KINDS) + ", not '" + kind + "'");
+        }
+        if ("named".equals(kind) && (name == null || name.isBlank())) {
+            return Result.refused("a named password needs --name");
+        }
         String refusal = gate(env, OpClass.LIGHT, yes, confirm);
         if (refusal != null) {
             return Result.refused(refusal);
@@ -1746,7 +1862,7 @@ public final class Operate {
             }
             value = line.toCharArray();
         } else {
-            String key = Secrets.named(driver, name);
+            String key = secretKey(kind, driver, name);
             value = secrets.get(key);
             if (value == null) {
                 return Result.refused("no secret '" + key + "' in the environment's secrets file (or use --stdin)");
@@ -1754,8 +1870,15 @@ public final class Operate {
         }
         String dn = driverDn(env, driver);
         String error = null;
+        String what = "named".equals(kind) ? "named password '" + name + "'" : kind.replace('-', ' ') + " password";
         try {
-            engine.setNamedPassword(dn, name, name, value);
+            switch (kind) {
+                case "named": engine.setNamedPassword(dn, name, name, value); break;
+                case "shim-auth": engine.replace(dn, com.pointblue.dirxml.dev.deploy.VaultMapping.SHIM_AUTH_PASSWORD, List.of(new String(value).getBytes(StandardCharsets.UTF_8))); Arrays.fill(value, '\0'); break;
+                case "remote-loader": engine.setRemoteLoaderPassword(dn, value); break;
+                case "key": engine.setMutualAuthKeyPassword(dn, value); break;
+                default: engine.setMutualAuthKeystorePassword(dn, value); break;
+            }
         } catch (RuntimeException e) {
             error = e.getMessage();
             Arrays.fill(value, '\0');
@@ -1763,40 +1886,422 @@ public final class Operate {
         DeployLog.Record rec = DeployLog.record(env.name, "operate");
         rec.outcome = error == null ? "ok" : "failed";
         if (error == null) {
-            rec.secretsSet.add(driver + ".named." + name);
+            rec.secretsSet.add(secretKey(kind, driver, name));
         }
-        rec.detail = "driver.secrets set '" + driver + "': name=" + name + (error != null ? " — " + error : "");
+        rec.detail = "driver.secrets set '" + driver + "': " + what + (error != null ? " — " + error : "");
         DeployLog.append(tree, rec);
-
         Result r = new Result();
         r.ok = error == null;
-        r.text = error == null ? "set named password '" + name + "' on '" + driver + "'\n" : "FAILED   " + error + "\n";
-        r.json = "{\"ok\":" + r.ok + ",\"name\":" + q(name) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        r.text = error == null ? "set " + what + " on '" + driver + "'\n" : "FAILED   " + error + "\n";
+        r.json = "{\"ok\":" + r.ok + ",\"kind\":" + q(kind) + ",\"name\":" + q(name == null ? "" : name) + (error != null ? ",\"error\":" + q(error) : "") + "}";
         return r;
     }
 
     public static Result secretsRemove(Engine engine, Environments.Environment env, String driver, String name,
             boolean yes, String confirm, Path tree) throws IOException {
+        return secretsRemove(engine, env, driver, "named", name, yes, confirm, tree);
+    }
+
+    /** Remove one secret of a driver live, by kind (see {@link #SECRET_KINDS}). Light write, audited. */
+    public static Result secretsRemove(Engine engine, Environments.Environment env, String driver, String kind, String name,
+            boolean yes, String confirm, Path tree) throws IOException {
+        if (!SECRET_KINDS.contains(kind)) {
+            return Result.refused("--kind is one of " + String.join(", ", SECRET_KINDS) + ", not '" + kind + "'");
+        }
+        if ("named".equals(kind) && (name == null || name.isBlank())) {
+            return Result.refused("a named password needs --name");
+        }
         String refusal = gate(env, OpClass.LIGHT, yes, confirm);
         if (refusal != null) {
             return Result.refused(refusal);
         }
         String dn = driverDn(env, driver);
+        String what = "named".equals(kind) ? "named password '" + name + "'" : kind.replace('-', ' ') + " password";
         String error = null;
         try {
-            engine.removeNamedPassword(dn, name);
+            switch (kind) {
+                case "named": engine.removeNamedPassword(dn, name); break;
+                case "shim-auth": engine.replace(dn, com.pointblue.dirxml.dev.deploy.VaultMapping.SHIM_AUTH_PASSWORD, List.of()); break;
+                case "remote-loader": engine.clearRemoteLoaderPassword(dn); break;
+                case "key": engine.clearMutualAuthKeyPassword(dn); break;
+                default: engine.clearMutualAuthKeystorePassword(dn); break;
+            }
         } catch (RuntimeException e) {
             error = e.getMessage();
         }
         DeployLog.Record rec = DeployLog.record(env.name, "operate");
         rec.outcome = error == null ? "ok" : "failed";
-        rec.detail = "driver.secrets remove '" + driver + "': name=" + name + (error != null ? " — " + error : "");
+        rec.detail = "driver.secrets remove '" + driver + "': " + what + (error != null ? " — " + error : "");
         DeployLog.append(tree, rec);
-
         Result r = new Result();
         r.ok = error == null;
-        r.text = error == null ? "removed named password '" + name + "' from '" + driver + "'\n" : "FAILED   " + error + "\n";
-        r.json = "{\"ok\":" + r.ok + ",\"name\":" + q(name) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        r.text = error == null ? "removed " + what + " from '" + driver + "'\n" : "FAILED   " + error + "\n";
+        r.json = "{\"ok\":" + r.ok + ",\"kind\":" + q(kind) + ",\"name\":" + q(name == null ? "" : name) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    // ---- G12: the log level ------------------------------------------------------------------------
+
+    /** {@code DirXML-DriverTraceLevel}: Designer's log level choice (0 errors, 1 errors and warnings, 2 last log time only, 3 off, 5 specific events). */
+    public static final String LOG_LEVEL_ATTR = "DirXML-DriverTraceLevel";
+    public static final String LOG_EVENTS_ATTR = "DirXML-LogEvents";
+    public static final String LOG_LIMIT_ATTR = "DirXML-LogLimit";
+    public static final String LOG_EVENTS_TYPE_ATTR = "DirXML-LogEventsType";
+
+    /** The level names, by {@code DirXML-DriverTraceLevel} value (Designer's log level page, read 2026-10-09). */
+    public static String logLevelName(int level) {
+        switch (level) {
+            case 0: return "errors";
+            case 1: return "errors-and-warnings";
+            case 2: return "last-log-time";
+            case 3: return "off";
+            case 5: return "specific-events";
+            case 6: return "xdas-events";
+            default: return "level-" + level;
+        }
+    }
+
+    /** A level by name or number; -1 when unknown. */
+    public static int logLevelValue(String s) {
+        if (s == null) {
+            return -1;
+        }
+        switch (s.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "errors": case "error": return 0;
+            case "errors-and-warnings": case "warnings": return 1;
+            case "last-log-time": return 2;
+            case "off": case "none": return 3;
+            case "specific-events": case "specific": case "events": return 5;
+            default:
+                try {
+                    return Integer.parseInt(s.trim());
+                } catch (NumberFormatException e) {
+                    return -1;
+                }
+        }
+    }
+
+    /** The event ids Designer selects for a level ({@code DSUtil.LOG_LEVEL_n_EVENTS}): 0 → 4 5 38; 1 → 3 4 5 35 38 39; 2 → -1; 3 → 0. */
+    public static int[] logLevelEvents(int level) {
+        switch (level) {
+            case 0: return new int[] { 4, 5, 38 };
+            case 1: return new int[] { 3, 4, 5, 35, 38, 39 };
+            case 2: return new int[] { -1 };
+            case 3: return new int[] { 0 };
+            default: return null;
+        }
+    }
+
+    /**
+     * The log level of a driver, or of the driver set when {@code driver} is null (docs/console-gaps.md §11):
+     * {@code DirXML-DriverTraceLevel} (the level), {@code DirXML-LogEvents} (the event ids the engine logs),
+     * {@code DirXML-LogLimit} (the most entries kept) and {@code DirXML-LogEventsType}. A driver without its
+     * own values uses the driver set's. Read-only.
+     */
+    public static Result logLevelShow(Engine engine, Environments.Environment env, String driver) {
+        String dn = driver == null || driver.isBlank() ? env.driverSetDn : driverDn(env, driver);
+        // DirXML-LogEvents is engine-written (no-user-modification): LDAP returns it only when asked for by name
+        Vault.Entry e = engine.read(dn, LOG_LEVEL_ATTR, LOG_EVENTS_ATTR, LOG_LIMIT_ATTR, LOG_EVENTS_TYPE_ATTR, "objectClass");
+        if (e == null) {
+            return Result.refused("no such object " + dn);
+        }
+        String level = e.string(LOG_LEVEL_ATTR);
+        List<String> events = e.strings(LOG_EVENTS_ATTR);
+        String limit = e.string(LOG_LIMIT_ATTR);
+        String type = e.string(LOG_EVENTS_TYPE_ATTR);
+        boolean inherits = driver != null && level == null && events.isEmpty() && limit == null && type == null;
+        StringBuilder t = new StringBuilder(driver == null ? "driver set" : driver).append('\n');
+        if (inherits) {
+            t.append("  log level       (uses the driver set's settings)\n");
+        }
+        t.append("  log level       ").append(level == null ? "-" : level + " (" + logLevelName(Integer.parseInt(level.trim())) + ")").append('\n');
+        t.append("  log events      ").append(events.isEmpty() ? "-" : String.join(" ", events)).append('\n');
+        t.append("  log limit       ").append(limit == null ? "-" : limit).append('\n');
+        t.append("  log events type ").append(type == null ? "-" : type).append('\n');
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"dn\":").append(q(dn)).append(",\"inherits\":").append(inherits)
+            .append(",\"level\":").append(level == null ? "null" : level.trim()).append(",\"levelName\":").append(q(level == null ? "" : logLevelName(Integer.parseInt(level.trim()))))
+            .append(",\"events\":[");
+        for (int i = 0; i < events.size(); i++) {
+            j.append(i > 0 ? "," : "").append(events.get(i).trim());
+        }
+        j.append("],\"limit\":").append(limit == null ? "null" : limit.trim()).append(",\"eventsType\":").append(type == null ? "null" : type.trim()).append("}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /**
+     * Set the log level live: the level writes {@code DirXML-DriverTraceLevel} and, unless {@code events} are
+     * given, the event ids Designer selects for it through {@code SetLogEvents} ({@code DirXML-LogEvents} is
+     * engine-written); {@code specific-events} needs the ids. {@code limit} and {@code eventsType} are
+     * written when given. Light write, audited.
+     */
+    public static Result logLevelSet(Engine engine, Environments.Environment env, String driver, Integer level, int[] events,
+            Integer limit, Integer eventsType, boolean yes, String confirm, Path tree) throws IOException {
+        return logLevelSet(engine, env, driver, level, events, limit, eventsType, false, yes, confirm, tree);
+    }
+
+    /** The same; with {@code inherit}, a driver drops its own four log attributes and uses the driver set's. */
+    public static Result logLevelSet(Engine engine, Environments.Environment env, String driver, Integer level, int[] events,
+            Integer limit, Integer eventsType, boolean inherit, boolean yes, String confirm, Path tree) throws IOException {
+        if (inherit) {
+            if (driver == null || driver.isBlank()) {
+                return Result.refused("--inherit is for a driver (it then uses the driver set's log settings)");
+            }
+            String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+            if (refusal != null) {
+                return Result.refused(refusal);
+            }
+            String dn = driverDn(env, driver);
+            String error = null;
+            try {
+                engine.clearLogEvents(dn);
+                for (String a : new String[] { LOG_LEVEL_ATTR, LOG_LIMIT_ATTR, LOG_EVENTS_TYPE_ATTR }) {
+                    engine.replace(dn, a, List.of());
+                }
+            } catch (RuntimeException e) {
+                error = e.getMessage();
+            }
+            DeployLog.Record rec = DeployLog.record(env.name, "operate");
+            rec.outcome = error == null ? "ok" : "failed";
+            rec.detail = "driver.log-level set '" + driver + "': inherit the driver set's" + (error != null ? " — " + error : "");
+            DeployLog.append(tree, rec);
+            Result r = new Result();
+            r.ok = error == null;
+            r.text = error == null ? "'" + driver + "' now uses the driver set's log settings\n" : "FAILED   " + error + "\n";
+            r.json = "{\"ok\":" + r.ok + ",\"inherit\":true" + (error != null ? ",\"error\":" + q(error) : "") + "}";
+            return r;
+        }
+        if (level == null && events == null && limit == null && eventsType == null) {
+            return Result.refused("nothing to set: give --level, --events, --limit, --events-type or --inherit");
+        }
+        if (level != null && logLevelName(level).startsWith("level-")) {
+            return Result.refused("--level is errors (0), errors-and-warnings (1), last-log-time (2), off (3) or specific-events (5)");
+        }
+        if (level != null && level == 5 && events == null) {
+            return Result.refused("specific-events needs --events id,id,…");
+        }
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        String dn = driver == null || driver.isBlank() ? env.driverSetDn : driverDn(env, driver);
+        int[] ids = events != null ? events : (level != null ? logLevelEvents(level) : null);
+        String error = null;
+        List<String> done = new ArrayList<>();
+        try {
+            if (level != null) {
+                engine.replace(dn, LOG_LEVEL_ATTR, List.of(String.valueOf(level).getBytes(StandardCharsets.UTF_8)));
+                done.add("level=" + level + " (" + logLevelName(level) + ")");
+            }
+            if (ids != null) {
+                if (ids.length == 1 && ids[0] == 0) {
+                    engine.clearLogEvents(dn);
+                    done.add("events cleared");
+                } else {
+                    engine.setLogEvents(dn, ids);
+                    done.add("events=" + Arrays.toString(ids));
+                }
+            }
+            if (limit != null) {
+                engine.replace(dn, LOG_LIMIT_ATTR, List.of(String.valueOf(limit).getBytes(StandardCharsets.UTF_8)));
+                done.add("limit=" + limit);
+            }
+            if (eventsType != null) {
+                engine.replace(dn, LOG_EVENTS_TYPE_ATTR, List.of(String.valueOf(eventsType).getBytes(StandardCharsets.UTF_8)));
+                done.add("events-type=" + eventsType);
+            }
+        } catch (RuntimeException e) {
+            error = e.getMessage();
+        }
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = error == null ? "ok" : "failed";
+        rec.detail = "driver.log-level set '" + (driver == null ? "driver set" : driver) + "': " + String.join(", ", done) + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = error == null;
+        r.text = error == null ? "log level of '" + (driver == null ? "driver set" : driver) + "': " + String.join(", ", done) + "\n" : "FAILED   " + error + " (done before it: " + String.join(", ", done) + ")\n";
+        r.json = "{\"ok\":" + r.ok + ",\"done\":" + q(String.join(", ", done)) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    // ---- G8: the e-mail server ----------------------------------------------------------------------
+
+    /** The notification collection's SMTP attributes, in the order shown ({@code notfSMTPMailPassword} is never read back). */
+    public static final String[][] EMAIL_SERVER_ATTRS = {
+        { "host", "notfSMTPEmailHost" }, { "port", "notfSMTPPort" }, { "from", "notfSMTPEmailFrom" }, { "user", "notfSMTPEmailUserName" },
+        { "tls", "notfSMTPUseTLS" }, { "timeout", "notfSMTPTimeout" }, { "protocol", "notfSMTPMailProtocol" }, { "auth", "notfSMTPAuthMechanisms" },
+    };
+    public static final String EMAIL_SERVER_PASSWORD_ATTR = "notfSMTPMailPassword";
+    /** The secrets-file key the password comes from. */
+    public static final String EMAIL_SERVER_PASSWORD_KEY = "email-server.password";
+
+    /** The vault's one notification collection ({@code notfTemplateCollection} under {@code cn=Security}), or null. */
+    static Vault.Entry emailCollection(Engine engine) {
+        try {
+            List<Vault.Entry> found = engine.search("cn=Security", "(objectClass=notfTemplateCollection)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+            return found.isEmpty() ? null : found.get(0);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** The SMTP settings the engine sends notification mail with (docs/console-gaps.md §12). Read-only; the password is reported as set or not. */
+    public static Result emailServerShow(Engine engine, Environments.Environment env) {
+        Vault.Entry c = emailCollection(engine);
+        if (c == null) {
+            return Result.refused("no notification collection under cn=Security (notfTemplateCollection)");
+        }
+        Vault.Entry e = engine.read(c.dn);
+        StringBuilder t = new StringBuilder(c.dn).append('\n');
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"dn\":").append(q(c.dn));
+        for (String[] a : EMAIL_SERVER_ATTRS) {
+            String v = e == null ? null : e.string(a[1]);
+            t.append(String.format("  %-9s %s", a[0], v == null ? "-" : v)).append('\n');
+            j.append(",").append(q(a[0])).append(":").append(v == null ? "null" : q(v));
+        }
+        boolean pw = e != null && e.bytes(EMAIL_SERVER_PASSWORD_ATTR) != null;
+        t.append("  password  ").append(pw ? "(set)" : "-").append('\n');
+        j.append(",\"passwordSet\":").append(pw).append("}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /**
+     * Write the SMTP settings given ({@code host}, {@code port}, {@code from}, {@code user}, {@code tls}, {@code timeout},
+     * {@code protocol}, {@code auth}; an empty value clears one) and the password when it is given. Light write, audited.
+     */
+    public static Result emailServerSet(Engine engine, Environments.Environment env, Map<String, String> values, char[] password,
+            boolean yes, String confirm, Path tree) throws IOException {
+        if (values.isEmpty() && password == null) {
+            return Result.refused("nothing to set: give --host, --port, --from, --user, --tls, --timeout, --protocol, --auth or a password");
+        }
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        Vault.Entry c = emailCollection(engine);
+        if (c == null) {
+            return Result.refused("no notification collection under cn=Security (notfTemplateCollection)");
+        }
+        List<String> done = new ArrayList<>();
+        String error = null;
+        try {
+            for (String[] a : EMAIL_SERVER_ATTRS) {
+                if (!values.containsKey(a[0])) {
+                    continue;
+                }
+                String v = values.get(a[0]);
+                engine.replace(c.dn, a[1], v == null || v.isEmpty() ? List.of() : List.of(v.getBytes(StandardCharsets.UTF_8)));
+                done.add(a[0] + "=" + (v == null || v.isEmpty() ? "(cleared)" : v));
+            }
+            if (password != null) {
+                engine.replace(c.dn, EMAIL_SERVER_PASSWORD_ATTR, List.of(new String(password).getBytes(StandardCharsets.UTF_8)));
+                Arrays.fill(password, '\0');
+                done.add("password=(set)");
+            }
+        } catch (RuntimeException e) {
+            error = e.getMessage();
+        }
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = error == null ? "ok" : "failed";
+        rec.detail = "vault.email-server set: " + String.join(", ", done) + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = error == null;
+        r.text = error == null ? "e-mail server: " + String.join(", ", done) + "\n" : "FAILED   " + error + " (done before it: " + String.join(", ", done) + ")\n";
+        r.json = "{\"ok\":" + r.ok + ",\"done\":" + q(String.join(", ", done)) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    // ---- G5: migrate into the application --------------------------------------------------------
+
+    /**
+     * Migrate vault objects into the application (the console's {@code migrateFromNDS}, docs/console-gaps.md
+     * §11): an LDAP search finds them, then each goes down the running driver's subscriber channel as a
+     * {@code <sync>} command, which makes the engine read the object and send its add or modify to the shim.
+     * Heavy write, audited; {@code dryRun} only lists what would go.
+     */
+    public static Result migrateIntoApp(Engine engine, Environments.Environment env, String driver, String base, String filter,
+            String className, int max, boolean dryRun, boolean yes, String confirm, Path tree) throws IOException {
+        if (base == null || base.isBlank() || filter == null || filter.isBlank() || className == null || className.isBlank()) {
+            return Result.refused("--base, --filter and --class are needed");
+        }
+        String dn = driverDn(env, driver);
+        List<Vault.Entry> found;
+        try {
+            found = engine.search(base, filter, javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+        } catch (RuntimeException e) {
+            return Result.refused("search " + base + " " + filter + ": " + e.getMessage());
+        }
+        if (found.size() > max) {
+            found = new ArrayList<>(found.subList(0, max));
+        }
+        if (dryRun) {
+            StringBuilder t = new StringBuilder().append(found.size()).append(" object(s) would be migrated into '").append(driver).append("' (dry run):\n");
+            StringBuilder j = new StringBuilder("{\"ok\":true,\"dryRun\":true,\"count\":").append(found.size()).append(",\"objects\":[");
+            int n = 0;
+            for (Vault.Entry e : found) {
+                t.append("  ").append(e.dn).append('\n');
+                j.append(n++ > 0 ? "," : "").append(q(e.dn));
+            }
+            j.append("]}");
+            Result r = new Result();
+            r.ok = true;
+            r.text = t.toString();
+            r.json = j.toString();
+            return r;
+        }
+        String refusal = gate(env, OpClass.HEAVY, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        int state = engine.driverState(dn);
+        if (state != Vault.STATE_RUNNING) {
+            return Result.refused("driver '" + driver + "' is " + Vault.stateName(state) + "; a migration needs a running driver");
+        }
+        StringBuilder t = new StringBuilder();
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"driver\":").append(q(driver)).append(",\"results\":[");
+        int ok = 0;
+        int failed = 0;
+        int n = 0;
+        for (Vault.Entry e : found) {
+            String xds = "<nds dtdversion=\"4.0\" ndsversion=\"8.x\"><source><product>DirXMLDev</product><contact>Point Blue</contact></source><input>"
+                + "<sync class-name=\"" + xmlAttr(className) + "\" event-id=\"dirxmldev-migrate\" src-dn=\"" + xmlAttr(slashDn(e.dn)) + "\"/></input></nds>";
+            String status;
+            try {
+                String answer = engine.submitCommand(dn, xds.getBytes(StandardCharsets.UTF_8));
+                status = queryStatus(answer);
+                if (status == null) {
+                    status = "submitted";
+                }
+            } catch (RuntimeException ex) {
+                status = "error: " + ex.getMessage();
+            }
+            boolean good = !status.startsWith("error") && !status.startsWith("fatal") && !status.startsWith("retry");
+            if (good) {
+                ok++;
+            } else {
+                failed++;
+            }
+            t.append(good ? "  ok      " : "  FAILED  ").append(e.dn).append("  ").append(status).append('\n');
+            j.append(n++ > 0 ? "," : "").append("{\"dn\":").append(q(e.dn)).append(",\"ok\":").append(good).append(",\"status\":").append(q(status)).append("}");
+        }
+        t.insert(0, found.size() + " object(s) sent into '" + driver + "': " + ok + " ok, " + failed + " failed\n");
+        j.append("],\"sent\":").append(found.size()).append(",\"succeeded\":").append(ok).append(",\"failed\":").append(failed).append("}");
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = failed == 0 ? "ok" : "failed";
+        rec.detail = "driver.migrate --direction vault '" + driver + "': " + found.size() + " object(s) from " + base + " " + filter + " as " + className + ": " + ok + " ok, " + failed + " failed";
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = failed == 0;
+        r.text = t.toString();
+        r.json = j.toString();
         return r;
     }
 

@@ -53,7 +53,13 @@ public final class ModelDiff {
         OBJECT_ADDED, OBJECT_REMOVED, OBJECT_CHANGED,
         ENTITLEMENT_ADDED, ENTITLEMENT_REMOVED, ENTITLEMENT_CHANGED,
         JOB_ADDED, JOB_REMOVED, JOB_CHANGED,
-        RBE_ADDED, RBE_REMOVED, RBE_CHANGED;
+        RBE_ADDED, RBE_REMOVED, RBE_CHANGED,
+        TEMPLATE_ADDED, TEMPLATE_REMOVED, TEMPLATE_CHANGED;
+
+        /** A notification template (docs/console-gaps.md §12): the vault's, read by the engine when it sends mail — no driver restart. */
+        public boolean isTemplate() {
+            return this == TEMPLATE_ADDED || this == TEMPLATE_REMOVED || this == TEMPLATE_CHANGED;
+        }
 
         /** A job is read by the engine's scheduler, told of a change by {@code NotifyJobUpdate}: no driver restart. */
         public boolean isJob() {
@@ -95,7 +101,7 @@ public final class ModelDiff {
 
         /** None of these kinds needs the owning driver restarted. */
         public boolean noRestart() {
-            return isProvisioning() || isEntitlement() || isJob() || isIcon() || this == DRIVERSET_STAMPS;
+            return isProvisioning() || isEntitlement() || isJob() || isTemplate() || isIcon() || this == DRIVERSET_STAMPS;
         }
     }
 
@@ -273,6 +279,9 @@ public final class ModelDiff {
         if (k == Kind.RBE_REMOVED) {
             return "rbe-policies";
         }
+        if (k == Kind.TEMPLATE_REMOVED) {
+            return "templates";
+        }
         if (k == Kind.FORM_REMOVED) {
             return "forms";
         }
@@ -298,7 +307,8 @@ public final class ModelDiff {
     private boolean treeHasNoneOfKind(String driver, String kind) {
         if (driver == null) {
             return ("jobs".equals(kind) && to.jobs.isEmpty())   // the driver set's own jobs
-                || ("rbe-policies".equals(kind) && to.rbePolicies.isEmpty());
+                || ("rbe-policies".equals(kind) && to.rbePolicies.isEmpty())
+                || ("templates".equals(kind) && to.templates.isEmpty());
         }
         Driver d = to.driver(driver);
         if (d == null) {
@@ -540,6 +550,7 @@ public final class ModelDiff {
         diffDriverSetGcvs();
         diffJobs(null, from.jobs, to.jobs);
         diffRbePolicies();
+        diffTemplates();
         diffDriverSetLinkage();
         diffDriverSetStamps();
     }
@@ -1048,6 +1059,45 @@ public final class ModelDiff {
             }
         }
         return sb.toString();
+    }
+
+    public static String templatePath(com.pointblue.dirxml.dev.model.NotificationTemplate t) {
+        return "templates/" + t.name;
+    }
+
+    /** Notification templates, by name (docs/console-gaps.md §12): the subject and the body. */
+    private void diffTemplates() {
+        Map<String, com.pointblue.dirxml.dev.model.NotificationTemplate> x = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, com.pointblue.dirxml.dev.model.NotificationTemplate> y = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (com.pointblue.dirxml.dev.model.NotificationTemplate t : from.templates) {
+            x.put(t.name, t);
+        }
+        for (com.pointblue.dirxml.dev.model.NotificationTemplate t : to.templates) {
+            y.put(t.name, t);
+        }
+        Set<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        names.addAll(x.keySet());
+        names.addAll(y.keySet());
+        for (String n : names) {
+            com.pointblue.dirxml.dev.model.NotificationTemplate a = x.get(n);
+            com.pointblue.dirxml.dev.model.NotificationTemplate b = y.get(n);
+            if (a == null) {
+                changes.add(new Change(Kind.TEMPLATE_ADDED, null, templatePath(b), null, "+ added notification template " + templatePath(b), null));
+            } else if (b == null) {
+                changes.add(new Change(Kind.TEMPLATE_REMOVED, null, templatePath(a), null, "- removed notification template " + templatePath(a), null));
+            } else {
+                String oldText = templateText(a);
+                String newText = templateText(b);
+                if (!Objects.equals(oldText, newText)) {
+                    changes.add(new Change(Kind.TEMPLATE_CHANGED, null, templatePath(b), null, "~ changed notification template " + templatePath(b), textDiff(oldText, newText)));
+                }
+            }
+        }
+    }
+
+    static String templateText(com.pointblue.dirxml.dev.model.NotificationTemplate t) {
+        String doc = serializeOrNull(t.data);
+        return "subject: " + (t.subject == null ? "" : t.subject) + "\n" + (doc == null ? "" : doc) + "\n";
     }
 
     public static String rbePath(com.pointblue.dirxml.dev.model.EntitlementPolicy p) {

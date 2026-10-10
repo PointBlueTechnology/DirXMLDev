@@ -57,6 +57,7 @@ public final class AsCodeReader {
         }
         readJobs(dsm, root, ds.jobs);
         readRbePolicies(dsm, root, ds.rbePolicies);
+        readTemplates(dsm, root, ds.templates);
         ds.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(root));
 
         // library
@@ -332,6 +333,16 @@ public final class AsCodeReader {
             }
             readMeta(je, j.meta);
             into.add(j);
+        }
+    }
+
+    private static void readTemplates(Element manifest, Path root, List<com.pointblue.dirxml.dev.model.NotificationTemplate> into) throws IOException {
+        for (Element te : children(manifest, "template")) {
+            Path file = attr(te, "file") == null ? null : root.resolve(attr(te, "file"));
+            com.pointblue.dirxml.dev.model.NotificationTemplate t = new com.pointblue.dirxml.dev.model.NotificationTemplate(attr(te, "name"), file != null && Files.exists(file) ? xml(file) : null);
+            t.subject = attr(te, "subject");
+            readMeta(te, t.meta);
+            into.add(t);
         }
     }
 

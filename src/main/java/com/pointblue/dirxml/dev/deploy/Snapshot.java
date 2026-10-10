@@ -93,11 +93,20 @@ public final class Snapshot {
      */
     public static Snapshot capture(VaultAccess v, String env, String driverSetDn, Collection<String> dns,
             Collection<String> driverDns, String treeCommit, String label, String planText) {
+        return capture(v, env, driverSetDn, dns, driverDns, treeCommit, label, planText, java.util.List.of());
+    }
+
+    /**
+     * The same, also accepting DNs that are one of {@code extraRoots} or under it: the vault's notification
+     * collection (docs/console-gaps.md §12), the one thing a deploy writes outside the driver set.
+     */
+    public static Snapshot capture(VaultAccess v, String env, String driverSetDn, Collection<String> dns,
+            Collection<String> driverDns, String treeCommit, String label, String planText, Collection<String> extraRoots) {
         for (String dn : dns) {
-            requireUnderDriverSet(dn, driverSetDn);
+            requireUnderDriverSet(dn, driverSetDn, extraRoots);
         }
         for (String dn : driverDns) {
-            requireUnderDriverSet(dn, driverSetDn);
+            requireUnderDriverSet(dn, driverSetDn, extraRoots);
         }
         Snapshot s = new Snapshot(env, driverSetDn, TS.format(Instant.now()), treeCommit,
             System.getProperty("user.name"), label, planText);
@@ -111,12 +120,19 @@ public final class Snapshot {
         return s;
     }
 
-    private static void requireUnderDriverSet(String dn, String driverSetDn) {
+    private static void requireUnderDriverSet(String dn, String driverSetDn, Collection<String> extraRoots) {
         String d = dn.toLowerCase(Locale.ROOT);
         String ds = driverSetDn.toLowerCase(Locale.ROOT);
-        if (!d.equals(ds) && !d.endsWith("," + ds)) {
-            throw new IllegalArgumentException(dn + " is not " + driverSetDn + " or under it");
+        if (d.equals(ds) || d.endsWith("," + ds)) {
+            return;
         }
+        for (String root : extraRoots) {
+            String r = root.toLowerCase(Locale.ROOT);
+            if (d.equals(r) || d.endsWith("," + r)) {
+                return;
+            }
+        }
+        throw new IllegalArgumentException(dn + " is not " + driverSetDn + " or under it");
     }
 
     // ---- disk: write / read -----------------------------------------------------------

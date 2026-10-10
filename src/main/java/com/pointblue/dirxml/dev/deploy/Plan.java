@@ -230,6 +230,10 @@ public final class Plan {
                 rbeChanged = true;
                 continue;
             }
+            if (c.kind.isTemplate()) {
+                templateSteps(p, c, to, engineObjects, deletes, ensuredContainers);
+                continue;
+            }
             switch (c.kind) {
                 case ARTIFACT_ADDED:
                 case ARTIFACT_CHANGED: {
@@ -482,7 +486,9 @@ public final class Plan {
                             secretSteps.add(new Step(Op.SET_SECRET, dn, need.key, null, null,
                                 "set secret " + need.key + " (" + need.kind + ")", c.path, c.driver));
                         } else {
-                            p.missingSecrets.add(need.key + " — " + need.because);
+                            if (!need.optional) {
+                                p.missingSecrets.add(need.key + " — " + need.because);
+                            }
                         }
                     }
                     break;
@@ -573,7 +579,9 @@ public final class Plan {
                         secretSteps.add(new Step(Op.SET_SECRET, dn, need.key, null, null,
                             "set secret " + need.key + " (" + need.kind + ")", "secrets#" + d.name, d.name));
                     } else {
-                        p.missingSecrets.add(need.key + " — " + need.because);
+                        if (!need.optional) {
+                                p.missingSecrets.add(need.key + " — " + need.because);
+                            }
                     }
                 }
             }
@@ -1117,6 +1125,42 @@ public final class Plan {
             for (Map.Entry<String, List<byte[]>> en : attrs.entrySet()) {
                 bucket.add(new Step(Op.MODIFY, dn, en.getKey(), null, Map.of(en.getKey(), en.getValue()),
                     dn + "  " + en.getKey() + (en.getValue().isEmpty() ? " (cleared)" : " (" + size(Map.of(en.getKey(), en.getValue())) + ")"), c.path, null));
+            }
+        }
+    }
+
+    /**
+     * A notification template (docs/console-gaps.md §12): the collection is created when absent, an added
+     * template is one add (with its package stamps when it carries them), a changed one a modify of the
+     * subject and the body, a removed one a delete held by the empty-kind guard ({@code --delete-all templates}).
+     */
+    private static void templateSteps(Plan p, ModelDiff.Change c, DriverSet to, List<Step> bucket, List<Step> deletes, Set<String> ensured) {
+        if (c.kind == ModelDiff.Kind.TEMPLATE_REMOVED) {
+            String dn = VaultMapping.templatePathDn(to, c.path);
+            p.touchedDns.add(dn);
+            deletes.add(new Step(Op.DELETE, dn, null, null, null, dn, c.path, null));
+            return;
+        }
+        String name = c.path.substring("templates/".length());
+        com.pointblue.dirxml.dev.model.NotificationTemplate t = to.template(name);
+        if (t == null) {
+            p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
+            return;
+        }
+        ensureContainer(bucket, ensured, to.templatesCollectionDn(), VaultMapping.OC_TEMPLATE_COLLECTION, c, null);
+        String dn = VaultMapping.templateDn(to, t.name);
+        Map<String, List<byte[]>> attrs = VaultMapping.templateAttributes(t);
+        p.touchedDns.add(dn);
+        if (c.kind == ModelDiff.Kind.TEMPLATE_ADDED) {
+            Map<String, List<byte[]>> stamps = VaultMapping.provisioningPackageAttributes(t.meta, null, p.packageIndex);
+            attrs.putAll(stamps);
+            bucket.add(new Step(Op.ADD, dn, null,
+                stamps.isEmpty() ? List.of("Top", VaultMapping.OC_TEMPLATE) : List.of("Top", VaultMapping.OC_TEMPLATE, VaultMapping.PKG_ITEM_AUX),
+                attrs, dn + "  " + VaultMapping.OC_TEMPLATE + " (" + size(attrs) + ")", c.path, null));
+        } else {
+            for (Map.Entry<String, List<byte[]>> en : attrs.entrySet()) {
+                bucket.add(new Step(Op.MODIFY, dn, en.getKey(), null, Map.of(en.getKey(), en.getValue()),
+                    dn + "  " + en.getKey() + " (" + size(Map.of(en.getKey(), en.getValue())) + ")", c.path, null));
             }
         }
     }

@@ -42,6 +42,7 @@ public final class Validator {
             new EntitlementCheck(),
             new JobCheck(),
             new RbeCheck(),
+            new TemplateCheck(),
             new AppConfigCheck(),
             new PackageLinkageCheck(),
             new OverridesCheck()));

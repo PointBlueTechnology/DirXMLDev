@@ -69,6 +69,8 @@ uses a command or an environment variable.
 ```properties
 <driver>.shim-auth-password        DirXML-ShimAuthPassword
 <driver>.remote-loader-password    the Remote Loader password
+<driver>.mutual-auth-key-password       the Remote Loader's mutual-authentication key password (optional)
+<driver>.mutual-auth-keystore-password  the Remote Loader's mutual-authentication keystore password (optional)
 <driver>.shim-auth-id              a shim auth id that is itself a credential (client id, API key); kept out of the tree
 <driver>.named.<name>              a named password the driver's policies or password-ref GCVs read
 driverset.named.<name>             a named password shared by the driver set

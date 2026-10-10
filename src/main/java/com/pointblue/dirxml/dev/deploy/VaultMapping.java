@@ -611,6 +611,31 @@ public final class VaultMapping {
         return m;
     }
 
+    public static final String OC_TEMPLATE_COLLECTION = "notfTemplateCollection";
+    public static final String OC_TEMPLATE = "notfMergeTemplate";
+
+    /** {@code cn=<template>,<collection dn>}. */
+    public static String templateDn(com.pointblue.dirxml.dev.model.DriverSet ds, String name) {
+        return "cn=" + escapeRdn(name) + "," + ds.templatesCollectionDn();
+    }
+
+    /** The DN for a template diff path ({@code templates/<name>}). */
+    public static String templatePathDn(com.pointblue.dirxml.dev.model.DriverSet ds, String path) {
+        return templateDn(ds, path.substring("templates/".length()));
+    }
+
+    /** The subject and the body a template deploys. */
+    public static Map<String, List<byte[]>> templateAttributes(com.pointblue.dirxml.dev.model.NotificationTemplate t) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        if (t.subject != null && !t.subject.isEmpty()) {
+            m.put("notfMergeTemplateSubject", List.of(t.subject.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        }
+        if (t.data != null) {
+            m.put("notfMergeTemplateData", List.of(xmlBytes(t.data)));
+        }
+        return m;
+    }
+
     public static final String OC_RBE_SET = "DirXML-SharedProfileSet";
     public static final String OC_RBE_POLICY = "DirXML-SharedProfile";
 

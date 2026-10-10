@@ -47,6 +47,21 @@ public interface VaultAccess extends AutoCloseable {
     void setDriverStartOption(String driverDn, int option);
 
     /** {@code NotifyJobUpdate}: the engine's scheduler re-reads a job object after a deploy wrote it. */
+    /** {@code SetRemoteLoaderPassword} (docs/console-gaps.md §11). The vault zeroes the array. */
+    default void setRemoteLoaderPassword(String driverDn, char[] value) {
+        throw new UnsupportedOperationException("setRemoteLoaderPassword");
+    }
+
+    /** {@code SetMutualAuthKeyPassword}: the Remote Loader's mutual-authentication key password. */
+    default void setMutualAuthKeyPassword(String driverDn, char[] value) {
+        throw new UnsupportedOperationException("setMutualAuthKeyPassword");
+    }
+
+    /** {@code SetMutualAuthKSPassword}: the Remote Loader's mutual-authentication keystore password. */
+    default void setMutualAuthKeystorePassword(String driverDn, char[] value) {
+        throw new UnsupportedOperationException("setMutualAuthKeystorePassword");
+    }
+
     default void notifyJobUpdate(String jobDn) {
         throw new UnsupportedOperationException("notifyJobUpdate");
     }

@@ -2,7 +2,15 @@ package com.pointblue.dirxml.dev.deploy;
 
 import com.novell.ldap.LDAPConnection;
 import com.novell.ldap.LDAPJSSESecureSocketFactory;
+import com.novell.nds.dirxml.ldap.ClearLogEventsRequest;
+import com.novell.nds.dirxml.ldap.ClearMutualAuthKSPasswordRequest;
+import com.novell.nds.dirxml.ldap.ClearMutualAuthKeyPasswordRequest;
+import com.novell.nds.dirxml.ldap.ClearRemoteLoaderPasswordRequest;
 import com.novell.nds.dirxml.ldap.CloseChunkedResultRequest;
+import com.novell.nds.dirxml.ldap.SetLogEventsRequest;
+import com.novell.nds.dirxml.ldap.SetMutualAuthKSPasswordRequest;
+import com.novell.nds.dirxml.ldap.SetMutualAuthKeyPasswordRequest;
+import com.novell.nds.dirxml.ldap.SetRemoteLoaderPasswordRequest;
 import com.novell.nds.dirxml.ldap.ChunkedResultResponseBase;
 import com.novell.nds.dirxml.ldap.DeleteCacheEntriesRequest;
 import com.novell.nds.dirxml.ldap.DriverResyncRequest;
@@ -769,6 +777,61 @@ public final class Vault implements VaultAccess {
             }
             Arrays.fill(value, '\0');
         }
+    }
+
+    @Override
+    public void setRemoteLoaderPassword(String driverDn, char[] value) {
+        try {
+            ops().extendedOperation(new SetRemoteLoaderPasswordRequest(driverDn, value));
+        } catch (Exception e) {
+            throw new VaultException("SetRemoteLoaderPassword " + driverDn + ": " + e.getMessage(), e);
+        } finally {
+            Arrays.fill(value, '\0');
+        }
+    }
+
+    @Override
+    public void setMutualAuthKeyPassword(String driverDn, char[] value) {
+        try {
+            ops().extendedOperation(new SetMutualAuthKeyPasswordRequest(driverDn, value));
+        } catch (Exception e) {
+            throw new VaultException("SetMutualAuthKeyPassword " + driverDn + ": " + e.getMessage(), e);
+        } finally {
+            Arrays.fill(value, '\0');
+        }
+    }
+
+    @Override
+    public void setMutualAuthKeystorePassword(String driverDn, char[] value) {
+        try {
+            ops().extendedOperation(new SetMutualAuthKSPasswordRequest(driverDn, value));
+        } catch (Exception e) {
+            throw new VaultException("SetMutualAuthKSPassword " + driverDn + ": " + e.getMessage(), e);
+        } finally {
+            Arrays.fill(value, '\0');
+        }
+    }
+
+    public void clearRemoteLoaderPassword(String driverDn) {
+        extOp("ClearRemoteLoaderPassword", driverDn, () -> ops().extendedOperation(new ClearRemoteLoaderPasswordRequest(driverDn)));
+    }
+
+    public void clearMutualAuthKeyPassword(String driverDn) {
+        extOp("ClearMutualAuthKeyPassword", driverDn, () -> ops().extendedOperation(new ClearMutualAuthKeyPasswordRequest(driverDn)));
+    }
+
+    public void clearMutualAuthKeystorePassword(String driverDn) {
+        extOp("ClearMutualAuthKSPassword", driverDn, () -> ops().extendedOperation(new ClearMutualAuthKSPasswordRequest(driverDn)));
+    }
+
+    /** {@code SetLogEvents}: the audit event ids a driver or driver set logs ({@code DirXML-LogEvents} is engine-written; docs/console-gaps.md §11). */
+    public void setLogEvents(String dn, int[] eventIds) {
+        extOp("SetLogEvents", dn, () -> ops().extendedOperation(new SetLogEventsRequest(dn, eventIds)));
+    }
+
+    /** {@code ClearLogEvents}: no events logged. */
+    public void clearLogEvents(String dn) {
+        extOp("ClearLogEvents", dn, () -> ops().extendedOperation(new ClearLogEventsRequest(dn)));
     }
 
     public void removeNamedPassword(String dn, String name) {
