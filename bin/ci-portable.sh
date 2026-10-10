@@ -29,6 +29,7 @@ javac --release 21 -encoding UTF-8 -cp "$CP" -d "$OUT" \
   src/main/java/com/pointblue/dirxml/dev/operate/TraceViewer.java \
   src/main/java/com/pointblue/dirxml/dev/LegacyTls.java \
   src/main/java/com/pointblue/dirxml/dev/Doctor.java \
+  src/main/java/com/pointblue/dirxml/dev/dn/*.java \
   src/test/java/com/pointblue/dirxml/dev/DoctorTest.java \
   src/test/java/com/pointblue/dirxml/dev/LegacyTlsTest.java \
   src/test/java/com/pointblue/dirxml/dev/ReleaseCheckTest.java \
@@ -38,7 +39,8 @@ javac --release 21 -encoding UTF-8 -cp "$CP" -d "$OUT" \
   src/test/java/com/pointblue/dirxml/dev/LocalFixtureTest.java \
   src/test/java/com/pointblue/dirxml/dev/deploy/AgentWriteGateTest.java \
   src/test/java/com/pointblue/dirxml/dev/deploy/TraceViewerArgsTest.java \
-  src/test/java/com/pointblue/dirxml/dev/operate/TraceViewerTest.java
+  src/test/java/com/pointblue/dirxml/dev/operate/TraceViewerTest.java \
+  src/test/java/com/pointblue/dirxml/dev/dn/*.java
 
 java -cp "$OUT:$CP" org.junit.runner.JUnitCore \
   com.pointblue.dirxml.dev.DoctorTest \
@@ -48,4 +50,6 @@ java -cp "$OUT:$CP" org.junit.runner.JUnitCore \
   com.pointblue.dirxml.dev.LocalFixtureTest \
   com.pointblue.dirxml.dev.deploy.AgentWriteGateTest \
   com.pointblue.dirxml.dev.deploy.TraceViewerArgsTest \
-  com.pointblue.dirxml.dev.operate.TraceViewerTest
+  com.pointblue.dirxml.dev.operate.TraceViewerTest \
+  com.pointblue.dirxml.dev.dn.DnTest \
+  com.pointblue.dirxml.dev.dn.FiltersAndNotationTest
