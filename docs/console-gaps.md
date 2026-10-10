@@ -164,8 +164,8 @@ removed with `--delete-all rbe-policies`, and the driver deleted again. What the
   children), Designer's export (`<rbe-policies>` holding the container `ds-object` with nested policy
   `ds-object`s, the two XML attributes base64 as Designer writes them; both the deploy shape's
   `<typed-name-level>` and the import shape's `<rbe-priority>` are read), a Designer project
-  (`Idm:RbePolicies` on the driver set — from Designer's model code; no project with a policy was at
-  hand, so this one is unverified), and back to an export.
+  (verified 2026-10-09 against three real projects, see "Designer projects, verified" below), and back
+  to an export.
 - `validate`: `rbe-name-blank`, `rbe-legacy-entitlements-xml`, `rbe-no-priority`,
   `rbe-duplicate-priority`, `rbe-priorities-not-sequential` (errors); `rbe-no-membership`,
   `rbe-no-entitlement`, `rbe-unknown-entitlement`, `rbe-no-service-driver` (warnings).
@@ -282,8 +282,29 @@ Vault (`Idm:NotfTemplates`), not in the driver set export.
   stamps, modifies the subject and body, deletes behind `--delete-all templates`. A `--driver`-scoped
   diff leaves them out, as it does the set's jobs.
 
-**Left for later.** Designer's project (`Idm:NotfTemplates`) and export are not read for templates;
-the package installer's type-4 (template) packages stay as noted in docs/packages.md §7.
+**Designer projects, verified (2026-10-09).** Grounded on the projects on Jerry's machine (three client
+projects with policies, read locally only; lab projects with templates):
+
+- *Policies*: the driver set's `Idm:RbeContainer` relation names the `.RBEContainer_` CObject (not
+  `Idm:RbePolicies` on the set, as Designer's model code had suggested); its `DirXML-SPPriority` is a
+  structure of `<policy name>#<level>#<interval>` strings; each `.RBEPolicy_` carries `Description`,
+  `memberQuery`, `dgIdentity`, `Member` and `excludedMember` (structures of strings),
+  `DirXML-SPFilterXML` (text) and `DirXML-SPDisplayEntitlements` (a byte array, **hex**). A project holds
+  no `DirXML-EntitlementRef`; the refs are derived from the display document, whose entitlement DNs are
+  in **NDS dot form** (`UserAccount.AD.driverset1.system`) — the readers (project and export) now turn a
+  dot-form DN that points into the set into the LDAP DN a deploy writes. All 15 policies of the three
+  projects read back with the right members (up to 957), query, identity and priority; validation then
+  found one genuinely dangling grant (a driver no longer in the project) and policies with no
+  membership.
+- *Templates*: the driver set's back reference names its `.IdentityVault_`, whose
+  `Idm:TemplateCollections` names the `.NotfTemplateCollection_`, whose `Idm:NotfTemplates` name the
+  `.NotfTemplate_` objects: the subject as `notfMergeTemplateSubject`, the body as `<id>_contents.xml`,
+  package stamps as `Idm:PackageGuid` and friends. Template files in a project's package cache
+  (`Model/Project/…`) are not the vault's and are not read. A lab project's 351 templates read
+  byte-identical to the same vault read live, except six whose wording differs between the two labs.
+
+**Left for later.** Designer's export does not carry templates; the package installer's type-4
+(template) packages stay as noted in docs/packages.md §7.
 
 ## 13. As built (L1): the low set
 
