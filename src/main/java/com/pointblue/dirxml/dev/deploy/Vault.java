@@ -178,6 +178,7 @@ public final class Vault implements VaultAccess {
     private final Config config;
     private final DirContext ldap;
     private LDAPConnection ops;   // lazily connected: only deploys that touch drivers need it
+    private boolean ownsLdap = true;   // false when the caller lent its own directory connection (open)
 
     private Vault(Config config, DirContext ldap) {
         this.config = config;
@@ -208,12 +209,44 @@ public final class Vault implements VaultAccess {
         }
     }
 
+    /**
+     * A vault over a directory connection the caller already holds, for a service that signs a person
+     * in and must not keep their password (Directory Console). {@code ldap} is used as is and left open
+     * by {@link #close}. The extended-operation connection is bound here, once, to {@code host}:{@code port}
+     * through {@code sockets} (the caller's TLS trust), as {@code bindDn}; {@code password} is used for that
+     * bind only and kept nowhere. Nothing is connected lazily afterwards.
+     */
+    public static Vault open(DirContext ldap, String host, int port, javax.net.ssl.SSLSocketFactory sockets, String bindDn, char[] password) {
+        registerResponses();
+        Config c = new Config();
+        c.url = "ldaps://" + (host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host) + ":" + port;
+        c.bindDn = bindDn;
+        Vault v = new Vault(c, ldap);
+        v.ownsLdap = false;
+        try {
+            LDAPConnection conn = new LDAPConnection(new LDAPJSSESecureSocketFactory(sockets));
+            conn.connect(host, port);
+            byte[] pw = new String(password).getBytes(StandardCharsets.UTF_8);
+            try {
+                conn.bind(LDAPConnection.LDAP_V3, bindDn, pw);
+            } finally {
+                java.util.Arrays.fill(pw, (byte) 0);
+            }
+            v.ops = conn;
+        } catch (Exception e) {
+            throw new VaultException("extended-op connection to " + host + ":" + port + " as " + bindDn + ": " + e.getMessage(), e);
+        }
+        return v;
+    }
+
     @Override
     public void close() {
-        try {
-            ldap.close();
-        } catch (Exception ignored) {
-            // closing
+        if (ownsLdap) {
+            try {
+                ldap.close();
+            } catch (Exception ignored) {
+                // closing
+            }
         }
         if (ops != null) {
             try {
@@ -452,22 +485,35 @@ public final class Vault implements VaultAccess {
 
     // ---- extended operations --------------------------------------------------------
 
+    /** The engine's response classes, registered with the LDAP library before any extended operation. */
+    private static synchronized void registerResponses() {
+        try {
+            registerAll();
+        } catch (ClassNotFoundException e) {
+            throw new VaultException("the engine's extended-operation classes (dirxml_misc.jar) are not on the class path: " + e.getMessage(), e);
+        }
+    }
+
+    private static void registerAll() throws ClassNotFoundException {
+        GetDriverStateResponse.register();
+        com.novell.nds.dirxml.ldap.GetJobStateResponse.register();
+        GetDriverStartOptionResponse.register();
+        ListNamedPasswordsResponse.register();
+        ViewCacheEntriesResponse.register();
+        GetChunkedResultResponse.register();
+        GetVersionResponse.register();
+        ViewActivationResponse.register();
+        GetDriverSetResponse.register();
+        GetDriverStatsResponse.register();
+        GetJvmStatsResponse.register();
+        SubmitEventResponse.register();
+        SubmitCommandResponse.register();
+    }
+
     private LDAPConnection ops() {
         if (ops == null) {
             try {
-                GetDriverStateResponse.register();
-                com.novell.nds.dirxml.ldap.GetJobStateResponse.register();
-                GetDriverStartOptionResponse.register();
-                ListNamedPasswordsResponse.register();
-                ViewCacheEntriesResponse.register();
-                GetChunkedResultResponse.register();
-                GetVersionResponse.register();
-                ViewActivationResponse.register();
-                GetDriverSetResponse.register();
-                GetDriverStatsResponse.register();
-                GetJvmStatsResponse.register();
-                SubmitEventResponse.register();
-                SubmitCommandResponse.register();
+                registerResponses();
                 URI u = URI.create(config.url);
                 int port = u.getPort() > 0 ? u.getPort() : ("ldaps".equals(u.getScheme()) ? 636 : 389);
                 LDAPConnection conn;
