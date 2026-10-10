@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **The low console gaps** (docs/console-gaps.md §13): `driverset.activation [apply]`,
+  `driverset.servers [add|remove]`, `engine.metrics`, `driver.rights`, `workorder.list`.
+
 ## [0.24.0] - 2026-10-09
 
 ### Added

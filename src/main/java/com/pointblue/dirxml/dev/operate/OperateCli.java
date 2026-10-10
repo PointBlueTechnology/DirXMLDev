@@ -45,7 +45,7 @@ public final class OperateCli {
         String cmd = argv[0];
         String sub = null;
         int optStart = 1;
-        if ((cmd.equals("driver.log-level") || cmd.equals("driver.health") || cmd.equals("vault.email-server")) && argv.length >= 2 && !argv[1].startsWith("--")) {
+        if ((cmd.equals("driver.log-level") || cmd.equals("driver.health") || cmd.equals("vault.email-server") || cmd.equals("driverset.activation") || cmd.equals("driverset.servers")) && argv.length >= 2 && !argv[1].startsWith("--")) {
             sub = argv[1];   // optional: "set" / "clear"; without it the command shows
             optStart = 2;
         }
@@ -102,6 +102,52 @@ public final class OperateCli {
             switch (cmd) {
                 case "driverset.status":
                     result = Operate.driversetStatus(engine, env);
+                    break;
+
+                case "driverset.activation": {
+                    if ("apply".equals(sub)) {
+                        String file = first(opts, "file");
+                        if (file == null) {
+                            System.err.println("usage: driverset.activation apply --env E --file <credential.xml> --yes [--confirm E]");
+                            return 2;
+                        }
+                        result = Operate.driversetActivationApply(engine, env, Files.readAllBytes(Paths.get(file)), file, yes, confirm, tree);
+                    } else {
+                        result = Operate.driversetActivation(engine, env);
+                    }
+                    break;
+                }
+
+                case "driverset.servers": {
+                    if ("add".equals(sub) || "remove".equals(sub)) {
+                        String server = first(opts, "server");
+                        if (server == null) {
+                            System.err.println("usage: driverset.servers add|remove --env E --server <server DN> --yes [--confirm E]");
+                            return 2;
+                        }
+                        String url = com.pointblue.dirxml.dev.deploy.Servers.urlOf(env, vault, server);
+                        result = Operate.driversetServerSet(env, server, url, "remove".equals(sub), yes, confirm, tree);
+                    } else {
+                        result = Operate.driversetServers(engine, env);
+                    }
+                    break;
+                }
+
+                case "engine.metrics":
+                    result = Operate.engineMetrics(engine, env, first(opts, "base"));
+                    break;
+
+                case "driver.rights": {
+                    if (driver == null) {
+                        System.err.println("usage: driver.rights --env E --driver D --dn <object> [--attr A…] [--json]");
+                        return 2;
+                    }
+                    result = Operate.driverRights(engine, env, driver, first(opts, "dn"), opts.getOrDefault("attr", List.of()));
+                    break;
+                }
+
+                case "workorder.list":
+                    result = Operate.workOrders(engine, env, first(opts, "base"), opts.containsKey("limit") ? Integer.parseInt(first(opts, "limit")) : 200);
                     break;
 
                 case "driver.status": {
@@ -549,6 +595,11 @@ public final class OperateCli {
         System.err.println("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]");
         System.err.println("  driver.secrets list|set|remove --env E --driver D [--name X] [--stdin]");
         System.err.println("  driver.trace show|set|reset|tail|view --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]   (view: the desktop viewer, or view --file F)");
+        System.err.println("  driverset.activation [apply --file <credential.xml> --yes] --env E   the driver set's activation as the engine reports it; apply writes a vendor credential");
+        System.err.println("  driverset.servers [add|remove --server DN --yes] --env E   the servers of the set and what this connection's server runs; add/remove associate a server (SetDriverSet / ClearDriverSet, at that server)");
+        System.err.println("  engine.metrics --env E [--base DN] [--json]        users, users with an association, enabled ones (the licensing count), and each driver's associations by state");
+        System.err.println("  driver.rights --env E --driver D --dn <object> [--attr A…]   eDirectory's effective rights of the driver object on an object: entry, all attributes, named attributes");
+        System.err.println("  workorder.list --env E [--base DN] [--limit N]    the Work Order driver's DirXML-WorkOrder objects: status, due date, description");
         System.err.println("  vault.email-server [set] --env E [--host H] [--port N] [--from A] [--user U] [--tls true|false] [--timeout N] [--protocol P] [--auth M] [--password-key K|--stdin]   the notification collection's SMTP settings; set writes them");
         System.err.println("  driver.migrate --env E --driver D --direction vault --base DN --filter F --class C [--max N] [--dry-run] --yes   send vault objects into the application (one <sync> per object through the running driver)");
         System.err.println("  driver.log-level [set] --env E [--driver D] [--level errors|errors-and-warnings|last-log-time|off|specific-events] [--events id,…] [--limit N] [--events-type N] [--inherit]   the log level of a driver or the driver set; set writes it live, --inherit makes a driver use the set's");
