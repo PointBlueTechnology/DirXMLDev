@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-09
+
 ### Fixed
 
 - **Designer projects: entitlement policies** are read from where real projects keep them (the driver
