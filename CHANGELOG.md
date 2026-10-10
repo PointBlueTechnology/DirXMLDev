@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Designer projects: entitlement policies** are read from where real projects keep them (the driver
+  set's `Idm:RbeContainer`, priorities in `DirXML-SPPriority`, multi-valued attributes as nested
+  structures, the display document as hex); verified against three real projects.
+- **Entitlement refs derived from a display document** (projects and exports) carry LDAP DNs: Designer
+  writes the entitlement DNs in NDS dot form, which a deploy cannot write.
+
+### Added
+
+- **Designer projects: notification templates** are read (the driver set's Identity Vault →
+  its template collection → the templates, subject, body and package stamps).
+
 ## [0.25.0] - 2026-10-09
 
 ### Added

@@ -212,8 +212,13 @@ public final class ProjectReader {
             }
         }
 
-        for (String key : relationKeys(m, "Idm:RbePolicies")) {
+        // the set's entitlement policy container (Idm:RbeContainer, grounded on real projects 2026-10-09)
+        for (String key : relationKeys(m, "Idm:RbeContainer")) {
             readRbeContainer(idx, idOf(key), ds);
+        }
+        // the vault's notification templates: driver set → its Identity Vault → the vault's collection
+        for (String vaultKey : allRelationKeys(m, "Idm:IdentityVaults")) {
+            readTemplates(idx, idOf(vaultKey), ds);
         }
 
         for (String libKey : relationKeys(m, "Idm:Libraries")) {
@@ -1008,13 +1013,15 @@ public final class ProjectReader {
     }
 
     /**
-     * Designer's RBE container ({@code Idm:RbePolicies} on the driver set, docs/console-gaps.md §9), from
-     * its model code ({@code RBEContainerImpl}, {@code RBEPolicyImpl}; no sample project held one when this
-     * was written): the container CObject carries {@code Priority} values {@code <policy>#<level>#<interval>}
-     * and the {@code Idm:RbePolicies} relation to its policies, each a CObject with the vault's own
-     * attribute names ({@code Description}, {@code memberQuery}, {@code dgIdentity}, {@code Member},
-     * {@code excludedMember}, {@code DirXML-SPFilterXML}, {@code DirXML-SPDisplayEntitlements}) — the
-     * display document possibly as the CObject's contents.
+     * Designer's RBE container (docs/console-gaps.md §9), grounded on real projects (2026-10-09): the driver
+     * set's {@code Idm:RbeContainer} relation names a {@code .RBEContainer_} CObject whose
+     * {@code DirXML-SPPriority} structure holds {@code <policy name>#<level>#<interval>} strings and whose
+     * {@code Idm:RbePolicies} relations name the {@code .RBEPolicy_} CObjects. A policy carries the vault's
+     * attribute names: {@code Description}, {@code memberQuery}, {@code dgIdentity}, {@code Member} and
+     * {@code excludedMember} (structures of strings), {@code DirXML-SPFilterXML} (the criteria as text) and
+     * {@code DirXML-SPDisplayEntitlements} (a byte array, hex, of the {@code <Drivers>} document). A project
+     * holds no {@code DirXML-EntitlementRef}: Designer derives the refs from the display document when it
+     * deploys, and so does this reader.
      */
     private static void readRbeContainer(Index idx, String id, DriverSet ds) {
         Element m = idx.parseMeta(id);
@@ -1026,7 +1033,11 @@ public final class ProjectReader {
             ds.meta.put(DriverSet.RBE_CONTAINER_META, container);
         }
         Map<String, Integer> levels = new java.util.LinkedHashMap<>();
-        for (String v : attrValues(m, "Priority")) {
+        List<String> priorities = attrValues(m, "DirXML-SPPriority");
+        if (priorities.isEmpty()) {
+            priorities = attrValues(m, "Priority");
+        }
+        for (String v : priorities) {
             String[] parts = v.split("#", 3);
             if (parts.length >= 2) {
                 try {
@@ -1068,7 +1079,7 @@ public final class ProjectReader {
                     p.meta.put("criteria.unreadable", "true");
                 }
             }
-            String disp = attrValue(pm, "DirXML-SPDisplayEntitlements");
+            String disp = hexOrText(attrValue(pm, "DirXML-SPDisplayEntitlements"));
             Element dispEl = null;
             if (disp != null) {
                 try {
@@ -1090,6 +1101,7 @@ public final class ProjectReader {
             p.displayEntitlements = dispEl;
             if (p.entitlementRefs.isEmpty()) {
                 p.entitlementRefs.addAll(p.refsFromDisplay());
+                p.ldapRefs(ds.name, ds.dn);
             }
             p.priority = levels.get(name.toLowerCase());
             copyPackageMeta(pm, p.meta, idx);
@@ -1110,12 +1122,80 @@ public final class ProjectReader {
         }
         for (Element c : Xds.childElements(a)) {
             String ln = c.getLocalName() != null ? c.getLocalName() : c.getNodeName();
-            if (ln.equals("values") || ln.equals("value")) {
+            // a CStructure's values are nested <attributes value=…/> (real projects); older shapes used <values>
+            if (ln.equals("attributes") || ln.equals("values") || ln.equals("value")) {
                 String cv = c.getAttribute("value");
-                out.add(cv.isEmpty() ? Xds.text(c) : cv);
+                if (!cv.isEmpty() || !Xds.text(c).isBlank()) {
+                    out.add(cv.isEmpty() ? Xds.text(c) : cv);
+                }
             }
         }
         return out;
+    }
+
+    /** A CByteArray's value is hex ({@code 3C3F786D6C…}); anything that is not even-length hex is returned as it is. */
+    static String hexOrText(String v) {
+        if (v == null || v.isEmpty() || (v.length() % 2) != 0 || !v.matches("[0-9A-Fa-f]+")) {
+            return v;
+        }
+        byte[] b = new byte[v.length() / 2];
+        for (int i = 0; i < b.length; i++) {
+            b[i] = (byte) Integer.parseInt(v.substring(2 * i, 2 * i + 2), 16);
+        }
+        return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * The vault's notification templates (docs/console-gaps.md §12), grounded on real projects (2026-10-09):
+     * the {@code .IdentityVault_} CObject's {@code Idm:TemplateCollections} relation names the
+     * {@code .NotfTemplateCollection_} (the vault's {@code cn=<name>,cn=Security}), whose
+     * {@code Idm:NotfTemplates} relations name the {@code .NotfTemplate_} CObjects: the subject as
+     * {@code notfMergeTemplateSubject}, the body as the sibling {@code <id>_contents.xml}, package stamps as
+     * {@code Idm:PackageGuid} and friends.
+     */
+    private static void readTemplates(Index idx, String vaultId, DriverSet ds) {
+        Element vault = idx.metaById.containsKey(vaultId) ? idx.parseMeta(vaultId) : null;
+        if (vault == null || isRefStub(vault)) {
+            return;
+        }
+        for (String collKey : relationKeys(vault, "Idm:TemplateCollections")) {
+            Element coll = idx.metaById.containsKey(idOf(collKey)) ? idx.parseMeta(idOf(collKey)) : null;
+            if (coll == null || isRefStub(coll)) {
+                continue;
+            }
+            String collName = attr(coll, "name", null);
+            if (collName != null && !collName.isBlank()) {
+                String dn = "cn=" + collName + ",cn=Security";
+                if (!dn.equalsIgnoreCase(com.pointblue.dirxml.dev.model.NotificationTemplate.DEFAULT_COLLECTION_DN)) {
+                    ds.meta.put(DriverSet.TEMPLATES_COLLECTION_META, dn);
+                }
+            }
+            for (String tKey : relationKeys(coll, "Idm:NotfTemplates")) {
+                String id = idOf(tKey);
+                Element tm = idx.metaById.containsKey(id) ? idx.parseMeta(id) : null;
+                if (tm == null || isRefStub(tm)) {
+                    continue;
+                }
+                String name = attr(tm, "name", null);
+                if (name == null || name.isBlank()) {
+                    continue;
+                }
+                Element body = null;
+                Path c = idx.contentsById.get(id);
+                if (c != null) {
+                    try {
+                        body = Xds.parseFile(c).getDocumentElement();
+                    } catch (Exception e) {
+                        // a body that does not parse is left out; validate reports template-no-data
+                    }
+                }
+                com.pointblue.dirxml.dev.model.NotificationTemplate t = new com.pointblue.dirxml.dev.model.NotificationTemplate(name, body);
+                t.subject = attrValue(tm, "notfMergeTemplateSubject");
+                t.meta.put("designer.id", id);
+                copyPackageMeta(tm, t.meta, idx);
+                ds.templates.add(t);
+            }
+        }
     }
 
     private static Entitlement readEntitlement(Index idx, String id) {
@@ -1361,6 +1441,23 @@ public final class ProjectReader {
     }
 
     /** {@code "#OES3U2HZ.ScriptPolicy_"} -&gt; {@code "OES3U2HZ"}. */
+    /** Like {@link #relationKeys}, back references included (a driver set names its Identity Vault by one). */
+    private static List<String> allRelationKeys(Element meta, String relationName) {
+        List<String> keys = new ArrayList<>();
+        if (meta == null) {
+            return keys;
+        }
+        for (Element rel : Xds.childrenByName(meta, "relations")) {
+            if (relationName.equals(rel.getAttribute("name"))) {
+                String key = rel.getAttribute("key");
+                if (key != null && !key.isEmpty()) {
+                    keys.add(key);
+                }
+            }
+        }
+        return keys;
+    }
+
     private static String idOf(String key) {
         String s = key.startsWith("#") ? key.substring(1) : key;
         int dot = s.indexOf('.');
