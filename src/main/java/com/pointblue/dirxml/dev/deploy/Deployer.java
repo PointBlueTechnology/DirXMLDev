@@ -34,7 +34,7 @@ public final class Deployer {
     static final List<String> VALID_DELETE_ALL_KINDS = validDeleteAllKinds();
 
     private static List<String> validDeleteAllKinds() {
-        List<String> out = new ArrayList<>(List.of("entitlements", "jobs", "rbe-policies", "forms", "prds"));
+        List<String> out = new ArrayList<>(List.of("entitlements", "jobs", "rbe-policies", "templates", "forms", "prds"));
         for (com.pointblue.dirxml.dev.model.AppObject.Kind k : com.pointblue.dirxml.dev.model.AppObject.Kind.values()) {
             if (k != com.pointblue.dirxml.dev.model.AppObject.Kind.PRD && k != com.pointblue.dirxml.dev.model.AppObject.Kind.FORM) {
                 out.add(k.plural());
@@ -309,7 +309,7 @@ public final class Deployer {
                 }
             }
             Snapshot snap = Snapshot.capture(vault, env.name, dsDn, plan.touchedDns, driverDns, treeCommit,
-                "deploy", r.planText);
+                "deploy", r.planText, List.of(to.templatesCollectionDn()));
             Path snapDir = o.tree.resolve("deploy-snapshots").resolve(env.name);
             Path snapFile = snap.write(snapDir);
             r.snapshot = o.tree.toAbsolutePath().relativize(snapFile.toAbsolutePath()).toString().replace('\\', '/');
@@ -510,8 +510,14 @@ public final class Deployer {
                     } else if (key.contains(".named.")) {
                         String name = key.substring(key.indexOf(".named.") + 7);
                         vault.setNamedPassword(s.dn, name, name, value.clone());
+                    } else if (key.endsWith("." + Secrets.REMOTE_LOADER)) {
+                        vault.setRemoteLoaderPassword(s.dn, value.clone());
+                    } else if (key.endsWith("." + Secrets.KEY)) {
+                        vault.setMutualAuthKeyPassword(s.dn, value.clone());
+                    } else if (key.endsWith("." + Secrets.KEYSTORE)) {
+                        vault.setMutualAuthKeystorePassword(s.dn, value.clone());
                     } else {
-                        r.skipped.add(s.description + " — Remote Loader passwords are not supported yet");
+                        r.skipped.add(s.description + " — unknown secret kind");
                         return;
                     }
                 } finally {
@@ -856,8 +862,16 @@ public final class Deployer {
             for (Snapshot.DriverStateInfo d : snap.drivers) {
                 driverDns.add(d.dn);
             }
+            // a snapshot may hold the vault's notification templates (outside the driver set): their parents are roots too
+            List<String> extraRoots = new ArrayList<>();
+            for (String dn : dns) {
+                String d = dn.toLowerCase(java.util.Locale.ROOT);
+                if (!d.equals(env.driverSetDn.toLowerCase(java.util.Locale.ROOT)) && !d.endsWith("," + env.driverSetDn.toLowerCase(java.util.Locale.ROOT)) && dn.indexOf(',') > 0) {
+                    extraRoots.add(dn.substring(dn.indexOf(',') + 1));
+                }
+            }
             Snapshot before = Snapshot.capture(vault, env.name, env.driverSetDn, dns, driverDns,
-                DeployLog.treeCommit(tree), "before-rollback", null);
+                DeployLog.treeCommit(tree), "before-rollback", null, extraRoots);
             Path snapFile = before.write(tree.resolve("deploy-snapshots").resolve(env.name));
             r.snapshot = tree.toAbsolutePath().relativize(snapFile.toAbsolutePath()).toString().replace('\\', '/');
             Snapshot.RestoreResult rr = snap.restore(vault);

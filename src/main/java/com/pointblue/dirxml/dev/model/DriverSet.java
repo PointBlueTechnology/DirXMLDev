@@ -33,6 +33,14 @@ public final class DriverSet {
      * container's name is {@link #rbeContainerName()}.
      */
     public final List<EntitlementPolicy> rbePolicies = new ArrayList<>();
+    /**
+     * The vault's e-mail notification templates ({@code notfMergeTemplate} objects of the notification
+     * collection, docs/console-gaps.md §12): not the driver set's, but kept with the tree. The collection's
+     * DN is {@link #templatesCollectionDn()}.
+     */
+    public final List<NotificationTemplate> templates = new ArrayList<>();
+    /** Meta key holding the notification collection's DN when it is not the default. */
+    public static final String TEMPLATES_COLLECTION_META = "templates.collection";
     /** Meta key holding the policy container's name when it is not the default. */
     public static final String RBE_CONTAINER_META = "rbe.container";
     /** iManager's and Designer's name for the policy container. */
@@ -104,6 +112,22 @@ public final class DriverSet {
     public String rbeContainerName() {
         String n = meta.get(RBE_CONTAINER_META);
         return n == null || n.isBlank() ? DEFAULT_RBE_CONTAINER : n;
+    }
+
+    /** The DN of the notification collection the templates live in. */
+    public String templatesCollectionDn() {
+        String n = meta.get(TEMPLATES_COLLECTION_META);
+        return n == null || n.isBlank() ? NotificationTemplate.DEFAULT_COLLECTION_DN : n;
+    }
+
+    /** A template by name (case-insensitive), or null. */
+    public NotificationTemplate template(String name) {
+        for (NotificationTemplate t : templates) {
+            if (t.name.equalsIgnoreCase(name)) {
+                return t;
+            }
+        }
+        return null;
     }
 
     /** A policy by name (case-insensitive), or null. */

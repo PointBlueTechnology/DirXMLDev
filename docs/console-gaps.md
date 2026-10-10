@@ -1,6 +1,6 @@
 # Identity Console gaps: design note
 
-Status: **decided 2026-10-09** (section 5); J1, J2, R1 and M1 built (jobs; entitlement policies; `driver.query`, `driver.health`); M2 next. Basis: *DirXMLDev CLI vs Identity
+Status: **decided 2026-10-09** (section 5); J1, J2, R1, M1 and M2 built (G5, G12, G11 in §11; G8 in §12); L1 as needed. Basis: *DirXMLDev CLI vs Identity
 Console API: Capability Gaps* (2026-10-09, 208 `edirapi` routes against DirXMLDev 0.18.0). The
 first set — **G3** association and object inspection, **G4** password-sync diagnostics, **G6**
 queue/submit event, **G10** the live start option — is built (`docs/operate.md`, release 0.19.0)
@@ -220,4 +220,68 @@ piece). The health job's actions (start, stop, restart, clear the cache, send e-
 listed by count, not by kind. The web's Objects tab is to get "ask the application" beside the vault's
 answer (an R2/M1b web change). Custom shims that are not installed on a lab engine refuse to start,
 which is the engine's doing, not the query's.
+
+## 11. As built (M2, first part): migrate into the application, the log level, the extra secrets
+
+**G5 `driver.migrate --direction vault --base DN --filter F --class C [--max N] [--dry-run]`.** The engine
+has no verb for it: the console's `migrateFromNDS` searches the vault itself and then migrates object by
+object (`migrateObject`, with `migrateStatus` for the progress). The command does the same: an LDAP search,
+then one `<sync class-name src-dn>` command per object through the running driver's subscriber channel
+(`SubmitCommand`), which makes the engine read the object and send its add or modify to the shim; each
+object's status is reported and the run is audited as one line. `--dry-run` lists the objects. The old
+`driver.migrate --xds` (the engine's `MigrateApp`, from the application) stays as `--direction app`, the
+default when `--xds` is given. Not proven live: the only lab driver that would run safely is a Loopback
+whose publisher policy writes an association back onto the user, so the live check stopped at the dry run.
+
+**G12 `driver.log-level [set] --env E [--driver D]`.** Grounded on Designer's log level page
+(`com.novell.idm.config`, `LogLevelComposite`, and `DSUtil.LOG_LEVEL_n_EVENTS`, read 2026-10-09): the
+page's radio lands in `DirXML-DriverTraceLevel` — 0 log errors, 1 errors and warnings, 2 only update the
+last log time, 3 logging off, 5 log specific events (6 was XDAS events before 4.8) — and the event ids it
+implies in `DirXML-LogEvents` (0 → 4 5 38; 1 → 3 4 5 35 38 39; 2 → -1; 3 → none). That attribute is
+engine-written, so it is set through `SetLogEvents` / `ClearLogEvents`. `DirXML-LogLimit` is the most
+log entries kept (0 turns the set's logging off), `DirXML-LogEventsType` the page's format choice. A driver
+without its own values uses the driver set's; `--inherit` clears a driver's four. The command shows all of
+this for a driver or the set and sets it live; `--level specific-events` needs `--events`. The trace
+settings were never in the tree (they are operational, `driver.trace`), and the log level follows them
+rather than the note's earlier idea of a tree attribute.
+
+**G11 `driver.secrets set|remove --kind named|shim-auth|remote-loader|key|keystore`.** The engine's
+`SetRemoteLoaderPassword`, `SetMutualAuthKeyPassword` and `SetMutualAuthKSPassword` (and their Clear
+operations) are what the console's `rlPassword`, `keyPassword` and `keystorePassword` call. Two new
+secret kinds, `<driver>.mutual-auth-key-password` and `<driver>.mutual-auth-keystore-password`, join the
+inventory as optional needs of a Remote Loader driver (no missing-secret note when absent); the deployer
+sets all three where before it skipped Remote Loader passwords as unsupported.
+
+**Left for later.** G8 (the e-mail server and the notification templates). The event ids' names (the
+engine's audit event table) are shown as numbers. The migrate-into-application path is tested against the
+fake engine only.
+
+## 12. As built (M2, second part): the e-mail server and the notification templates
+
+**Grounding (edir3, 2026-10-09).** The vault's one `notfTemplateCollection`,
+`cn=Default Notification Collection,cn=Security`, carries the SMTP settings (`notfSMTPEmailHost`,
+`notfSMTPPort`, `notfSMTPEmailFrom`, `notfSMTPEmailUserName`, `notfSMTPMailPassword`, `notfSMTPUseTLS`,
+`notfSMTPTimeout`, `notfSMTPMailProtocol`, `notfSMTPAuthMechanisms`, and the OAuth ones) and 351
+`notfMergeTemplate` children, 344 of them package-stamped: each a subject
+(`notfMergeTemplateSubject`) and a body (`notfMergeTemplateData`: an `<html>` document with
+`form:token-descriptions` and `$token$` markers). Designer models the templates under the Identity
+Vault (`Idm:NotfTemplates`), not in the driver set export.
+
+**Built.**
+
+- **`vault.email-server [set] --env E`**: the SMTP settings shown, the password as set or not;
+  `set` writes the ones given (an empty value clears one) and the password from the secrets file
+  (`--password-key`, suggested key `email-server.password`) or stdin. The console's test send has no
+  engine operation behind it (the console mails from its own process), so none is offered.
+- **Templates in the tree**: `NotificationTemplate` (name, subject, body, meta), `DriverSet.templates`
+  with the collection's DN in meta when it is not the default; `templates/<name>.xml` beside
+  `driverset.xml`, the subject and stamps on the manifest's `<template>`. Read live (the import also
+  reads the collection under `cn=Security`) and from an LDIF; `validate` (`template-no-data`,
+  `template-no-subject`, `template-name-blank`); `vault.diff` `TEMPLATE_ADDED / REMOVED / CHANGED` (no
+  driver restart); `vault.deploy` creates the collection when absent, adds a template with its package
+  stamps, modifies the subject and body, deletes behind `--delete-all templates`. A `--driver`-scoped
+  diff leaves them out, as it does the set's jobs.
+
+**Left for later.** Designer's project (`Idm:NotfTemplates`) and export are not read for templates;
+the package installer's type-4 (template) packages stay as noted in docs/packages.md §7.
 

@@ -70,6 +70,7 @@ public final class AsCodeWriter {
         }
         writeJobs(ds.jobs, root, m);
         writeRbePolicies(ds.rbePolicies, root, m);
+        writeTemplates(ds.templates, root, m);
         List<Driver> drivers = new ArrayList<>(ds.drivers);
         drivers.sort(Comparator.comparing(d -> d.name));
         for (Driver d : drivers) {
@@ -423,6 +424,32 @@ public final class AsCodeWriter {
             writeText(dir.resolve(file), rbePolicyXml(p));
             Manifest pm = m.child("rbe-policy").attr("name", p.name).attr("file", "rbe-policies/" + file);
             pm.meta(p.meta);
+        }
+    }
+
+    /**
+     * Notification templates ({@code notfMergeTemplate}, docs/console-gaps.md §12): {@code templates/<name>.xml}
+     * holds the body document; the manifest's {@code <template>} carries the subject and the meta.
+     */
+    private static void writeTemplates(List<com.pointblue.dirxml.dev.model.NotificationTemplate> templates, Path root, Manifest m) throws IOException {
+        if (templates.isEmpty()) {
+            return;
+        }
+        Path dir = root.resolve("templates");
+        Files.createDirectories(dir);
+        Set<String> used = new HashSet<>();
+        List<com.pointblue.dirxml.dev.model.NotificationTemplate> sorted = new ArrayList<>(templates);
+        sorted.sort(Comparator.comparing(t -> t.name));
+        for (com.pointblue.dirxml.dev.model.NotificationTemplate t : sorted) {
+            String file = uniqueFile(fileSafe(t.name) + ".xml", used);
+            if (t.data != null) {
+                writeXml(dir.resolve(file), t.data);
+            }
+            Manifest tm = m.child("template").attr("name", t.name).attr("file", "templates/" + file);
+            if (t.subject != null) {
+                tm.attr("subject", t.subject);
+            }
+            tm.meta(t.meta);
         }
     }
 

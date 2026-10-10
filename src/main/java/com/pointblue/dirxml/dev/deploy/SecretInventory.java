@@ -27,11 +27,18 @@ public final class SecretInventory {
         public final String key;       // the Secrets key, e.g. "AD.named.svc"
         public final String kind;      // shim-auth | remote-loader | named
         public final String because;   // where the need comes from
+        /** Set when it is not a problem for the secret to be absent (the Remote Loader's mutual-authentication passwords). */
+        public final boolean optional;
 
         Need(String key, String kind, String because) {
+            this(key, kind, because, false);
+        }
+
+        Need(String key, String kind, String because, boolean optional) {
             this.key = key;
             this.kind = kind;
             this.because = because;
+            this.optional = optional;
         }
 
         @Override
@@ -53,6 +60,8 @@ public final class SecretInventory {
         Element shim = d.config.get(Driver.SHIM_CONFIG_INFO);
         if (shim != null && usesRemoteLoader(shim)) {
             out.add(new Need(Secrets.remoteLoader(d.name), "remote-loader", "shim-config-info names a Remote Loader"));
+            out.add(new Need(Secrets.key(d.name), "key", "a Remote Loader with mutual authentication (set when the secrets file has it)", true));
+            out.add(new Need(Secrets.keystore(d.name), "keystore", "a Remote Loader with mutual authentication (set when the secrets file has it)", true));
         }
         Set<String> named = new LinkedHashSet<>();
         List<Policy> policies = new ArrayList<>(d.policies);

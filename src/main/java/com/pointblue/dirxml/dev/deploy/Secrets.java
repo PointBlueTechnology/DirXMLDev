@@ -34,6 +34,10 @@ public final class Secrets {
 
     public static final String SHIM_AUTH = "shim-auth-password";
     public static final String REMOTE_LOADER = "remote-loader-password";
+    /** The Remote Loader's mutual-authentication key password ({@code SetMutualAuthKeyPassword}, docs/console-gaps.md §11). */
+    public static final String KEY = "mutual-auth-key-password";
+    /** The Remote Loader's mutual-authentication keystore password ({@code SetMutualAuthKSPassword}). */
+    public static final String KEYSTORE = "mutual-auth-keystore-password";
     /**
      * {@code <driver>.shim-auth-id}: a shim authentication id that is a credential (an OAuth client
      * id, an API key) rather than a user name, kept out of the tree. It wins over the tree's and the
@@ -110,6 +114,14 @@ public final class Secrets {
 
     public static String remoteLoader(String driver) {
         return driver + "." + REMOTE_LOADER;
+    }
+
+    public static String key(String driver) {
+        return driver + "." + KEY;
+    }
+
+    public static String keystore(String driver) {
+        return driver + "." + KEYSTORE;
     }
 
     public static String shimAuthId(String driver) {
