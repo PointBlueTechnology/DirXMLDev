@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-09
+
 ### Added
 
 - **`driver.migrate --direction vault`** (docs/console-gaps.md §11, G5): migrate vault objects into the
