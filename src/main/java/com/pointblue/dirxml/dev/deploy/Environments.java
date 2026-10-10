@@ -75,6 +75,14 @@ public final class Environments {
             this.sshUser = sshUser;
         }
 
+        /**
+         * An environment for a service that holds its own connections (Directory Console): a name, the
+         * driver set and the tier, which is what {@code Operate} reads. No URL, credentials or secrets.
+         */
+        public static Environment forService(String name, String driverSetDn, Tier tier) {
+            return new Environment(name, null, null, null, driverSetDn, tier, null, null, false, null, null);
+        }
+
         public Vault.Config vaultConfig() {
             Vault.Config c = new Vault.Config();
             c.url = url;
