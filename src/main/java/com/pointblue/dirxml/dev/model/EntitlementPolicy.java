@@ -132,6 +132,56 @@ public final class EntitlementPolicy {
         return out;
     }
 
+    /**
+     * Designer keeps the entitlement DNs of a policy's display document in NDS dot form
+     * ({@code UserAccount.AD Driver.driverset1.system}, grounded on real projects 2026-10-09); the vault and a
+     * deploy need LDAP DNs. A ref whose DN is in dot form and points into this driver set (its third part is the
+     * set's name) becomes {@code cn=<entitlement>,cn=<driver>,<driver set dn>}; any other ref is returned as it is
+     * (validate reports one it cannot place).
+     */
+    public static String ldapRef(String ref, String driverSetName, String driverSetDn) {
+        if (ref == null || driverSetName == null || driverSetDn == null || driverSetDn.isBlank()) {
+            return ref;
+        }
+        String dn = refDn(ref);
+        if (dn.indexOf('=') >= 0) {
+            return ref;
+        }
+        List<String> parts = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean esc = false;
+        for (char c : dn.toCharArray()) {
+            if (esc) {
+                cur.append(c);
+                esc = false;
+            } else if (c == '\\') {
+                esc = true;
+            } else if (c == '.') {
+                parts.add(cur.toString());
+                cur.setLength(0);
+            } else {
+                cur.append(c);
+            }
+        }
+        parts.add(cur.toString());
+        if (parts.size() < 3 || !parts.get(2).trim().equalsIgnoreCase(driverSetName.trim())) {
+            return ref;
+        }
+        String ldap = "cn=" + escapeRdn(parts.get(0).trim()) + ",cn=" + escapeRdn(parts.get(1).trim()) + "," + driverSetDn;
+        return ldap + ref.substring(dn.length());
+    }
+
+    private static String escapeRdn(String v) {
+        return v.replace("\\", "\\\\").replace(",", "\\,").replace("+", "\\+").replace("\"", "\\\"").replace("<", "\\<").replace(">", "\\>").replace(";", "\\;");
+    }
+
+    /** {@link #ldapRef} over every ref, in place. */
+    public void ldapRefs(String driverSetName, String driverSetDn) {
+        for (int i = 0; i < entitlementRefs.size(); i++) {
+            entitlementRefs.set(i, ldapRef(entitlementRefs.get(i), driverSetName, driverSetDn));
+        }
+    }
+
     private static List<Element> children(Element parent, String localName) {
         List<Element> out = new ArrayList<>();
         for (Node c = parent.getFirstChild(); c != null; c = c.getNextSibling()) {
