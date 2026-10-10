@@ -523,6 +523,7 @@ public final class ExportReader {
                 }
                 if (p.entitlementRefs.isEmpty()) {
                     p.entitlementRefs.addAll(p.refsFromDisplay());
+                    p.ldapRefs(ds.name, ds.dn);
                 }
                 p.priority = levels.get(name.toLowerCase());
                 String guid = pe.getAttribute("designer-guid");
