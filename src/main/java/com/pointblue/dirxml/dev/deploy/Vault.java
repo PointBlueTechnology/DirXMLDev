@@ -2,7 +2,14 @@ package com.pointblue.dirxml.dev.deploy;
 
 import com.novell.ldap.LDAPConnection;
 import com.novell.ldap.LDAPJSSESecureSocketFactory;
+import com.novell.nds.dirxml.ldap.ApplyActivationRequest;
+import com.novell.nds.dirxml.ldap.ClearDriverSetRequest;
 import com.novell.nds.dirxml.ldap.ClearLogEventsRequest;
+import com.novell.nds.dirxml.ldap.GetDriverSetRequest;
+import com.novell.nds.dirxml.ldap.GetDriverSetResponse;
+import com.novell.nds.dirxml.ldap.SetDriverSetRequest;
+import com.novell.nds.dirxml.ldap.ViewActivationRequest;
+import com.novell.nds.dirxml.ldap.ViewActivationResponse;
 import com.novell.nds.dirxml.ldap.ClearMutualAuthKSPasswordRequest;
 import com.novell.nds.dirxml.ldap.ClearMutualAuthKeyPasswordRequest;
 import com.novell.nds.dirxml.ldap.ClearRemoteLoaderPasswordRequest;
@@ -455,6 +462,8 @@ public final class Vault implements VaultAccess {
                 ViewCacheEntriesResponse.register();
                 GetChunkedResultResponse.register();
                 GetVersionResponse.register();
+                ViewActivationResponse.register();
+                GetDriverSetResponse.register();
                 GetDriverStatsResponse.register();
                 GetJvmStatsResponse.register();
                 SubmitEventResponse.register();
@@ -822,6 +831,81 @@ public final class Vault implements VaultAccess {
 
     public void clearMutualAuthKeystorePassword(String driverDn) {
         extOp("ClearMutualAuthKSPassword", driverDn, () -> ops().extendedOperation(new ClearMutualAuthKSPasswordRequest(driverDn)));
+    }
+
+    /** {@code ViewActivation}: the driver set's activation document (docs/console-gaps.md §13), or "" when it has none. */
+    public String viewActivation(String driverSetDn) {
+        try {
+            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new ViewActivationRequest(driverSetDn, 60));
+            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new VaultException("ViewActivation " + driverSetDn + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** {@code ApplyActivation}: an activation credential document (the file the vendor sends) onto the driver set. */
+    public void applyActivation(String driverSetDn, byte[] credential) {
+        extOp("ApplyActivation", driverSetDn, () -> ops().extendedOperation(new ApplyActivationRequest(driverSetDn, credential)));
+    }
+
+    /** {@code GetDriverSet}: the driver set the connected server runs, or null when it runs none. */
+    public String serverDriverSet() {
+        try {
+            GetDriverSetResponse r = (GetDriverSetResponse) ops().extendedOperation(new GetDriverSetRequest());
+            String dn = r.getDriverSetDN();
+            return dn == null || dn.isBlank() ? null : dn;
+        } catch (Exception e) {
+            throw new VaultException("GetDriverSet: " + e.getMessage(), e);
+        }
+    }
+
+    /** {@code SetDriverSet}: associate the connected server with a driver set. */
+    public void setServerDriverSet(String driverSetDn) {
+        extOp("SetDriverSet", driverSetDn, () -> ops().extendedOperation(new SetDriverSetRequest(driverSetDn)));
+    }
+
+    /** {@code ClearDriverSet}: the connected server runs no driver set any more. */
+    public void clearServerDriverSet() {
+        extOp("ClearDriverSet", "(this server)", () -> ops().extendedOperation(new ClearDriverSetRequest()));
+    }
+
+    /**
+     * eDirectory's effective rights of {@code trusteeDn} on {@code objectDn} for {@code attribute}
+     * ({@code [Entry Rights]}, {@code [All Attributes Rights]} or one attribute), as the LDAP extension
+     * reports them: a bit set of {@code LDAPDSConstants.LDAP_DS_ENTRY_*} / {@code LDAP_DS_ATTR_*}.
+     */
+    public int effectivePrivileges(String objectDn, String trusteeDn, String attribute) {
+        try {
+            com.novell.ldap.extensions.GetEffectivePrivilegesResponse r = (com.novell.ldap.extensions.GetEffectivePrivilegesResponse)
+                ops().extendedOperation(new com.novell.ldap.extensions.GetEffectivePrivilegesRequest(objectDn, trusteeDn, attribute));
+            return r.getPrivileges();
+        } catch (Exception e) {
+            throw new VaultException("GetEffectivePrivileges " + objectDn + " for " + trusteeDn + " on " + attribute + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** How many entries a search finds, without reading their attributes. */
+    public int count(String base, String filter, int scope) {
+        int n = 0;
+        try {
+            SearchControls sc = new SearchControls();
+            sc.setSearchScope(scope);
+            sc.setReturningAttributes(new String[] {"1.1"});
+            NamingEnumeration<SearchResult> results = ldap.search(base, filter, sc);
+            try {
+                while (results.hasMore()) {
+                    results.next();
+                    n++;
+                }
+            } finally {
+                results.close();
+            }
+        } catch (NameNotFoundException e) {
+            return 0;
+        } catch (Exception e) {
+            throw new VaultException("count " + base + " " + filter + ": " + e.getMessage(), e);
+        }
+        return n;
     }
 
     /** {@code SetLogEvents}: the audit event ids a driver or driver set logs ({@code DirXML-LogEvents} is engine-written; docs/console-gaps.md §11). */

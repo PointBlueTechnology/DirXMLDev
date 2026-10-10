@@ -317,7 +317,7 @@ public final class Cli {
             if (args.length >= 1 && args[0].startsWith("viewer.")) {
                 System.exit(com.pointblue.dirxml.dev.operate.ViewerCli.run(args));
             }
-            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].startsWith("job.") || args[0].startsWith("rbe.") || args[0].equals("object.inspect") || args[0].equals("vault.email-server"))) {
+            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].startsWith("job.") || args[0].startsWith("rbe.") || args[0].startsWith("workorder.") || args[0].equals("object.inspect") || args[0].equals("vault.email-server"))) {
                 System.exit(com.pointblue.dirxml.dev.operate.OperateCli.run(args));
             }
             if (args.length >= 3 && args[0].equals("tree.diff")) {
@@ -533,6 +533,7 @@ public final class Cli {
         System.err.println("  driver.query --env E --driver D [--class C] [--scope subtree|subordinates|entry] [--dn DN] [--association A] [--search name=value…] [--read-attr A…|none]   ask the connected system through the running driver (the engine's query verb)");
         System.err.println("  driver.health [clear] --env E --driver D [--yes]   the Driver Health job's last state per server, the health configuration, the set's health jobs; clear removes the recorded status");
         System.err.println("  job.list --env E [--driver D] | job.status --env E --job J [--driver D] | job.start|abort --env E --job J [--driver D] [--yes]   the set's jobs with the engine's state; start or abort one");
+        System.err.println("  driverset.activation [apply --file F --yes] | driverset.servers [add|remove --server DN --yes] | engine.metrics | driver.rights --driver D --dn O | workorder.list   the low console gaps (docs/console-gaps.md §13)");
         System.err.println("  vault.email-server [set] --env E [--host H] [--port N] [--from A] [--user U] [--tls true|false] [--timeout N] [--protocol P] [--password-key K|--stdin]   the notification collection's SMTP settings (the password never shown); set writes them");
         System.err.println("  rbe.list --env E | rbe.members --env E --policy P   the entitlement policies of the set: priority, members, grants; one policy's computed members");
         System.err.println("  engine.version --env E");
