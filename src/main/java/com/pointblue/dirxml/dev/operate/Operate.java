@@ -166,6 +166,27 @@ public final class Operate {
             throw new UnsupportedOperationException("clearMutualAuthKeystorePassword");
         }
 
+        /** The low set (docs/console-gaps.md §13): activation, the server's driver set, effective rights, counting. */
+        default String viewActivation(String driverSetDn) {
+            throw new UnsupportedOperationException("viewActivation");
+        }
+
+        default void applyActivation(String driverSetDn, byte[] credential) {
+            throw new UnsupportedOperationException("applyActivation");
+        }
+
+        default String serverDriverSet() {
+            throw new UnsupportedOperationException("serverDriverSet");
+        }
+
+        default int effectivePrivileges(String objectDn, String trusteeDn, String attribute) {
+            throw new UnsupportedOperationException("effectivePrivileges");
+        }
+
+        default int count(String base, String filter, int scope) {
+            return search(base, filter, scope).size();
+        }
+
         /** {@code SetLogEvents} / {@code ClearLogEvents} (docs/console-gaps.md §11). */
         default void setLogEvents(String dn, int[] eventIds) {
             throw new UnsupportedOperationException("setLogEvents");
@@ -307,6 +328,31 @@ public final class Operate {
             @Override
             public void clearMutualAuthKeystorePassword(String dn) {
                 v.clearMutualAuthKeystorePassword(dn);
+            }
+
+            @Override
+            public String viewActivation(String driverSetDn) {
+                return v.viewActivation(driverSetDn);
+            }
+
+            @Override
+            public void applyActivation(String driverSetDn, byte[] credential) {
+                v.applyActivation(driverSetDn, credential);
+            }
+
+            @Override
+            public String serverDriverSet() {
+                return v.serverDriverSet();
+            }
+
+            @Override
+            public int effectivePrivileges(String objectDn, String trusteeDn, String attribute) {
+                return v.effectivePrivileges(objectDn, trusteeDn, attribute);
+            }
+
+            @Override
+            public int count(String base, String filter, int scope) {
+                return v.count(base, filter, scope);
             }
 
             @Override
@@ -2124,6 +2170,336 @@ public final class Operate {
         r.ok = error == null;
         r.text = error == null ? "log level of '" + (driver == null ? "driver set" : driver) + "': " + String.join(", ", done) + "\n" : "FAILED   " + error + " (done before it: " + String.join(", ", done) + ")\n";
         r.json = "{\"ok\":" + r.ok + ",\"done\":" + q(String.join(", ", done)) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    // ---- L1: the low set (docs/console-gaps.md §13) -----------------------------------------------
+
+    /**
+     * The driver set's activation (the console's {@code driverSetActivation}): the engine's activation document
+     * ({@code ViewActivation}) when the engine answers, and the activation attributes on the driver set either
+     * way — {@code DirXML-Act1}, {@code DirXML-Act2}, {@code DirXML-Act3} (credentials: shown as present, with
+     * the timestamp {@code DirXML-Act2} opens with, which the lab engines carry as the evaluation's date) and
+     * {@code DirXML-ActivationDate}. Read-only.
+     */
+    public static Result driversetActivation(Engine engine, Environments.Environment env) {
+        String doc = null;
+        String viewError = null;
+        try {
+            doc = engine.viewActivation(env.driverSetDn);
+        } catch (RuntimeException e) {
+            viewError = e.getMessage();
+        }
+        Result r = new Result();
+        r.ok = true;
+        StringBuilder t = new StringBuilder("driver set ").append(env.driverSetDn).append('\n');
+        Vault.Entry ds = engine.read(env.driverSetDn, "DirXML-Act1", "DirXML-Act2", "DirXML-Act3", "DirXML-ActivationDate", "DirXML-ActivationDateStr", "objectClass");
+        StringBuilder ja = new StringBuilder("[");
+        int na = 0;
+        for (String a : new String[] { "DirXML-Act1", "DirXML-Act2", "DirXML-Act3", "DirXML-ActivationDate", "DirXML-ActivationDateStr" }) {
+            String v = ds == null ? null : ds.string(a);
+            if (v == null) {
+                continue;
+            }
+            String shown;
+            if (a.startsWith("DirXML-Act") && !a.contains("Date")) {
+                String first = v.indexOf('#') > 0 ? v.substring(0, v.indexOf('#')) : v;
+                String when = "";
+                try {
+                    when = " (opens with " + java.time.Instant.ofEpochSecond(Long.parseLong(first.trim())).toString().substring(0, 10) + ")";
+                } catch (RuntimeException ex) {
+                    // not a timestamp
+                }
+                shown = "present" + when;
+            } else {
+                shown = v;
+            }
+            t.append(String.format("  %-24s%s", a, shown)).append('\n');
+            ja.append(na++ > 0 ? "," : "").append("{\"attribute\":").append(q(a)).append(",\"value\":").append(q(shown)).append("}");
+        }
+        ja.append("]");
+        if (na == 0) {
+            t.append("  activation attributes   none on the driver set\n");
+        }
+        if (viewError != null) {
+            t.append("  ViewActivation          the engine did not answer (").append(viewError.replaceFirst("^ViewActivation [^:]*: ", "")).append(")\n");
+        } else if (doc == null || doc.isBlank()) {
+            t.append("  ViewActivation          no document reported\n");
+        } else {
+            org.w3c.dom.Element root = parseOrNull(doc);
+            if (root != null) {
+                for (org.w3c.dom.Element c : leafElements(root, new ArrayList<>())) {
+                    String name = c.getLocalName() != null ? c.getLocalName() : c.getNodeName();
+                    String text = com.pointblue.dirxml.sim.Xds.text(c).trim();
+                    if (!text.isEmpty()) {
+                        t.append(String.format("  %-16s%s", name, text.length() > 120 ? text.substring(0, 120) + "…" : text)).append('\n');
+                    }
+                }
+            } else {
+                t.append(doc.strip()).append('\n');
+            }
+        }
+        r.text = t.toString();
+        r.json = "{\"ok\":true,\"driverSet\":" + q(env.driverSetDn) + ",\"attributes\":" + ja + ",\"activation\":" + q(doc == null ? "" : doc) + (viewError != null ? ",\"viewError\":" + q(viewError) : "") + "}";
+        return r;
+    }
+
+    /** Every element under {@code e} that has no element children, in document order. */
+    static List<org.w3c.dom.Element> leafElements(org.w3c.dom.Element e, List<org.w3c.dom.Element> into) {
+        List<org.w3c.dom.Element> kids = com.pointblue.dirxml.sim.Xds.childElements(e);
+        if (kids.isEmpty()) {
+            into.add(e);
+        } else {
+            for (org.w3c.dom.Element k : kids) {
+                leafElements(k, into);
+            }
+        }
+        return into;
+    }
+
+    /** Apply an activation credential document (the vendor's file) to the driver set. Heavy write, audited. */
+    public static Result driversetActivationApply(Engine engine, Environments.Environment env, byte[] credential, String fileName,
+            boolean yes, String confirm, Path tree) throws IOException {
+        if (credential == null || credential.length == 0) {
+            return Result.refused("the credential file is empty");
+        }
+        String refusal = gate(env, OpClass.HEAVY, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        String error = null;
+        try {
+            engine.applyActivation(env.driverSetDn, credential);
+        } catch (RuntimeException e) {
+            error = e.getMessage();
+        }
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = error == null ? "ok" : "failed";
+        rec.detail = "driverset.activation apply from " + fileName + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = error == null;
+        r.text = error == null ? "activation credential applied to " + env.driverSetDn + "\n" : "FAILED   " + error + "\n";
+        r.json = "{\"ok\":" + r.ok + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    /**
+     * The servers of the driver set ({@code DirXML-ServerList}) and, for the one this connection reaches, the
+     * driver set it reports running ({@code GetDriverSet}). Read-only.
+     */
+    public static Result driversetServers(Engine engine, Environments.Environment env) {
+        Vault.Entry ds = engine.read(env.driverSetDn, "DirXML-ServerList", "objectClass");
+        if (ds == null) {
+            return Result.refused("no driver set " + env.driverSetDn);
+        }
+        List<String> servers = ds.strings("DirXML-ServerList");
+        String mine = null;
+        String mineError = null;
+        try {
+            mine = engine.serverDriverSet();
+        } catch (RuntimeException e) {
+            mineError = e.getMessage();
+        }
+        StringBuilder t = new StringBuilder("driver set ").append(env.driverSetDn).append('\n');
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"driverSet\":").append(q(env.driverSetDn)).append(",\"servers\":[");
+        for (int i = 0; i < servers.size(); i++) {
+            t.append("  server          ").append(servers.get(i)).append('\n');
+            j.append(i > 0 ? "," : "").append(q(servers.get(i)));
+        }
+        if (servers.isEmpty()) {
+            t.append("  server          none listed (DirXML-ServerList is empty: no engine runs this set)\n");
+        }
+        t.append("  this connection ").append(mineError != null ? "could not ask (" + mineError + ")" : mine == null ? "runs no driver set" : "runs " + mine + (mine.equalsIgnoreCase(env.driverSetDn) ? "" : " — not this one")).append('\n');
+        j.append("],\"connectedServerRuns\":").append(mine == null ? "null" : q(mine)).append("}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /**
+     * Associate the server at {@code url} with the driver set ({@code SetDriverSet}) or clear its association
+     * ({@code ClearDriverSet}): the operation goes to that server itself. Heavy write, audited. Not for the
+     * only server of a set: clearing it would stop every driver.
+     */
+    public static Result driversetServerSet(Environments.Environment env, String serverDn, String url, boolean remove,
+            boolean yes, String confirm, Path tree) throws IOException {
+        if (url == null || url.isBlank()) {
+            return Result.refused("no LDAP URL for " + serverDn + ": name it in the environment's servers= mapping");
+        }
+        String refusal = gate(env, OpClass.HEAVY, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        String error = null;
+        String before = null;
+        try (Vault v = Vault.connect(env.vaultConfig().withUrl(url))) {
+            before = v.serverDriverSet();
+            if (remove) {
+                if (before == null) {
+                    return Result.refused(serverDn + " runs no driver set; nothing to clear");
+                }
+                v.clearServerDriverSet();
+            } else {
+                if (before != null && !before.equalsIgnoreCase(env.driverSetDn)) {
+                    return Result.refused(serverDn + " runs " + before + "; clear that first");
+                }
+                v.setServerDriverSet(env.driverSetDn);
+            }
+        } catch (RuntimeException e) {
+            error = e.getMessage();
+        }
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = error == null ? "ok" : "failed";
+        rec.detail = "driverset.servers " + (remove ? "remove" : "add") + " " + serverDn + (before == null ? "" : " (ran " + before + ")") + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = error == null;
+        r.text = error == null ? serverDn + (remove ? " no longer runs " : " now runs ") + env.driverSetDn + "\n" : "FAILED   " + error + "\n";
+        r.json = "{\"ok\":" + r.ok + ",\"server\":" + q(serverDn) + ",\"remove\":" + remove + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    /**
+     * The console's user and driver metrics ({@code getUserDriverMetrics}, {@code computeDriverDistribution}):
+     * users, users with an association, of those the enabled ones (the console's licensing count:
+     * {@code (&(objectClass=User)(DirXML-Associations=*)(!(loginDisabled=true)))}), and per driver the
+     * associated objects by state. Counts only; nothing is read beyond the DNs. Read-only.
+     */
+    public static Result engineMetrics(Engine engine, Environments.Environment env, String base) {
+        String b = base == null ? "" : base;
+        int users = engine.count(b, "(objectClass=User)", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+        int associated = engine.count(b, "(&(objectClass=User)(DirXML-Associations=*))", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+        int enabled = engine.count(b, "(&(objectClass=User)(DirXML-Associations=*)(!(loginDisabled=true)))", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+        List<Vault.Entry> drivers = new ArrayList<>(engine.children(env.driverSetDn));
+        drivers.sort(java.util.Comparator.comparing((Vault.Entry e) -> e.dn, String.CASE_INSENSITIVE_ORDER));
+        StringBuilder t = new StringBuilder();
+        t.append(String.format("users %d · with an association %d · of those enabled %d%s", users, associated, enabled, b.isEmpty() ? "" : "  (under " + b + ")")).append('\n');
+        t.append(String.format("%-32s %8s %8s %8s %8s %8s", "driver", "disabled", "processed", "pending", "manual", "migrate")).append('\n');
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"users\":").append(users).append(",\"associated\":").append(associated).append(",\"enabled\":").append(enabled).append(",\"drivers\":[");
+        int n = 0;
+        for (Vault.Entry d : drivers) {
+            if (!d.hasClass("DirXML-Driver")) {
+                continue;
+            }
+            String name = d.dn.substring(d.dn.indexOf('=') + 1, d.dn.indexOf(','));
+            int[] counts = new int[5];
+            for (int state = 0; state < 5; state++) {
+                counts[state] = engine.count(b, "(DirXML-Associations=" + d.dn + "#" + state + "#*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+            }
+            t.append(String.format("%-32s %8d %8d %8d %8d %8d", name, counts[0], counts[1], counts[2], counts[3], counts[4])).append('\n');
+            j.append(n++ > 0 ? "," : "").append("{\"name\":").append(q(name)).append(",\"dn\":").append(q(d.dn))
+             .append(",\"disabled\":").append(counts[0]).append(",\"processed\":").append(counts[1]).append(",\"pending\":").append(counts[2])
+             .append(",\"manual\":").append(counts[3]).append(",\"migrate\":").append(counts[4]).append("}");
+        }
+        j.append("]}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /** The names of eDirectory's entry and attribute rights bits. */
+    public static List<String> rightsNames(int bits, boolean entry) {
+        List<String> out = new ArrayList<>();
+        if (entry) {
+            if ((bits & 1) != 0) out.add("browse");
+            if ((bits & 2) != 0) out.add("add");
+            if ((bits & 4) != 0) out.add("delete");
+            if ((bits & 8) != 0) out.add("rename");
+            if ((bits & 16) != 0) out.add("supervisor");
+            if ((bits & 64) != 0) out.add("inheritance-control");
+        } else {
+            if ((bits & 1) != 0) out.add("compare");
+            if ((bits & 2) != 0) out.add("read");
+            if ((bits & 4) != 0) out.add("write");
+            if ((bits & 8) != 0) out.add("self");
+            if ((bits & 32) != 0) out.add("supervisor");
+            if ((bits & 64) != 0) out.add("inheritance-control");
+        }
+        return out;
+    }
+
+    /**
+     * The rights a driver has on an object (the console's {@code privileges}): eDirectory's effective
+     * privileges of the driver object (the identity the engine runs its policies as, through its security
+     * equivalences) on {@code objectDn} — entry rights, all-attributes rights and each attribute asked for.
+     * Read-only.
+     */
+    public static Result driverRights(Engine engine, Environments.Environment env, String driver, String objectDn, List<String> attributes) {
+        if (objectDn == null || objectDn.isBlank()) {
+            return Result.refused("--dn is needed: the object to check the rights on");
+        }
+        String trustee = driverDn(env, driver);
+        List<String> names = new ArrayList<>();
+        names.add("[Entry Rights]");
+        names.add("[All Attributes Rights]");
+        if (attributes != null) {
+            names.addAll(attributes);
+        }
+        StringBuilder t = new StringBuilder(driver).append(" on ").append(objectDn).append('\n');
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"driver\":").append(q(driver)).append(",\"trustee\":").append(q(trustee)).append(",\"dn\":").append(q(objectDn)).append(",\"rights\":[");
+        int n = 0;
+        for (String a : names) {
+            boolean entry = "[Entry Rights]".equals(a);
+            String shown;
+            String err = null;
+            int bits = 0;
+            try {
+                bits = engine.effectivePrivileges(objectDn, trustee, a);
+                List<String> rn = rightsNames(bits, entry);
+                shown = rn.isEmpty() ? "none" : String.join(" ", rn);
+            } catch (RuntimeException e) {
+                err = e.getMessage();
+                shown = "? (" + err + (err.contains("No Such Attribute") ? "; the LDAP name, e.g. loginDisabled, not the NDS one" : "") + ")";
+            }
+            t.append(String.format("  %-26s%s", a, shown)).append('\n');
+            j.append(n++ > 0 ? "," : "").append("{\"attribute\":").append(q(a)).append(",\"bits\":").append(bits).append(",\"names\":").append(q(shown)).append(err != null ? ",\"error\":" + q(err) : "").append("}");
+        }
+        j.append("]}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /** The work orders ({@code DirXML-WorkOrder}, the Work Order driver's objects) under a base, newest due first. Read-only. */
+    public static Result workOrders(Engine engine, Environments.Environment env, String base, int limit) {
+        String b = base == null || base.isBlank() ? env.driverSetDn : base;
+        List<Vault.Entry> found;
+        try {
+            found = engine.search(b, "(objectClass=DirXML-WorkOrder)", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+        } catch (RuntimeException e) {
+            return Result.refused("search " + b + ": " + e.getMessage());
+        }
+        found = new ArrayList<>(found);
+        found.sort(java.util.Comparator.comparing((Vault.Entry e) -> e.string("DirXML-DueDate") == null ? "" : e.string("DirXML-DueDate")).reversed());
+        StringBuilder t = new StringBuilder();
+        t.append(found.size()).append(" work order(s) under ").append(b).append('\n');
+        t.append(String.format("%-36s %-10s %-20s %s", "work order", "status", "due", "description")).append('\n');
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"base\":").append(q(b)).append(",\"total\":").append(found.size()).append(",\"workOrders\":[");
+        int n = 0;
+        for (Vault.Entry e : found) {
+            if (n >= limit) {
+                break;
+            }
+            String name = e.dn.substring(e.dn.indexOf('=') + 1, e.dn.indexOf(','));
+            String status = e.string("DirXML-nwoStatus");
+            String due = e.string("DirXML-DueDate");
+            String desc = e.string("Description");
+            t.append(String.format("%-36s %-10s %-20s %s", name, status == null ? "-" : status, due == null ? "-" : due, desc == null ? "" : desc)).append('\n');
+            j.append(n++ > 0 ? "," : "").append("{\"name\":").append(q(name)).append(",\"dn\":").append(q(e.dn)).append(",\"status\":").append(q(status == null ? "" : status))
+             .append(",\"due\":").append(q(due == null ? "" : due)).append(",\"description\":").append(q(desc == null ? "" : desc)).append(",\"content\":").append(q(e.string("DirXML-nwoContent") == null ? "" : e.string("DirXML-nwoContent"))).append("}");
+        }
+        j.append("]}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
         return r;
     }
 

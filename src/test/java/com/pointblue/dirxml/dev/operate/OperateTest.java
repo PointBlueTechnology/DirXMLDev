@@ -104,6 +104,34 @@ public class OperateTest {
             calls.add("clearMutualAuthKeystorePassword " + dn);
         }
 
+        String activation = "";
+        String serverDriverSet = null;
+        final Map<String, Integer> privileges = new LinkedHashMap<>();   // "object|trustee|attr" -> bits
+
+        @Override
+        public String viewActivation(String driverSetDn) {
+            return activation;
+        }
+
+        @Override
+        public void applyActivation(String driverSetDn, byte[] credential) {
+            calls.add("applyActivation " + driverSetDn + " " + credential.length);
+        }
+
+        @Override
+        public String serverDriverSet() {
+            return serverDriverSet;
+        }
+
+        @Override
+        public int effectivePrivileges(String objectDn, String trusteeDn, String attribute) {
+            Integer v = privileges.get(objectDn + "|" + trusteeDn + "|" + attribute);
+            if (v == null) {
+                throw new RuntimeException("no rights recorded for " + attribute);
+            }
+            return v;
+        }
+
         @Override
         public void setLogEvents(String dn, int[] eventIds) {
             calls.add("setLogEvents " + dn + " " + java.util.Arrays.toString(eventIds));
@@ -931,5 +959,92 @@ public class OperateTest {
         assertTrue(again.text(), !again.text().contains("pw\n"));
         Operate.Result nothing = Operate.emailServerSet(fake, env, Map.of(), null, false, null, tree);
         assertTrue(nothing.text(), !nothing.ok && nothing.text().contains("nothing to set"));
+    }
+
+    // ---- L1: the low set (docs/console-gaps.md §13) ----
+
+    @Test
+    public void activationIsShownAndAppliedThroughTheEngine() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        Environments.Environment env = env("dev", Environments.Tier.DEV);
+        Operate.Result none = Operate.driversetActivation(fake, env);
+        assertTrue(none.text(), none.ok && none.text().contains("no document reported") && none.text().contains("none on the driver set"));
+        Vault.Entry ds = FakeEngine.entry(DS_DN, "driverset1", List.of("Top", "DirXML-DriverSet"));
+        FakeEngine.put(ds, "DirXML-Act2", List.of("1797961437#0#x"));
+        fake.entries.put(DS_DN, ds);
+        Operate.Result attrs = Operate.driversetActivation(fake, env);
+        assertTrue(attrs.text(), attrs.text().contains("DirXML-Act2             present (opens with 2026-12-22)"));
+        assertTrue(attrs.text(), !attrs.text().contains("1797961437#0#x"));
+        fake.activation = "<activation><product>Identity Manager</product><expires>2027-01-01</expires></activation>";
+        Operate.Result some = Operate.driversetActivation(fake, env);
+        assertTrue(some.text(), some.text().contains("product         Identity Manager") && some.text().contains("expires         2027-01-01"));
+        Path tree = Files.createTempDirectory("op");
+        Operate.Result empty = Operate.driversetActivationApply(fake, env, new byte[0], "x.xml", true, null, tree);
+        assertTrue(empty.text(), !empty.ok);
+        Operate.Result applied = Operate.driversetActivationApply(fake, env, "<credential/>".getBytes("UTF-8"), "x.xml", true, null, tree);
+        assertTrue(applied.text(), applied.ok);
+        assertEquals(List.of("applyActivation " + DS_DN + " 13"), fake.calls);
+    }
+
+    @Test
+    public void serversListTheSetAndWhatThisConnectionRuns() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        Vault.Entry ds = FakeEngine.entry(DS_DN, "driverset1", List.of("Top", "DirXML-DriverSet"));
+        FakeEngine.put(ds, "DirXML-ServerList", List.of("cn=s1,o=system", "cn=s2,o=system"));
+        fake.entries.put(DS_DN, ds);
+        fake.serverDriverSet = DS_DN;
+        Operate.Result r = Operate.driversetServers(fake, env("dev", Environments.Tier.DEV));
+        assertTrue(r.text(), r.ok && r.text().contains("server          cn=s1,o=system") && r.text().contains("this connection runs " + DS_DN));
+        fake.serverDriverSet = "cn=other,o=system";
+        assertTrue(Operate.driversetServers(fake, env("dev", Environments.Tier.DEV)).text().contains("not this one"));
+    }
+
+    @Test
+    public void metricsCountUsersAndAssociationsByState() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        Vault.Entry d = FakeEngine.entry(DRIVER_DN, DRIVER, List.of("Top", "DirXML-Driver"));
+        fake.childrenOf.put(DS_DN, List.of(d));
+        Vault.Entry u1 = FakeEngine.entry("cn=a,o=data", "a", List.of("Top", "User"));
+        Vault.Entry u2 = FakeEngine.entry("cn=b,o=data", "b", List.of("Top", "User"));
+        fake.searches.put("(objectClass=User)", List.of(u1, u2));
+        fake.searches.put("(&(objectClass=User)(DirXML-Associations=*))", List.of(u1));
+        fake.searches.put("(&(objectClass=User)(DirXML-Associations=*)(!(loginDisabled=true)))", List.of(u1));
+        fake.searches.put("(DirXML-Associations=" + DRIVER_DN + "#1#*)", List.of(u1));
+        Operate.Result r = Operate.engineMetrics(fake, env("dev", Environments.Tier.DEV), null);
+        assertTrue(r.text(), r.ok && r.text().startsWith("users 2 · with an association 1 · of those enabled 1"));
+        assertTrue(r.json(), r.json().contains("\"processed\":1") && r.json().contains("\"pending\":0"));
+    }
+
+    @Test
+    public void rightsDecodeTheBitsPerAttribute() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        String obj = "ou=users,o=data";
+        fake.privileges.put(obj + "|" + DRIVER_DN + "|[Entry Rights]", 1 + 2 + 4 + 8);
+        fake.privileges.put(obj + "|" + DRIVER_DN + "|[All Attributes Rights]", 1 + 2 + 4);
+        fake.privileges.put(obj + "|" + DRIVER_DN + "|Surname", 32);
+        Operate.Result r = Operate.driverRights(fake, env("dev", Environments.Tier.DEV), DRIVER, obj, List.of("Surname", "Password"));
+        assertTrue(r.text(), r.text().contains("[Entry Rights]            browse add delete rename"));
+        assertTrue(r.text(), r.text().contains("[All Attributes Rights]   compare read write"));
+        assertTrue(r.text(), r.text().contains("Surname                   supervisor"));
+        assertTrue(r.text(), r.text().contains("Password                  ? ("));
+        assertEquals(List.of("compare", "read", "write", "self", "supervisor", "inheritance-control"), Operate.rightsNames(1 + 2 + 4 + 8 + 32 + 64, false));
+        assertTrue(!Operate.driverRights(fake, env("dev", Environments.Tier.DEV), DRIVER, null, List.of()).ok);
+    }
+
+    @Test
+    public void workOrdersAreListedNewestDueFirst() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        Vault.Entry w1 = FakeEngine.entry("cn=wo1,cn=WorkOrders," + DS_DN, "wo1", List.of("Top", "DirXML-WorkOrder"));
+        FakeEngine.put(w1, "DirXML-nwoStatus", List.of("pending"));
+        FakeEngine.put(w1, "DirXML-DueDate", List.of("20261001000000Z"));
+        Vault.Entry w2 = FakeEngine.entry("cn=wo2,cn=WorkOrders," + DS_DN, "wo2", List.of("Top", "DirXML-WorkOrder"));
+        FakeEngine.put(w2, "DirXML-nwoStatus", List.of("configured"));
+        FakeEngine.put(w2, "DirXML-DueDate", List.of("20261101000000Z"));
+        FakeEngine.put(w2, "Description", List.of("new hire"));
+        fake.searches.put("(objectClass=DirXML-WorkOrder)", List.of(w1, w2));
+        Operate.Result r = Operate.workOrders(fake, env("dev", Environments.Tier.DEV), null, 200);
+        assertTrue(r.text(), r.ok && r.text().startsWith("2 work order(s) under " + DS_DN));
+        assertTrue(r.text(), r.text().indexOf("wo2") < r.text().indexOf("wo1"));
+        assertTrue(r.text(), r.text().contains("new hire"));
     }
 }
