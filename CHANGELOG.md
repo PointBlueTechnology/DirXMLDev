@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-12
+
 ### Fixed
 
 - **`vault.deploy --capture-drift`** clears every path a tree read writes before writing the vault's state
