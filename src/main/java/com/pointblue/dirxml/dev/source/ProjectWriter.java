@@ -14,6 +14,7 @@ import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.dev.model.PolicyLink;
 import com.pointblue.dirxml.dev.model.PolicySet;
+import com.pointblue.dirxml.dev.model.PackageStamps;
 import com.pointblue.dirxml.dev.model.Prd;
 import com.pointblue.dirxml.dev.model.Resource;
 import com.pointblue.dirxml.dev.model.Scope;
@@ -31,6 +32,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -151,6 +153,7 @@ public final class ProjectWriter {
         Result result = new Result();
         DriverSet project = ProjectReader.read(projectDir);
         DriverSet treeDs = AsCodeReader.read(tree);
+        embedPrdProcesses(treeDs);
         ModelDiff diff = ModelDiff.of(project, treeDs);
         if (diff.isEmpty()) {
             result.ok = true;
@@ -186,6 +189,37 @@ public final class ProjectWriter {
         ctx.flush();
         result.ok = true;
         return result;
+    }
+
+    /**
+     * A {@code .prd} holds the PRD's {@code <process>} inside its {@code <prov-req-defn>}
+     * ({@link Ctx#prdDocumentXml}), so a project reads every PRD back that way. A tree read from a vault
+     * whose {@code XmlData} lacks the process keeps it apart ({@code process.xml}); embedding it the way the
+     * {@code .prd} writer does lets the two compare equal. What is written is unchanged: the writer embeds
+     * a separate process anyway.
+     */
+    static void embedPrdProcesses(DriverSet ds) {
+        for (Driver d : ds.drivers) {
+            if (d.provisioning == null) {
+                continue;
+            }
+            for (Prd p : d.provisioning.prds) {
+                if (p.definition == null || p.process == null || Ctx.isChildOf(p.process, p.definition)) {
+                    continue;
+                }
+                Document doc = CanonicalXml.parse(CanonicalXml.serialize(p.definition));
+                Element root = doc.getDocumentElement();
+                Element existing = Ctx.firstChildNamed(root, "process");
+                Node imported = doc.importNode(p.process, true);
+                if (existing != null) {
+                    root.replaceChild(imported, existing);
+                } else {
+                    root.appendChild(imported);
+                }
+                p.definition = root;
+                p.process = Ctx.firstChildNamed(root, "process");
+            }
+        }
     }
 
     /**
@@ -312,6 +346,42 @@ public final class ProjectWriter {
             }
         }
         ctx.deferredLinkage.clear();
+        // jobs, notification templates and entitlement policies are not written into a project yet: say so,
+        // rather than leave a new project silently without them
+        int jobs = 0;
+        int templates = 0;
+        int rbe = 0;
+        if (ctx.plan != null) {
+            // a new project: everything of these kinds the tree holds (a driver's jobs come with the driver,
+            // not as changes of their own)
+            jobs = treeDs.jobs.size();
+            for (Driver d : treeDs.drivers) {
+                jobs += d.jobs.size();
+            }
+            templates = treeDs.templates.size();
+            rbe = treeDs.rbePolicies.size();
+        } else {
+            for (ModelDiff.Change c : diff.changes()) {
+                jobs += c.kind.isJob() ? 1 : 0;
+                templates += c.kind.isTemplate() ? 1 : 0;
+                rbe += c.kind.isRbe() ? 1 : 0;
+            }
+        }
+        if (jobs + templates + rbe > 0) {
+            List<String> parts = new ArrayList<>();
+            if (jobs > 0) {
+                parts.add(jobs + " job" + (jobs == 1 ? "" : "s"));
+            }
+            if (templates > 0) {
+                parts.add(templates + " notification template" + (templates == 1 ? "" : "s"));
+            }
+            if (rbe > 0) {
+                parts.add(rbe + " entitlement polic" + (rbe == 1 ? "y" : "ies"));
+            }
+            result.notes.add(String.join(", ", parts) + (ctx.plan != null ? " of the tree were not written: " : " of the tree differ from the project and were not written: ")
+                + "the project writer does not carry jobs, notification templates or entitlement policies yet "
+                + "(deploy them from the tree)");
+        }
     }
 
     private static void applyChange(Ctx ctx, ModelDiff.Change c, DriverSet treeDs, DriverSet project, Result result)
@@ -1282,20 +1352,30 @@ public final class ProjectWriter {
         }
 
         void writeFile(Path p, String content, boolean created) throws IOException {
-            if (!dryRun) {
-                Files.createDirectories(p.getParent());
-                Files.write(p, content.getBytes(StandardCharsets.UTF_8));
-            }
-            (created ? result.createdFiles : result.changedFiles).add(relative(p));
+            writeBytes(p, content.getBytes(StandardCharsets.UTF_8), created);
         }
 
-        /** The same for an opaque binary payload (a driver icon). */
+        /**
+         * The same for an opaque binary payload (a driver icon). A file that already holds exactly these
+         * bytes is neither rewritten nor reported: the result lists only real changes.
+         */
         void writeBytes(Path p, byte[] content, boolean created) throws IOException {
+            if (!created && sameBytes(p, content)) {
+                return;
+            }
             if (!dryRun) {
                 Files.createDirectories(p.getParent());
                 Files.write(p, content);
             }
-            (created ? result.createdFiles : result.changedFiles).add(relative(p));
+            String rel = relative(p);
+            List<String> list = created ? result.createdFiles : result.changedFiles;
+            if (!list.contains(rel)) {
+                list.add(rel);
+            }
+        }
+
+        private static boolean sameBytes(Path p, byte[] content) throws IOException {
+            return Files.isRegularFile(p) && Files.size(p) == content.length && Arrays.equals(Files.readAllBytes(p), content);
         }
 
         void deleteFile(Path p) throws IOException {
@@ -1314,16 +1394,20 @@ public final class ProjectWriter {
                 Path p = metaFileById.get(id);
                 Document doc = allDocs.get(id);
                 String xml = CObjectXml.serialize(doc.getDocumentElement());
+                byte[] bytes = xml.getBytes(StandardCharsets.UTF_8);
+                if (!newlyCreatedIds.contains(id) && sameBytes(p, bytes)) {
+                    continue; // touched but unchanged: not a change
+                }
                 if (!dryRun) {
                     Files.createDirectories(p.getParent());
-                    Files.write(p, xml.getBytes(StandardCharsets.UTF_8));
+                    Files.write(p, bytes);
                 }
                 String rel = relative(p);
                 if (newlyCreatedIds.contains(id)) {
                     if (!result.createdFiles.contains(rel)) {
                         result.createdFiles.add(rel);
                     }
-                } else {
+                } else if (!result.changedFiles.contains(rel)) {
                     result.changedFiles.add(rel);
                 }
             }
@@ -1463,6 +1547,7 @@ public final class ProjectWriter {
             String assocId = packageStamp(meta, "pkg-assoc-id");
             String checksum = packageStamp(meta, "checksum");
             String directive = meta.get("directive-checksum");
+            String linkages = PackageStamps.linkages(meta);
             StringBuilder sb = new StringBuilder(
                 "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"initial_state\"/>");
             if (assocId != null) {
@@ -1476,6 +1561,11 @@ public final class ProjectWriter {
             }
             if (directive != null) {
                 sb.append(CObjectXml.attr("Idm:DirectiveChecksum", directive, "CLong"));
+            }
+            if (linkages != null) {
+                // the package's record of the item's policy-set linkage, verbatim as the vault holds it
+                // (DirXML-pkgLinkages) and ProjectReader reads it back
+                sb.append(CObjectXml.attr("Idm:InstalledLinkages", linkages, "CString"));
             }
             return sb.toString();
         }
@@ -1597,6 +1687,11 @@ public final class ProjectWriter {
                 Driver owner = newA.driver == null ? null : treeDs.driver(newA.driver);
                 String checksum = Long.toString(InstalledChecksum.of(treeDs, owner, newA));
                 setStringAttribute(id, "Idm:ContentChecksum", checksum, "CLong");
+            }
+            String oldLinkages = PackageStamps.linkages(oldA.meta);
+            String newLinkages = PackageStamps.linkages(newA.meta);
+            if (!Objects.equals(oldLinkages, newLinkages)) {
+                setStringAttribute(id, "Idm:InstalledLinkages", newLinkages, "CString");
             }
         }
 

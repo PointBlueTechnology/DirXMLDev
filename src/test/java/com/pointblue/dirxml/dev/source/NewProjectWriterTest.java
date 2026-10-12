@@ -295,6 +295,59 @@ public class NewProjectWriterTest {
         assertEquals("Group", ua.entitlements.get(0).name);
     }
 
+    /**
+     * A new project, then an update of it to the same tree, changes nothing — with the two things a
+     * vault-read tree carries that once made every update rewrite files: a packaged item's linkage
+     * record ({@code dirxml-pkglinkages}) and a PRD whose {@code <process>} is kept apart from its
+     * definition ({@code process.xml}, a vault whose {@code XmlData} lacks it).
+     */
+    @Test
+    public void aNewProjectUpdatedToItsOwnTreeChangesNothing() throws IOException {
+        Path tree = syntheticTree();
+        DriverSet ds = AsCodeReader.read(tree);
+        com.pointblue.dirxml.dev.model.Artifact packaged = null;
+        for (Driver d : ds.drivers) {
+            for (com.pointblue.dirxml.dev.model.Artifact a : d.artifacts()) {
+                if (packaged == null && com.pointblue.dirxml.dev.edit.Packages.isPackaged(a)) {
+                    packaged = a;
+                }
+            }
+        }
+        assertNotNull("the synthetic tree has a packaged item", packaged);
+        String linkages = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><policy-linkage>\n"
+            + "\t<policy-set Driver=\"ABCD1234\" name=\"input\" order=\"Weight\" package-id=\"" + PACKAGE_ID + "\" value=\"800\"/>\n"
+            + "</policy-linkage>";
+        packaged.meta.put(com.pointblue.dirxml.dev.model.PackageStamps.LINKAGES, linkages);
+        Prd prd = ds.driver("UA").provisioning.prd("Stock Prd");
+        org.w3c.dom.Element process = null;
+        for (org.w3c.dom.Node n = prd.definition.getFirstChild(); n != null; n = n.getNextSibling()) {
+            if ("process".equals(n.getNodeName())) {
+                process = (org.w3c.dom.Element) n;
+            }
+        }
+        assertNotNull("the synthetic PRD has a process", process);
+        prd.definition.removeChild(process);
+        prd.process = process;
+        Path vaultLike = tmp.newFolder("vaultlike" + (seq++)).toPath();
+        AsCodeWriter.write(ds, vaultLike);
+        assertTrue("the PRD's process is kept apart", Files.exists(vaultLike.resolve("drivers/UA/provisioning/prds/Stock Prd/process.xml")));
+
+        Path project = tmp.newFolder("out" + (seq++)).toPath().resolve("RoundTrip");
+        String packagedPathOf = packaged.path();
+        ProjectWriter.Result created = ProjectWriter.create(vaultLike, project, NewProject.defaults().withDesignerRoot(noDesigner()), false);
+        assertTrue(created.text(), created.ok);
+        assertEquals("the linkage record is written with the item", linkages,
+            ProjectReader.read(project).driver(packaged.driver).artifacts().stream()
+                .filter(a -> a.path().equals(packagedPathOf)).findFirst().orElseThrow()
+                .meta.get(com.pointblue.dirxml.dev.model.PackageStamps.LINKAGES));
+
+        ProjectWriter.Result again = ProjectWriter.update(vaultLike, project, true);
+        assertTrue(again.text(), again.ok);
+        assertTrue(again.text(), again.changedFiles.isEmpty());
+        assertTrue(again.text(), again.createdFiles.isEmpty());
+        assertTrue(again.text(), again.deletedFiles.isEmpty());
+    }
+
     @Test
     public void packagedItemsCarryTheirPackageAttributesAndABaseline() throws IOException {
         Path tree = syntheticTree();

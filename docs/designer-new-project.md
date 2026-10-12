@@ -557,6 +557,10 @@ never carried the record — although the project stores it, on each item, as
 copies it; re-imported, the project tree carries 132 records, the warnings are gone, and
 the remaining 13 GCV infos match ig4's own 10 (Designer's inconsistency, not ours).
 Tests: 629.
+The project writer did not write it back until 2026-10-12: a new project lacked every
+item's `Idm:InstalledLinkages`, so updating it to the same tree reported (and rewrote) each
+packaged item again, every time. It is now written with the other package attributes and
+kept in step by an update.
 
 ### 7.2 What the Designer check must look at (the code cannot)
 
