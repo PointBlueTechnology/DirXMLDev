@@ -223,4 +223,55 @@ public class DeployerTest {
         assertEquals("ok", last.outcome);
         assertTrue(last.detail, last.detail.contains("--delete-all: entitlements"));
     }
+
+    private static void git(Path dir, String... args) throws Exception {
+        List<String> cmd = new ArrayList<>(List.of("git", "-C", dir.toString()));
+        cmd.addAll(List.of(args));
+        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertEquals(out, 0, p.waitFor());
+    }
+
+    private static String gitOut(Path dir, String... args) throws Exception {
+        List<String> cmd = new ArrayList<>(List.of("git", "-C", dir.toString()));
+        cmd.addAll(List.of(args));
+        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        p.waitFor();
+        return out;
+    }
+
+    /**
+     * {@code --capture-drift} on a production environment with no deploy on record: the vault's state is captured as an
+     * {@code as-found/…} branch that holds exactly the vault — a set job the tree still carries but the vault no longer
+     * holds leaves no stale file behind (the capture clears every path the writer owns, jobs, policies and templates too).
+     */
+    @Test
+    public void captureDriftLeavesNoStaleJobPolicyOrTemplateFiles() throws Exception {
+        DriverSet vaultSide = VaultMappingTest.model();
+        FakeVault vault = seedVault(vaultSide);
+
+        DriverSet treeSide = VaultMappingTest.model();
+        treeSide.jobs.add(new com.pointblue.dirxml.dev.model.Job("OldJob", ValidatorTest.xml("<job-aggregation><job-definition><java-class>x.Job</java-class></job-definition></job-aggregation>")));
+        Path tree = tmp.newFolder("prdtree").toPath();
+        AsCodeWriter.write(treeSide, tree);
+        assertTrue(java.nio.file.Files.exists(tree.resolve("jobs/OldJob.xml")));
+        git(tree, "init", "-q", "-b", "main");
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "add", "-A");
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "import");
+
+        Environments.Environment prd = new Environments.Environment("prd", "ldaps://fake:636", "cn=admin,o=system", "pw", DS,
+            Environments.Tier.PRD, null, null, true, null, null);
+        Deployer.Options o = options(tree, prd, List.of());
+        o.confirm = "prd";
+        o.captureDrift = true;
+        Deployer.Result r = new Deployer(o, vault).run();
+        assertFalse(r.text(), r.ok);   // a capture stops the deploy: the change goes on top of the captured state
+        assertTrue(r.text(), r.refusal != null && r.refusal.contains("as-found/prd/"));
+        String branch = gitOut(tree, "branch", "--list", "as-found/prd/*").replace("*", "").trim();
+        assertTrue("an as-found branch: " + gitOut(tree, "branch"), branch.startsWith("as-found/prd/"));
+        String files = gitOut(tree, "ls-tree", "-r", "--name-only", branch);
+        assertFalse(files, files.contains("jobs/OldJob.xml"));
+        assertTrue(files, files.contains("driverset.xml"));
+    }
 }

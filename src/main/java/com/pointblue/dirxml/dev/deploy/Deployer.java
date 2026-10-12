@@ -701,7 +701,7 @@ public final class Deployer {
             }
             // exactly the live state: clear the managed paths first so nothing stale survives,
             // and make sure git stores the bytes as they are
-            for (String managed : new String[] {"driverset.xml", "config-values.xml", "library", "drivers"}) {
+            for (String managed : AsCodeWriter.MANAGED_PATHS) {
                 deleteRecursively(wt.resolve(managed));
             }
             Path attrs = wt.resolve(".gitattributes");
