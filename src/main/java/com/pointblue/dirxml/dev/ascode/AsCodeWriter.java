@@ -49,6 +49,15 @@ public final class AsCodeWriter {
     public static final String SCHEMA_FILE = "schema/vault.xml";
 
     /** Write the whole driver set under {@code root} (created if needed; files overwritten). */
+    /**
+     * The paths {@link #write} owns in a tree: what a fresh read of a vault replaces whole (the deploy's
+     * drift capture and the web's pull clear them first, so an object the vault no longer holds leaves no
+     * stale file). {@code schema/}, {@code overrides/}, {@code servers/} overrides inside driver folders aside,
+     * everything else in a tree (cases, deploy-log, README …) is the repository's own.
+     */
+    public static final java.util.List<String> MANAGED_PATHS = java.util.List.of(
+        DRIVERSET_MANIFEST, CONFIG_VALUES_FILE, "library", "drivers", "jobs", "rbe-policies", "templates");
+
     public static void write(DriverSet ds, Path root) throws IOException {
         Files.createDirectories(root);
 
