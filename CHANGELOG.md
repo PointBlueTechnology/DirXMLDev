@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **`vault.deploy --capture-drift`** clears every path a tree read writes before writing the vault's state
+  (jobs, entitlement policies and notification templates too, through the new
+  `AsCodeWriter.MANAGED_PATHS`), so an object the vault no longer holds leaves no stale file on the
+  captured `as-found/…` branch.
+
 ## [0.27.0] - 2026-10-10
 
 ### Added
