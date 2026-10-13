@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-13
+
 ### Fixed
 
 - **`export-project` round trip**: updating a project to the tree it was just written from now changes
