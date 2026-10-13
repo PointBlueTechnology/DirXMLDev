@@ -7,6 +7,28 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`export-project` writes jobs, notification templates and entitlement policies** into a Designer
+  project, laid out as Designer keeps them (grounded on real projects and Designer's own `DeployedPath`):
+  - A job is a `Job_` under its driver set or driver, with its document, its own trace settings, a link
+    to each server it runs on that the project holds, and each scope as a `JobScope_`. A server the
+    project does not hold is noted and left out of the comparison.
+  - The vault's template collection is a `NotfTemplateCollection_` tied to the Identity Vault, each
+    template a child with its subject and body.
+  - The set's `RBEContainer_` holds each policy as an `RBEPolicy_` and their priorities as
+    `DirXML-SPPriority`.
+  - An update adds, changes and removes them like any other object. A new project made from the edir3
+    vault tree (2 jobs, 351 templates) and from two client projects with policies reads back equal and
+    updates to nothing.
+
+### Fixed
+
+- **Reading a Designer project's jobs**: a job's scopes (`JobScope_`) are now read, as the vault's
+  `DirXML-Scope` value (`<dn>#0#<scope-def/>`, a missing scope attribute filled in as Designer does when
+  it deploys), and its own trace settings (`DirXML-TraceLevel`, `-TraceFile`, `-TraceSizeLimit`). Trees
+  imported from a project before this lack them: import again to pick them up.
+
 ## [0.29.0] - 2026-10-13
 
 ### Fixed
