@@ -154,6 +154,7 @@ public final class ProjectWriter {
         DriverSet project = ProjectReader.read(projectDir);
         DriverSet treeDs = AsCodeReader.read(tree);
         embedPrdProcesses(treeDs);
+        Map<String, List<String>> unlinked = jobServersAsNames(treeDs, projectServerNames(projectDir));
         ModelDiff diff = ModelDiff.of(project, treeDs);
         if (diff.isEmpty()) {
             result.ok = true;
@@ -161,6 +162,7 @@ public final class ProjectWriter {
         }
 
         Ctx ctx = new Ctx(tree, projectDir, project, treeDs, dryRun, result);
+        ctx.unlinkedServers.putAll(unlinked);
         ctx.scan();
 
         for (ModelDiff.Change c : diff.changes()) {
@@ -189,6 +191,68 @@ public final class ProjectWriter {
         ctx.flush();
         result.ok = true;
         return result;
+    }
+
+    /** The name a project gives a job's server: a DN's first RDN value, or the name as it is. */
+    static String jobServerName(String server) {
+        if (server == null) {
+            return "";
+        }
+        int eq = server.indexOf('=');
+        int comma = server.indexOf(',');
+        if (eq > 0 && (comma < 0 || eq < comma)) {
+            return comma < 0 ? server.substring(eq + 1) : server.substring(eq + 1, comma);
+        }
+        return server;
+    }
+
+    /**
+     * A tree's job servers as a project names them, so a vault-read tree and its project compare equal; a
+     * server the project does not hold cannot be linked, so it is left out (and returned, by job, for a note).
+     */
+    static Map<String, List<String>> jobServersAsNames(DriverSet ds, Set<String> projectServers) {
+        Map<String, List<String>> dropped = new LinkedHashMap<>();
+        List<com.pointblue.dirxml.dev.model.Job> all = new ArrayList<>(ds.jobs);
+        for (Driver d : ds.drivers) {
+            all.addAll(d.jobs);
+        }
+        for (com.pointblue.dirxml.dev.model.Job j : all) {
+            List<String> names = new ArrayList<>();
+            for (String s : j.servers) {
+                String n = jobServerName(s);
+                if (projectServers.contains(n.toLowerCase(java.util.Locale.ROOT))) {
+                    names.add(n);
+                } else {
+                    dropped.computeIfAbsent(j.name, k -> new ArrayList<>()).add(n);
+                }
+            }
+            j.servers.clear();
+            j.servers.addAll(names);
+        }
+        return dropped;
+    }
+
+    private static String unescapeXml(String s) {
+        return s.replace("&quot;", "\"").replace("&apos;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
+    }
+
+    /** The names of the project's Server_ objects, lower-cased. */
+    static Set<String> projectServerNames(Path projectDir) throws IOException {
+        Set<String> out = new HashSet<>();
+        Path model = projectDir.resolve("Model");
+        if (!Files.isDirectory(model)) {
+            return out;
+        }
+        Pattern name = Pattern.compile("<com\\.novell\\.designer\\.model:CObject[^>]*\\sname=\"([^\"]*)\"");
+        try (java.util.stream.Stream<Path> st = Files.walk(model)) {
+            for (Path f : (Iterable<Path>) st.filter(x -> x.getFileName().toString().endsWith(".Server_"))::iterator) {
+                Matcher m = name.matcher(Files.readString(f, StandardCharsets.UTF_8));
+                if (m.find()) {
+                    out.add(unescapeXml(m.group(1)).toLowerCase(java.util.Locale.ROOT));
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -262,8 +326,10 @@ public final class ProjectWriter {
             ProjectSkeleton.Plan plan = ProjectSkeleton.write(work, name.toString(), treeDs, opts, result);
 
             DriverSet project = ProjectReader.read(work);
+            Map<String, List<String>> unlinked = jobServersAsNames(treeDs, projectServerNames(work));
             ModelDiff diff = ModelDiff.of(project, treeDs);
             Ctx ctx = new Ctx(tree, work, project, treeDs, false, result);
+            ctx.unlinkedServers.putAll(unlinked);
             ctx.plan = plan;
             ctx.opts = opts;
             ctx.designer = opts.designerRoot != null
@@ -346,42 +412,7 @@ public final class ProjectWriter {
             }
         }
         ctx.deferredLinkage.clear();
-        // jobs, notification templates and entitlement policies are not written into a project yet: say so,
-        // rather than leave a new project silently without them
-        int jobs = 0;
-        int templates = 0;
-        int rbe = 0;
-        if (ctx.plan != null) {
-            // a new project: everything of these kinds the tree holds (a driver's jobs come with the driver,
-            // not as changes of their own)
-            jobs = treeDs.jobs.size();
-            for (Driver d : treeDs.drivers) {
-                jobs += d.jobs.size();
-            }
-            templates = treeDs.templates.size();
-            rbe = treeDs.rbePolicies.size();
-        } else {
-            for (ModelDiff.Change c : diff.changes()) {
-                jobs += c.kind.isJob() ? 1 : 0;
-                templates += c.kind.isTemplate() ? 1 : 0;
-                rbe += c.kind.isRbe() ? 1 : 0;
-            }
-        }
-        if (jobs + templates + rbe > 0) {
-            List<String> parts = new ArrayList<>();
-            if (jobs > 0) {
-                parts.add(jobs + " job" + (jobs == 1 ? "" : "s"));
-            }
-            if (templates > 0) {
-                parts.add(templates + " notification template" + (templates == 1 ? "" : "s"));
-            }
-            if (rbe > 0) {
-                parts.add(rbe + " entitlement polic" + (rbe == 1 ? "y" : "ies"));
-            }
-            result.notes.add(String.join(", ", parts) + (ctx.plan != null ? " of the tree were not written: " : " of the tree differ from the project and were not written: ")
-                + "the project writer does not carry jobs, notification templates or entitlement policies yet "
-                + "(deploy them from the tree)");
-        }
+        ctx.applyJobsTemplatesPolicies(diff);
     }
 
     private static void applyChange(Ctx ctx, ModelDiff.Change c, DriverSet treeDs, DriverSet project, Result result)
@@ -999,6 +1030,8 @@ public final class ProjectWriter {
         final Map<String, String> channelIdCache = new LinkedHashMap<>();
 
         final Set<ModelDiff.Change> consumed = Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        /** By job name: the servers a job runs on that the project does not hold (noted when the job is written). */
+        final Map<String, List<String>> unlinkedServers = new LinkedHashMap<>();
 
         /** driver name -&gt; {@code Model/Provisioning/<AppConfig dir>} on disk, only for drivers the project ties an AppConfig to. */
         final Map<String, Path> provisioningDirByDriver = new LinkedHashMap<>();
@@ -1767,6 +1800,490 @@ public final class ProjectWriter {
                 contentsFile = metaFileById.get(id).getParent().resolve(id + "_contents.xml");
             }
             writeFile(contentsFile, content, created);
+        }
+
+        // ---- jobs, notification templates, entitlement policies (docs/console-gaps.md §1, §9, §12) ----
+        // Written the way Designer lays them out (grounded on real projects, 2026-10-13):
+        //   a job:      <owner children dir>/<id>.Job_ + <id>_contents.xml (the job document), Idm:Jobs Child from
+        //               the driver set or driver; its own trace settings as DirXML-TraceLevel/-TraceFile/
+        //               -TraceSizeLimit with IdmParameter:Inherit* false; each server a Reference pair
+        //               (Idm:JobServers / Idm:JobRefs on the job, Idm:Jobs / Idm:JobServerRefs on the Server_);
+        //               each scope a <id>/<scope>.JobScope_ child (Idm:JobScopes): IdmParameter:scopeDNPrameter
+        //               the DN, JobScopePath the <scope-def/>, IdmParameter:scopeTypePrameter Container/Group/Leaf.
+        //               The vault's DirXML-Scope is "<dn>#0#<scope-def/>" (Designer's DeployedPath).
+        //   templates:  the vault's NotfTemplateCollection_ beside the driver set (IdentityVault_
+        //               Idm:TemplateCollections ContainedReference, Idm:IdentityVaults BackReference), each
+        //               template a <collection>/<id>.NotfTemplate_ child (Idm:NotfTemplates) with its subject
+        //               (notfMergeTemplateSubject) and its body as <id>_contents.xml.
+        //   policies:   the set's RBEContainer_ (Idm:RbeContainer Child) with DirXML-SPPriority "<name>#<level>#0",
+        //               each policy a <container>/<id>.RBEPolicy_ child (Idm:RbePolicies) carrying the vault's
+        //               attribute names.
+
+        /** A new CObject, held as a document so later relations land on it; written by {@link #flush}. */
+        Document newCObject(String id, Path file, String type, String xml) {
+            Document doc = CanonicalXml.parse(xml);
+            metaFileById.put(id, file);
+            typeById.put(id, type);
+            allDocs.put(id, doc);
+            newlyCreatedIds.add(id);
+            dirtyIds.add(id);
+            return doc;
+        }
+
+        /** Removes a CObject this project holds: its file, contents and (for a container) its children folder. */
+        void removeCObject(String id) throws IOException {
+            Path meta = metaFileById.get(id);
+            if (meta == null) {
+                return;
+            }
+            Path children = meta.getParent().resolve(id);
+            if (Files.isDirectory(children)) {
+                List<Path> files;
+                try (java.util.stream.Stream<Path> st = Files.walk(children)) {
+                    files = st.filter(Files::isRegularFile).sorted().collect(java.util.stream.Collectors.toList());
+                }
+                for (Path f : files) {
+                    deleteFile(f);
+                }
+            }
+            deleteFile(contentsFileById.get(id));
+            deleteFile(meta);
+            dirtyIds.remove(id);
+            allDocs.remove(id);
+        }
+
+        /** Every id of a CObject type this project holds (scanned, or created in this run). */
+        List<String> idsOfType(String type) {
+            List<String> out = new ArrayList<>();
+            for (Map.Entry<String, String> e : typeById.entrySet()) {
+                if (type.equals(e.getValue()) && metaFileById.containsKey(e.getKey())) {
+                    out.add(e.getKey());
+                }
+            }
+            return out;
+        }
+
+        String cobjectName(String id) {
+            return parsed(id).getDocumentElement().getAttribute("name");
+        }
+
+        /** A server by the name a job records (a DN's first RDN value, or the name itself). */
+        String serverIdFor(String server) {
+            String name = jobServerName(server);
+            for (String id : idsOfType("Server")) {
+                if (cobjectName(id).equalsIgnoreCase(name)) {
+                    return id;
+                }
+            }
+            return null;
+        }
+
+        /** The Identity Vault the driver set sits in. */
+        String vaultId() {
+            if (plan != null && plan.vaultId != null) {
+                return plan.vaultId;
+            }
+            List<String> ids = idsOfType("IdentityVault");
+            return ids.isEmpty() ? null : ids.get(0);
+        }
+
+        private static String cstructure(String attrName, List<String> values) {
+            StringBuilder sb = new StringBuilder("<attributes xsi:type=\"com.novell.designer.model:CStructure\" attrName=\"")
+                .append(CObjectXml.esc(attrName)).append("\"");
+            if (values.isEmpty()) {
+                return sb.append("/>").toString();
+            }
+            sb.append(">");
+            for (String v : values) {
+                sb.append("<attributes xsi:type=\"com.novell.designer.model:CString\" value=\"").append(CObjectXml.esc(v)).append("\"/>");
+            }
+            return sb.append("</attributes>").toString();
+        }
+
+        /** The package attributes of an item Designer keeps no baseline for (a job, a template, a policy). */
+        private static String packageAttrsNoBaseline(Map<String, String> meta) {
+            if (!isPackagedMeta(meta)) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder();
+            String assocId = packageStamp(meta, "pkg-assoc-id");
+            String pkgId = packageStamp(meta, "package-id");
+            String checksum = packageStamp(meta, "checksum");
+            if (assocId != null) {
+                sb.append(CObjectXml.attr("Idm:PackageAssocGuid", assocId, "CString"));
+            }
+            if (pkgId != null) {
+                sb.append(CObjectXml.attr("Idm:PackageGuid", pkgId, "CString"));
+            }
+            if (checksum != null) {
+                sb.append(CObjectXml.attr("Idm:ContentChecksum", checksum, "CLong"));
+            }
+            return sb.toString();
+        }
+
+        void applyJobsTemplatesPolicies(ModelDiff diff) throws IOException {
+            boolean templates = false;
+            boolean policies = false;
+            for (ModelDiff.Change c : diff.changes()) {
+                if (c.kind == ModelDiff.Kind.DRIVER_ADDED && treeDs.driver(c.driver) != null) {
+                    // a new driver's jobs come with it, not as changes of their own
+                    for (com.pointblue.dirxml.dev.model.Job j : treeDs.driver(c.driver).jobs) {
+                        writeJob(c.driver, j, null);
+                    }
+                } else if (c.kind.isJob()) {
+                    applyJobChange(c);
+                } else if (c.kind.isTemplate()) {
+                    templates = true;
+                } else if (c.kind.isRbe()) {
+                    policies = true;
+                }
+            }
+            if (templates) {
+                syncTemplates();
+            }
+            if (policies) {
+                syncPolicies();
+            }
+        }
+
+        // ---- jobs ----
+
+        private com.pointblue.dirxml.dev.model.Job jobIn(DriverSet ds, String driver, String name) {
+            List<com.pointblue.dirxml.dev.model.Job> jobs = driver == null ? ds.jobs
+                : ds.driver(driver) == null ? List.of() : ds.driver(driver).jobs;
+            for (com.pointblue.dirxml.dev.model.Job j : jobs) {
+                if (j.name.equals(name)) {
+                    return j;
+                }
+            }
+            return null;
+        }
+
+        private static String jobName(ModelDiff.Change c) {
+            return c.path.substring(c.path.lastIndexOf('/') + 1);
+        }
+
+        void applyJobChange(ModelDiff.Change c) throws IOException {
+            String name = jobName(c);
+            com.pointblue.dirxml.dev.model.Job mine = jobIn(project, c.driver, name);
+            com.pointblue.dirxml.dev.model.Job theirs = jobIn(treeDs, c.driver, name);
+            String id = mine == null ? null : mine.meta.get("designer.id");
+            if (c.kind == ModelDiff.Kind.JOB_REMOVED || c.kind == ModelDiff.Kind.JOB_CHANGED) {
+                if (id == null) {
+                    if (c.kind == ModelDiff.Kind.JOB_REMOVED) {
+                        result.notes.add("cannot remove job '" + c.path + "': no designer id on record");
+                        return;
+                    }
+                } else {
+                    unlinkJob(id, c.driver);
+                    removeCObject(id);
+                }
+            }
+            if (theirs != null && c.kind != ModelDiff.Kind.JOB_REMOVED) {
+                writeJob(c.driver, theirs, id);
+            }
+        }
+
+        private void unlinkJob(String id, String driver) {
+            String key = "#" + id + ".Job_";
+            String owner = driver == null ? dsId : driverId(driver);
+            if (owner != null && metaFileById.containsKey(owner)) {
+                removeRelationsWithKey(docFor(owner).getDocumentElement(), key);
+            }
+            for (String server : idsOfType("Server")) {
+                Element root = parsed(server).getDocumentElement();
+                if (hasRelationKey(root, key)) {
+                    removeRelationsWithKey(docFor(server).getDocumentElement(), key);
+                }
+            }
+        }
+
+        private static boolean hasRelationKey(Element root, String key) {
+            for (Node n = root.getFirstChild(); n != null; n = n.getNextSibling()) {
+                if (n instanceof Element && "relations".equals(n.getNodeName()) && key.equals(((Element) n).getAttribute("key"))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** Writes {@code j} as a new Job_ (keeping {@code reuseId} when it replaces one), with its scopes and servers. */
+        void writeJob(String driver, com.pointblue.dirxml.dev.model.Job j, String reuseId) throws IOException {
+            String owner = driver == null ? dsId : driverId(driver);
+            if (owner == null || !metaFileById.containsKey(owner)) {
+                result.notes.add("job '" + j.name + "' not written: its " + (driver == null ? "driver set" : "driver '" + driver + "'") + " is not in the project");
+                return;
+            }
+            Path dir = driver == null ? dsChildrenDir() : metaFileById.get(owner).getParent().resolve(owner);
+            String id = reuseId != null ? reuseId : mintId();
+            String level = j.meta.get("trace-level");
+            String file = j.meta.get("trace-file");
+            String size = j.meta.get("trace-size-limit");
+            StringBuilder attrs = new StringBuilder("<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"contents\"/>");
+            attrs.append(CObjectXml.attr("IdmParameter:InheritTraceFileEncoding", "true", "CString"));
+            attrs.append(CObjectXml.attr("IdmParameter:InheritTraceLevel", String.valueOf(level == null), "CString"));
+            if (level != null) {
+                attrs.append(CObjectXml.attr("DirXML-TraceLevel", level, "CString"));
+            }
+            attrs.append(CObjectXml.attr("IdmParameter:InheritTraceSize", String.valueOf(size == null), "CString"));
+            if (size != null) {
+                attrs.append(CObjectXml.attr("DirXML-TraceSizeLimit", size, "CString"));
+            }
+            attrs.append(CObjectXml.attr("IdmParameter:InheritTraceFile", String.valueOf(file == null), "CString"));
+            if (file != null) {
+                attrs.append(CObjectXml.attr("DirXML-TraceFile", file, "CString"));
+            }
+            attrs.append(packageAttrsNoBaseline(j.meta));
+            Document doc = newCObject(id, dir.resolve(id + ".Job_"), "Job", CObjectXml.cobject(j.name, "Job", attrs.toString(), ""));
+            if (reuseId != null) {
+                newlyCreatedIds.remove(id); // a replaced job is a changed file, not a new one
+            }
+            writeFile(dir.resolve(id + "_contents.xml"), j.definition == null ? "" : CanonicalXml.serialize(j.definition), reuseId == null);
+            appendRelation(docFor(owner), "Idm:Jobs", "Child", id, "Job");
+
+            // the servers it runs on, both directions
+            for (String server : unlinkedServers.getOrDefault(j.name, List.of())) {
+                result.notes.add("job '" + j.name + "' runs on server '" + server + "', which the project does not hold: not linked (add the server in Designer)");
+            }
+            for (String server : j.servers) {
+                String serverId = serverIdFor(server);
+                if (serverId == null) {
+                    result.notes.add("job '" + j.name + "' runs on server '" + jobServerName(server) + "', which the project does not hold: not linked (add the server in Designer)");
+                    continue;
+                }
+                appendRelation(doc, "Idm:JobRefs", "BackReference", serverId, "Server");
+                appendRelation(doc, "Idm:JobServers", "Reference", serverId, "Server");
+                Document sdoc = docFor(serverId);
+                appendRelation(sdoc, "Idm:JobServerRefs", "BackReference", id, "Job");
+                appendRelation(sdoc, "Idm:Jobs", "Reference", id, "Job");
+            }
+
+            // its scopes, as JobScope_ children
+            int n = 0;
+            for (String scope : j.scopes) {
+                String[] parts = scope.split("#", 3);
+                if (parts.length < 3) {
+                    result.notes.add("job '" + j.name + "': scope '" + scope + "' is not <dn>#<namespace>#<path>; not written");
+                    continue;
+                }
+                String scopeId = mintId();
+                String type = scopeType(parts[2]);
+                String sattrs = CObjectXml.attr("JobScopePath", parts[2], "CString")
+                    + CObjectXml.attr("IdmParameter:scopeDNPrameter", parts[0], "CString")
+                    + CObjectXml.attr("IdmParameter:scopeTypePrameter", type, "CString");
+                newCObject(scopeId, dir.resolve(id).resolve(scopeId + ".JobScope_"), "JobScope",
+                    CObjectXml.cobject(++n == 1 ? "Scope" : "Scope " + n, "JobScope", sattrs, ""));
+                appendRelation(doc, "Idm:JobScopes", "Child", scopeId, "JobScope");
+            }
+        }
+
+        /** Designer's scope type for a {@code <scope-def scope="…"/>}: Container, Group or Leaf (JobScope.SCOPE_TYPE_*). */
+        static String scopeType(String path) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("scope\\s*=\\s*[\"']([^\"']*)[\"']").matcher(path);
+            String scope = m.find() ? m.group(1).toLowerCase(java.util.Locale.ROOT) : "";
+            if (scope.equals("members")) {
+                return "Group";
+            }
+            if (scope.equals("entry")) {
+                return "Leaf";
+            }
+            return "Container";
+        }
+
+        // ---- notification templates ----
+
+        private String templateCollectionId(boolean create) {
+            List<String> ids = idsOfType("NotfTemplateCollection");
+            String vault = vaultId();
+            for (String id : ids) {
+                if (vault == null || hasRelationKey(parsed(id).getDocumentElement(), "#" + vault + ".IdentityVault_")) {
+                    return id;
+                }
+            }
+            if (!create || vault == null || dsId == null) {
+                return null;
+            }
+            String dn = treeDs.templatesCollectionDn();
+            String name = dn.startsWith("cn=") ? dn.substring(3, dn.indexOf(',') < 0 ? dn.length() : dn.indexOf(',')) : dn;
+            String id = mintId();
+            Path file = metaFileById.get(dsId).getParent().resolve(id + ".NotfTemplateCollection_");
+            Document doc = newCObject(id, file, "NotfTemplateCollection", CObjectXml.cobjectNoType(name, ""));
+            appendRelation(doc, "Idm:IdentityVaults", "BackReference", vault, "IdentityVault");
+            appendRelation(docFor(vault), "Idm:TemplateCollections", "ContainedReference", id, "NotfTemplateCollection");
+            return id;
+        }
+
+        void syncTemplates() throws IOException {
+            Map<String, com.pointblue.dirxml.dev.model.NotificationTemplate> mine = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            for (com.pointblue.dirxml.dev.model.NotificationTemplate t : project.templates) {
+                mine.put(t.name, t);
+            }
+            Map<String, com.pointblue.dirxml.dev.model.NotificationTemplate> theirs = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            for (com.pointblue.dirxml.dev.model.NotificationTemplate t : treeDs.templates) {
+                theirs.put(t.name, t);
+            }
+            String coll = templateCollectionId(!theirs.isEmpty());
+            if (coll == null) {
+                if (!theirs.isEmpty()) {
+                    result.notes.add(theirs.size() + " notification template(s) not written: the project has no Identity Vault to hold them");
+                }
+                return;
+            }
+            Path dir = metaFileById.get(coll).getParent().resolve(coll);
+            for (com.pointblue.dirxml.dev.model.NotificationTemplate t : mine.values()) {
+                if (!theirs.containsKey(t.name)) {
+                    String id = t.meta.get("designer.id");
+                    if (id != null) {
+                        removeRelationsWithKey(docFor(coll).getDocumentElement(), "#" + id + ".NotfTemplate_");
+                        removeCObject(id);
+                    }
+                }
+            }
+            for (com.pointblue.dirxml.dev.model.NotificationTemplate t : theirs.values()) {
+                com.pointblue.dirxml.dev.model.NotificationTemplate m = mine.get(t.name);
+                String body = t.data == null ? "" : CanonicalXml.serialize(t.data);
+                if (m != null && m.meta.get("designer.id") != null) {
+                    if (ModelDiff.templateText(m).equals(ModelDiff.templateText(t))) {
+                        continue;
+                    }
+                    String id = m.meta.get("designer.id");
+                    setStringAttribute(id, "notfMergeTemplateSubject", t.subject, "CString");
+                    Path contents = contentsFileById.get(id);
+                    writeFile(contents != null ? contents : metaFileById.get(id).getParent().resolve(id + "_contents.xml"), body, contents == null);
+                    continue;
+                }
+                String id = mintId();
+                String attrs = "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"contents\"/>"
+                    + (t.subject == null ? "" : CObjectXml.attr("notfMergeTemplateSubject", t.subject, "CString"))
+                    + packageAttrsNoBaseline(t.meta);
+                newCObject(id, dir.resolve(id + ".NotfTemplate_"), "NotfTemplate", CObjectXml.cobjectNoType(t.name, attrs));
+                writeFile(dir.resolve(id + "_contents.xml"), body, true);
+                appendRelation(docFor(coll), "Idm:NotfTemplates", "Child", id, "NotfTemplate");
+            }
+        }
+
+        // ---- entitlement policies ----
+
+        private String rbeContainerId(boolean create) {
+            if (dsId == null) {
+                return null;
+            }
+            List<String> keys = relationKeys(parsed(dsId).getDocumentElement(), "Idm:RbeContainer");
+            if (!keys.isEmpty()) {
+                return idOf(keys.get(0));
+            }
+            if (!create) {
+                return null;
+            }
+            String id = mintId();
+            newCObject(id, dsChildrenDir().resolve(id + ".RBEContainer_"), "RBEContainer",
+                CObjectXml.cobject(treeDs.rbeContainerName(), "RBEContainer", "", ""));
+            appendRelation(docFor(dsId), "Idm:RbeContainer", "Child", id, "RBEContainer");
+            return id;
+        }
+
+        void syncPolicies() throws IOException {
+            Map<String, com.pointblue.dirxml.dev.model.EntitlementPolicy> mine = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : project.rbePolicies) {
+                mine.put(p.name, p);
+            }
+            String container = rbeContainerId(!treeDs.rbePolicies.isEmpty());
+            if (container == null) {
+                return;
+            }
+            Path dir = metaFileById.get(container).getParent().resolve(container);
+            Set<String> keep = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : treeDs.rbePolicies) {
+                keep.add(p.name);
+            }
+            for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : mine.values()) {
+                String id = p.meta.get("designer.id");
+                if (id != null && (!keep.contains(p.name) || !ModelDiff.rbeText(p, true).equals(ModelDiff.rbeText(treeDs.rbePolicy(p.name), true)))) {
+                    removeRelationsWithKey(docFor(container).getDocumentElement(), "#" + id + ".RBEPolicy_");
+                    removeCObject(id);
+                    if (keep.contains(p.name)) {
+                        writePolicy(container, dir, treeDs.rbePolicy(p.name), id);
+                    }
+                }
+            }
+            for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : treeDs.rbePolicies) {
+                if (!mine.containsKey(p.name)) {
+                    writePolicy(container, dir, p, null);
+                }
+            }
+            // the priorities, as Designer keeps them on the container: "<name>#<level>#0", in level order
+            List<com.pointblue.dirxml.dev.model.EntitlementPolicy> ordered = new ArrayList<>(treeDs.rbePolicies);
+            ordered.removeIf(p -> p.priority == null);
+            ordered.sort(java.util.Comparator.comparingInt(p -> p.priority));
+            List<String> levels = new ArrayList<>();
+            for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : ordered) {
+                levels.add(p.name + "#" + p.priority + "#0");
+            }
+            Element croot = parsed(container).getDocumentElement();
+            List<String> current = new ArrayList<>();
+            Element existing = findAttributeElement(croot, "DirXML-SPPriority");
+            if (existing != null) {
+                for (Node n = existing.getFirstChild(); n != null; n = n.getNextSibling()) {
+                    if (n instanceof Element) {
+                        current.add(((Element) n).getAttribute("value"));
+                    }
+                }
+            }
+            if (!current.equals(levels)) {
+                Document cdoc = docFor(container);
+                croot = cdoc.getDocumentElement();
+                existing = findAttributeElement(croot, "DirXML-SPPriority");
+                if (existing != null) {
+                    croot.removeChild(existing);
+                }
+                if (!levels.isEmpty()) {
+                    Element imported = (Element) cdoc.importNode(CanonicalXml.parse(
+                        "<x xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" + cstructure("DirXML-SPPriority", levels) + "</x>")
+                        .getDocumentElement().getFirstChild(), true);
+                    croot.insertBefore(imported, croot.getFirstChild());
+                }
+            }
+        }
+
+        private void writePolicy(String container, Path dir, com.pointblue.dirxml.dev.model.EntitlementPolicy p, String reuseId) {
+            String id = reuseId != null ? reuseId : mintId();
+            StringBuilder attrs = new StringBuilder();
+            if (p.displayEntitlements != null) {
+                attrs.append(CObjectXml.attr("DirXML-SPDisplayEntitlements", hex(CanonicalXml.serialize(p.displayEntitlements)), "CByteArray"));
+            } else if (!p.entitlementRefs.isEmpty()) {
+                // no display document to derive the refs from (a policy made outside Designer): keep the refs
+                attrs.append(cstructure("DirXML-EntitlementRef", p.entitlementRefs));
+            }
+            if (p.criteria != null) {
+                attrs.append(CObjectXml.attr("DirXML-SPFilterXML", CanonicalXml.serialize(p.criteria), "CString"));
+            }
+            if (p.description != null) {
+                attrs.append(CObjectXml.attr("Description", p.description, "CString"));
+            }
+            if (p.memberQuery != null) {
+                attrs.append(CObjectXml.attr("memberQuery", p.memberQuery, "CString"));
+            }
+            if (!p.members.isEmpty()) {
+                attrs.append(cstructure("Member", p.members));
+            }
+            attrs.append(cstructure("excludedMember", p.excludedMembers));
+            if (p.identity != null) {
+                attrs.append(CObjectXml.attr("dgIdentity", p.identity, "CString"));
+            }
+            attrs.append(packageAttrsNoBaseline(p.meta));
+            newCObject(id, dir.resolve(id + ".RBEPolicy_"), "RBEPolicy", CObjectXml.cobject(p.name, "RBEPolicy", attrs.toString(), ""));
+            if (reuseId != null) {
+                newlyCreatedIds.remove(id);
+            }
+            appendRelation(docFor(container), "Idm:RbePolicies", "Child", id, "RBEPolicy");
+        }
+
+        private static String hex(String s) {
+            StringBuilder sb = new StringBuilder();
+            for (byte b : s.getBytes(StandardCharsets.UTF_8)) {
+                sb.append(String.format("%02X", b & 0xff));
+            }
+            return sb.toString();
         }
 
         // ---- provisioning: forms ----
