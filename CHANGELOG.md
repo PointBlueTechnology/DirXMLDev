@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-13
+
 ### Added
 
 - **`export-project` writes jobs, notification templates and entitlement policies** into a Designer
