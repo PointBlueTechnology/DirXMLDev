@@ -722,3 +722,27 @@ the e2e pair is `tree-7c`'s `PkgTest7` with `NOVLEDIRBASE` + `NOVLEDIRDCFG`):
    driver's is the Active Directory one, not the generic application icon.
 6. **A package upgrade still works**: *Package → Upgrade* on a driver in the new project
    offers the newer version from the workstation catalog and applies it.
+
+### 7.6 Jobs, notification templates and entitlement policies (2026-10-13)
+
+The writer now carries the three kinds a vault-read tree holds beside the drivers, laid out as
+real projects keep them (test11pf for jobs and templates; two projects with policies, read locally
+only):
+
+| Kind | Object | Where | Linked by |
+|---|---|---|---|
+| job | `<id>.Job_` + `<id>_contents.xml` | driver set's or driver's children folder | `Idm:Jobs` Child from the owner; `Idm:JobServers`/`Idm:JobRefs` ↔ `Idm:Jobs`/`Idm:JobServerRefs` with each `Server_` |
+| job scope | `<job>/<id>.JobScope_` | the job's children folder | `Idm:JobScopes` Child |
+| template collection | `<id>.NotfTemplateCollection_` | beside the driver set | `Idm:TemplateCollections` ContainedReference from the `IdentityVault_`, `Idm:IdentityVaults` BackReference |
+| template | `<coll>/<id>.NotfTemplate_` + contents | the collection's folder | `Idm:NotfTemplates` Child |
+| policy container | `<id>.RBEContainer_` (`DirXML-SPPriority` "name#level#0") | driver set's children folder | `Idm:RbeContainer` Child |
+| policy | `<container>/<id>.RBEPolicy_` | the container's folder | `Idm:RbePolicies` Child |
+
+A job's own trace settings are the vault's attributes (`DirXML-TraceLevel`, `-TraceFile`,
+`-TraceSizeLimit`) with `IdmParameter:Inherit*` false. A scope keeps the DN in
+`IdmParameter:scopeDNPrameter`, the `<scope-def/>` in `JobScopePath` and the type
+(`Container`/`Group`/`Leaf`) in `IdmParameter:scopeTypePrameter`; Designer deploys it as
+`DirXML-Scope` `<dn>#0#<path>` (its `DeployedPath`), adding a scope attribute from the type when
+the path has none. The reader now reads both. A policy's display document is the `CByteArray`
+`DirXML-SPDisplayEntitlements`; its entitlement refs are derived from it, as Designer does, and are
+written as `DirXML-EntitlementRef` only for a policy without one.
