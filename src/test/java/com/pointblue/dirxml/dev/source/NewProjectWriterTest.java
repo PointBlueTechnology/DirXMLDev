@@ -348,6 +348,109 @@ public class NewProjectWriterTest {
         assertTrue(again.text(), again.deletedFiles.isEmpty());
     }
 
+    private static org.w3c.dom.Element xml(String s) {
+        return com.pointblue.dirxml.dev.xml.CanonicalXml.parse(s).getDocumentElement();
+    }
+
+    /** Every job (set and driver), template and entitlement policy of a model, as ModelDiff compares them. */
+    private static String jobsTemplatesPolicies(DriverSet ds) {
+        StringBuilder sb = new StringBuilder();
+        List<com.pointblue.dirxml.dev.model.Job> jobs = new java.util.ArrayList<>(ds.jobs);
+        for (Driver d : ds.drivers) {
+            jobs.addAll(d.jobs);
+        }
+        jobs.sort(java.util.Comparator.comparing(j -> j.name));
+        for (com.pointblue.dirxml.dev.model.Job j : jobs) {
+            sb.append("job ").append(j.name).append('\n').append(com.pointblue.dirxml.dev.deploy.ModelDiff.jobText(j, true));
+        }
+        List<com.pointblue.dirxml.dev.model.NotificationTemplate> ts = new java.util.ArrayList<>(ds.templates);
+        ts.sort(java.util.Comparator.comparing(t -> t.name));
+        for (com.pointblue.dirxml.dev.model.NotificationTemplate t : ts) {
+            sb.append("template ").append(t.name).append('\n').append(com.pointblue.dirxml.dev.deploy.ModelDiff.templateText(t));
+        }
+        List<com.pointblue.dirxml.dev.model.EntitlementPolicy> ps = new java.util.ArrayList<>(ds.rbePolicies);
+        ps.sort(java.util.Comparator.comparing(p -> p.name));
+        for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : ps) {
+            sb.append("policy ").append(p.name).append('\n').append(com.pointblue.dirxml.dev.deploy.ModelDiff.rbeText(p, true));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Jobs (with their servers, scopes and own trace settings), notification templates and entitlement
+     * policies (with their priorities) are written into a project, read back as the tree has them, and kept
+     * in step by an update — a vault-read tree's shapes: server DNs, "<dn>#0#<scope-def/>" scopes.
+     */
+    @Test
+    public void jobsTemplatesAndPoliciesRoundTripThroughAProject() throws IOException {
+        Path base = syntheticTree();
+        DriverSet ds = AsCodeReader.read(base);
+        String driver = ds.drivers.get(0).name;
+
+        com.pointblue.dirxml.dev.model.Job setJob = new com.pointblue.dirxml.dev.model.Job("Nightly",
+            xml("<job-aggregation><job-definition type=\"java\" display-name=\"Nightly\"/></job-aggregation>"));
+        setJob.servers.add("cn=srv1,ou=servers,o=synth");
+        ds.jobs.add(setJob);
+        com.pointblue.dirxml.dev.model.Job driverJob = new com.pointblue.dirxml.dev.model.Job("Trigger",
+            xml("<job-aggregation><job-definition type=\"java\" display-name=\"Trigger\"/></job-aggregation>"));
+        driverJob.servers.add("cn=srv1,ou=servers,o=synth");
+        driverJob.scopes.add("ou=users,o=synth#0#<scope-def scope=\"subtree\"/>");
+        driverJob.scopes.add("cn=admins,ou=groups,o=synth#0#<scope-def scope=\"members\"/>");
+        driverJob.meta.put("trace-level", "3");
+        driverJob.meta.put("trace-file", "/var/trace/trigger.xml");
+        ds.driver(driver).jobs.add(driverJob);
+
+        com.pointblue.dirxml.dev.model.NotificationTemplate t = new com.pointblue.dirxml.dev.model.NotificationTemplate("Welcome",
+            xml("<html><body><p>Hello $UserFullName$</p></body></html>"));
+        t.subject = "Welcome aboard";
+        ds.templates.add(t);
+
+        com.pointblue.dirxml.dev.model.EntitlementPolicy a = new com.pointblue.dirxml.dev.model.EntitlementPolicy("Staff");
+        a.description = "everyone in staff";
+        a.memberQuery = "ldap:///ou=users,o=synth??sub?(objectClass=inetOrgPerson)";
+        a.identity = "cn=admin,o=synth";
+        a.members.add("cn=alice,ou=users,o=synth");
+        a.criteria = xml("<filter><and/></filter>");
+        a.entitlementRefs.add("cn=Group,cn=" + driver + ",cn=SynthSet,o=synth#1#<ref/>");
+        a.priority = 0;
+        com.pointblue.dirxml.dev.model.EntitlementPolicy b = new com.pointblue.dirxml.dev.model.EntitlementPolicy("Contractors");
+        b.excludedMembers.add("cn=bob,ou=users,o=synth");
+        b.priority = 1;
+        ds.rbePolicies.add(a);
+        ds.rbePolicies.add(b);
+
+        Path tree = tmp.newFolder("jtp" + (seq++)).toPath();
+        AsCodeWriter.write(ds, tree);
+        DriverSet expected = AsCodeReader.read(tree);
+        ProjectWriter.jobServersAsNames(expected, java.util.Set.of("srv1"));
+
+        Path project = tmp.newFolder("out" + (seq++)).toPath().resolve("JobsTemplates");
+        ProjectWriter.Result r = ProjectWriter.create(tree, project,
+            new NewProject(null, null, null, "srv1", "ou=servers,o=synth").withDesignerRoot(noDesigner()), false);
+        assertTrue(r.text(), r.ok);
+        assertEquals(jobsTemplatesPolicies(expected), jobsTemplatesPolicies(ProjectReader.read(project)));
+        ProjectWriter.Result again = ProjectWriter.update(tree, project, true);
+        assertTrue(again.text(), again.changedFiles.isEmpty() && again.createdFiles.isEmpty() && again.deletedFiles.isEmpty());
+
+        // edits: a template's subject, a policy removed and the other's priority, a job's scope and trace
+        DriverSet edited = AsCodeReader.read(tree);
+        edited.template("Welcome").subject = "Welcome!";
+        edited.rbePolicies.removeIf(p -> p.name.equals("Staff"));
+        edited.rbePolicy("Contractors").priority = 0;
+        com.pointblue.dirxml.dev.model.Job j = edited.driver(driver).jobs.get(0);
+        j.scopes.remove(1);
+        j.meta.remove("trace-file");
+        Path tree2 = tmp.newFolder("jtp" + (seq++)).toPath();
+        AsCodeWriter.write(edited, tree2);
+        ProjectWriter.Result applied = ProjectWriter.update(tree2, project, false);
+        assertTrue(applied.text(), applied.ok);
+        DriverSet expected2 = AsCodeReader.read(tree2);
+        ProjectWriter.jobServersAsNames(expected2, java.util.Set.of("srv1"));
+        assertEquals(jobsTemplatesPolicies(expected2), jobsTemplatesPolicies(ProjectReader.read(project)));
+        ProjectWriter.Result settled = ProjectWriter.update(tree2, project, true);
+        assertTrue(settled.text(), settled.changedFiles.isEmpty() && settled.createdFiles.isEmpty() && settled.deletedFiles.isEmpty());
+    }
+
     @Test
     public void packagedItemsCarryTheirPackageAttributesAndABaseline() throws IOException {
         Path tree = syntheticTree();

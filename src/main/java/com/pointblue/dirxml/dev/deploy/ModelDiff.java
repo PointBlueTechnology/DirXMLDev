@@ -1037,7 +1037,7 @@ public final class ModelDiff {
     }
 
     /** What a job deploys, as text: its document, then its servers, scopes and trace settings one per line. */
-    static String jobText(com.pointblue.dirxml.dev.model.Job j, boolean withDocument) {
+    public static String jobText(com.pointblue.dirxml.dev.model.Job j, boolean withDocument) {
         StringBuilder sb = new StringBuilder();
         if (withDocument) {
             String doc = serializeOrNull(j.definition);
@@ -1095,7 +1095,7 @@ public final class ModelDiff {
         }
     }
 
-    static String templateText(com.pointblue.dirxml.dev.model.NotificationTemplate t) {
+    public static String templateText(com.pointblue.dirxml.dev.model.NotificationTemplate t) {
         String doc = serializeOrNull(t.data);
         return "subject: " + (t.subject == null ? "" : t.subject) + "\n" + (doc == null ? "" : doc) + "\n";
     }
@@ -1141,7 +1141,7 @@ public final class ModelDiff {
      * excluded members, entitlement refs, criteria; with {@code withOrdering}, the priority and Designer's
      * display document too (they do not change what the driver grants).
      */
-    static String rbeText(com.pointblue.dirxml.dev.model.EntitlementPolicy p, boolean withOrdering) {
+    public static String rbeText(com.pointblue.dirxml.dev.model.EntitlementPolicy p, boolean withOrdering) {
         StringBuilder sb = new StringBuilder();
         sb.append("description: ").append(p.description == null ? "" : p.description).append('\n');
         // eDirectory re-cases the DN components of the query (OU=users,O=data): compare it case-folded

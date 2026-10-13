@@ -1008,8 +1008,49 @@ public final class ProjectReader {
             String sn = server == null ? null : attr(server, "name", null);
             j.servers.add(sn != null ? sn : idOf(key));
         }
+        // its own trace settings: Designer keeps them as the vault's attributes, with IdmParameter:Inherit* false
+        String[][] trace = { {"DirXML-TraceLevel", "InheritTraceLevel", "trace-level"},
+            {"DirXML-TraceFile", "InheritTraceFile", "trace-file"},
+            {"DirXML-TraceSizeLimit", "InheritTraceSize", "trace-size-limit"} };
+        for (String[] t : trace) {
+            String v = attrValue(m, t[0]);
+            if (v != null && !v.isEmpty() && !"true".equalsIgnoreCase(attrValue(m, "IdmParameter:" + t[1]))) {
+                j.meta.put(t[2], v);
+            }
+        }
+        // its scopes (Idm:JobScopes → .JobScope_), as the vault's DirXML-Scope "<dn>#0#<scope-def/>" — Designer's
+        // DeployedPath: the DN in IdmParameter:scopeDNPrameter, the path in JobScopePath, and a path without a
+        // scope attribute given one from IdmParameter:scopeTypePrameter (Container subordinates, Group members,
+        // anything else entry) as Designer does when it deploys
+        for (String key : relationKeys(m, "Idm:JobScopes")) {
+            Element sm = idx.metaById.containsKey(idOf(key)) ? idx.parseMeta(idOf(key)) : null;
+            if (sm == null || isRefStub(sm)) {
+                continue;
+            }
+            String dn = attrValue(sm, "IdmParameter:scopeDNPrameter");
+            String path = attrValue(sm, "JobScopePath");
+            if (dn == null || dn.isEmpty()) {
+                continue;
+            }
+            j.scopes.add(dn + "#0#" + scopePath(path, attrValue(sm, "IdmParameter:scopeTypePrameter")));
+        }
         copyPackageMeta(m, j.meta, idx);
         return j;
+    }
+
+    static String scopePath(String path, String type) {
+        String p = path == null || path.isBlank() ? "<scope-def/>" : path;
+        try {
+            Element e = CanonicalXml.parse(p).getDocumentElement();
+            if (!e.getAttribute("scope").isEmpty()) {
+                return p;
+            }
+            String t = type == null ? "" : type;
+            e.setAttribute("scope", t.equalsIgnoreCase("Container") ? "subordinates" : t.equalsIgnoreCase("Group") ? "members" : "entry");
+            return CanonicalXml.serialize(e);
+        } catch (RuntimeException ex) {
+            return p;
+        }
     }
 
     /**
