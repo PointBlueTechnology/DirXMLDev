@@ -7,6 +7,22 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **`export-project` round trip**: updating a project to the tree it was just written from now changes
+  nothing. Three causes, all in `ProjectWriter`:
+  - A packaged item's package linkage record (`dirxml-pkglinkages`, Designer's `Idm:InstalledLinkages`)
+    was never written into a project, so every update saw it missing on each packaged item. It is now
+    written with the item's other package attributes, verbatim as the vault holds it, and an update
+    keeps it in step.
+  - A PRD whose `<process>` the tree keeps apart from its definition (a vault whose `XmlData` lacks it)
+    compared as changed against its `.prd`, which always embeds it. An update now compares it the way
+    the `.prd` holds it; what is written is unchanged.
+  - A file rewritten with the bytes it already had was listed as changed. The result now lists, and the
+    writer now writes, only files whose bytes change.
+- A project's result now says when jobs, notification templates or entitlement policies of the tree
+  were not written: the project writer does not carry them yet (deploy them from the tree).
+
 ## [0.28.0] - 2026-10-12
 
 ### Fixed
