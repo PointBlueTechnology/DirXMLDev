@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The diff's JSON no longer fails on a driver-set-level guard.** When the vault has jobs, templates
+  or RBE policies at the driver-set level and the tree has none, the held-back deletes are reported as
+  an "empty kind" with no driver. `ModelDiff.json()` threw a `NullPointerException` on that, and
+  DirXMLDevWeb's Compare showed only "Cannot invoke String.length() because s is null"
+  (DirXMLDevWeb#116). The driver is now written `null`, and the JSON writer writes any null string as
+  `null`. The CLI's text report was never affected.
+
 ## [0.34.0] - 2026-10-14
 
 ### Added
