@@ -484,9 +484,11 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   /requests/permissions/v2` (the JSON form renderer's call), scripted in
   `bin/apps` with tasks/approve/history; reference with required fields and
   accepted values in [idapps-rest.md](idapps-rest.md), proof in
-  [spikes/prd-rest-live.md](spikes/prd-rest-live.md). Open check: whether
+  [spikes/prd-rest-live.md](spikes/prd-rest-live.md). ~~Open check: whether
   `POST /index/permissions ADD_OR_MODIFY` makes a just-deployed PRD
-  requestable before the index's 10-minute interval.
+  requestable before the index's 10-minute interval~~ — checked 2026-10-14: it
+  does not (nor `REFRESH`); the PRD arrives on the index's own interval
+  ([spikes/w3-rest-live.md](spikes/w3-rest-live.md)).
 - ~~**DirXML Trace Viewer integration**~~ — done 2026-09-25: `viewer.install`
   (release or `--source`), `viewer.check`, doctor line, `driver.trace view --env|--file`;
   the viewer gained `--open` / `--connect … --driver` / `--password-stdin` (its 1.2.0).
@@ -509,7 +511,7 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   2026-09-21 (also `package.build`, `package.site`, `package.status` were missing).
 - ~~**`form.field.add --json '{…}'` is swallowed by the global `--json` output flag**~~ — fixed
   2026-09-21: the extra-properties flag is `--props`; `--json` is output everywhere.
-- **A live run of a W3 integration activity** (REST, role, resource,
+- ~~**A live run of a W3 integration activity**~~ — REST done 2026-10-14 ([spikes/w3-rest-live.md](spikes/w3-rest-live.md); found and fixed: the attributes are expressions, the output maps flowdata paths); role, resource and start-flow still unproven live. Was: (REST, role, resource,
   entity) — the grammar is decompiled from `workflow.jar`'s binding classes
   and checked, but never executed on a lab; needs a REST endpoint or a role
   on idm254.

@@ -20,7 +20,7 @@ Commands (see docs/idapps-rest.md for the bodies and accepted values):
                                    start the PRD (POST /requests/permissions/v2); --data may repeat,
                                    a repeated key becomes a multi-valued item
     index <PRD name|DN> [--op ADD_OR_MODIFY|REMOVE|REFRESH]
-                                   tell the permission index about a PRD (POST /index/permissions)
+                                   tell the permission index about a PRD (POST /index/permissions); answers success but does not make a new PRD requestable sooner
     tasks [--q text] [--size N]    my open tasks (GET /tasks/list)
     task <taskId>                  one task with its data items (POST /tasks/item)
     approve|deny|claim|refuse|release <taskId>... [--process NAME] [--comment TEXT]
@@ -224,7 +224,7 @@ def main(argv):
                     print("started: request %s for %s" % (s.get("requestId"), node.get("userDn")))
         elif isinstance(r, dict) and r.get("success") is False and not fault(r):
             print("not started — the PRD is not in the permission index yet (deploy < 10 min ago?); "
-                  "run 'bin/apps index <PRD>' or wait for the index interval", file=sys.stderr)
+                  "wait for the index interval (up to 10 minutes; 'bin/apps permission <PRD>' says when it is there — the index command does not shorten it)", file=sys.stderr)
         return out(st, r, ok)
 
     if cmd == "index":

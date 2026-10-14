@@ -286,6 +286,16 @@ Recommendation: **B, with A's parameters as the first operations**
   proof exists (needs a REST endpoint or a role on the lab — tracked as a
   follow-up, not blocking this step).
 
+  **Live proof, `rest` (idm254, 2026-10-14; [spikes/w3-rest-live.md](spikes/w3-rest-live.md)).**
+  A PRD whose `rest-activity` GETs the lab's own OpenID discovery document ran
+  end to end and put status 200 and the body into an approval task's data. It
+  corrected two points of the table: the attributes are expressions (a bare
+  `protocol="https"` is `ReferenceError: "https" is not defined`, error link
+  taken), and the output maps are flowdata paths. `flow.activity.add`/`.set`
+  now quote a plain value and prefix a bare output name; `FlowCheck` reports
+  `flow-rest-unquoted` and `flow-rest-output-map`. `role-request`,
+  `resource-request` and `start-flow` are still unproven live.
+
   All four are `ActivityBean`s like every other kind: `activity-id`
   (required), `audit`, `digital-signature-type`, `legal-disclaimer-id`,
   `display-name xml:lang` children as usual; the engine does not restrict
@@ -299,7 +309,7 @@ Recommendation: **B, with A's parameters as the first operations**
 
   | kind | attributes | children (JAXB default names, in order) |
   |---|---|---|
-  | `rest-activity` | `protocol` (required, `http`\|`https`), `host` (required), `port` (required), `path` (required), `method` (required, `GET`\|`POST`\|`PUT`\|`DELETE`\|`PATCH` — checked case-insensitively, stored as given), `contentTypeHeader`, `acceptHeader`, `authorizationHeader`, `timeout`, `trustManagers` | `content` (request body expression), `returnStatusCodeOutputMap`, `returnContentTypeOutputMap`, `returnContentOutputMap` (each the data item name that receives the value), zero or more `http-headers` — **each header element is itself named `http-headers`** (`<http-headers key="Name">value</http-headers>`; the JAXB binding is `@XmlElement(name="http-headers") List<THttpHeader>` with `@XmlAttribute key` and `@XmlValue` — not a typo) |
+  | `rest-activity` | **ECMAScript expressions, not literals** (live 2026-10-14): `protocol` (required, `'http'`\|`'https'`), `host` (required), `port` (required), `path` (required), `method` (required, `'GET'`\|`'POST'`\|`'PUT'`\|`'DELETE'`\|`'PATCH'` — checked case-insensitively), `contentTypeHeader`, `acceptHeader`, `authorizationHeader`; a literal is written quoted (`protocol="'https'"`), a bare word fails at run time; `timeout`, `trustManagers` (not exercised) | `content` (request body expression), `returnStatusCodeOutputMap`, `returnContentTypeOutputMap`, `returnContentOutputMap` (each a **flowdata path** that receives the value, `flowdata.restStatus` — a bare name keeps nothing, live 2026-10-14), zero or more `http-headers` — **each header element is itself named `http-headers`** (`<http-headers key="Name">value</http-headers>`; the JAXB binding is `@XmlElement(name="http-headers") List<THttpHeader>` with `@XmlAttribute key` and `@XmlValue` — not a typo) |
   | `role-request-activity` | `sod-override-request` (not exposed by `flow.activity.add`/`.set` — see below) | `roles`\* (≥1, required; expression, typically a quoted DN), `targets`\* (≥1, required; expression), `targetType` (enum `USER`\|`GROUP`\|`CONTAINER`\|`CONTAINER_WITH_SUBTREE`\|`ROLE`, default `USER`), `action` (enum `GRANT`\|`REVOKE`\|`EXTEND`, default `GRANT`), `effective-date`, `expiration-date`, `request-description` (required; expression), `correlation-id`, `sod-override-justification`, `sod-overrides`\* (not exposed — see below) |
   | `resource-request-activity` | — | `target-resource` (required; expression), `target-user`\* (≥1, required; expression), `action` (enum `GRANT`\|`REVOKE`, default `GRANT`), `request-description` (required), `correlation-id`, `target-param`\* (zero or more `<target-param source="…" target="…"/>` maps), `target-guid` (not exposed — see below) |
   | `start-correlated-flow-activity` | — | `processId` (required; the PRD DN or name expression), `recipient`\* (≥1, required; expression), `correlationId` (camelCase, unlike the others' `correlation-id` — this is what the binding classes actually name it) |

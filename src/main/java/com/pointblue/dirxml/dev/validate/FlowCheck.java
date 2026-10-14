@@ -522,11 +522,28 @@ public final class FlowCheck implements Check {
                 checkEnum(a.attr("action"), Flow.BIND_ACTIONS, "activity '" + a.id + "' action", path, r);
             }
             if (a.kind == Flow.Kind.REST) {
-                String protocol = a.attr("protocol");
+                // the engine evaluates these attributes as ECMAScript: a bare word is an undefined variable at run
+                // time and the activity takes its error link (live, idm254 2026-10-14; docs/workflows.md §4 W3)
+                for (String attr : Flow.REST_EXPRESSION_ATTRS) {
+                    String v = a.attr(attr);
+                    if (Flow.bareWord(v)) {
+                        r.add(Finding.error("flow-rest-unquoted", path, "activity '" + a.id + "' " + attr + " is the bare word '"
+                            + v + "': the engine evaluates it as ECMAScript and fails (\"" + v.trim() + "\" is not defined); "
+                            + "write the literal quoted, '" + v.trim() + "' (flow.activity.set quotes a plain value)"));
+                    }
+                }
+                for (String map : new String[] {"returnStatusCodeOutputMap", "returnContentTypeOutputMap", "returnContentOutputMap"}) {
+                    String target = textOfFirstChild(a.element, map);
+                    if (target != null && !target.isBlank() && !target.trim().startsWith("flowdata.")) {
+                        r.add(Finding.error("flow-rest-output-map", path, "activity '" + a.id + "' " + map + " is '" + target.trim()
+                            + "': the engine keeps the value only under a flowdata path; write flowdata." + target.trim()));
+                    }
+                }
+                String protocol = Flow.stringLiteral(a.attr("protocol"));
                 if (protocol != null) {
                     checkEnum(protocol, Flow.REST_PROTOCOLS, "activity '" + a.id + "' protocol", path, r);
                 }
-                String method = a.attr("method");
+                String method = Flow.stringLiteral(a.attr("method"));
                 if (method != null) {
                     checkEnumCaseInsensitive(method, Flow.REST_METHODS, "activity '" + a.id + "' method", path, r);
                 }
