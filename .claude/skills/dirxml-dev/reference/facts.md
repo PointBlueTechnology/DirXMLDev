@@ -170,8 +170,16 @@ version it was proven on unless stated.
   minutes (default 10). Symptom: 200 `{"success": false}` with no `Fault` and
   nothing logged; `POST /permissions/item` says `PermissionIndexException …
   does not exist`. `POST /index/permissions` accepts `ADD_OR_MODIFY`/`REMOVE`/
-  `REFRESH` (the vendor doc says REMOVE only) — whether it shortens the wait
-  is unproven → `prd-rest-live.md`.
+  `REFRESH` (the vendor doc says REMOVE only) and answers success, but does
+  **not** shorten the wait (live 2026-10-14: the PRD appeared at +7:57 either
+  way); poll `bin/apps permission <PRD>`. A changed PRD (same DN) is used at
+  once → `prd-rest-live.md`, `w3-rest-live.md`.
+- **A `rest-activity`'s attributes are ECMAScript expressions** (`protocol`,
+  `host`, `port`, `path`, `method`, the header attributes): `protocol="https"`
+  fails with `ReferenceError: "https" is not defined` and takes the error link;
+  write `'https'`. **Its output maps name a flowdata path** (`flowdata.restStatus`);
+  a bare name keeps nothing. The operations do both; `validate` flags hand-edited
+  XML (`flow-rest-unquoted`, `flow-rest-output-map`) → `w3-rest-live.md`.
 - **Token:** OSP password grant at `/osp/a/idm/auth/oauth2/token`, Basic
   `<client>:<secret>`; `rbpmrest` (documented) and `rbpm` (the dashboard's)
   both work on the lab. Application errors are HTTP 489 with an `NcacFault`

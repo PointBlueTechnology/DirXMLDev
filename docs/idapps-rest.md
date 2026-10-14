@@ -99,9 +99,11 @@ the W4 proof — the search path differs). Two ways to know / hurry it:
   Rights: the caller must be a domain administrator for that type
   (Provisioning for PRDs). Response `{"success": true}` or
   `{"success": false, "failed": [{"reason": …}]}`. Both `ADD_OR_MODIFY` and
-  `REFRESH` returned success on idm254 **[live]**; that they shortcut the
-  10-minute wait for a *just-deployed* PRD is not yet proven (the test ran
-  after the interval had elapsed) — check it on the next scratch deploy.
+  `REFRESH` return success **[live]**, but **neither makes a just-deployed PRD
+  requestable sooner** **[live, 2026-10-14]**: `ADD_OR_MODIFY` four seconds after
+  the deploy and `REFRESH` at +1:43 left `POST /permissions/item` answering
+  "does not exist"; the PRD arrived at +7:57, on the index's own interval. A
+  *changed* PRD (same DN) runs its new definition on the next request at once.
 
 `GET /permissions?q=*&type=PRD&nextIndex=1&size=50` (the index search; `type`
 repeats, values `ROLE`/`RESOURCE`/`PRD`; `column` selects response attributes;

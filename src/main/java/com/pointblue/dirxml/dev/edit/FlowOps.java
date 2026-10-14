@@ -202,6 +202,27 @@ public final class FlowOps {
         return a;
     }
 
+    /**
+     * A rest-activity enum ({@code protocol}, {@code method}) checked on its literal: the value as typed or the
+     * text of a quoted literal; a computed expression is not checked (docs/workflows.md &sect;4 W3: the engine
+     * evaluates these attributes).
+     */
+    private static void checkRestEnum(String value, Set<String> allowed, String label, boolean caseInsensitive) throws Operation.Refusal {
+        if (value == null) {
+            return;
+        }
+        String lit = Flow.stringLiteral(value);
+        String v = lit != null ? lit : (Flow.bareWord(value) ? value.trim() : null);
+        if (v == null) {
+            return;
+        }
+        if (caseInsensitive) {
+            checkEnumCaseInsensitive(v, allowed, label);
+        } else {
+            checkEnum(v, allowed, label);
+        }
+    }
+
     private static void checkEnum(String value, Set<String> allowed, String label) throws Operation.Refusal {
         if (value != null && !allowed.contains(value)) {
             throw new Operation.Refusal("--" + label + " '" + value + "' is not one of " + allowed);
@@ -843,8 +864,8 @@ public final class FlowOps {
                     requireOne("port", "a rest activity");
                     requireOne("path", "a rest activity");
                     requireOne("method", "a rest activity");
-                    checkEnum(one("protocol"), Flow.REST_PROTOCOLS, "protocol");
-                    checkEnumCaseInsensitive(one("method"), Flow.REST_METHODS, "method");
+                    checkRestEnum(one("protocol"), Flow.REST_PROTOCOLS, "protocol", false);
+                    checkRestEnum(one("method"), Flow.REST_METHODS, "method", true);
                     for (String header : many("header")) {
                         if (header.indexOf('=') < 0) {
                             throw new Operation.Refusal("--header must be Key=Value: '" + header + "'");
@@ -958,32 +979,32 @@ public final class FlowOps {
                 case "rest": {
                     Element e = doc.createElementNS(null, "rest-activity");
                     e.setAttribute("activity-id", activityId);
-                    e.setAttribute("protocol", one("protocol"));
-                    e.setAttribute("host", one("host"));
-                    e.setAttribute("port", one("port"));
-                    e.setAttribute("path", one("path"));
-                    e.setAttribute("method", one("method"));
+                    e.setAttribute("protocol", Flow.restExpression(one("protocol")));
+                    e.setAttribute("host", Flow.restExpression(one("host")));
+                    e.setAttribute("port", Flow.restExpression(one("port")));
+                    e.setAttribute("path", Flow.restExpression(one("path")));
+                    e.setAttribute("method", Flow.restExpression(one("method")));
                     if (timeout != null) {
                         e.setAttribute("timeout", timeout);
                     }
-                    setAttrIfPresent(e, "contentTypeHeader", one("content-type"));
-                    setAttrIfPresent(e, "acceptHeader", one("accept"));
-                    setAttrIfPresent(e, "authorizationHeader", one("authorization"));
+                    setAttrIfPresent(e, "contentTypeHeader", Flow.restExpression(one("content-type")));
+                    setAttrIfPresent(e, "acceptHeader", Flow.restExpression(one("accept")));
+                    setAttrIfPresent(e, "authorizationHeader", Flow.restExpression(one("authorization")));
                     String content = one("content");
                     if (content != null) {
                         appendTextChild(doc, e, "content", content);
                     }
                     String statusTo = one("status-to");
                     if (statusTo != null) {
-                        appendTextChild(doc, e, "returnStatusCodeOutputMap", statusTo);
+                        appendTextChild(doc, e, "returnStatusCodeOutputMap", Flow.flowdataTarget(statusTo));
                     }
                     String contentTypeTo = one("content-type-to");
                     if (contentTypeTo != null) {
-                        appendTextChild(doc, e, "returnContentTypeOutputMap", contentTypeTo);
+                        appendTextChild(doc, e, "returnContentTypeOutputMap", Flow.flowdataTarget(contentTypeTo));
                     }
                     String contentTo = one("content-to");
                     if (contentTo != null) {
-                        appendTextChild(doc, e, "returnContentOutputMap", contentTo);
+                        appendTextChild(doc, e, "returnContentOutputMap", Flow.flowdataTarget(contentTo));
                     }
                     // each header element is itself named "http-headers" (JAXB @XmlElement(name="http-headers")
                     // List<THttpHeader>, @XmlAttribute key, @XmlValue) — this is not a typo, see docs/workflows.md §4 W3.
@@ -1311,8 +1332,8 @@ public final class FlowOps {
                     }
                 }
                 if (act.kind == Flow.Kind.REST) {
-                    checkEnum(one("protocol"), Flow.REST_PROTOCOLS, "protocol");
-                    checkEnumCaseInsensitive(one("method"), Flow.REST_METHODS, "method");
+                    checkRestEnum(one("protocol"), Flow.REST_PROTOCOLS, "protocol", false);
+                    checkRestEnum(one("method"), Flow.REST_METHODS, "method", true);
                     for (String header : many("header")) {
                         if (header.indexOf('=') < 0) {
                             throw new Operation.Refusal("--header must be Key=Value: '" + header + "'");
@@ -1425,35 +1446,35 @@ public final class FlowOps {
             }
             if (act.kind == Flow.Kind.REST) {
                 if (one("protocol") != null) {
-                    el.setAttribute("protocol", one("protocol"));
+                    el.setAttribute("protocol", Flow.restExpression(one("protocol")));
                     changed = true;
                 }
                 if (one("host") != null) {
-                    el.setAttribute("host", one("host"));
+                    el.setAttribute("host", Flow.restExpression(one("host")));
                     changed = true;
                 }
                 if (one("port") != null) {
-                    el.setAttribute("port", one("port"));
+                    el.setAttribute("port", Flow.restExpression(one("port")));
                     changed = true;
                 }
                 if (one("path") != null) {
-                    el.setAttribute("path", one("path"));
+                    el.setAttribute("path", Flow.restExpression(one("path")));
                     changed = true;
                 }
                 if (one("method") != null) {
-                    el.setAttribute("method", one("method"));
+                    el.setAttribute("method", Flow.restExpression(one("method")));
                     changed = true;
                 }
                 if (one("content-type") != null) {
-                    el.setAttribute("contentTypeHeader", one("content-type"));
+                    el.setAttribute("contentTypeHeader", Flow.restExpression(one("content-type")));
                     changed = true;
                 }
                 if (one("accept") != null) {
-                    el.setAttribute("acceptHeader", one("accept"));
+                    el.setAttribute("acceptHeader", Flow.restExpression(one("accept")));
                     changed = true;
                 }
                 if (one("authorization") != null) {
-                    el.setAttribute("authorizationHeader", one("authorization"));
+                    el.setAttribute("authorizationHeader", Flow.restExpression(one("authorization")));
                     changed = true;
                 }
                 if (one("content") != null) {
@@ -1461,15 +1482,15 @@ public final class FlowOps {
                     changed = true;
                 }
                 if (one("status-to") != null) {
-                    setOrCreateTextChild(doc, el, "returnStatusCodeOutputMap", one("status-to"));
+                    setOrCreateTextChild(doc, el, "returnStatusCodeOutputMap", Flow.flowdataTarget(one("status-to")));
                     changed = true;
                 }
                 if (one("content-type-to") != null) {
-                    setOrCreateTextChild(doc, el, "returnContentTypeOutputMap", one("content-type-to"));
+                    setOrCreateTextChild(doc, el, "returnContentTypeOutputMap", Flow.flowdataTarget(one("content-type-to")));
                     changed = true;
                 }
                 if (one("content-to") != null) {
-                    setOrCreateTextChild(doc, el, "returnContentOutputMap", one("content-to"));
+                    setOrCreateTextChild(doc, el, "returnContentOutputMap", Flow.flowdataTarget(one("content-to")));
                     changed = true;
                 }
                 if (extra.containsKey("header")) {
