@@ -111,10 +111,36 @@ public final class Environments {
     }
 
     private Environments(Properties props, Path file, Set<String> defined, Path secretsDir) {
+        this(props, file, defined, secretsDir, Set.of());
+    }
+
+    private Environments(Properties props, Path file, Set<String> defined, Path secretsDir, Set<String> refused) {
         this.props = props;
         this.file = file;
         this.defined = defined;
         this.secretsDir = secretsDir;
+        this.refused = refused;
+    }
+
+    /**
+     * The secret keys whose {@code …Command} reference a person's credentials file holds but may not run
+     * ({@link #load(Path, Path, boolean)} with {@code commands} false): a hosted server runs a command as itself,
+     * so only a deployer's are honoured. Asking for one of these secrets says so instead of "not set".
+     */
+    private final Set<String> refused;
+
+    /** The keys left out because their command reference may not run here, sorted. */
+    public List<String> refusedCommands() {
+        return new ArrayList<>(new TreeSet<>(refused));
+    }
+
+    /** {@link SecretSource#resolve}, except that a command reference left out says why rather than "not set". */
+    private char[] resolve(String key, String what) throws IOException {
+        if (refused.contains(key) && !SecretSource.has(props, key)) {
+            throw new IOException(what + ": " + key + " is read by a command, which only a deployer may use on this "
+                + "server; keep it in your own file or an environment variable instead (Connections)");
+        }
+        return SecretSource.resolve(props, key, what);
     }
 
     /** A key that holds, or points at, a secret: {@code <env>.password}, {@code .eventsPassword}, {@code .appsPassword}, each with its {@code Env|Command|Keychain} form. */
@@ -142,6 +168,15 @@ public final class Environments {
      * may be absent. A relative {@code <env>.secrets} resolves beside the definitions file.
      */
     public static Environments load(Path definitions, Path credentials) throws IOException {
+        return load(definitions, credentials, true);
+    }
+
+    /**
+     * The definitions merged with one person's credentials; with {@code commands} false, the person's
+     * {@code …Command} references are left out (see {@link #refusedCommands()}): a hosted server runs them as
+     * itself, so only a deployer's may run. The definitions hold no secrets, so nothing of theirs is affected.
+     */
+    public static Environments load(Path definitions, Path credentials, boolean commands) throws IOException {
         List<String> secret = secretKeys(definitions);
         if (!secret.isEmpty()) {
             throw new IOException("the environment definitions " + definitions + " hold secret keys that belong in a person's credentials file: " + String.join(", ", secret));
@@ -149,9 +184,19 @@ public final class Environments {
         Properties defs = Files.isRegularFile(definitions) ? Secrets.parse(Files.readString(definitions, StandardCharsets.UTF_8)) : new Properties();
         Properties merged = new Properties();
         merged.putAll(defs);
+        Set<String> refused = new TreeSet<>();
         if (credentials != null && Files.isRegularFile(credentials)) {
             SecretSource.warnIfShared(credentials);
-            merged.putAll(Secrets.parse(Files.readString(credentials, StandardCharsets.UTF_8)));
+            Properties creds = Secrets.parse(Files.readString(credentials, StandardCharsets.UTF_8));
+            if (!commands) {
+                for (String k : creds.stringPropertyNames()) {
+                    if (k.endsWith("Command")) {
+                        creds.remove(k);
+                        refused.add(k.substring(0, k.length() - "Command".length()));
+                    }
+                }
+            }
+            merged.putAll(creds);
         }
         Set<String> defined = new TreeSet<>();
         for (String k : defs.stringPropertyNames()) {
@@ -160,7 +205,7 @@ public final class Environments {
                 defined.add(k.substring(0, dot));
             }
         }
-        return new Environments(merged, credentials == null ? definitions : credentials, defined, definitions.toAbsolutePath().getParent());
+        return new Environments(merged, credentials == null ? definitions : credentials, defined, definitions.toAbsolutePath().getParent(), refused);
     }
 
     /** Where the environments file is looked for, in order. */
@@ -282,7 +327,7 @@ public final class Environments {
     public Environment get(String name) throws IOException {
         String url = req(name, "url");
         String bindDn = req(name, "bindDn");
-        char[] pw = SecretSource.resolve(props, name + ".password", "environment '" + name + "'");
+        char[] pw = resolve(name + ".password", "environment '" + name + "'");
         if (pw == null || pw.length == 0) {
             throw new IOException("environment '" + name + "': set " + name + ".password, .passwordEnv, .passwordCommand or .passwordKeychain");
         }
@@ -322,7 +367,8 @@ public final class Environments {
             url = "jdbc:postgresql://" + url;
         }
         String user = props.getProperty(name + ".eventsUser", "eventlogger_reader").trim();
-        char[] pw = SecretSource.has(props, name + ".eventsPassword") ? SecretSource.resolve(props, name + ".eventsPassword", "environment '" + name + "' event store") : null;
+        char[] pw = SecretSource.has(props, name + ".eventsPassword") || refused.contains(name + ".eventsPassword")
+            ? resolve(name + ".eventsPassword", "environment '" + name + "' event store") : null;
         String table = props.getProperty(name + ".eventsTable", "public.dxmlevent").trim();
         if (!table.matches("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?")) {
             throw new IOException("environment '" + name + "': eventsTable must be a plain [schema.]table name");
@@ -337,7 +383,7 @@ public final class Environments {
      * in any of the {@link SecretSource} forms; null when not configured.
      */
     public char[] secret(String name, String key) throws IOException {
-        return SecretSource.resolve(props, name + "." + key, "environment '" + name + "'");
+        return resolve(name + "." + key, "environment '" + name + "'");
     }
 
     /** Any other {@code <env>.<key>} value (e.g. {@code formsUrl}, {@code k8sHost}), trimmed; null when absent or blank. */
