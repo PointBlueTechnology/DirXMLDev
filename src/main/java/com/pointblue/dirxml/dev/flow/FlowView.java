@@ -225,8 +225,8 @@ public final class FlowView {
                 append(sb, "action", a.attr("action"));
                 break;
             case REST:
-                appendRaw(sb, str(a.attr("method")) + " " + str(a.attr("protocol")) + "://"
-                    + str(a.attr("host")) + ":" + str(a.attr("port")) + str(a.attr("path")));
+                appendRaw(sb, str(Flow.literalOrSelf(a.attr("method"))) + " " + str(Flow.literalOrSelf(a.attr("protocol"))) + "://"
+                    + str(Flow.literalOrSelf(a.attr("host"))) + ":" + str(Flow.literalOrSelf(a.attr("port"))) + str(Flow.literalOrSelf(a.attr("path"))));
                 break;
             case ROLE_REQUEST: {
                 String action = textOfChild(a.element, "action");

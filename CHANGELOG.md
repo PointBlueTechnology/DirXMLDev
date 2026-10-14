@@ -7,6 +7,25 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `rest` workflow activity authored by the tool now runs.** A live run on idm254 found two
+  shapes wrong in the W3 grammar, which was calibrated from the binding classes alone:
+  - **The attributes are ECMAScript expressions.** This covers `protocol`, `host`, `port`, `path`,
+    `method` and the three header attributes. `protocol="https"` failed with
+    `ReferenceError: "https" is not defined`.
+  - **The output maps are flowdata paths.** A bare `restStatus` kept nothing; the map has to read
+    `flowdata.restStatus`.
+
+  `flow.activity.add`/`.set` now quote a plain value and keep an expression, and they add the
+  `flowdata.` prefix to a bare output name. `validate` reports both mistakes in hand-edited XML
+  (`flow-rest-unquoted`, `flow-rest-output-map`), and `prd.flow` shows the literal values. The
+  operations' help, docs/workflows.md, the agent guide and the skill's facts say so too.
+  docs/spikes/w3-rest-live.md has the run.
+- **`bin/apps` no longer suggests `index` to make a new PRD requestable.** Measured live, neither
+  `ADD_OR_MODIFY` nor `REFRESH` shortens the permission index's wait; `permission` says when the
+  PRD is there.
+
 ## [0.33.0] - 2026-10-14
 
 ### Added

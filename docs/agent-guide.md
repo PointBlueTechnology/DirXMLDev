@@ -250,6 +250,18 @@ bin/idm flow.activity.add tree/ --prd "Widget Access" --kind start-flow --id fol
 bin/idm validate tree/          # flow-start-flow-unknown warns here: no PRD named "Widget Follow-up" exists yet
 ```
 
+Two things about a `rest` activity, proven on idm254 (2026-10-14, `docs/spikes/w3-rest-live.md`):
+
+- **Its attributes are expressions.** The engine evaluates `protocol`, `host`, `port`, `path`,
+  `method` and the three header attributes as ECMAScript: `protocol="https"` fails with
+  `ReferenceError: "https" is not defined` and the activity takes its error link. The operations
+  write a plain value quoted (`--protocol https` → `'https'`) and keep an expression as you typed
+  it (`--host "flowdata.get('apiHost')"`); `validate` reports a bare word in hand-edited XML
+  (`flow-rest-unquoted`).
+- **Its outputs go to a flowdata path.** `--status-to statusCode` is written
+  `flowdata.statusCode`; read it later with `flowdata.get('statusCode')`. A bare name in the XML
+  keeps nothing (`flow-rest-output-map`).
+
 `flow.activity.set` takes the same kind-specific flags to update an existing
 activity of that kind (a flag that doesn't match the activity's kind is
 refused, naming it); a repeatable one (`--header`/`--role`/`--target`/

@@ -476,7 +476,7 @@ public class FlowCheckTest {
     public void restActivityCleanIsFindingFree() {
         Report r = run("<process version=\"4.5.0\">"
             + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
-            + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"api.example.com\" port=\"443\" path=\"/v1\" method=\"POST\">"
+            + "<rest-activity activity-id=\"call\" protocol=\"'https'\" host=\"'api.example.com'\" port=\"'443'\" path=\"'/v1'\" method=\"'POST'\">"
             + "<display-name xml:lang=\"en\">Call</display-name><content>'{}'</content>"
             + "<http-headers key=\"Accept\">application/json</http-headers></rest-activity>"
             + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
@@ -490,7 +490,7 @@ public class FlowCheckTest {
     public void flowActivityIncompleteRestMissingRequiredAttribute() {
         Report r = run("<process version=\"4.5.0\">"
             + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
-            + "<rest-activity activity-id=\"call\" host=\"api.example.com\" port=\"443\" path=\"/v1\" method=\"POST\">"
+            + "<rest-activity activity-id=\"call\" host=\"'api.example.com'\" port=\"'443'\" path=\"'/v1'\" method=\"'POST'\">"
             + "<display-name xml:lang=\"en\">Call</display-name></rest-activity>"
             + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
             + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
@@ -504,7 +504,7 @@ public class FlowCheckTest {
     public void flowAttributeEnumRestMethodInvalid() {
         Report r = run("<process version=\"4.5.0\">"
             + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
-            + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"h\" port=\"443\" path=\"/v1\" method=\"BOGUS\">"
+            + "<rest-activity activity-id=\"call\" protocol=\"'https'\" host=\"'h'\" port=\"'443'\" path=\"'/v1'\" method=\"'BOGUS'\">"
             + "<display-name xml:lang=\"en\">Call</display-name></rest-activity>"
             + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
             + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
@@ -517,7 +517,7 @@ public class FlowCheckTest {
     public void restMethodCheckedCaseInsensitively() {
         Report r = run("<process version=\"4.5.0\">"
             + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
-            + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"h\" port=\"443\" path=\"/v1\" method=\"post\">"
+            + "<rest-activity activity-id=\"call\" protocol=\"'https'\" host=\"'h'\" port=\"'443'\" path=\"'/v1'\" method=\"'post'\">"
             + "<display-name xml:lang=\"en\">Call</display-name></rest-activity>"
             + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
             + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
@@ -530,7 +530,7 @@ public class FlowCheckTest {
     public void flowExpressionSyntaxRestContent() {
         Report r = run("<process version=\"4.5.0\">"
             + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>"
-            + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"h\" port=\"443\" path=\"/v1\" method=\"POST\">"
+            + "<rest-activity activity-id=\"call\" protocol=\"'https'\" host=\"'h'\" port=\"'443'\" path=\"'/v1'\" method=\"'POST'\">"
             + "<display-name xml:lang=\"en\">Call</display-name><content>true &amp;&amp;</content></rest-activity>"
             + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
             + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
@@ -693,5 +693,33 @@ public class FlowCheckTest {
             + "</process>");
         assertEquals(1, r.withCode("flow-display-name-missing").size());
         assertEquals(Finding.Severity.WARNING, r.withCode("flow-display-name-missing").get(0).severity);
+    }
+
+    /**
+     * The engine evaluates a rest-activity's protocol, host, port, path, method and header attributes as ECMAScript
+     * (live, idm254 2026-10-14: protocol="https" → ReferenceError "https" is not defined, error link taken). A bare
+     * word is an error; a quoted literal or a computed expression is fine, and an expression is not enum-checked.
+     */
+    @Test
+    public void restAttributesAreExpressionsSoABareWordIsAnError() {
+        String head = "<process version=\"4.5.0\">"
+            + "<start-activity activity-id=\"start\"><display-name xml:lang=\"en\">S</display-name></start-activity>";
+        String tail = "<display-name xml:lang=\"en\">Call</display-name></rest-activity>"
+            + "<finish-activity activity-id=\"finish\"><display-name xml:lang=\"en\">F</display-name></finish-activity>"
+            + "<link source=\"start\" target=\"call\" type=\"forward\"/>"
+            + "<link source=\"call\" target=\"finish\" type=\"forward\"/>"
+            + "</process>";
+        Report r = run(head + "<rest-activity activity-id=\"call\" protocol=\"https\" host=\"api.example.com\" port=\"443\" path=\"/v1\" method=\"GET\" acceptHeader=\"application/json\">" + tail);
+        assertEquals(r.text(), 5, r.withCode("flow-rest-unquoted").size());   // protocol, host, path, method, acceptHeader; 443 evaluates
+        assertTrue(r.text(), r.text().contains("'https'"));
+        Report ok = run(head + "<rest-activity activity-id=\"call\" protocol=\"flowdata.get('proto')\" host=\"'h' + '.example.com'\" port=\"443\" path=\"'/v1'\" method=\"flowdata.get('m')\">" + tail);
+        assertEquals(ok.text(), 0, ok.withCode("flow-rest-unquoted").size());
+        assertEquals("a computed protocol or method is not enum-checked", 0, ok.withCode("flow-attribute-enum").size());
+
+        String maps = "<rest-activity activity-id=\"call\" protocol=\"'https'\" host=\"'h'\" port=\"'443'\" path=\"'/v1'\" method=\"'GET'\">"
+            + "<returnStatusCodeOutputMap>restStatus</returnStatusCodeOutputMap><returnContentOutputMap>flowdata.restBody</returnContentOutputMap>";
+        Report m = run(head + maps + tail);
+        assertEquals("an output map must be a flowdata path", 1, m.withCode("flow-rest-output-map").size());
+        assertTrue(m.text(), m.text().contains("flowdata.restStatus"));
     }
 }

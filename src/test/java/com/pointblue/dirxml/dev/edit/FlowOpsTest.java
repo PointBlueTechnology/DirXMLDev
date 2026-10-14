@@ -650,14 +650,14 @@ public class FlowOpsTest {
         Flow.Activity call = flow.byId("call");
         assertNotNull(call);
         assertEquals(Flow.Kind.REST, call.kind);
-        assertEquals("https", call.attr("protocol"));
-        assertEquals("api.example.com", call.attr("host"));
-        assertEquals("443", call.attr("port"));
-        assertEquals("/v1/items", call.attr("path"));
-        assertEquals("post", call.attr("method"));   // stored as given, not uppercased
+        assertEquals("written quoted: the engine evaluates it", "'https'", call.attr("protocol"));
+        assertEquals("'api.example.com'", call.attr("host"));
+        assertEquals("'443'", call.attr("port"));
+        assertEquals("'/v1/items'", call.attr("path"));
+        assertEquals("'post'", call.attr("method"));   // quoted as given, not uppercased
         assertEquals("'{}'", call.element.getElementsByTagName("content").item(0).getTextContent());
-        assertEquals("statusCode", call.element.getElementsByTagName("returnStatusCodeOutputMap").item(0).getTextContent());
-        assertEquals("body", call.element.getElementsByTagName("returnContentOutputMap").item(0).getTextContent());
+        assertEquals("a bare name gets the flowdata. prefix", "flowdata.statusCode", call.element.getElementsByTagName("returnStatusCodeOutputMap").item(0).getTextContent());
+        assertEquals("flowdata.body", call.element.getElementsByTagName("returnContentOutputMap").item(0).getTextContent());
         org.w3c.dom.NodeList headers = call.element.getElementsByTagName("http-headers");
         assertEquals(2, headers.getLength());
         assertEquals("X-Api-Key", ((Element) headers.item(0)).getAttribute("key"));
@@ -693,9 +693,9 @@ public class FlowOpsTest {
         assertTrue(r.text(), r.ok() && r.written);
         Flow flow = flowOf(t);
         Flow.Activity call = flow.byId("call");
-        assertEquals("h2", call.attr("host"));
-        assertEquals("put", call.attr("method"));
-        assertEquals("https", call.attr("protocol"));   // untouched
+        assertEquals("'h2'", call.attr("host"));
+        assertEquals("'put'", call.attr("method"));
+        assertEquals("'https'", call.attr("protocol"));   // untouched
         org.w3c.dom.NodeList headers = call.element.getElementsByTagName("http-headers");
         assertEquals(1, headers.getLength());
         assertEquals("B", ((Element) headers.item(0)).getAttribute("key"));
@@ -875,5 +875,18 @@ public class FlowOpsTest {
         Result bad = Transaction.open(t).run(new FlowOps.ActivitySet(null, "P", "start", null, null, null, null, null,
             null, null, null, "cn=x", null, null), false, false);
         assertFalse(bad.text(), bad.ok());
+    }
+
+    /** What flow.activity.add/.set store for a rest attribute: a plain value quoted, an expression as typed (docs/workflows.md §4 W3). */
+    @Test
+    public void restAttributeValuesAreWrittenAsExpressions() {
+        assertEquals("'https'", com.pointblue.dirxml.dev.flow.Flow.restExpression("https"));
+        assertEquals("'443'", com.pointblue.dirxml.dev.flow.Flow.restExpression("443"));
+        assertEquals("'/a/b?x=1'", com.pointblue.dirxml.dev.flow.Flow.restExpression("/a/b?x=1"));
+        assertEquals("already quoted", "'https'", com.pointblue.dirxml.dev.flow.Flow.restExpression("'https'"));
+        assertEquals("flowdata.get('host')", com.pointblue.dirxml.dev.flow.Flow.restExpression("flowdata.get('host')"));
+        assertEquals("'a' + 'b'", com.pointblue.dirxml.dev.flow.Flow.restExpression("'a' + 'b'"));
+        assertEquals("https", com.pointblue.dirxml.dev.flow.Flow.literalOrSelf("'https'"));
+        assertEquals(null, com.pointblue.dirxml.dev.flow.Flow.stringLiteral("'a' + 'b'"));
     }
 }
