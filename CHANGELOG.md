@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`Environments.load(definitions, credentials, commands)`**: with `commands` false, a person's
+  `…Command` references are left out of the merge and listed (`refusedCommands()`); asking for one of
+  those secrets says a command is a deployer's rather than "not set", and the command never runs. A
+  hosted server (DirXMLDevWeb) uses it for everyone who is not a deployer, since it runs a command as
+  itself. The two-argument form and the one-file form are unchanged.
+
 ### Fixed
 
 - **Docs**: docs/plan.md and docs/vault-deploy.md no longer call the Remote Loader password deferred; it
