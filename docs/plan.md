@@ -228,8 +228,8 @@ spec: [validation.md](validation.md))
 **Phase 4 — Vault deploy with safeguards** — ✅ **built and proven on the test
 vault** (2026-09-08; `--delete-driver` implemented 2026-09-16;
 [vault-deploy.md](vault-deploy.md) records what landed and what is
-deliberately deferred: the Remote Loader password, `simulate` inside the
-production gate)
+deliberately deferred: `simulate` inside the production gate; the Remote Loader
+password, deferred at first, is set since 0.24.0, docs/console-gaps.md §11)
 - Structured `vault.diff`; deploy plan; LDIF snapshot + `rollback`; LDAP writes +
   `RestartDriver`; environment gating; audit log; post-deploy verification
   (re-read → diff empty; optional canary `SubmitEvent` vs simulator prediction).

@@ -7,6 +7,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docs**: docs/plan.md and docs/vault-deploy.md no longer call the Remote Loader password deferred; it
+  is set since 0.24.0 (`SetRemoteLoaderPassword`, with the mutual-authentication key and keystore
+  passwords), tested against the fake engine only.
+
 ## [0.30.0] - 2026-10-13
 
 ### Added
