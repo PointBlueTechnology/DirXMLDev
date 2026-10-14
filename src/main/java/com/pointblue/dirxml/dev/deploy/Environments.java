@@ -7,8 +7,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
 
@@ -111,10 +113,10 @@ public final class Environments {
     }
 
     private Environments(Properties props, Path file, Set<String> defined, Path secretsDir) {
-        this(props, file, defined, secretsDir, Set.of());
+        this(props, file, defined, secretsDir, Map.of());
     }
 
-    private Environments(Properties props, Path file, Set<String> defined, Path secretsDir, Set<String> refused) {
+    private Environments(Properties props, Path file, Set<String> defined, Path secretsDir, Map<String, String> refused) {
         this.props = props;
         this.file = file;
         this.defined = defined;
@@ -123,25 +125,38 @@ public final class Environments {
     }
 
     /**
-     * The secret keys whose {@code …Command} reference a person's credentials file holds but may not run
-     * ({@link #load(Path, Path, boolean)} with {@code commands} false): a hosted server runs a command as itself,
-     * so only a deployer's are honoured. Asking for one of these secrets says so instead of "not set".
+     * The secret keys whose reference ({@code …Env}, {@code …Command} or {@code …Keychain}) a person's credentials
+     * file holds but may not use ({@link #load(Path, Path, boolean)} with {@code references} false), each with
+     * its form: a hosted server resolves a reference as itself, from its own environment, shell or Keychain, so
+     * only a deployer's are honoured. Asking for one of these secrets says so instead of "not set".
      */
-    private final Set<String> refused;
+    private final Map<String, String> refused;
 
-    /** The keys left out because their command reference may not run here, sorted. */
-    public List<String> refusedCommands() {
-        return new ArrayList<>(new TreeSet<>(refused));
+    /** The keys left out because their reference may not be used here, sorted, each with its form ({@code Env}, {@code Command}, {@code Keychain}). */
+    public Map<String, String> refusedReferences() {
+        return new TreeMap<>(refused);
     }
 
-    /** {@link SecretSource#resolve}, except that a command reference left out says why rather than "not set". */
+    /** The keys of {@link #refusedReferences()}, sorted. */
+    @Deprecated
+    public List<String> refusedCommands() {
+        return new ArrayList<>(new TreeMap<>(refused).keySet());
+    }
+
+    /** {@link SecretSource#resolve}, except that a reference left out says why rather than "not set". */
     private char[] resolve(String key, String what) throws IOException {
-        if (refused.contains(key) && !SecretSource.has(props, key)) {
-            throw new IOException(what + ": " + key + " is read by a command, which only a deployer may use on this "
-                + "server; keep it in your own file or an environment variable instead (Connections)");
+        String form = refused.get(key);
+        if (form != null && !SecretSource.has(props, key)) {
+            throw new IOException(what + ": " + key + " is " + READ_BY.get(form) + ", which only a deployer may use on "
+                + "this server; keep it in your own file instead (Connections)");
         }
         return SecretSource.resolve(props, key, what);
     }
+
+    private static final Map<String, String> READ_BY = Map.of(
+        "Env", "read from an environment variable",
+        "Command", "read by a command",
+        "Keychain", "read from the Keychain");
 
     /** A key that holds, or points at, a secret: {@code <env>.password}, {@code .eventsPassword}, {@code .appsPassword}, each with its {@code Env|Command|Keychain} form. */
     private static final Pattern SECRET_KEY = Pattern.compile("[^.]+\\.[A-Za-z0-9_]*[pP]assword(Env|Command|Keychain)?");
@@ -172,11 +187,13 @@ public final class Environments {
     }
 
     /**
-     * The definitions merged with one person's credentials; with {@code commands} false, the person's
-     * {@code …Command} references are left out (see {@link #refusedCommands()}): a hosted server runs them as
-     * itself, so only a deployer's may run. The definitions hold no secrets, so nothing of theirs is affected.
+     * The definitions merged with one person's credentials; with {@code references} false, the person's
+     * {@code …Env}, {@code …Command} and {@code …Keychain} references are left out (see
+     * {@link #refusedReferences()}): a hosted server resolves them as itself, so only a deployer's may be used,
+     * and anyone else keeps the value itself in their own file. The definitions hold no secrets, so nothing of
+     * theirs is affected.
      */
-    public static Environments load(Path definitions, Path credentials, boolean commands) throws IOException {
+    public static Environments load(Path definitions, Path credentials, boolean references) throws IOException {
         List<String> secret = secretKeys(definitions);
         if (!secret.isEmpty()) {
             throw new IOException("the environment definitions " + definitions + " hold secret keys that belong in a person's credentials file: " + String.join(", ", secret));
@@ -184,15 +201,16 @@ public final class Environments {
         Properties defs = Files.isRegularFile(definitions) ? Secrets.parse(Files.readString(definitions, StandardCharsets.UTF_8)) : new Properties();
         Properties merged = new Properties();
         merged.putAll(defs);
-        Set<String> refused = new TreeSet<>();
+        Map<String, String> refused = new TreeMap<>();
         if (credentials != null && Files.isRegularFile(credentials)) {
             SecretSource.warnIfShared(credentials);
             Properties creds = Secrets.parse(Files.readString(credentials, StandardCharsets.UTF_8));
-            if (!commands) {
+            if (!references) {
                 for (String k : creds.stringPropertyNames()) {
-                    if (k.endsWith("Command")) {
+                    String base = SecretSource.baseKey(k);
+                    if (!base.equals(k)) {
                         creds.remove(k);
-                        refused.add(k.substring(0, k.length() - "Command".length()));
+                        refused.put(base, k.substring(base.length()));
                     }
                 }
             }
@@ -367,7 +385,7 @@ public final class Environments {
             url = "jdbc:postgresql://" + url;
         }
         String user = props.getProperty(name + ".eventsUser", "eventlogger_reader").trim();
-        char[] pw = SecretSource.has(props, name + ".eventsPassword") || refused.contains(name + ".eventsPassword")
+        char[] pw = SecretSource.has(props, name + ".eventsPassword") || refused.containsKey(name + ".eventsPassword")
             ? resolve(name + ".eventsPassword", "environment '" + name + "' event store") : null;
         String table = props.getProperty(name + ".eventsTable", "public.dxmlevent").trim();
         if (!table.matches("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?")) {

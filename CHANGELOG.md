@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- **`Environments.load(definitions, credentials, false)` now leaves out every reference in a person's
+  file, not only commands**: `…Env`, `…Command` and `…Keychain`. A hosted server resolves each of them as
+  itself (its own environment variables, shell and Keychain), so a person who is not a deployer could
+  have read one of the server's own variables. Their secrets are now only the values kept in their own
+  file. `refusedReferences()` lists each key left out with its form, and asking for one of those secrets
+  says which form a deployer's is. `refusedCommands()` stays, deprecated, as its key list. The
+  two-argument form and the one-file form are unchanged.
+
 ## [0.31.0] - 2026-10-14
 
 ### Added
