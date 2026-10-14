@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`IDM_CREDENTIALS`** names a person's own credentials file, which the CLI merges over the
+  environments file it found (`Environments.load()`, `loadFound(file)`, and `idm doctor`), as
+  `Environments.load(definitions, credentials)` does for the server. A hosted DirXMLDevWeb keeps
+  only the definitions in its environments file and each person's bind DN and password in their own
+  file, so the `idm` inside its container could see the environments but never bind. Without
+  `IDM_CREDENTIALS` nothing changes. docs/vault-deploy.md, "Two files".
+
 ## [0.32.0] - 2026-10-14
 
 ### Changed

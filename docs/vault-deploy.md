@@ -479,6 +479,18 @@ prd.tier=prd
 prd.requires=stg
 ```
 
+**Two files** (a hosted DirXMLDevWeb, its container's `idm`): there the environments file holds the
+definitions only (URL, driver set, tier, no secret), and each person's bind DN and password are in a
+file of their own. `IDM_CREDENTIALS` names that file, and the CLI merges it over the environments file
+it found, the way the server does: a key in the person's file wins, a name only there is their own
+environment, the definitions may hold no secret, and a missing credentials file is an empty one.
+`idm doctor` reads the same pair.
+
+```bash
+IDM_ENVIRONMENTS=/etc/idmweb/environments.properties \
+IDM_CREDENTIALS=/var/lib/idmweb/users/jcombs/environments.properties idm vault.status --env stg
+```
+
 The gate, by tier:
 
 | tier | to deploy |
