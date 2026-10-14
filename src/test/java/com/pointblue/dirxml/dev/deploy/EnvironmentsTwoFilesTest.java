@@ -83,4 +83,35 @@ public class EnvironmentsTwoFilesTest {
         assertFalse(e.describe().get(0).own);
         assertEquals("pw", e.get("dev").password);
     }
+
+    /**
+     * A hosted server runs a command reference as itself, so a person who is not a deployer may not use one:
+     * with commands off, their {@code …Command} keys are left out, listed, and asking for that secret says why.
+     * The command is never run.
+     */
+    @Test
+    public void aPersonsCommandReferencesAreLeftOutWhenCommandsAreOff() throws Exception {
+        Path dir = Files.createTempDirectory("envs");
+        Path marker = dir.resolve("ran");
+        Path defs = write(dir, "definitions.properties", "stg.url=ldaps://stg:636\nstg.driverSet=cn=ds,o=system\nstg.eventsUrl=db:5432/events\n");
+        Path creds = write(dir, "creds.properties", "stg.bindDn=cn=bob,o=system\nstg.passwordCommand=touch " + marker + "; echo pw\n"
+            + "stg.eventsPasswordCommand=touch " + marker + "; echo ev\nstg.appsPasswordEnv=IDM_TEST_UNSET_APPS_VAR\n");
+
+        Environments off = Environments.load(defs, creds, false);
+        assertEquals(List.of("stg.eventsPassword", "stg.password"), off.refusedCommands());
+        assertFalse("listed as not configured", off.describe().get(0).passwordConfigured);
+        try {
+            off.get("stg");
+            fail("a refused command reference was used");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("only a deployer may use"));
+        }
+        assertFalse("the command never ran", Files.exists(marker));
+
+        Environments on = Environments.load(defs, creds, true);
+        assertTrue(on.refusedCommands().isEmpty());
+        assertEquals("pw", on.get("stg").password);
+        assertTrue(Files.exists(marker));
+        assertEquals("the two-argument form keeps commands", List.of(), Environments.load(defs, creds).refusedCommands());
+    }
 }
