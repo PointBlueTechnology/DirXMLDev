@@ -223,7 +223,7 @@ public final class Doctor {
         try {
             envFile = resolveEnvironments(req);
             if (envFile != null) {
-                loaded = Environments.load(envFile);
+                loaded = Environments.loadFound(envFile);
             }
         } catch (IOException e) {
             checks.add(environmentsUnreadable(e.getMessage()));
