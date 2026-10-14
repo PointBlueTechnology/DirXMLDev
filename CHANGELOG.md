@@ -7,6 +7,23 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-10-14
+
+### Added
+
+- **Mapping tables as CSV.**
+  - `mapping-table.import-csv --path P --csv-file F` replaces a table from RFC 4180 CSV. The header
+    names the columns and the first column is the key. A column already in the table keeps its type
+    and a new one is `nocase`. A duplicate or empty key, a ragged row or bad quoting is refused, and
+    the table is left untouched.
+  - With `--merge true` it adds and updates rows by key instead and keeps the others.
+  - `mapping-table.export-csv <tree> <path>` prints a table as CSV.
+- **The drivers that use a mapping table.** A table is not linked into a driver the way an
+  ECMAScript resource is: a driver reaches it through a policy that reads it with `token-map`.
+  `Refs.withDrivers` (and `idm refs`) now also lists each such driver, as a `driver` reference: one
+  that runs its own such policy, links a Library one, or gets it from the driver set. Rename and
+  delete still act on `Refs.to`, as before.
+
 ### Fixed
 
 - **A `rest` workflow activity authored by the tool now runs.** A live run on idm254 found two
