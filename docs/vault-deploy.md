@@ -407,7 +407,7 @@ as an afterthought a human fixes in iManager.
 | secret | how it's detected | how it's set |
 |---|---|---|
 | shim authentication password (`DirXML-ShimAuthPassword`) | the driver has a `shim-auth-id` / auth server | LDAP modify — **measured (spike 4a): writable by the deploy identity, and readable back, so it can be verified by re-read** (the value is never shown) |
-| Remote Loader password | shim-config-info / engine-control values name a remote loader (`remote-loader` parameters) | to locate on a Remote Loader driver (not on the test driver); expected to be a driver attribute or a named password |
+| Remote Loader password (and a Remote Loader driver's mutual-authentication key and keystore passwords) | shim-config-info / engine-control values name a remote loader (`remote-loader` parameters) | the engine's `SetRemoteLoaderPassword` (and `SetMutualAuthKeyPassword` / `SetMutualAuthKSPassword`) extended operations on the driver, the ones Identity Console calls; keys `<driver>.remote-loader-password`, `.mutual-auth-key-password`, `.mutual-auth-keystore-password` (since 0.24.0, docs/console-gaps.md §11) |
 | named passwords | `validate` already lists every `token-named-password` a policy reads (`named-password` findings); password-ref GCVs (`type="password-ref"`) name them too | `SetNamedPassword` extended op on the driver (or driver set for shared names) — **measured: works on both**; `ListNamedPasswords` verifies the name exists; `RemoveNamedPassword` |
 | application-side secrets inside shim parameters (a `password` typed parameter) | shim-config-info definitions with `type="password-ref"` | as named passwords |
 | a shim auth id that is a credential (`DirXML-ShimAuthID` holding an OAuth client id or API key) | not detected — the tree's `shim-auth-id` is left empty and the secrets file's `<driver>.shim-auth-id` supplies it (2026-09-27) | an ordinary modify, but the diff says only that the value differs, the plan says `(from the secrets file)`, and `import-live --env` keeps it out of the tree |
@@ -533,10 +533,13 @@ client's job; the tool never writes outside `driverSet`.
    `--delete-all <kind>` is given, in which case they deploy and the audit
    line records the override — see "Deploy never empties a kind" above.
 
-Not done, deliberately deferred: Remote Loader password (no RL driver on the
-test vault to learn from); `idm vault.secrets` as a standalone command (use
-`vault.deploy --secrets all`); `simulate` as part of the production gate (run
-it before deploying).
+Not done, deliberately deferred: `idm vault.secrets` as a standalone command (use
+`vault.deploy --secrets all`, or `driver.secrets set` for one secret); `simulate` as
+part of the production gate (run it before deploying). The Remote Loader password,
+deferred at first because the test vault had no Remote Loader driver to learn from,
+is set since 0.24.0 through the engine's own extended operation (docs/console-gaps.md
+§11); like the shim password it cannot be read back, and it has been exercised against
+the fake engine only, not yet against a live Remote Loader driver.
 
 Delegation: 1 and 4 are well-specified subagent work; 2 (live vault, scratch
 discipline), 5 and 7 are not.
