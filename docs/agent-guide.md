@@ -339,6 +339,9 @@ bin/idm artifact.rename tree/ --path "library/LocCodeMap" --name LocationCodeMap
 bin/idm gcv.set tree/ --driver "AD Driver" --name drv.user.container --value "data\users"
 bin/idm filter.set-attr tree/ --driver "AD Driver" --class User --attr Title --publisher sync --subscriber sync
 bin/idm mapping-table.set-row tree/ --path library/LocationCodeMap --col LocCode=0042 --col Domain-Placement="OU=x,DC=y"
+bin/idm mapping-table.export-csv tree/ library/LocationCodeMap > codes.csv      # edit it in a spreadsheet, then:
+bin/idm mapping-table.import-csv tree/ --path library/LocationCodeMap --csv-file codes.csv   # --merge true to upsert
+bin/idm refs tree/ library/LocationCodeMap      # the policies that read it, and the drivers that run them
 ```
 
 Every operation takes `--dry-run` (do everything but write; the result shows
