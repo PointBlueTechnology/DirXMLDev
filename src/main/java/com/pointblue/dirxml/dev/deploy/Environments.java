@@ -241,11 +241,32 @@ public final class Environments {
     public static Environments load() throws IOException {
         for (Path p : candidates()) {
             if (Files.isRegularFile(p)) {
-                return load(p);
+                return loadFound(p);
             }
         }
         throw new IOException("no environments file: looked for " + candidates()
             + " (set IDM_ENVIRONMENTS or create environments.properties; see docs/vault-deploy.md)");
+    }
+
+    /**
+     * A person's own credentials file, for the CLI on a hosted install: {@code IDM_CREDENTIALS} (or the
+     * {@code idm.credentials} system property). There the environments file holds the definitions only and
+     * each person's bind DN and password live in their own file (DirXMLDevWeb, docs/multi-user.md); null when
+     * neither is set.
+     */
+    public static Path credentialsFile() {
+        String v = System.getProperty("idm.credentials", System.getenv("IDM_CREDENTIALS"));
+        return v == null || v.isBlank() ? null : Paths.get(v.trim());
+    }
+
+    /**
+     * The environments file the CLI found, merged with {@link #credentialsFile()} when one is named
+     * ({@link #load(Path, Path)}: the definitions must then hold no secret, and a missing credentials file is
+     * an empty one); otherwise the file alone.
+     */
+    public static Environments loadFound(Path file) throws IOException {
+        Path credentials = credentialsFile();
+        return credentials == null ? load(file) : load(file, credentials);
     }
 
     public static Environments load(Path file) throws IOException {

@@ -127,4 +127,41 @@ public class EnvironmentsTwoFilesTest {
         assertEquals(System.getenv("PATH"), new String(on.secret("stg", "appsPassword")));
         assertEquals("the two-argument form keeps references", Map.of(), Environments.load(defs, creds).refusedReferences());
     }
+
+    /**
+     * The CLI on a hosted install (the container's idm): the environments file it finds holds the definitions,
+     * IDM_CREDENTIALS (here the idm.credentials property) names the person's own file, and the two merge as
+     * the server merges them. Without it the file is read alone, as before.
+     */
+    @Test
+    public void theCliMergesTheFileNamedByIdmCredentials() throws Exception {
+        Path dir = Files.createTempDirectory("envs");
+        Path defs = write(dir, "environments.properties", "stg.url=ldaps://stg:636\nstg.driverSet=cn=ds,o=system\nstg.tier=stg\n");
+        Path mine = write(dir, "mine.properties", "stg.bindDn=cn=me,o=system\nstg.password=mine\n");
+        String before = System.getProperty("idm.credentials");
+        try {
+            System.clearProperty("idm.credentials");
+            assertEquals(null, Environments.credentialsFile());
+            try {
+                Environments.loadFound(defs).get("stg");
+                fail("bound without a password");
+            } catch (IOException expected) {
+                assertTrue(expected.getMessage(), expected.getMessage().contains("bindDn") || expected.getMessage().contains("password"));
+            }
+            System.setProperty("idm.credentials", mine.toString());
+            Environments.Environment env = Environments.loadFound(defs).get("stg");
+            assertEquals("cn=me,o=system", env.bindDn);
+            assertEquals("mine", env.password);
+            assertEquals("ldaps://stg:636", env.url);
+
+            System.setProperty("idm.credentials", dir.resolve("absent.properties").toString());
+            assertEquals("a missing credentials file is an empty one", List.of("stg"), Environments.loadFound(defs).names());
+        } finally {
+            if (before == null) {
+                System.clearProperty("idm.credentials");
+            } else {
+                System.setProperty("idm.credentials", before);
+            }
+        }
+    }
 }
