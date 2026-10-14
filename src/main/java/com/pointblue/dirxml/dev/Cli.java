@@ -269,9 +269,20 @@ public final class Cli {
                 // package.diff <tree> <artifactPath>: a customized packaged artifact vs its baseline in a tree.
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.packageDiff(args));
             }
+            if (args.length >= 3 && args[0].equals("mapping-table.export-csv")) {
+                // mapping-table.export-csv <tree> <path>: the table as CSV on stdout (mapping-table.import-csv reads it back)
+                DriverSet ds = AsCodeReader.read(Paths.get(args[1]));
+                com.pointblue.dirxml.dev.model.Artifact a = ds.resolve(args[2]);
+                if (!(a instanceof com.pointblue.dirxml.dev.model.Resource r) || !r.isMappingTable() || r.content == null) {
+                    System.err.println("'" + args[2] + "' is not a mapping table");
+                    System.exit(2);
+                }
+                System.out.print(com.pointblue.dirxml.dev.edit.MappingTableCsv.write(((com.pointblue.dirxml.dev.model.Resource) a).content));
+                System.exit(0);
+            }
             if (args.length >= 3 && args[0].equals("refs")) {
                 DriverSet ds = AsCodeReader.read(Paths.get(args[1]));
-                List<com.pointblue.dirxml.dev.edit.Refs.Ref> refs = com.pointblue.dirxml.dev.edit.Refs.to(ds, args[2]);
+                List<com.pointblue.dirxml.dev.edit.Refs.Ref> refs = com.pointblue.dirxml.dev.edit.Refs.withDrivers(ds, args[2]);
                 if (ds.resolve(args[2]) == null) {
                     System.out.println("(no artifact at '" + args[2] + "')");
                 }
@@ -482,7 +493,8 @@ public final class Cli {
         System.err.println("  tree.diff <fromDir> <toDir> [--json]  structured diff of two as-code trees (exit 1 if they differ)");
         System.err.println("  docs <asCodeDir> --out <dir> [--driver D…] [--since <commit>] [--format md|html]  generate documentation from the model");
         System.err.println("  simulate <asCodeDir> --cases <dir> [--against <asCodeDir>] [--env E] [--json]  run the regression corpus against the tree (with E's overrides applied); diff vs another tree");
-        System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact");
+        System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact (a mapping table: also the drivers that run a policy reading it)");
+        System.err.println("  mapping-table.export-csv <asCodeDir> <path>   the table as CSV on stdout (mapping-table.import-csv reads it back)");
         System.err.println("  show <asCodeDir> <artifactPath>       an artifact's content");
         System.err.println("  query <asCodeDir> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver]");
         System.err.println("  query <asCodeDir> fishbone <driver> [--json] | drivers [--json]   the policy-flow fishbone the VS Code viewer draws; the drivers to pick from");
