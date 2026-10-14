@@ -280,9 +280,12 @@ bin/apps --env stg history
 ```
 
 A PRD deployed less than about ten minutes ago is not in the permission index
-yet. `request` says it was not started. `bin/apps --env stg index "Widget Access"`
-asks the index to pick it up (`--op` defaults to `ADD_OR_MODIFY`). Bodies and
-status codes: [idapps-rest.md](idapps-rest.md).
+yet, and `request` says it was not started. Nothing shortens the wait:
+`bin/apps index "Widget Access"` (`ADD_OR_MODIFY`, or `--op REFRESH`) answers
+success but the PRD still appears only on the index's own interval (measured on
+idm254: about 8 minutes after the deploy). `bin/apps permission "Widget Access"`
+says when it is there; a change to an existing PRD is picked up at once. Bodies
+and status codes: [idapps-rest.md](idapps-rest.md).
 
 ## 5. Operate
 

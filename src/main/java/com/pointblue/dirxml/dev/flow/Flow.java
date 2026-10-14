@@ -74,6 +74,86 @@ public final class Flow {
     /** {@code bind-role-activity/@action} and {@code bind-resource-status-activity/@action} enum. */
     public static final Set<String> BIND_ACTIONS = Set.of("APPROVED", "DENIED");
 
+    /**
+     * The {@code rest-activity} attributes the engine evaluates as ECMAScript expressions, not literals:
+     * {@code protocol="https"} fails at run time with {@code ReferenceError: "https" is not defined}, and the
+     * activity takes its error link (live run on idm254, 2026-10-14; docs/workflows.md &sect;4 W3). A literal is
+     * written quoted, {@code protocol="'https'"}.
+     */
+    public static final List<String> REST_EXPRESSION_ATTRS = List.of("protocol", "host", "port", "path", "method",
+        "contentTypeHeader", "acceptHeader", "authorizationHeader");
+
+    /** The text of a single string literal ({@code 'https'} or {@code "https"}), unescaped; null when {@code expr} is anything else. */
+    public static String stringLiteral(String expr) {
+        if (expr == null) {
+            return null;
+        }
+        String s = expr.trim();
+        if (s.length() < 2) {
+            return null;
+        }
+        char q = s.charAt(0);
+        if ((q != '\'' && q != '"') || s.charAt(s.length() - 1) != q) {
+            return null;
+        }
+        StringBuilder out = new StringBuilder();
+        for (int i = 1; i < s.length() - 1; i++) {
+            char c = s.charAt(i);
+            if (c == '\\' && i + 1 < s.length() - 1) {
+                out.append(s.charAt(++i));
+            } else if (c == q) {
+                return null;   // a second literal, e.g. 'a' + 'b'
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * Whether {@code value} is a bare word the engine cannot evaluate as meant: not a quoted literal, not a
+     * number, and nothing that calls, concatenates or quotes ({@code https}, {@code idm.example.com},
+     * {@code /a/b}, {@code application/json}).
+     */
+    public static boolean bareWord(String value) {
+        if (value == null || value.isBlank() || stringLiteral(value) != null) {
+            return false;
+        }
+        String s = value.trim();
+        return !s.matches("-?\\d+(\\.\\d+)?") && s.indexOf('(') < 0 && s.indexOf('+') < 0 && s.indexOf('\'') < 0 && s.indexOf('"') < 0;
+    }
+
+    /** What to store for a value typed for one of {@link #REST_EXPRESSION_ATTRS}: a bare word or number is quoted, an expression kept. */
+    public static String restExpression(String value) {
+        if (value == null) {
+            return null;
+        }
+        boolean number = value.trim().matches("-?\\d+(\\.\\d+)?");
+        if (!bareWord(value) && !number) {
+            return value;
+        }
+        return "'" + value.trim().replace("\\", "\\\\").replace("'", "\\'") + "'";
+    }
+
+    /**
+     * The {@code rest-activity} output maps ({@code returnStatusCodeOutputMap}, {@code returnContentTypeOutputMap},
+     * {@code returnContentOutputMap}) name a flowdata path, {@code flowdata.restStatus}: with a bare name the
+     * engine keeps nothing (live, idm254 2026-10-14). A bare name is given the prefix.
+     */
+    public static String flowdataTarget(String name) {
+        if (name == null) {
+            return null;
+        }
+        String s = name.trim();
+        return s.startsWith("flowdata.") ? s : "flowdata." + s;
+    }
+
+    /** The literal value of an expression attribute for display and enum checks: the quoted text, or the value as written. */
+    public static String literalOrSelf(String value) {
+        String lit = stringLiteral(value);
+        return lit != null ? lit : value;
+    }
+
     /** {@code rest-activity/@protocol} enum (Track W step W3, docs/workflows.md &sect;4 W3 grammar table). */
     public static final Set<String> REST_PROTOCOLS = Set.of("http", "https");
 
