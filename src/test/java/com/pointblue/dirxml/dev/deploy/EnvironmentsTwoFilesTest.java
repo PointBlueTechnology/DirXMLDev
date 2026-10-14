@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -85,33 +86,45 @@ public class EnvironmentsTwoFilesTest {
     }
 
     /**
-     * A hosted server runs a command reference as itself, so a person who is not a deployer may not use one:
-     * with commands off, their {@code …Command} keys are left out, listed, and asking for that secret says why.
-     * The command is never run.
+     * A hosted server resolves a reference as itself (its own environment, shell or Keychain), so a person who is
+     * not a deployer may not use one: with references off, their {@code …Env}, {@code …Command} and
+     * {@code …Keychain} keys are left out, listed with their form, and asking for that secret says why. The
+     * command is never run and the server's variable never read. A literal in their own file still works.
      */
     @Test
-    public void aPersonsCommandReferencesAreLeftOutWhenCommandsAreOff() throws Exception {
+    public void aPersonsReferencesAreLeftOutWhenReferencesAreOff() throws Exception {
         Path dir = Files.createTempDirectory("envs");
         Path marker = dir.resolve("ran");
-        Path defs = write(dir, "definitions.properties", "stg.url=ldaps://stg:636\nstg.driverSet=cn=ds,o=system\nstg.eventsUrl=db:5432/events\n");
+        Path defs = write(dir, "definitions.properties", "stg.url=ldaps://stg:636\nstg.driverSet=cn=ds,o=system\nstg.eventsUrl=db:5432/events\n"
+            + "dev.url=ldaps://dev:636\ndev.driverSet=cn=ds,o=system\n");
         Path creds = write(dir, "creds.properties", "stg.bindDn=cn=bob,o=system\nstg.passwordCommand=touch " + marker + "; echo pw\n"
-            + "stg.eventsPasswordCommand=touch " + marker + "; echo ev\nstg.appsPasswordEnv=IDM_TEST_UNSET_APPS_VAR\n");
+            + "stg.eventsPasswordCommand=touch " + marker + "; echo ev\nstg.appsPasswordEnv=PATH\nstg.otherPasswordKeychain=svc/acct\n"
+            + "dev.bindDn=cn=bob,o=system\ndev.password=literal\n");
 
         Environments off = Environments.load(defs, creds, false);
-        assertEquals(List.of("stg.eventsPassword", "stg.password"), off.refusedCommands());
-        assertFalse("listed as not configured", off.describe().get(0).passwordConfigured);
+        assertEquals(Map.of("stg.eventsPassword", "Command", "stg.password", "Command", "stg.appsPassword", "Env", "stg.otherPassword", "Keychain"),
+            off.refusedReferences());
+        assertFalse("listed as not configured", off.describe().stream().filter(d -> d.name.equals("stg")).findFirst().get().passwordConfigured);
         try {
             off.get("stg");
             fail("a refused command reference was used");
         } catch (IOException expected) {
-            assertTrue(expected.getMessage(), expected.getMessage().contains("only a deployer may use"));
+            assertTrue(expected.getMessage(), expected.getMessage().contains("read by a command, which only a deployer may use"));
+        }
+        try {
+            off.secret("stg", "appsPassword");
+            fail("the server's environment variable was read");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("read from an environment variable, which only a deployer may use"));
         }
         assertFalse("the command never ran", Files.exists(marker));
+        assertEquals("a literal in their own file is theirs", "literal", off.get("dev").password);
 
         Environments on = Environments.load(defs, creds, true);
-        assertTrue(on.refusedCommands().isEmpty());
+        assertTrue(on.refusedReferences().isEmpty());
         assertEquals("pw", on.get("stg").password);
         assertTrue(Files.exists(marker));
-        assertEquals("the two-argument form keeps commands", List.of(), Environments.load(defs, creds).refusedCommands());
+        assertEquals(System.getenv("PATH"), new String(on.secret("stg", "appsPassword")));
+        assertEquals("the two-argument form keeps references", Map.of(), Environments.load(defs, creds).refusedReferences());
     }
 }
