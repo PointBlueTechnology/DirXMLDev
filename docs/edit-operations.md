@@ -98,6 +98,7 @@ having because agents do them constantly and get the XML wrong:
 | `schema-map.set` `driver ndsClass appClass? ndsAttr? appAttr?` / `schema-map.remove` | edits the driver's `<attr-name-map>` |
 | `driver.set` `driver key value` | shim class, auth server / id, trace level / file, a shim-config-info or engine-control parameter by name |
 | `mapping-table.set-row` / `delete-row` / `add-column` | row-level table edits by key column |
+| `mapping-table.import-csv` | the table from a CSV file (header = column names, first column = key): replaces it, or with `--merge true` adds and updates rows by key; `mapping-table.export-csv <tree> <path>` prints it (read-only) |
 
 ### Packages: overrides that mark themselves
 

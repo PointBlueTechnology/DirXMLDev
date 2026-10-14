@@ -646,6 +646,9 @@ public final class Registry {
         register("mapping-table.add-column", "add a column (empty in every existing row)",
             a -> new ConfigOps.TableAddColumn(a.get("path"), a.get("column"), a.get("type")),
             table, req("column", "column name"), opt("type", "nocase|case|numeric (default nocase)"));
+        register("mapping-table.import-csv", "replace the table from a CSV file (first line: column names, first column: the key); --merge true adds and updates rows by key instead",
+            a -> new MappingTableCsv.Import(a.get("path"), scriptFileOf(a.get("csv-file")), "true".equals(a.get("merge"))),
+            table, req("csv-file", "the CSV file (RFC 4180; UTF-8)"), opt("merge", "true: add and update rows by key, keep the others (default: the table becomes the CSV)"));
     }
 
     private static Scope scopeOf(Map<String, String> a) {
