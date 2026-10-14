@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-10-14
+
 ### Changed
 
 - **`Environments.load(definitions, credentials, false)` now leaves out every reference in a person's
