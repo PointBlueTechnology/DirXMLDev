@@ -1,6 +1,6 @@
 # A vendor-free vault path (design note)
 
-**Status: confirmed (Jerry, 2026-10-15); building V1–V4.**
+**Status: built and verified live 2026-10-15 (V1–V4).**
 
 ## Why
 
@@ -139,3 +139,53 @@ vendor's decoder and then live (see Verification).
   in our code, not the vendor jar.
 - **Licensing.** The OpenLDAP Public License needs its notice shipped with the jar: a `NOTICE` /
   third-party file in the release and in the console's image.
+
+## Results (2026-10-15)
+
+- **V1.** `IdmOps` builds every request Vault uses byte for byte as the vendor's classes do (40
+  requests), and reads every reply as they do. `IdmOpsVendorTest` checks this with the vendor jar
+  loaded in a class loader of its own, and passes on both the vendor's BER classes and JLDAP 4.3's.
+  The engine version's packing matches `DxConst`.
+- **V2.**
+  - `Vault` and `Operate` are on `IdmOps`, and JLDAP 4.3 comes from Maven Central; `ldap.jar` is
+    gone from the build.
+  - The full suite passes on it (138 suites), including the engine-backed ones.
+  - Two more edges were cut along the way: the trust-all socket factory JNDI loads by name (it was
+    the simulator's `TrustAllSocketFactory`, now `deploy/TrustAllSockets`), and the simulator's DOM
+    helper in the vault path (now `xml/Dom`). The package-baseline read moved to `AsCodeWriter`.
+- **Containment.**
+  - `VendorFreeTest` walks from exactly the methods the directory-console calls, method by method,
+    through every call their bytecode makes. An interface call reaches every implementation.
+  - It fails on any vendor class named by an instruction, a catch type, a signature, or a string
+    that is loaded by name.
+  - It reaches 272 methods and none name a vendor class. A planted reference fails it.
+  - The rest of `Operate` (cache snapshots into a tree, submit) still reaches the tree and the
+    validator. The console does not call those, and classes load lazily.
+- **V3.** `doctor` has a `vault` line ("no engine jar needed"), `ldap.jar` is out of every jar
+  list, `bin/idm` puts JLDAP on the class path, and THIRD-PARTY.md carries the notices.
+- **V4, read-only, on idm254**, with a class path of only this project, JLDAP, trace-core and the
+  PostgreSQL driver (no `lib/`, no simulator). These all answered as the released build does:
+  - `engine.version` (4.10.2.0 build 3), `driverset.status` (state and start option of all four
+    drivers), `driverset.servers` (the server's driver set);
+  - `engine.stats` (driver and JVM statistics, both chunked), `driver.status`,
+    `driver.secrets list`, `job.list` (job state), `driver.log-level`.
+
+  `driver.cache view` on the running User Application driver and `ViewActivation` answer "Other" on
+  this lab with the released vendor-class build too, so the engine refuses them and our encoding is
+  not the cause. The trace over LDAP needs the simulator jar (its `EdirTraceStream`); with it and
+  JLDAP, and no vendor jar, it streams.
+- **V4 writes** (go-ahead given 2026-10-15) ran on a scratch Loopback driver and a scratch job on
+  idm254. Both were deployed from the full imported tree, with a snapshot first. The vendor-free
+  class path did all of these:
+  - the start option set to auto and back to manual;
+  - a named password set, listed and removed;
+  - the Remote Loader, shim-auth, key and keystore passwords each set and cleared;
+  - log events set, then cleared (`--inherit`, ClearLogEvents);
+  - an event queued into the stopped driver's cache, viewed, and the cache cleared (DeleteCacheEntries,
+    with the engine's snapshot);
+  - the driver started, restarted and stopped;
+  - the job started.
+
+  `AbortJob` on the already finished job answers "Other", as it does with the released vendor-class
+  build. The deploy itself used our SetDriverStartOption and NotifyJobUpdate. The scratch driver and
+  job were then removed (`--delete-driver`), and `vault.diff` showed no differences.

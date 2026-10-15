@@ -4,7 +4,7 @@ import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
 import com.pointblue.dirxml.sim.UnsupportedFeatures;
-import com.pointblue.dirxml.sim.Xds;
+import com.pointblue.dirxml.dev.xml.Dom;
 import org.w3c.dom.Element;
 
 import java.util.ArrayList;
@@ -113,10 +113,10 @@ public final class SecretInventory {
         if (configValues == null) {
             return out;
         }
-        for (Element def : Xds.descendantsByName(configValues, "definition")) {
+        for (Element def : Dom.descendantsByName(configValues, "definition")) {
             if ("password-ref".equals(def.getAttribute("type"))) {
-                List<Element> v = Xds.childrenByName(def, "value");
-                String name = v.isEmpty() ? def.getAttribute("name") : Xds.text(v.get(0)).trim();
+                List<Element> v = Dom.childrenByName(def, "value");
+                String name = v.isEmpty() ? def.getAttribute("name") : Dom.text(v.get(0)).trim();
                 if (!name.isBlank()) {
                     out.add(name);
                 }
@@ -127,11 +127,11 @@ public final class SecretInventory {
 
     /** True if the shim config carries Remote Loader connection parameters. */
     static boolean usesRemoteLoader(Element shimConfig) {
-        for (Element def : Xds.descendantsByName(shimConfig, "definition")) {
+        for (Element def : Dom.descendantsByName(shimConfig, "definition")) {
             String n = def.getAttribute("name").toLowerCase();
             if (n.contains("remote-loader") || n.contains("remoteloader")) {
-                List<Element> v = Xds.childrenByName(def, "value");
-                if (!v.isEmpty() && !Xds.text(v.get(0)).isBlank()) {
+                List<Element> v = Dom.childrenByName(def, "value");
+                if (!v.isEmpty() && !Dom.text(v.get(0)).isBlank()) {
                     return true;
                 }
             }

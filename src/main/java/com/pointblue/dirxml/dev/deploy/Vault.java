@@ -1,54 +1,11 @@
 package com.pointblue.dirxml.dev.deploy;
 
 import com.novell.ldap.LDAPConnection;
+import com.novell.ldap.LDAPExtendedOperation;
+import com.novell.ldap.LDAPExtendedResponse;
 import com.novell.ldap.LDAPJSSESecureSocketFactory;
-import com.novell.nds.dirxml.ldap.ApplyActivationRequest;
-import com.novell.nds.dirxml.ldap.ClearDriverSetRequest;
-import com.novell.nds.dirxml.ldap.ClearLogEventsRequest;
-import com.novell.nds.dirxml.ldap.GetDriverSetRequest;
-import com.novell.nds.dirxml.ldap.GetDriverSetResponse;
-import com.novell.nds.dirxml.ldap.SetDriverSetRequest;
-import com.novell.nds.dirxml.ldap.ViewActivationRequest;
-import com.novell.nds.dirxml.ldap.ViewActivationResponse;
-import com.novell.nds.dirxml.ldap.ClearMutualAuthKSPasswordRequest;
-import com.novell.nds.dirxml.ldap.ClearMutualAuthKeyPasswordRequest;
-import com.novell.nds.dirxml.ldap.ClearRemoteLoaderPasswordRequest;
-import com.novell.nds.dirxml.ldap.CloseChunkedResultRequest;
-import com.novell.nds.dirxml.ldap.SetLogEventsRequest;
-import com.novell.nds.dirxml.ldap.SetMutualAuthKSPasswordRequest;
-import com.novell.nds.dirxml.ldap.SetMutualAuthKeyPasswordRequest;
-import com.novell.nds.dirxml.ldap.SetRemoteLoaderPasswordRequest;
-import com.novell.nds.dirxml.ldap.ChunkedResultResponseBase;
-import com.novell.nds.dirxml.ldap.DeleteCacheEntriesRequest;
-import com.novell.nds.dirxml.ldap.DriverResyncRequest;
-import com.novell.nds.dirxml.ldap.GetChunkedResultRequest;
-import com.novell.nds.dirxml.ldap.GetChunkedResultResponse;
-import com.novell.nds.dirxml.ldap.GetDriverStartOptionRequest;
-import com.novell.nds.dirxml.ldap.GetDriverStatsRequest;
-import com.novell.nds.dirxml.ldap.GetDriverStatsResponse;
-import com.novell.nds.dirxml.ldap.GetJvmStatsRequest;
-import com.novell.nds.dirxml.ldap.GetJvmStatsResponse;
-import com.novell.nds.dirxml.ldap.GetVersionRequest;
-import com.novell.nds.dirxml.ldap.GetVersionResponse;
-import com.novell.nds.dirxml.ldap.MigrateAppRequest;
-import com.novell.nds.dirxml.ldap.QueueEventRequest;
-import com.novell.nds.dirxml.ldap.SubmitCommandRequest;
-import com.novell.nds.dirxml.ldap.SubmitCommandResponse;
-import com.novell.nds.dirxml.ldap.SubmitEventRequest;
-import com.novell.nds.dirxml.ldap.SubmitEventResponse;
-import com.novell.nds.dirxml.ldap.ViewCacheEntriesRequest;
-import com.novell.nds.dirxml.ldap.ViewCacheEntriesResponse;
-import com.novell.nds.dirxml.ldap.GetDriverStartOptionResponse;
-import com.novell.nds.dirxml.ldap.GetDriverStateRequest;
-import com.novell.nds.dirxml.ldap.GetDriverStateResponse;
-import com.novell.nds.dirxml.ldap.ListNamedPasswordsRequest;
-import com.novell.nds.dirxml.ldap.ListNamedPasswordsResponse;
-import com.novell.nds.dirxml.ldap.RemoveNamedPasswordRequest;
-import com.novell.nds.dirxml.ldap.RestartDriverRequest;
-import com.novell.nds.dirxml.ldap.SetDriverStartOptionRequest;
-import com.novell.nds.dirxml.ldap.SetNamedPasswordRequest;
-import com.novell.nds.dirxml.ldap.StartDriverRequest;
-import com.novell.nds.dirxml.ldap.StopDriverRequest;
+import com.pointblue.dirxml.dev.deploy.IdmOps.Op;
+import com.pointblue.dirxml.dev.deploy.IdmOps.Reply;
 
 import javax.naming.Context;
 import javax.naming.NameNotFoundException;
@@ -197,7 +154,7 @@ public final class Vault implements VaultAccess {
             env.put("java.naming.ldap.attributes.binary", String.join(" ", binary));
             com.pointblue.dirxml.dev.LegacyTls.enable();   // before the TLS stack initialises: eDirectory often offers static-RSA suites only
             if (c.url.startsWith("ldaps") && c.trustAll) {
-                env.put("java.naming.ldap.factory.socket", "com.pointblue.dirxml.sim.TrustAllSocketFactory");
+                env.put("java.naming.ldap.factory.socket", TrustAllSockets.class.getName());
                 // trust-all also means the certificate's name need not match the URL's host: a lab reached
                 // through an SSH tunnel (127.0.0.1:6637) presents its own hostname's certificate, and JNDI's
                 // LDAPS endpoint identification would otherwise turn that into "simple bind failed"
@@ -217,7 +174,6 @@ public final class Vault implements VaultAccess {
      * bind only and kept nowhere. Nothing is connected lazily afterwards.
      */
     public static Vault open(DirContext ldap, String host, int port, javax.net.ssl.SSLSocketFactory sockets, String bindDn, char[] password) {
-        registerResponses();
         Config c = new Config();
         c.url = "ldaps://" + (host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host) + ":" + port;
         c.bindDn = bindDn;
@@ -485,35 +441,26 @@ public final class Vault implements VaultAccess {
 
     // ---- extended operations --------------------------------------------------------
 
-    /** The engine's response classes, registered with the LDAP library before any extended operation. */
-    private static synchronized void registerResponses() {
+    /**
+     * One IDM extended operation ({@link IdmOps}, our own encoding with JLDAP's BER classes — no vendor
+     * classes): its reply decoded. The request value, which can hold a password, is zeroed afterwards.
+     */
+    private Reply call(Op op, Object... items) throws Exception {
+        LDAPExtendedOperation req = IdmOps.request(op, items);
         try {
-            registerAll();
-        } catch (ClassNotFoundException e) {
-            throw new VaultException("the engine's extended-operation classes (dirxml_misc.jar) are not on the class path: " + e.getMessage(), e);
+            LDAPExtendedResponse resp = ops().extendedOperation(req);
+            return IdmOps.decode(resp == null ? null : resp.getValue());
+        } finally {
+            byte[] v = req.getValue();
+            if (v != null) {
+                Arrays.fill(v, (byte) 0);
+            }
         }
-    }
-
-    private static void registerAll() throws ClassNotFoundException {
-        GetDriverStateResponse.register();
-        com.novell.nds.dirxml.ldap.GetJobStateResponse.register();
-        GetDriverStartOptionResponse.register();
-        ListNamedPasswordsResponse.register();
-        ViewCacheEntriesResponse.register();
-        GetChunkedResultResponse.register();
-        GetVersionResponse.register();
-        ViewActivationResponse.register();
-        GetDriverSetResponse.register();
-        GetDriverStatsResponse.register();
-        GetJvmStatsResponse.register();
-        SubmitEventResponse.register();
-        SubmitCommandResponse.register();
     }
 
     private LDAPConnection ops() {
         if (ops == null) {
             try {
-                registerResponses();
                 URI u = URI.create(config.url);
                 int port = u.getPort() > 0 ? u.getPort() : ("ldaps".equals(u.getScheme()) ? 636 : 389);
                 LDAPConnection conn;
@@ -539,7 +486,7 @@ public final class Vault implements VaultAccess {
 
     public int driverState(String driverDn) {
         try {
-            return ((GetDriverStateResponse) ops().extendedOperation(new GetDriverStateRequest(driverDn))).getDriverState();
+            return call(Op.GET_DRIVER_STATE, driverDn).integer(0);
         } catch (Exception e) {
             throw new VaultException("GetDriverState " + driverDn + ": " + e.getMessage(), e);
         }
@@ -556,25 +503,25 @@ public final class Vault implements VaultAccess {
     }
 
     public void startDriver(String driverDn) {
-        extOp("StartDriver", driverDn, () -> ops().extendedOperation(new StartDriverRequest(driverDn)));
+        extOp("StartDriver", driverDn, () -> call(Op.START_DRIVER, driverDn));
     }
 
     // ---- jobs (DirXML-Job; docs/console-gaps.md §1) ----
 
     /** {@code StartJob}: run the job now. */
     public void startJob(String jobDn) {
-        extOp("StartJob", jobDn, () -> ops().extendedOperation(new com.novell.nds.dirxml.ldap.StartJobRequest(jobDn)));
+        extOp("StartJob", jobDn, () -> call(Op.START_JOB, jobDn));
     }
 
     /** {@code AbortJob}: stop a running job. */
     public void abortJob(String jobDn) {
-        extOp("AbortJob", jobDn, () -> ops().extendedOperation(new com.novell.nds.dirxml.ldap.AbortJobRequest(jobDn)));
+        extOp("AbortJob", jobDn, () -> call(Op.ABORT_JOB, jobDn));
     }
 
     /** {@code NotifyJobUpdate}: tell the scheduler the job object changed. */
     @Override
     public void notifyJobUpdate(String jobDn) {
-        extOp("NotifyJobUpdate", jobDn, () -> ops().extendedOperation(new com.novell.nds.dirxml.ldap.NotifyJobUpdateRequest(jobDn)));
+        extOp("NotifyJobUpdate", jobDn, () -> call(Op.NOTIFY_JOB_UPDATE, jobDn));
     }
 
     /** What the engine says about a job: {@code GetJobState} — running state, configuration state, whether it is scheduled and when it next runs. */
@@ -594,31 +541,33 @@ public final class Vault implements VaultAccess {
 
     public JobState jobState(String jobDn) {
         try {
-            com.novell.nds.dirxml.ldap.GetJobStateResponse resp = (com.novell.nds.dirxml.ldap.GetJobStateResponse) ops().extendedOperation(new com.novell.nds.dirxml.ldap.GetJobStateRequest(jobDn));
-            return new JobState(resp.getRunningState(), resp.getConfigurationState(), resp.isScheduled(), resp.getNextRunTime());
+            // running state, configuration state, then 0 or the next run (epoch seconds) — the same element
+            Reply r = call(Op.GET_JOB_STATE, jobDn);
+            int next = r.integer(2);
+            return new JobState(r.integer(0), r.integer(1), next != 0, next != 0 ? new java.util.Date(next * 1000L) : null);
         } catch (Exception e) {
             throw new VaultException("GetJobState " + jobDn + ": " + e.getMessage(), e);
         }
     }
 
     public void stopDriver(String driverDn) {
-        extOp("StopDriver", driverDn, () -> ops().extendedOperation(new StopDriverRequest(driverDn)));
+        extOp("StopDriver", driverDn, () -> call(Op.STOP_DRIVER, driverDn));
     }
 
     public void restartDriver(String driverDn) {
-        extOp("RestartDriver", driverDn, () -> ops().extendedOperation(new RestartDriverRequest(driverDn)));
+        extOp("RestartDriver", driverDn, () -> call(Op.RESTART_DRIVER, driverDn));
     }
 
     public int driverStartOption(String driverDn) {
         try {
-            return ((GetDriverStartOptionResponse) ops().extendedOperation(new GetDriverStartOptionRequest(driverDn))).getDriverStartOption();
+            return call(Op.GET_DRIVER_START_OPTION, driverDn).integer(0);
         } catch (Exception e) {
             throw new VaultException("GetDriverStartOption " + driverDn + ": " + e.getMessage(), e);
         }
     }
 
     public void setDriverStartOption(String driverDn, int option) {
-        extOp("SetDriverStartOption", driverDn, () -> ops().extendedOperation(new SetDriverStartOptionRequest(driverDn, option, false)));
+        extOp("SetDriverStartOption", driverDn, () -> call(Op.SET_DRIVER_START_OPTION, driverDn, option, 0));
     }
 
     /**
@@ -679,13 +628,10 @@ public final class Vault implements VaultAccess {
     /** Read up to {@code count} cached events from {@code position} (0 = first). Works on a running driver too. */
     public CachePage viewCache(String driverDn, int position, int count) {
         try {
-            ViewCacheEntriesResponse resp = (ViewCacheEntriesResponse) ops().extendedOperation(
-                new ViewCacheEntriesRequest(driverDn, 1, position, count, 0));
-            int next = resp.getPositionToken();
-            if (resp.getDataHandle() == 0 || resp.getDataSize() == 0) {
-                return new CachePage("", next);
-            }
-            return new CachePage(new String(chunked(resp), StandardCharsets.UTF_8), next);
+            // timeout 1, position, count, cache type 0 (×2 = view); the reply: handle, size, next position
+            Reply resp = call(Op.VIEW_CACHE_ENTRIES, driverDn, 1, position, count, 0);
+            int next = resp.integer(2);
+            return new CachePage(chunkedText(resp), next);
         } catch (Exception e) {
             throw new VaultException("ViewCacheEntries " + driverDn + ": " + e.getMessage(), e);
         }
@@ -693,19 +639,18 @@ public final class Vault implements VaultAccess {
 
     /** Raw DeleteCacheEntries (parameter semantics settled by spike 5a). */
     public void deleteCacheEntries(String driverDn, int p2, int p3, String p4, int priority) {
-        extOp("DeleteCacheEntries", driverDn, () -> ops().extendedOperation(new DeleteCacheEntriesRequest(driverDn, p2, p3, p4, priority)));
+        extOp("DeleteCacheEntries", driverDn, () -> call(Op.DELETE_CACHE_ENTRIES, driverDn, p2, p3, p4, priority * 2 + 1));
     }
 
     /** Queue an XDS event into the driver's subscriber cache (no result document). */
     public void queueEvent(String driverDn, byte[] xds) {
-        extOp("QueueEvent", driverDn, () -> ops().extendedOperation(new QueueEventRequest(driverDn, xds)));
+        extOp("QueueEvent", driverDn, () -> call(Op.QUEUE_EVENT, driverDn, xds));
     }
 
     /** Submit an XDS document to a running driver's publisher channel; returns the result document (may be empty). */
     public String submitEvent(String driverDn, byte[] xds) {
         try {
-            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new SubmitEventRequest(driverDn, 1, xds));
-            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+            return chunkedText(call(Op.SUBMIT_EVENT, driverDn, 1, xds));
         } catch (Exception e) {
             throw new VaultException("SubmitEvent " + driverDn + ": " + e.getMessage(), e);
         }
@@ -714,8 +659,7 @@ public final class Vault implements VaultAccess {
     /** Submit an XDS command to a running driver's subscriber channel; returns the result document (may be empty). */
     public String submitCommand(String driverDn, byte[] xds) {
         try {
-            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new SubmitCommandRequest(driverDn, 1, xds));
-            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+            return chunkedText(call(Op.SUBMIT_COMMAND, driverDn, 1, xds));
         } catch (Exception e) {
             throw new VaultException("SubmitCommand " + driverDn + ": " + e.getMessage(), e);
         }
@@ -728,7 +672,7 @@ public final class Vault implements VaultAccess {
      * iManager's "Refresh Application Schema" — so that attribute is read afterwards. XML, or "".
      */
     public String driverGetSchema(String driverDn) {
-        extOp("DriverGetSchema", driverDn, () -> ops().extendedOperation(new com.novell.nds.dirxml.ldap.DriverGetSchemaRequest(driverDn)));
+        extOp("DriverGetSchema", driverDn, () -> call(Op.DRIVER_GET_SCHEMA, driverDn));
         return applicationSchema(driverDn);
     }
 
@@ -740,19 +684,19 @@ public final class Vault implements VaultAccess {
     }
 
     public void migrateApp(String driverDn, byte[] xds) {
-        extOp("MigrateApp", driverDn, () -> ops().extendedOperation(new MigrateAppRequest(driverDn, xds)));
+        extOp("MigrateApp", driverDn, () -> call(Op.MIGRATE_APP, driverDn, xds));
     }
 
     /** Resync events since {@code since} (epoch millis; 0 = full resync). */
     public void resync(String driverDn, long sinceMillis) {
-        extOp("DriverResync", driverDn, () -> ops().extendedOperation(new DriverResyncRequest(driverDn, new java.util.Date(sinceMillis))));
+        extOp("DriverResync", driverDn, () -> call(Op.DRIVER_RESYNC, driverDn, (int) (sinceMillis / 1000L)));
     }
 
     /** The engine version as the packed int the engine reports. */
     @Override
     public int engineVersion() {
         try {
-            return ((GetVersionResponse) ops().extendedOperation(new GetVersionRequest())).getVersion();
+            return call(Op.GET_VERSION).integer(0);
         } catch (Exception e) {
             throw new VaultException("GetVersion: " + e.getMessage(), e);
         }
@@ -761,8 +705,7 @@ public final class Vault implements VaultAccess {
     /** The driver's statistics document (XML), or "" when the engine returns none. */
     public String driverStats(String driverDn, int arg) {
         try {
-            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new GetDriverStatsRequest(driverDn, arg));
-            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+            return chunkedText(call(Op.GET_DRIVER_STATS, driverDn, arg, 0));   // timeout, cache type 0
         } catch (Exception e) {
             throw new VaultException("GetDriverStats " + driverDn + ": " + e.getMessage(), e);
         }
@@ -771,47 +714,44 @@ public final class Vault implements VaultAccess {
     /** The engine JVM's statistics document (XML), or "" when none. */
     public String jvmStats(int a, int b) {
         try {
-            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new GetJvmStatsRequest(a, b));
-            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+            return chunkedText(call(Op.GET_JVM_STATS, a, b));   // version, timeout
         } catch (Exception e) {
             throw new VaultException("GetJvmStats: " + e.getMessage(), e);
         }
     }
 
-    private byte[] chunked(ChunkedResultResponseBase resp) throws Exception {
-        int handle = resp.getDataHandle();
-        int size = resp.getDataSize();
+    /** A chunked result (the reply's data handle and size) read whole as UTF-8; "" when it has none. */
+    private String chunkedText(Reply resp) throws Exception {
+        if (resp.size() < 2 || resp.integer(0) == 0 || resp.integer(1) == 0) {
+            return "";
+        }
+        return new String(chunked(resp.integer(0), resp.integer(1)), StandardCharsets.UTF_8);
+    }
+
+    private byte[] chunked(int handle, int size) throws Exception {
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(size);
         int remaining = size;
         while (remaining > 0) {
-            byte[] reply = ((GetChunkedResultResponse) ops().extendedOperation(
-                new GetChunkedResultRequest(handle, Math.min(remaining, MAX_CHUNK), 0))).getData();
+            byte[] reply = call(Op.GET_CHUNKED_RESULT, handle, Math.min(remaining, MAX_CHUNK), 0).bytes(0);
             if (reply == null || reply.length == 0) {
                 break;
             }
             out.write(reply, 0, reply.length);
             remaining -= reply.length;
         }
-        ops().extendedOperation(new CloseChunkedResultRequest(handle));
+        call(Op.CLOSE_CHUNKED_RESULT, handle);
         return out.toByteArray();
     }
 
     // ---- named passwords -------------------------------------------------------------
 
     /** Names of the named passwords set on a driver (or driver set). */
-    @SuppressWarnings("unchecked")
     public List<String> namedPasswords(String dn) {
         try {
-            ListNamedPasswordsResponse r = (ListNamedPasswordsResponse) ops().extendedOperation(new ListNamedPasswordsRequest(dn));
-            // each entry is a String[] {name, displayName}; the name is what we key on
+            // each element is a SET {name, displayName}; the name is what we key on
             List<String> out = new ArrayList<>();
-            for (Object o : (List<Object>) r.getList()) {
-                if (o instanceof String[]) {
-                    String[] pair = (String[]) o;
-                    out.add(pair.length > 0 ? pair[0] : "");
-                } else {
-                    out.add(String.valueOf(o));
-                }
+            for (String[] pair : call(Op.LIST_NAMED_PASSWORDS, dn).pairs(0)) {
+                out.add(pair[0]);
             }
             return out;
         } catch (Exception e) {
@@ -820,16 +760,11 @@ public final class Vault implements VaultAccess {
     }
 
     public void setNamedPassword(String dn, String name, String displayName, char[] value) {
-        SetNamedPasswordRequest req = null;
         try {
-            req = new SetNamedPasswordRequest(dn, name, displayName == null ? name : displayName, value);
-            ops().extendedOperation(req);
+            call(Op.SET_NAMED_PASSWORD, dn, name, displayName == null ? name : displayName, value);
         } catch (Exception e) {
             throw new VaultException("SetNamedPassword " + dn + " '" + name + "': " + e.getMessage(), e);
         } finally {
-            if (req != null) {
-                req.zero();
-            }
             Arrays.fill(value, '\0');
         }
     }
@@ -837,7 +772,7 @@ public final class Vault implements VaultAccess {
     @Override
     public void setRemoteLoaderPassword(String driverDn, char[] value) {
         try {
-            ops().extendedOperation(new SetRemoteLoaderPasswordRequest(driverDn, value));
+            call(Op.SET_REMOTE_LOADER_PASSWORD, driverDn, value);
         } catch (Exception e) {
             throw new VaultException("SetRemoteLoaderPassword " + driverDn + ": " + e.getMessage(), e);
         } finally {
@@ -848,7 +783,7 @@ public final class Vault implements VaultAccess {
     @Override
     public void setMutualAuthKeyPassword(String driverDn, char[] value) {
         try {
-            ops().extendedOperation(new SetMutualAuthKeyPasswordRequest(driverDn, value));
+            call(Op.SET_MUTUAL_AUTH_KEY_PASSWORD, driverDn, value);
         } catch (Exception e) {
             throw new VaultException("SetMutualAuthKeyPassword " + driverDn + ": " + e.getMessage(), e);
         } finally {
@@ -859,7 +794,7 @@ public final class Vault implements VaultAccess {
     @Override
     public void setMutualAuthKeystorePassword(String driverDn, char[] value) {
         try {
-            ops().extendedOperation(new SetMutualAuthKSPasswordRequest(driverDn, value));
+            call(Op.SET_MUTUAL_AUTH_KS_PASSWORD, driverDn, value);
         } catch (Exception e) {
             throw new VaultException("SetMutualAuthKSPassword " + driverDn + ": " + e.getMessage(), e);
         } finally {
@@ -868,22 +803,21 @@ public final class Vault implements VaultAccess {
     }
 
     public void clearRemoteLoaderPassword(String driverDn) {
-        extOp("ClearRemoteLoaderPassword", driverDn, () -> ops().extendedOperation(new ClearRemoteLoaderPasswordRequest(driverDn)));
+        extOp("ClearRemoteLoaderPassword", driverDn, () -> call(Op.CLEAR_REMOTE_LOADER_PASSWORD, driverDn));
     }
 
     public void clearMutualAuthKeyPassword(String driverDn) {
-        extOp("ClearMutualAuthKeyPassword", driverDn, () -> ops().extendedOperation(new ClearMutualAuthKeyPasswordRequest(driverDn)));
+        extOp("ClearMutualAuthKeyPassword", driverDn, () -> call(Op.CLEAR_MUTUAL_AUTH_KEY_PASSWORD, driverDn));
     }
 
     public void clearMutualAuthKeystorePassword(String driverDn) {
-        extOp("ClearMutualAuthKSPassword", driverDn, () -> ops().extendedOperation(new ClearMutualAuthKSPasswordRequest(driverDn)));
+        extOp("ClearMutualAuthKSPassword", driverDn, () -> call(Op.CLEAR_MUTUAL_AUTH_KS_PASSWORD, driverDn));
     }
 
     /** {@code ViewActivation}: the driver set's activation document (docs/console-gaps.md §13), or "" when it has none. */
     public String viewActivation(String driverSetDn) {
         try {
-            ChunkedResultResponseBase resp = (ChunkedResultResponseBase) ops().extendedOperation(new ViewActivationRequest(driverSetDn, 60));
-            return resp.getDataHandle() == 0 || resp.getDataSize() == 0 ? "" : new String(chunked(resp), StandardCharsets.UTF_8);
+            return chunkedText(call(Op.VIEW_ACTIVATION, driverSetDn, 60));   // timeout
         } catch (Exception e) {
             throw new VaultException("ViewActivation " + driverSetDn + ": " + e.getMessage(), e);
         }
@@ -891,14 +825,14 @@ public final class Vault implements VaultAccess {
 
     /** {@code ApplyActivation}: an activation credential document (the file the vendor sends) onto the driver set. */
     public void applyActivation(String driverSetDn, byte[] credential) {
-        extOp("ApplyActivation", driverSetDn, () -> ops().extendedOperation(new ApplyActivationRequest(driverSetDn, credential)));
+        extOp("ApplyActivation", driverSetDn, () -> call(Op.APPLY_ACTIVATION, driverSetDn, credential));
     }
 
     /** {@code GetDriverSet}: the driver set the connected server runs, or null when it runs none. */
     public String serverDriverSet() {
         try {
-            GetDriverSetResponse r = (GetDriverSetResponse) ops().extendedOperation(new GetDriverSetRequest());
-            String dn = r.getDriverSetDN();
+            Reply r = call(Op.GET_DRIVER_SET);
+            String dn = r.size() == 0 ? null : r.string(0);
             return dn == null || dn.isBlank() ? null : dn;
         } catch (Exception e) {
             throw new VaultException("GetDriverSet: " + e.getMessage(), e);
@@ -907,12 +841,12 @@ public final class Vault implements VaultAccess {
 
     /** {@code SetDriverSet}: associate the connected server with a driver set. */
     public void setServerDriverSet(String driverSetDn) {
-        extOp("SetDriverSet", driverSetDn, () -> ops().extendedOperation(new SetDriverSetRequest(driverSetDn)));
+        extOp("SetDriverSet", driverSetDn, () -> call(Op.SET_DRIVER_SET, driverSetDn));
     }
 
     /** {@code ClearDriverSet}: the connected server runs no driver set any more. */
     public void clearServerDriverSet() {
-        extOp("ClearDriverSet", "(this server)", () -> ops().extendedOperation(new ClearDriverSetRequest()));
+        extOp("ClearDriverSet", "(this server)", () -> call(Op.CLEAR_DRIVER_SET));
     }
 
     /**
@@ -956,25 +890,25 @@ public final class Vault implements VaultAccess {
 
     /** {@code SetLogEvents}: the audit event ids a driver or driver set logs ({@code DirXML-LogEvents} is engine-written; docs/console-gaps.md §11). */
     public void setLogEvents(String dn, int[] eventIds) {
-        extOp("SetLogEvents", dn, () -> ops().extendedOperation(new SetLogEventsRequest(dn, eventIds)));
+        extOp("SetLogEvents", dn, () -> call(Op.SET_LOG_EVENTS, dn, eventIds));
     }
 
     /** {@code ClearLogEvents}: no events logged. */
     public void clearLogEvents(String dn) {
-        extOp("ClearLogEvents", dn, () -> ops().extendedOperation(new ClearLogEventsRequest(dn)));
+        extOp("ClearLogEvents", dn, () -> call(Op.CLEAR_LOG_EVENTS, dn));
     }
 
     public void removeNamedPassword(String dn, String name) {
-        extOp("RemoveNamedPassword '" + name + "'", dn, () -> ops().extendedOperation(new RemoveNamedPasswordRequest(dn, name)));
+        extOp("RemoveNamedPassword '" + name + "'", dn, () -> call(Op.REMOVE_NAMED_PASSWORD, dn, name));
     }
 
     // ---- helpers ------------------------------------------------------------------
 
-    private interface Op {
+    private interface Action {
         void run() throws Exception;
     }
 
-    private static void extOp(String what, String dn, Op op) {
+    private static void extOp(String what, String dn, Action op) {
         try {
             op.run();
         } catch (Exception e) {

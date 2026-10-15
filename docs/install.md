@@ -26,7 +26,7 @@ Identity Applications helper). There is no server, no database and no GUI.
 | **Python 3.8+** | only for `bin/apps` (standard library, nothing to install) | `python3 --version` |
 | **The DirXML Policy Simulator** built and installed locally | the engine that validates and simulates policies | `ls ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/` |
 | **The trace parser** (`dirxml-trace-core`) | `trace.view` ([trace-view.md](trace-view.md)) reads traces with the parser the trace viewer and the web share. It is not on Maven Central, so take the jar from a [DirXMLTraceViewer release](https://github.com/PointBlueTechnology/DirXMLTraceViewer/releases) at the version `pom.xml` pins (`tracecore.version`), then `mvn install:install-file -Dfile=dirxml-trace-core-<v>.jar -DgroupId=com.pointbluetech -DartifactId=dirxml-trace-core -Dversion=<v> -Dpackaging=jar`. A DirXMLDev release attaches it too. | `ls ~/.m2/repository/com/pointbluetech/dirxml-trace-core/` |
-| **The Identity Manager engine jars** | proprietary; the simulator and the tool load the real policy compilers and the LDAP/extended-operation client | see §2 |
+| **The Identity Manager engine jars** | proprietary; the simulator and the tool load the real policy compiler for `validate`'s compile check, `simulate` and package GCV checksums. **Talking to a vault needs none of them**: deploy, diff, import-live and the `driver.*`/`driverset.*`/`engine.*`/`job.*` commands use open-source JLDAP and the project's own extended operations ([vendor-free-vault.md](vendor-free-vault.md)) | see §2 |
 | **Network access to the vault** | LDAPS to the eDirectory server that holds the driver set (port 636) | `nc -z host 636` |
 | Optional: **SSH to the engine host** | `driver.trace tail` can read the trace file over SSH; without it the trace streams over LDAP | `ssh user@host true` |
 | Optional: **Designer 4.8+** on the workstation | only for `form.edit` (the vendor's JSON form builder is a Designer plugin) | `bin/idm form.edit --check` |
@@ -67,13 +67,19 @@ The message can appear whenever the engine profile resolves the simulator.
 
 ### 2.2 DirXMLDev
 
+DirXMLDev's `lib/` takes the engine jars below. `ldap.jar` is no longer one of them: the LDAP client
+is open-source JLDAP from Maven Central (THIRD-PARTY.md). The simulator's own `lib/` still lists it.
+Without `lib/`, the vault, driver and engine commands work; `validate` (compile check), `simulate`
+and the package checksum need the jars. The trace over LDAP (`driver.trace tail --ldap`,
+`trace.view --ldap`) also needs the simulator jar, which is ours and needs no engine jar for it.
+
 ```bash
 git clone <this repository> ~/IdeaProjects/DirXMLDev
 cd ~/IdeaProjects/DirXMLDev
 mkdir -p lib
 src=~/IdeaProjects/DirXMLSimulator/lib
 for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar js.jar jclient.jar \
-         ldap.jar XDS.jar dhutil.jar CommonDriverShim.jar; do
+         XDS.jar dhutil.jar CommonDriverShim.jar; do
   cp "$src/$j" "lib/$j"          # regular files; lib/ is gitignored
 done
 JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q test  # builds and runs the test suite

@@ -14,11 +14,13 @@ SIM_JAR="$HOME/.m2/repository/com/pointblue/dirxml/dirxml-simulator/$SIM_VER/dir
 # the PostgreSQL JDBC driver for the event store (the version the pom names; `mvn package` fetches it)
 PG_VER=$(sed -n 's#.*<postgresql.version>\([^<]*\)</postgresql.version>.*#\1#p' "$HERE/pom.xml" | head -1)
 PG_JAR="$HOME/.m2/repository/org/postgresql/postgresql/$PG_VER/postgresql-$PG_VER.jar"
+# the vault path's LDAP client: open-source JLDAP from Maven Central (docs/vendor-free-vault.md)
+JLDAP_JAR="$HOME/.m2/repository/com/novell/ldap/jldap/4.3/jldap-4.3.jar"
 TRACE_VER=$(sed -n 's#.*<tracecore.version>\([^<]*\)</tracecore.version>.*#\1#p' "$HERE/pom.xml" | head -1)
 TRACE_JAR="$HOME/.m2/repository/com/pointbluetech/dirxml-trace-core/$TRACE_VER/dirxml-trace-core-$TRACE_VER.jar"
 CMD="${1:-}"
 
-# REQUIRED_JARS: dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar
+# REQUIRED_JARS: dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar
 
 is_java21() {
   [ -x "$1/bin/java" ] || return 1
@@ -107,7 +109,7 @@ doctor_shell() {
   if [ -L "$HERE/lib" ]; then
     links="lib is a directory symlink"
   else
-    for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar; do
+    for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar; do
       if [ -L "$HERE/lib/$j" ]; then
         if [ -n "$links" ]; then
           links="$links, $j"
@@ -196,6 +198,7 @@ if [ -f "$SIM_JAR" ]; then
 fi
 [ -f "$PG_JAR" ] && CP="$CP:$PG_JAR"
 [ -f "$TRACE_JAR" ] && CP="$CP:$TRACE_JAR"
+[ -f "$JLDAP_JAR" ] && CP="$CP:$JLDAP_JAR"
 for j in "$HERE"/lib/*.jar; do
   [ -f "$j" ] || continue
   CP="$CP:$j"
