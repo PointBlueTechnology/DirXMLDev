@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **A deploy and a rollback report each step as it happens.** `Deployer.Options.progress`, and
+  `Deployer.rollback(…, progress)`, hear one line per step:
+  - validating, reading the vault, the plan;
+  - the snapshot, each write (`write 3/9: modify cn=…`);
+  - each restart and its wait for Running;
+  - verify, and the outcome.
+
+  The web page shows them while a deploy runs.
+
 ### Fixed
 
 - **`--capture-drift` works where git has no identity**, which includes the web image's container. The

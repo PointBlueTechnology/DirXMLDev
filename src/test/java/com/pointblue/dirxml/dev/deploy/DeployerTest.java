@@ -314,8 +314,17 @@ public class DeployerTest {
 
         Deployer.Options o = options(tree, stgEnv("test"), List.of());
         o.drivers = List.of("AD");
+        List<String> progress = new ArrayList<>();
+        o.progress = progress::add;
         Deployer.Result r = new Deployer(o, vault).run();
         assertTrue(r.text(), r.ok && r.verified);
+        // each step as it happens, in order (what the web page shows while a deploy runs)
+        String steps = String.join("\n", progress);
+        int validating = steps.indexOf("validating the tree"), reading = steps.indexOf("reading the vault"),
+            planned = steps.indexOf("planned: "), snapshot = steps.indexOf("snapshot: deploy-snapshots/test/"),
+            write = steps.indexOf("write 1/"), verifying = steps.indexOf("verifying"), done = steps.indexOf("done: verified");
+        assertTrue(steps, 0 <= validating && validating < reading && reading < planned && planned < snapshot
+            && snapshot < write && write < verifying && verifying < done);
         assertTrue(r.planText, r.planText.startsWith("validation: 1 error(s) outside this deploy's scope, not deployed by it (Broken)"));
         assertTrue(vault.exists("cn=sub-new,cn=Subscriber," + VaultMapping.driverDn(DS, "AD")));
     }
