@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Importing needs no engine jar.** `import-live`, `vault.diff`, deploy's read of the vault, and
+  importing a Designer project or export used to parse with the engine's `XmlDocument` (through the
+  simulator's `Xds`). On an install with no `lib/`, they stopped with `NoClassDefFoundError`: the
+  web's "Export from an Identity Vault", "Import a Designer project" and "Import a Designer export"
+  failed on a fresh container. They now parse with the JDK (`CanonicalXml.parse` and the new
+  `parseFile`). Importing idm254 both ways gives byte-identical trees (726 files).
+- `VendorFreeTest` also walks from the readers (`VaultDiff.readLive`, `LdifReader`,
+  `ProjectReader`, `ExportReader`, `AsCodeReader`/`Writer`), so this stays fixed.
+
 ## [0.39.0] - 2026-10-15
 
 ### Fixed

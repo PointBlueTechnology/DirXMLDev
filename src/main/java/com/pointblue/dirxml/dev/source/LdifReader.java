@@ -624,7 +624,7 @@ public final class LdifReader {
             return null;
         }
         try {
-            return Xds.parse(xml).getDocumentElement();
+            return CanonicalXml.parse(xml).getDocumentElement();
         } catch (Exception e) {
             meta.put("unparsed." + key, xml);
             return null;
@@ -636,7 +636,7 @@ public final class LdifReader {
             return null;
         }
         try {
-            return Xds.parse(xml).getDocumentElement();
+            return CanonicalXml.parse(xml).getDocumentElement();
         } catch (Exception e) {
             return null;
         }

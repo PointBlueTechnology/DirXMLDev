@@ -92,7 +92,7 @@ public final class ExportReader {
 
     /** Read a Designer export file (either root form) into the model. */
     public static DriverSet read(Path exportFile) {
-        Element root = Xds.parseFile(exportFile).getDocumentElement();
+        Element root = CanonicalXml.parseFile(exportFile).getDocumentElement();
         return read(root, exportFile.getFileName().toString());
     }
 
