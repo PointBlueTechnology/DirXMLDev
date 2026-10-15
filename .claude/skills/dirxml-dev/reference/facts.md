@@ -176,6 +176,12 @@ version it was proven on unless stated.
   {"cacheHolderItems":[{"cacheHolderID":"All Cache"}]}` → 204, and the PRD is
   requestable at once (`bin/apps flush`; live 2026-10-15). A changed PRD (same
   DN) is used at once → `prd-rest-live.md`, `w3-rest-live.md`.
+- **A role's container is not its category** (#70). Container =
+  `RoleDefs/Level<n>/<container>` (resources `ResourceDefs/<container>`);
+  category = key in `nrfRoleCategoryKey`/`nrfCategoryKey` from the DAL list
+  `DirectoryModel/ChoiceDefs/roles-category`/`resources-category`. `role.add`/
+  `resource.add --category key --container Name`; `category.list/add/set/remove
+  --for role|resource` edit the list → `appconfig.md` §9.
 - **Every password sign-in grows the user's `oidpInstanceData`**; at ~32 KB the
   write fails (`-649`) and every sign-in for that user answers HTTP 500
   "Unexpected error". Sign in once and reuse the token (`bin/apps permission

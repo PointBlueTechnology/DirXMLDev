@@ -665,6 +665,54 @@ public final class ReadCli {
         return 0;
     }
 
+    /** {@code category.list}: the role or resource category keys (issue #70), with labels and use counts. */
+    public static int categoryList(String[] argv) throws Exception {
+        com.pointblue.dirxml.dev.model.AppCategories.For f = com.pointblue.dirxml.dev.model.AppCategories.For.of(flag(argv, "--for"));
+        if (argv.length < 2 || f == null) {
+            System.err.println("usage: category.list <tree> --for role|resource [--driver D] [--json]");
+            return 2;
+        }
+        String driverName = flag(argv, "--driver");
+        boolean json = hasFlag(argv, "--json");
+        DriverSet ds = AsCodeReader.read(Paths.get(argv[1]));
+        List<Object> rows = new ArrayList<>();
+        boolean any = false;
+        for (Driver d : driversOf(ds, driverName)) {
+            List<com.pointblue.dirxml.dev.model.AppCategories.Category> cats = com.pointblue.dirxml.dev.model.AppCategories.of(d.provisioning, f);
+            if (cats == null) {
+                continue;
+            }
+            any = true;
+            for (com.pointblue.dirxml.dev.model.AppCategories.Category c : cats) {
+                int used = 0;
+                for (AppObject o : d.provisioning.objects) {
+                    if (o.kind() == f.kind && o.all(f.attr).contains(c.key())) {
+                        used++;
+                    }
+                }
+                if (json) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("driver", d.name);
+                    row.put("key", c.key());
+                    row.put("label", c.label());
+                    row.put("labels", c.labels());
+                    row.put("used", used);
+                    rows.add(row);
+                } else {
+                    System.out.printf("%-20s %-36s %d %s%n", c.key(), c.label(), used, used == 1 ? f.key : f.key + "s");
+                }
+            }
+        }
+        if (!any) {
+            System.err.println("no " + f.path() + " in the tree" + (driverName == null ? "" : " for driver " + driverName));
+            return 1;
+        }
+        if (json) {
+            System.out.println(Json.pretty(rows));
+        }
+        return 0;
+    }
+
     public static int appConfigShow(String[] argv) throws Exception {
         if (argv.length < 3) {
             System.err.println("usage: appconfig.show <tree> <path-or-name> [--driver D] [--attr A] [--json]");

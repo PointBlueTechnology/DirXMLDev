@@ -300,8 +300,10 @@ Everything else under the User Application driver's AppConfig is in the tree as
 `appconfig.list` / `appconfig.show`; edit with the typed operations:
 
 ```
-bin/idm role.add tree/ --name Auditor --level 20 --category Custom --display "Auditor" --display "de=Prüfer" --descr "Audits access"
-bin/idm resource.add tree/ --name AuditGroup --category Custom --entitlement "cn=Groups,cn=AD,cn=driverset1,o=system" --param "cn=auditors,ou=groups,o=data"
+bin/idm category.list tree/ --for role                      # the category keys the list has
+bin/idm category.add tree/ --for role --key audit --display "Audit Roles"
+bin/idm role.add tree/ --name Auditor --level 20 --category audit --container Custom --display "Auditor" --display "de=Prüfer" --descr "Audits access"
+bin/idm resource.add tree/ --name AuditGroup --category system --container Custom --entitlement "cn=Groups,cn=AD,cn=driverset1,o=system" --param "cn=auditors,ou=groups,o=data"
 bin/idm entity.attr.add tree/ --entity user --key roomNumber --ldap roomNumber --display "Room" --required true
 bin/idm appconfig.set tree/ --path UIConfig/NavItems/AccessRptTool --attr nrfLocalizedNames --value "de=Zugriffsbericht"
 bin/idm role.remove tree/ --name Auditor
