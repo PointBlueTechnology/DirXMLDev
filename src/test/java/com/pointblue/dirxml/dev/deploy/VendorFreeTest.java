@@ -85,7 +85,8 @@ public class VendorFreeTest {
      */
     private static final Pattern REFLECTIVE = Pattern.compile("(com\\.novell\\.(?!ldap\\.)|novell\\.|com\\.netiq\\.|com\\.pointblue\\.dirxml\\.sim\\.)[\\w.$]+");
     static final Set<String> DATA = Set.of(
-        "com.novell.nds.dirxml.job.ckdrvhealth.CheckDriverHealthJob");   // a job's class, written to the vault, never loaded
+        "com.novell.nds.dirxml.job.ckdrvhealth.CheckDriverHealthJob",   // a job's class, written to the vault, never loaded
+        "com.novell.idm.driver.ComposerDriverShim");                    // a driver's shim class, written to its configuration
 
     static boolean reflective(String s) {
         return REFLECTIVE.matcher(s).matches() && !DATA.contains(s);
@@ -349,15 +350,43 @@ public class VendorFreeTest {
         return out;
     }
 
+    /**
+     * Reading a tree in, the way a fresh install with no engine jars does it: from a vault (import,
+     * diff, deploy's read), a Designer project or an export, and the tree on disk both ways.
+     */
+    static final String[][] IMPORT_ROOTS = {
+        {"com/pointblue/dirxml/dev/deploy/VaultDiff", "readLive"},
+        {"com/pointblue/dirxml/dev/source/LdifReader", "fromEntries"},
+        {"com/pointblue/dirxml/dev/source/ProjectReader", "read"},
+        {"com/pointblue/dirxml/dev/source/ExportReader", "read"},
+        {"com/pointblue/dirxml/dev/ascode/AsCodeReader", "read"},
+        {"com/pointblue/dirxml/dev/ascode/AsCodeWriter", "write"},
+    };
+
     @Test
     public void theConsolesCallsReachNoVendorClass() throws Exception {
+        List<String> seen = walk(ROOTS, "the console calls");
+        assertTrue("the walk is the console's whole surface, not a corner of it (" + seen.size() + " methods)", seen.size() > 300);
+        assertTrue("the walk reached the extended operations",
+            seen.stream().anyMatch(x -> x.startsWith("com/pointblue/dirxml/dev/deploy/IdmOps.request")));
+    }
+
+    @Test
+    public void readingATreeInReachesNoVendorClass() throws Exception {
+        List<String> seen = walk(IMPORT_ROOTS, "importing calls");
+        assertTrue("the readers parse with CanonicalXml",
+            seen.stream().anyMatch(x -> x.startsWith("com/pointblue/dirxml/dev/xml/CanonicalXml.parse")));
+    }
+
+    /** Walks from {@code roots}; fails on a vendor class reached, or a root that does not exist. Returns the methods reached. */
+    private List<String> walk(String[][] roots, String what) throws Exception {
         List<String> universe = universe();
         Map<String, List<String>> subtypes = new HashMap<>();
         Deque<String[]> todo = new ArrayDeque<>();   // {owner, "name" | "name+desc" | "*", caller}
         Set<String> seen = new LinkedHashSet<>();
         Map<String, String> parent = new HashMap<>();
         TreeMap<String, Set<String>> bad = new TreeMap<>();
-        for (String[] r : ROOTS) {
+        for (String[] r : roots) {
             todo.add(new String[] {r[0], r[1], null});
         }
         while (!todo.isEmpty()) {
@@ -421,9 +450,9 @@ public class VendorFreeTest {
                 }
             }
         }
-        for (String[] r : ROOTS) {
+        for (String[] r : roots) {
             boolean exists = seen.stream().anyMatch(k -> k.startsWith(r[0] + ".") && (r[1].equals("*") || k.startsWith(r[0] + "." + r[1] + "(")));
-            assertTrue("the console calls " + r[0] + "." + r[1] + ", which the walk did not find (renamed?)", exists);
+            assertTrue(what + " " + r[0] + "." + r[1] + ", which the walk did not find (renamed?)", exists);
         }
         StringBuilder why = new StringBuilder();
         for (Map.Entry<String, Set<String>> b : bad.entrySet()) {
@@ -435,8 +464,6 @@ public class VendorFreeTest {
             why.append("\n  ").append(chain).append("\n      names ").append(b.getValue());
         }
         assertTrue("reached " + seen.size() + " methods; these name vendor classes:" + why, bad.isEmpty());
-        assertTrue("the walk is the console's whole surface, not a corner of it (" + seen.size() + " methods)", seen.size() > 300);
-        assertTrue("the walk reached the extended operations",
-            seen.stream().anyMatch(s -> s.startsWith("com/pointblue/dirxml/dev/deploy/IdmOps.request")));
+        return new ArrayList<>(seen);
     }
 }
