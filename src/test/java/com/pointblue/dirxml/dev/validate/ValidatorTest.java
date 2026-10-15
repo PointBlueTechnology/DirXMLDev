@@ -91,6 +91,38 @@ public class ValidatorTest {
         d.links.add(new PolicyLink(PolicySet.SUB_COMMAND, "drivers/AD/subscriber/" + name, d.links.size()));
     }
 
+    /** Without the engine jars, a check that needs them is skipped with an info finding; the others still run. */
+    @Test
+    public void aCheckNeedingTheEngineIsSkippedWithoutIt() {
+        Check engine = new Check() {
+            @Override
+            public String name() {
+                return "compile";
+            }
+
+            @Override
+            public void run(DriverSet ds, Report r) {
+                throw new NoClassDefFoundError("com/novell/nds/dirxml/engine/gcv/GCDefinitions");
+            }
+        };
+        Check plain = new Check() {
+            @Override
+            public String name() {
+                return "plain";
+            }
+
+            @Override
+            public void run(DriverSet ds, Report r) {
+                r.add(Finding.warning("plain-ran", "driverset", "ran"));
+            }
+        };
+        Report r = new Validator(java.util.List.of(engine, plain)).validate(clean());
+        assertTrue(r.text(), r.findings().stream().anyMatch(f -> f.code.equals("check-skipped-no-engine")
+            && f.severity == Finding.Severity.INFO && f.message.contains("'compile'") && f.message.contains("GCDefinitions")));
+        assertTrue("the next check still runs", r.findings().stream().anyMatch(f -> f.code.equals("plain-ran")));
+        assertTrue("no error from a missing engine", r.of(Finding.Severity.ERROR).isEmpty());
+    }
+
     @Test
     public void cleanDriverSetHasNoErrors() {
         Report r = owned().validate(clean());
