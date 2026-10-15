@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-10-14
+
 ### Fixed
 
 - **The diff's JSON no longer fails on a driver-set-level guard.** When the vault has jobs, templates
