@@ -24,7 +24,7 @@ import java.nio.file.Path;
  */
 public final class Packages {
 
-    public static final String BASELINE_DIR = ".package-baseline";
+    public static final String BASELINE_DIR = AsCodeWriter.BASELINE_DIR;
     public static final String CUSTOMIZED_KEY = "package.customized";
 
     private Packages() {
@@ -157,12 +157,7 @@ public final class Packages {
 
     /** Where the artifact's package baseline lives in a tree. */
     public static Path baselineFile(Path tree, Artifact a) {
-        String[] parts = a.path().split("/");
-        Path p = tree.resolve(BASELINE_DIR);
-        for (String part : parts) {
-            p = p.resolve(AsCodeWriter.fileSafe(part));
-        }
-        return p.resolveSibling(p.getFileName() + AsCodeWriter.extension(a));
+        return AsCodeWriter.baselineFile(tree, a);
     }
 
     /**

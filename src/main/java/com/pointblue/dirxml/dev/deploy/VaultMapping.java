@@ -189,7 +189,8 @@ public final class VaultMapping {
         put(m, PKG_LINKAGES, stamps.get(PackageStamps.LINKAGES));
         if (!m.isEmpty() && tree != null) {
             try {
-                String baseline = com.pointblue.dirxml.dev.edit.Packages.baseline(tree, a);
+                java.nio.file.Path f = com.pointblue.dirxml.dev.ascode.AsCodeWriter.baselineFile(tree, a);
+                String baseline = java.nio.file.Files.exists(f) ? java.nio.file.Files.readString(f, StandardCharsets.UTF_8) : null;
                 if (baseline != null) {
                     m.put(PKG_INITIAL_STATE, List.of(baseline.getBytes(StandardCharsets.UTF_8)));
                 }

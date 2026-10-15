@@ -31,7 +31,9 @@ public final class Doctor {
     public static final String PROJECT_SIM_VERSION = "1.7.0";
 
     /**
-     * The proprietary NetIQ/OpenText jars {@code pom.xml} puts on the system classpath.
+     * The proprietary NetIQ/OpenText jars {@code pom.xml} puts on the system classpath: the engine, for
+     * validate's compile check, simulate and package checksums. Talking to a vault needs none of them
+     * (docs/vendor-free-vault.md); its LDAP client is open-source JLDAP from Maven Central.
      * {@code bin/require-engine.sh} and the {@code doctor} shell fallback list the same names.
      */
     public static final List<String> REQUIRED_JARS = List.of(
@@ -43,8 +45,7 @@ public final class Doctor {
         "jclient.jar",
         "dhutil.jar",
         "XDS.jar",
-        "js.jar",
-        "ldap.jar");
+        "js.jar");
 
     /** Classes the simulator's own doctor loads, plus the Novell LDAP client this repo binds with. */
     static final List<String> ENGINE_CLASSES = List.of(
@@ -215,6 +216,7 @@ public final class Doctor {
         checks.add(jdk(req));
         checks.add(simulator(req));
         checks.add(lib(req));
+        checks.add(vault(req));
         checks.add(traceViewer());
         checks.add(tls());
         checks.add(release(req));
@@ -321,6 +323,19 @@ public final class Doctor {
         }
         fields.put("detail", "dirxml-simulator " + version);
         return new Check("simulator", true, "simulator: OK  " + version + "  (" + jar + ")", notes, fields);
+    }
+
+    /** The vault path: open-source JLDAP and our own extended operations, no engine jar (docs/vendor-free-vault.md). */
+    private static Check vault(Request req) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        if (req.checkEngineClasses && !classLoads(req, "com.novell.ldap.LDAPConnection")) {
+            String detail = "JLDAP (com.novell.ldap:jldap:4.3, open source) is not on the classpath; mvn install puts it in ~/.m2, "
+                + "where bin/idm takes it from. The vault, driver and engine commands need it; no engine jar is needed for them.";
+            fields.put("detail", detail);
+            return new Check("vault", false, "vault: FAIL  JLDAP not on the classpath", List.of(detail), fields);
+        }
+        fields.put("detail", "vault, driver and engine commands need no engine jar: JLDAP (open source) and this project's own extended operations");
+        return new Check("vault", true, "vault: OK  no engine jar needed (JLDAP + own extended operations)", List.of(), fields);
     }
 
     /** A versioned spelling of a required jar that is present instead ({@code xp-1.0.0.jar} for {@code xp.jar}), or null. */
