@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-10-15
+
 ### Added
 
 - **A deploy and a rollback report each step as it happens.** `Deployer.Options.progress`, and
