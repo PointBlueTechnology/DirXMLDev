@@ -1,6 +1,6 @@
 # A vendor-free vault path (design note)
 
-**Status: built 2026-10-15 (V1–V3, V4 read-only). Live writes await a go-ahead.**
+**Status: built and verified live 2026-10-15 (V1–V4).**
 
 ## Why
 
@@ -174,5 +174,18 @@ vendor's decoder and then live (see Verification).
   this lab with the released vendor-class build too, so the engine refuses them and our encoding is
   not the cause. The trace over LDAP needs the simulator jar (its `EdirTraceStream`); with it and
   JLDAP, and no vendor jar, it streams.
-- **V4 writes** (start/stop, start option, a named password set and removed, log events, a cache
-  entry, a job) wait for a per-run go-ahead, on a scratch driver with a snapshot.
+- **V4 writes** (go-ahead given 2026-10-15) ran on a scratch Loopback driver and a scratch job on
+  idm254. Both were deployed from the full imported tree, with a snapshot first. The vendor-free
+  class path did all of these:
+  - the start option set to auto and back to manual;
+  - a named password set, listed and removed;
+  - the Remote Loader, shim-auth, key and keystore passwords each set and cleared;
+  - log events set, then cleared (`--inherit`, ClearLogEvents);
+  - an event queued into the stopped driver's cache, viewed, and the cache cleared (DeleteCacheEntries,
+    with the engine's snapshot);
+  - the driver started, restarted and stopped;
+  - the job started.
+
+  `AbortJob` on the already finished job answers "Other", as it does with the released vendor-class
+  build. The deploy itself used our SetDriverStartOption and NotifyJobUpdate. The scratch driver and
+  job were then removed (`--delete-driver`), and `vault.diff` showed no differences.
