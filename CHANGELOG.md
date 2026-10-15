@@ -18,6 +18,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
   The web page shows them while a deploy runs.
 
+### Fixed
+
+- **`--capture-drift` works where git has no identity**, which includes the web image's container. The
+  as-found commit failed with "unable to auto-detect email address", so the capture stopped before it
+  recorded the vault's state, and the next production deploy still found no deploy on record. When
+  git has no `user.email`, the commit now uses `DirXMLDev <dirxmldev@localhost>`. A configured
+  identity is left alone.
+
 ## [0.41.0] - 2026-10-15
 
 ### Changed

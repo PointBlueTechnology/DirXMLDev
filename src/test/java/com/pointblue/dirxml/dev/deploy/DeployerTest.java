@@ -346,4 +346,18 @@ public class DeployerTest {
         assertTrue(scoped.refusal, scoped.refusal.contains("1 error(s) in what this deploy writes") && scoped.refusal.contains("drivers/Broken/subscriber/sub-broken"));
         assertFalse(vault.exists("cn=sub-new,cn=Subscriber," + VaultMapping.driverDn(DS, "AD")));
     }
+
+    @Test
+    public void theAsFoundCommitHasAnIdentityWhenGitHasNone() throws Exception {
+        // a container (the web image) has no user.email anywhere: the capture's commit gets one of its own
+        assertEquals(List.of("-c", "user.name=DirXMLDev", "-c", "user.email=dirxmldev@localhost"), Deployer.identityArgs(null));
+        assertEquals(List.of("-c", "user.name=DirXMLDev", "-c", "user.email=dirxmldev@localhost"), Deployer.identityArgs(" "));
+        assertEquals("a configured identity is left alone", List.of(), Deployer.identityArgs("jerry@example.com"));
+
+        Path repo = tmp.newFolder("identity").toPath();
+        assertEquals(0, new ProcessBuilder("git", "-C", repo.toString(), "init", "-q").inheritIO().start().waitFor());
+        assertEquals(0, new ProcessBuilder("git", "-C", repo.toString(), "config", "user.email", "local@example.com").start().waitFor());
+        assertEquals("local@example.com", Deployer.gitConfig(repo, "user.email"));
+        assertEquals(null, Deployer.gitConfig(repo, "no.such-key"));
+    }
 }
