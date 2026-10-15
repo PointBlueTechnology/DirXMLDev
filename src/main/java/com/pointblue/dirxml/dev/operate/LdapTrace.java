@@ -1,71 +1,104 @@
 package com.pointblue.dirxml.dev.operate;
 
+import com.novell.ldap.events.edir.EdirEventConstant;
 import com.pointblue.dirxml.dev.deploy.Environments;
-import com.pointblue.dirxml.sim.EdirTraceStream;
+import com.pointbluetech.dirxml.trace.ldap.CertificateTrust;
+import com.pointbluetech.dirxml.trace.ldap.ConnectionSettings;
+import com.pointbluetech.dirxml.trace.ldap.LdapTraceEventSource;
+import com.pointbluetech.dirxml.trace.model.TraceParser;
+import com.pointbluetech.dirxml.trace.model.TraceRecord;
 
-import java.text.SimpleDateFormat;
+import java.net.URI;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 /**
- * {@code driver.trace tail} over LDAP: one driver's lines out of the engine's DirXML debug
- * events ({@link EdirTraceStream}, the simulator), so no SSH host, no trace file and no
- * {@code DirXML-TraceFile} are needed — only the environment's LDAPS connection. A continuation
- * line (a stack trace's next line, an XML document's) carries no driver prefix and is attributed
- * to the last driver line seen, the way it reads in a trace file.
+ * {@code driver.trace tail --ldap} and {@code trace.view --ldap}: the engine's DirXML trace events
+ * over the environment's own LDAPS connection, so no SSH host, trace file or {@code DirXML-TraceFile}
+ * is needed. The stream and its parsing are {@code dirxml-trace-core}'s, as in the trace viewer and
+ * the web, over open-source JLDAP: no simulator and no engine jar. Each message is printed as a trace
+ * file has it ({@code [timestamp]:Driver ST:text}, an XML document's lines after it), so
+ * {@code trace.view} and the trace viewer read it; a continuation belongs to the driver before it.
+ * <p>
+ * Certificates: one the JVM does not trust is accepted for this run when the environment says
+ * {@code trustAll} (a lab, a tunnel), and refused otherwise — the core's vault connections do the same.
  */
 public final class LdapTrace {
 
+    /** host:port of the servers whose environment says trustAll. */
+    private static final Set<String> TRUSTED = ConcurrentHashMap.newKeySet();
+
+    static {
+        CertificateTrust.setPrompt(req -> TRUSTED.contains(req.host() + ":" + req.port())
+            ? CertificateTrust.Decision.ONCE : CertificateTrust.Decision.REJECT);
+    }
+
     private final String driver;
     private final Pattern grep;
-    private final SimpleDateFormat time = new SimpleDateFormat("HH:mm:ss");
-    private String lastDriver;
+    private final boolean engineToo;
 
-    /** {@code driver} null = every driver; {@code grep} null = every line. */
-    public LdapTrace(String driver, String grep) {
+    /** {@code driver} null = every driver; {@code grep} null = every message; {@code engineToo} adds the engine's own channel. */
+    public LdapTrace(String driver, String grep, boolean engineToo) {
         this.driver = driver;
         this.grep = grep == null || grep.isBlank() ? null : Pattern.compile(grep);
+        this.engineToo = engineToo;
     }
 
-    /** The line as printed ({@code [HH:mm:ss.mmm] [ST: ]text}, the driver named only when every driver is shown), or null when filtered out. */
-    public synchronized String accept(EdirTraceStream.Line line) {
-        String owner = line.driver != null ? line.driver : lastDriver;
-        if (line.driver != null) {
-            lastDriver = line.driver;
+    /** The message's lines as printed, or an empty list when it is filtered out. */
+    public List<String> accept(TraceRecord r) {
+        if (r.eventType() == EdirEventConstant.EVT_DB_DIRXML && !engineToo) {
+            return List.of();   // the engine's channel (DSTrace "DirXML"), not a driver's
         }
-        if (driver != null && (owner == null || !owner.equalsIgnoreCase(driver))) {
-            return null;
+        if (driver != null && (r.driverName() == null ? !engineToo : !r.driverName().equalsIgnoreCase(driver))) {
+            return List.of();
         }
-        if (grep != null && !grep.matcher(line.text).find()) {
-            return null;
+        if (grep != null && !grep.matcher(r.text()).find()) {
+            return List.of();
         }
-        String stamp = "[" + time.format(new Date(line.receivedAt)) + "." + String.format("%03d", line.millis) + "] ";
-        if (driver == null) {
-            return stamp + line.format();
-        }
-        return stamp + (line.driver == null ? line.text : (line.channel == null ? "" : line.channel + ": ") + line.text);
+        String text = r.text().endsWith("\n") ? r.text().substring(0, r.text().length() - 1) : r.text();
+        return List.of(text.split("\n", -1));
     }
 
-    /** The stream's connection from an environment: its URL, bind identity, password and trust setting. */
-    public static EdirTraceStream.Config config(Environments.Environment env) {
-        EdirTraceStream.Config c = EdirTraceStream.Config.fromUrl(env.url, env.bindDn, env.password);
-        c.trustAllCerts = env.trustAll;
-        return c;
+    /** The library's connection settings from an environment. */
+    static ConnectionSettings settings(Environments.Environment env) {
+        URI u = URI.create(env.url.contains("://") ? env.url : "ldaps://" + env.url);
+        boolean ssl = !"ldap".equalsIgnoreCase(u.getScheme());
+        int port = u.getPort() > 0 ? u.getPort() : (ssl ? 636 : 389);
+        return new ConnectionSettings(u.getHost(), port, ssl, true, env.bindDn,
+            env.password == null ? new char[0] : env.password.toCharArray(), "");
     }
 
     /** Stream for {@code seconds} (0 = until the thread is interrupted), each printed line to {@code sink}; the count of lines passed on. */
-    public static long stream(Environments.Environment env, String driver, String grep, boolean engineToo, long seconds, Consumer<String> sink) throws InterruptedException {
-        LdapTrace filter = new LdapTrace(driver, grep);
+    public static long stream(Environments.Environment env, String driver, String grep, boolean engineToo, long seconds, Consumer<String> sink) throws Exception {
+        LdapTrace filter = new LdapTrace(driver, grep, engineToo);
+        ConnectionSettings settings = settings(env);
+        if (env.trustAll) {
+            TRUSTED.add(settings.host() + ":" + settings.port());
+        }
+        TraceParser parser = new TraceParser();
         long[] count = {0};
-        try (EdirTraceStream stream = new EdirTraceStream(config(env))) {
-            stream.start(engineToo, line -> {
-                String printed = filter.accept(line);
-                if (printed != null) {
-                    count[0]++;
-                    sink.accept(printed);
+        List<String> errors = new ArrayList<>();
+        LdapTraceEventSource source = new LdapTraceEventSource(settings, env.name);
+        try {
+            source.start(ev -> {
+                List<String> lines;
+                synchronized (parser) {
+                    TraceRecord r = parser.parse(ev);
+                    lines = r == null ? List.of() : filter.accept(r);
+                }
+                synchronized (sink) {
+                    for (String line : lines) {
+                        count[0]++;
+                        sink.accept(line);
+                    }
+                }
+            }, e -> {
+                synchronized (errors) {
+                    errors.add(e.getMessage());
                 }
             });
             if (seconds > 0) {
@@ -73,16 +106,17 @@ public final class LdapTrace {
             } else {
                 Thread.currentThread().join();
             }
-            List<Throwable> errors = stream.errors();
-            if (!errors.isEmpty()) {
-                sink.accept("stream error: " + errors.get(0).getMessage());
-            }
+        } finally {
+            source.close();
+        }
+        if (!errors.isEmpty()) {
+            sink.accept("stream error: " + errors.get(0));
         }
         return count[0];
     }
 
     /** Collect for {@code seconds} and return the printed lines. */
-    public static List<String> collect(Environments.Environment env, String driver, String grep, boolean engineToo, long seconds) throws InterruptedException {
+    public static List<String> collect(Environments.Environment env, String driver, String grep, boolean engineToo, long seconds) throws Exception {
         List<String> out = new ArrayList<>();
         stream(env, driver, grep, engineToo, seconds, out::add);
         return out;

@@ -7,6 +7,18 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+**`driver.trace tail --ldap` prints lines as a trace file has them**
+(`[10/15/26 15:30:01.123]:AD ST:Start transaction.`, an XML document's lines after its message). It
+used to print `[15:30:01.123] ST: Start transaction.`. `trace.view --ldap` can now read the stream
+into transactions, which it could not before, and a saved tail opens in the trace viewer.
+
+### Changed
+
+- **The trace over LDAP uses `dirxml-trace-core`'s stream** (the trace viewer's and the web's), over
+  JLDAP, in place of the simulator's `EdirTraceStream`. It needs neither the simulator nor an engine
+  jar. A certificate the JVM does not trust is accepted for the run only when the environment says
+  `trustAll`, as the vault connections do.
+
 ## [0.37.0] - 2026-10-15
 
 **Talking to a vault no longer needs any NetIQ/OpenText jar** (docs/vendor-free-vault.md). Default
