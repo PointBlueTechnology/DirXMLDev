@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-10-15
+
 **Talking to a vault no longer needs any NetIQ/OpenText jar** (docs/vendor-free-vault.md). Default
 behaviour is unchanged. `ldap.jar` is no longer one of the jars `lib/` needs: the LDAP client is
 open-source JLDAP 4.3 from Maven Central, which a release attaches (THIRD-PARTY.md).
