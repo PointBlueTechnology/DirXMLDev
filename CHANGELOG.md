@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **A role-based entitlement policy no longer compares as changed right after an import.**
+  - The tree's writer left carriage returns as they were. A parser turns CR LF into LF, so a value
+    typed on Windows came back from `rbe-policies/<name>.xml` different from the vault's. Typical
+    cases are a Description from Designer or iManager, or criteria.
+  - Carriage returns are now written as `&#13;`, and newlines and tabs in attribute values as
+    references, everywhere in the tree's XML.
+  - The compare also ignores whitespace around a policy's `DirXML-EntitlementRef` values, which the
+    tree's reader trims.
+  - A tree imported before this fix still holds the altered text. Import again, or take the vault's
+    state into the branch, to clear the difference.
+
 ## [0.40.0] - 2026-10-15
 
 ### Fixed
