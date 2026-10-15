@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-10-15
+
 **`driver.trace tail --ldap` prints lines as a trace file has them**
 (`[10/15/26 15:30:01.123]:AD ST:Start transaction.`, an XML document's lines after its message). It
 used to print `[15:30:01.123] ST: Start transaction.`. `trace.view --ldap` can now read the stream
