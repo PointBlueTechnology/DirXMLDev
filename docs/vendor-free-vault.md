@@ -172,8 +172,8 @@ vendor's decoder and then live (see Verification).
 
   `driver.cache view` on the running User Application driver and `ViewActivation` answer "Other" on
   this lab with the released vendor-class build too, so the engine refuses them and our encoding is
-  not the cause. The trace over LDAP needs the simulator jar (its `EdirTraceStream`); with it and
-  JLDAP, and no vendor jar, it streams.
+  not the cause. The trace over LDAP first needed the simulator jar (its `EdirTraceStream`). It now
+  uses the trace viewer's own stream (`dirxml-trace-core`, 2026-10-15), so it needs neither.
 - **V4 writes** (go-ahead given 2026-10-15) ran on a scratch Loopback driver and a scratch job on
   idm254. Both were deployed from the full imported tree, with a snapshot first. The vendor-free
   class path did all of these:
