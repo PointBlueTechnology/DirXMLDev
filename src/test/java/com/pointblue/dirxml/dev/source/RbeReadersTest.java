@@ -102,6 +102,30 @@ public class RbeReadersTest {
     }
 
     @Test
+    public void aPolicyReadFromTheVaultComparesEqualToItsTreeAfterAnImport() throws Exception {
+        // values as a vault holds them: a Description typed on Windows (CR LF), a grant ending in a newline,
+        // criteria with CR LF inside — an import then a compare must show no difference
+        List<Entry> vault = List.of(
+            entry(DS, "DirXML-DriverSet"),
+            entry(ENT, "DirXML-Entitlement", "XmlData", "<entitlement conflict-resolution=\"priority\" display-name=\"UserAccount\"><values multi-valued=\"false\"/></entitlement>"),
+            entry("cn=Entitlements Service," + DS, "DirXML-Driver", "DirXML-JavaModule", EntitlementPolicy.SERVICE_SHIM_CLASS),
+            entry(SET, "DirXML-SharedProfileSet", "DirXML-SPPriority", POL + "#0#0"),
+            entry(POL, "DirXML-SharedProfile", "Description", "Contractors\r\nget an AD account ",
+                "memberQuery", "ldap:///ou=users,o=data??sub?(employeeType=contractor)?x-sparse",
+                "DirXML-SPFilterXML", CRITERIA.replace("<group>", "<group>\r\n"),
+                "Member", "cn=bob,ou=users,o=data",
+                "DirXML-EntitlementRef", ENT + "#0#<ref><param>x</param></ref>\n",
+                "DirXML-SPDisplayEntitlements", DISPLAY));
+        DriverSet live = LdifReader.fromEntries(vault, "test", Map.of());
+        Path t = tmp.newFolder("imported").toPath();
+        AsCodeWriter.write(live, t);
+        DriverSet tree = AsCodeReader.read(t);
+        assertEquals("Contractors\r\nget an AD account ", tree.rbePolicy("Contractors").description);
+        com.pointblue.dirxml.dev.deploy.ModelDiff d = com.pointblue.dirxml.dev.deploy.ModelDiff.of(tree, live);
+        assertTrue(d.text(), d.changes().stream().noneMatch(c -> c.kind.isRbe()));
+    }
+
+    @Test
     public void exportRoundTripsDesignersShape() throws Exception {
         DriverSet ds = LdifReader.fromEntries(entries(), "test", Map.of());
         String xml = ExportWriter.toXml(ds);
