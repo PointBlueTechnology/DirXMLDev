@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-10-15
+
 **Behaviour change:** `role.add`, `resource.add`, `role.set` and `resource.set` now check `--category`
 against the tree's category list (`DirectoryModel/ChoiceDefs/roles-category` or
 `resources-category`). A key the list does not have is refused, and the refusal names the keys
