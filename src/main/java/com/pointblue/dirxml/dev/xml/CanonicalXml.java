@@ -104,6 +104,33 @@ public final class CanonicalXml {
         }
     }
 
+    /**
+     * Parses a file as {@link #parse} does, from its bytes so the parser follows the file's own
+     * encoding declaration. The readers of vaults, Designer projects and exports use this and
+     * {@link #parse}, not the engine's parser, so importing needs no engine jar
+     * (docs/vendor-free-vault.md).
+     */
+    public static Document parseFile(java.nio.file.Path file) {
+        Objects.requireNonNull(file, "file");
+        try (java.io.InputStream in = java.nio.file.Files.newInputStream(file)) {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setCoalescing(false);
+            factory.setExpandEntityReferences(false);
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            builder.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
+            InputSource src = new InputSource(in);
+            src.setSystemId(file.toUri().toString());
+            return builder.parse(src);
+        } catch (ParserConfigurationException | SAXException | IOException e) {
+            throw new IllegalArgumentException("Failed to parse " + file + ": " + e.getMessage(), e);
+        }
+    }
+
     /** Serializes {@code doc}'s document element per the class rules. */
     public static String serialize(Document doc) {
         Objects.requireNonNull(doc, "doc");
