@@ -520,12 +520,18 @@ public final class AsCodeWriter {
         return s.strip();
     }
 
+    /**
+     * Text content that reads back as written. A carriage return is a reference: a parser turns a literal
+     * CR LF into LF, so a value typed on Windows (a Description from Designer or iManager) would come back
+     * different and compare as changed against the vault (DirXMLDevWeb: RBE policies after an import).
+     */
     private static String xmlText(String s) {
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\r", "&#13;");
     }
 
+    /** An attribute value that reads back as written: a parser turns a literal newline or tab in one into a space. */
     private static String xmlAttr(String s) {
-        return xmlText(s).replace("\"", "&quot;");
+        return xmlText(s).replace("\"", "&quot;").replace("\n", "&#10;").replace("\t", "&#9;");
     }
 
     public static String fileSafe(String name) {

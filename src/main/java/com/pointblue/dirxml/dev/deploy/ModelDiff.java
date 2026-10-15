@@ -1154,8 +1154,9 @@ public final class ModelDiff {
         for (String s : sorted(p.excludedMembers)) {
             sb.append("excluded-member: ").append(s).append('\n');
         }
+        // the tree's reader trims each ref (a hand-indented <entitlement-ref>); whitespace around one grants nothing
         for (String s : sorted(p.entitlementRefs)) {
-            sb.append("entitlement-ref: ").append(s).append('\n');
+            sb.append("entitlement-ref: ").append(s.trim()).append('\n');
         }
         String crit = serializeOrNull(p.criteria);
         sb.append("criteria: ").append(crit == null ? "" : crit).append('\n');
