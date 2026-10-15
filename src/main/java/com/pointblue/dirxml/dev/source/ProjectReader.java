@@ -158,7 +158,7 @@ public final class ProjectReader {
         }
         if (schemaFile != null) {
             try {
-                ds.schema = com.pointblue.dirxml.dev.model.VaultSchema.fromDesigner(Xds.parseFile(schemaFile).getDocumentElement(),
+                ds.schema = com.pointblue.dirxml.dev.model.VaultSchema.fromDesigner(CanonicalXml.parseFile(schemaFile).getDocumentElement(),
                     "designer-project:" + projectDir.getFileName(), Files.getLastModifiedTime(schemaFile).toInstant());
             } catch (RuntimeException | java.io.IOException e) {
                 ds.meta.put("project.schema-error", e.getMessage());
@@ -285,7 +285,7 @@ public final class ProjectReader {
             }
             Element digest;
             try {
-                digest = Xds.parseFile(digestFile).getDocumentElement();
+                digest = CanonicalXml.parseFile(digestFile).getDocumentElement();
             } catch (Exception e) {
                 continue;
             }
@@ -404,7 +404,7 @@ public final class ProjectReader {
                 Path digestFile = f.resolve(fn + ".digest");
                 if (Files.isRegularFile(digestFile)) {
                     try {
-                        Element digest = Xds.parseFile(digestFile).getDocumentElement();
+                        Element digest = CanonicalXml.parseFile(digestFile).getDocumentElement();
                         String cn = digest.getAttribute("cn");
                         if (cn.startsWith("cn=")) {
                             segs.set(segs.size() - 1, cn.substring(3));
@@ -443,7 +443,7 @@ public final class ProjectReader {
             Path digestFile = dir.resolve(name + ".digest");
             if (Files.isRegularFile(digestFile)) {
                 try {
-                    digest = Xds.parseFile(digestFile).getDocumentElement();
+                    digest = CanonicalXml.parseFile(digestFile).getDocumentElement();
                     type = digest.getAttribute("type");
                     String cn = digest.getAttribute("cn");
                     if (cn.startsWith("cn=")) {
@@ -499,7 +499,7 @@ public final class ProjectReader {
                 Path digestFile = dir.resolve(name + ".digest");
                 if (Files.exists(digestFile)) {
                     try {
-                        readItemDigestMeta(Xds.parseFile(digestFile).getDocumentElement(), form.meta, idx);
+                        readItemDigestMeta(CanonicalXml.parseFile(digestFile).getDocumentElement(), form.meta, idx);
                     } catch (Exception e) {
                         // no digest meta; content already captured
                     }
@@ -542,7 +542,7 @@ public final class ProjectReader {
         // shape the as-code tree's own reader would produce (see its javadoc) —
         // otherwise a script with CRLF line endings (seen on the test vault) would
         // make the very first write differ from every write after a tree round trip.
-        Element root = CanonicalXml.normalize(Xds.parseFile(prdFile).getDocumentElement());
+        Element root = CanonicalXml.normalize(CanonicalXml.parseFile(prdFile).getDocumentElement());
         String fileName = prdFile.getFileName().toString();
         String name = fileName.substring(0, fileName.length() - ".prd".length());
 
@@ -562,7 +562,7 @@ public final class ProjectReader {
         Element digest = null;
         if (Files.exists(digestFile)) {
             try {
-                digest = Xds.parseFile(digestFile).getDocumentElement();
+                digest = CanonicalXml.parseFile(digestFile).getDocumentElement();
                 String cn = digest.getAttribute("cn");
                 if (cn.startsWith("cn=")) {
                     name = cn.substring(3);
@@ -745,7 +745,7 @@ public final class ProjectReader {
         String shimConfigInfo = attrValue(m, "DirXML-ShimConfigInfo");
         if (shimConfigInfo != null && !shimConfigInfo.isBlank()) {
             try {
-                d.config.put(Driver.SHIM_CONFIG_INFO, Xds.parse(shimConfigInfo).getDocumentElement());
+                d.config.put(Driver.SHIM_CONFIG_INFO, CanonicalXml.parse(shimConfigInfo).getDocumentElement());
             } catch (Exception e) {
                 d.meta.put("unparsed." + Driver.SHIM_CONFIG_INFO, truncate(shimConfigInfo));
             }
@@ -753,7 +753,7 @@ public final class ProjectReader {
         String ecv = attrValue(m, "DirXML-EngineControlValues");
         if (ecv != null && !ecv.isBlank()) {
             try {
-                d.config.put(Driver.ENGINE_CONTROL_VALUES, Xds.parse(ecv).getDocumentElement());
+                d.config.put(Driver.ENGINE_CONTROL_VALUES, CanonicalXml.parse(ecv).getDocumentElement());
             } catch (Exception e) {
                 d.meta.put("unparsed." + Driver.ENGINE_CONTROL_VALUES, truncate(ecv));
             }
@@ -785,7 +785,7 @@ public final class ProjectReader {
         if (!filterKeys.isEmpty()) {
             Path c = idx.contentsById.get(idOf(filterKeys.get(0)));
             if (c != null) {
-                Element filter = Xds.parseFile(c).getDocumentElement();
+                Element filter = CanonicalXml.parseFile(c).getDocumentElement();
                 if (filter != null) {
                     d.config.put(Driver.DRIVER_FILTER, filter);
                 }
@@ -951,7 +951,7 @@ public final class ProjectReader {
         Path c = idx.contentsById.get(id);
         if (c != null) {
             try {
-                content = Xds.parseFile(c).getDocumentElement();
+                content = CanonicalXml.parseFile(c).getDocumentElement();
             } catch (Exception e) {
                 // leave content null; nothing else to preserve without a multi-KB meta blob
             }
@@ -989,7 +989,7 @@ public final class ProjectReader {
         Path c = idx.contentsById.get(id);
         if (c != null) {
             try {
-                content = Xds.parseFile(c).getDocumentElement();
+                content = CanonicalXml.parseFile(c).getDocumentElement();
             } catch (Exception e) {
                 // leave content null
             }
@@ -1133,7 +1133,7 @@ public final class ProjectReader {
                 Path c = idx.contentsById.get(idOf(key));
                 if (c != null) {
                     try {
-                        dispEl = Xds.parseFile(c).getDocumentElement();
+                        dispEl = CanonicalXml.parseFile(c).getDocumentElement();
                     } catch (Exception e) {
                         // no display document
                     }
@@ -1225,7 +1225,7 @@ public final class ProjectReader {
                 Path c = idx.contentsById.get(id);
                 if (c != null) {
                     try {
-                        body = Xds.parseFile(c).getDocumentElement();
+                        body = CanonicalXml.parseFile(c).getDocumentElement();
                     } catch (Exception e) {
                         // a body that does not parse is left out; validate reports template-no-data
                     }
@@ -1252,7 +1252,7 @@ public final class ProjectReader {
         Path c = idx.contentsById.get(id);
         if (c != null) {
             try {
-                content = Xds.parseFile(c).getDocumentElement();
+                content = CanonicalXml.parseFile(c).getDocumentElement();
             } catch (Exception e) {
                 // leave content null
             }
@@ -1284,7 +1284,7 @@ public final class ProjectReader {
                     r.text = raw;
                 } else {
                     try {
-                        r.content = Xds.parse(raw).getDocumentElement();
+                        r.content = CanonicalXml.parse(raw).getDocumentElement();
                     } catch (Exception e) {
                         r.text = raw;
                     }
@@ -1561,7 +1561,7 @@ public final class ProjectReader {
             if (p == null) {
                 return null;
             }
-            return metaCache.computeIfAbsent(id, k -> Xds.parseFile(p).getDocumentElement());
+            return metaCache.computeIfAbsent(id, k -> CanonicalXml.parseFile(p).getDocumentElement());
         }
 
         /** package guid -> its record, from every {@code IdmPackage_} in the project (built on first use). */
@@ -1618,7 +1618,7 @@ public final class ProjectReader {
             for (Path f : configValueFiles) {
                 if (f.getFileName().toString().startsWith(prefix)) {
                     try {
-                        return Xds.parseFile(f).getDocumentElement();
+                        return CanonicalXml.parseFile(f).getDocumentElement();
                     } catch (Exception e) {
                         return null;
                     }
