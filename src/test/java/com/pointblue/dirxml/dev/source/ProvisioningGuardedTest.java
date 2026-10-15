@@ -11,6 +11,9 @@ import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.FormDocument;
 import com.pointblue.dirxml.dev.model.Prd;
 import com.pointblue.dirxml.dev.model.Provisioning;
+import com.pointblue.dirxml.dev.validate.Finding;
+import com.pointblue.dirxml.dev.validate.Report;
+import com.pointblue.dirxml.dev.validate.Validator;
 import com.pointblue.dirxml.dev.xml.CanonicalXml;
 import org.junit.Rule;
 import org.junit.Test;
@@ -49,10 +52,22 @@ public class ProvisioningGuardedTest {
 
     // ---- test11 (Designer project) --------------------------------------------------
 
+    /** No {@code form-*}/{@code prd-*} error from the validator: the forms and PRDs as read are consistent. */
+    private static void assertNoFormCheckErrors(DriverSet ds, String label) {
+        Report r = Validator.standard().validate(ds);
+        List<Finding> bad = r.of(Finding.Severity.ERROR).stream()
+            .filter(f -> f.code.startsWith("form-") || f.code.startsWith("prd-"))
+            .toList();
+        assertTrue(label + ": unexpected FormCheck error(s):\n" + bad.stream().map(Finding::toString).reduce("", (a, b) -> a + "\n" + b),
+            bad.isEmpty());
+    }
+
     @Test
     public void test11HasElevenFormsAndThirtyNinePrds() {
         assumeTrue("needs " + TEST11, Files.isDirectory(TEST11));
-        Provisioning p = provisioningOf(ProjectReader.read(TEST11));
+        DriverSet ds = ProjectReader.read(TEST11);
+        assertNoFormCheckErrors(ds, "test11");
+        Provisioning p = provisioningOf(ds);
         assertEquals(11, p.forms.size());
         assertEquals(39, p.prds.size());
 
@@ -81,7 +96,9 @@ public class ProvisioningGuardedTest {
         assumeTrue("needs " + UA_LDIF, Files.exists(UA_LDIF));
         assertEquals(272, countLdifEntries(UA_LDIF));
 
-        Provisioning p = provisioningOf(LdifReader.read(UA_LDIF));
+        DriverSet ds = LdifReader.read(UA_LDIF);
+        assertNoFormCheckErrors(ds, "ua-driver.ldif (4.8.7)");
+        Provisioning p = provisioningOf(ds);
         assertEquals(11, p.forms.size());
         assertEquals(39, p.prds.size());
         assertNotNull(p.prd("HelpdeskTicket").bindings());
@@ -95,6 +112,7 @@ public class ProvisioningGuardedTest {
         assertEquals(279, countLdifEntries(UA_LDIF_IDM254));
 
         DriverSet ds = LdifReader.read(UA_LDIF_IDM254);
+        assertNoFormCheckErrors(ds, "ua-driver-idm254.ldif (4.10.1)");
         Provisioning p = provisioningOf(ds);
         assertEquals(11, p.forms.size());
         assertEquals(39, p.prds.size());
@@ -213,7 +231,9 @@ public class ProvisioningGuardedTest {
     public void syntheticLdifHasTwoFormsAndOnePrd() throws IOException {
         Path ldif = SyntheticDriverSet.copy(SyntheticDriverSet.LDIF, Files.createTempDirectory("synth"));
         assertEquals(18, countLdifEntries(ldif));
-        Driver loop = LdifReader.read(ldif).driver(SyntheticDriverSet.DRIVER);
+        DriverSet ds = LdifReader.read(ldif);
+        assertNoFormCheckErrors(ds, "synthetic driverset.ldif");
+        Driver loop = ds.driver(SyntheticDriverSet.DRIVER);
         assertNotNull(loop);
         Provisioning p = loop.provisioning;
         assertNotNull(p);

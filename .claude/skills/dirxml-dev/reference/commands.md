@@ -138,7 +138,7 @@ A PRD deployed less than ~10 minutes ago is not requestable yet (`request` says 
 
 ## Operate
 
-`driverset.status` · `driver.status` · `driver.start|stop|restart` · `driver.cache view [--out dir] | clear --yes` · `driver.migrate --xds f --yes` · `driver.resync [--since t] --yes` · `driver.secrets list|set|remove` · `driver.trace show|set|reset|tail [--lines N] [--grep RE] [--since MIN] [--follow]` · `driver.submit --xds f --yes [--tree tree/]` · `engine.version` · `engine.stats [--driver D]`
+`driverset.status` · `driver.status` · `driver.start|stop|restart` · `driver.cache view [--out dir] | clear --yes` · `driver.migrate --xds f --yes` · `driver.resync [--since t] --yes` · `driver.secrets list|set|remove` · `driver.trace show|set|reset|tail [--lines N] [--grep RE] [--since MIN] [--follow]` · `trace.view --file F | --env E --driver D [filters] [--transaction N] --json` (a trace as transactions: event, policies, rules, actions, vetoes, statuses; best effort, shim output kept as text — docs/trace-view.md) · `driver.submit --xds f --yes [--tree tree/]` · `engine.version` · `engine.stats [--driver D]`
 
 Gating: reads are free; start/restart/trace/secrets need `--yes` on stg and `--yes --confirm <env>` on prd; stop/resync/migrate/submit need `--yes` everywhere; `cache clear` needs `--yes` (+ `--confirm` on stg/prd). Every state change is audited in `deploy-log/<env>.jsonl`.
 

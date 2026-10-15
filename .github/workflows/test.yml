@@ -66,6 +66,15 @@ jobs:
           test "$code" -eq 1
           printf '%s\n' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] is False; names={c["name"] for c in d["checks"]}; assert {"jdk","simulator","lib"} <= names'
 
+      - name: Trace parser (DirXMLTraceViewer release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TRACE=$(sed -n 's#.*<tracecore.version>\([^<]*\)</tracecore.version>.*#\1#p' pom.xml | head -1)
+          gh release download "v$TRACE" --repo PointBlueTechnology/DirXMLTraceViewer -p "dirxml-trace-core-$TRACE.jar" -D /tmp
+          printf '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>com.pointbluetech</groupId><artifactId>dirxml-trace-core</artifactId><version>%s</version></project>' "$TRACE" > /tmp/trace-core.pom
+          mvn -B -q install:install-file -Dfile=/tmp/dirxml-trace-core-$TRACE.jar -DpomFile=/tmp/trace-core.pom
+
       - name: Portable tests
         run: mvn -B -Pidm.portable test
       - name: Set up Node 22
@@ -108,6 +117,15 @@ jobs:
 
       - name: Require engine jars and simulator
         run: bash bin/require-engine.sh
+
+      - name: Trace parser (DirXMLTraceViewer release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TRACE=$(sed -n 's#.*<tracecore.version>\([^<]*\)</tracecore.version>.*#\1#p' pom.xml | head -1)
+          gh release download "v$TRACE" --repo PointBlueTechnology/DirXMLTraceViewer -p "dirxml-trace-core-$TRACE.jar" -D /tmp
+          printf '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>com.pointbluetech</groupId><artifactId>dirxml-trace-core</artifactId><version>%s</version></project>' "$TRACE" > /tmp/trace-core.pom
+          mvn -B -q install:install-file -Dfile=/tmp/dirxml-trace-core-$TRACE.jar -DpomFile=/tmp/trace-core.pom
 
       - name: Test
         run: mvn -B test
