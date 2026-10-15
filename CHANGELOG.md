@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- **A deploy scoped to drivers is no longer refused for validation errors in drivers it leaves
+  alone.**
+  - It's held to errors in its own drivers, in the Library artifacts they link, in the RBE policies
+    when the Entitlements Service driver is in scope, and at the driver-set level.
+  - Errors elsewhere are listed on the plan's first line and don't block.
+  - A whole-driver-set deploy still needs the whole tree clean.
+  - Before this, one broken policy in any driver blocked every deploy of a production driver set
+    (`deploy/ValidationScope`, docs/validation.md).
+
 ### Fixed
 
 - **A role-based entitlement policy no longer compares as changed right after an import.**
