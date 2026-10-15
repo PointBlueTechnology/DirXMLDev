@@ -56,6 +56,12 @@ public final class Validator {
             } catch (RuntimeException e) {
                 r.add(Finding.error("check-failed", "driverset",
                     "check '" + c.name() + "' threw " + e, stackTop(e)));
+            } catch (NoClassDefFoundError e) {
+                // the engine's classes (lib/: dirxml.jar, dirxml_misc.jar, js.jar …) are not on the class
+                // path: a check that runs the engine is skipped, the others go on (docs/vendor-free-vault.md)
+                r.add(Finding.info("check-skipped-no-engine", "driverset",
+                    "check '" + c.name() + "' needs the Identity Manager engine jars (lib/), which are not on the class path: skipped ("
+                        + e.getMessage() + " not found)"));
             }
         }
         return r;
