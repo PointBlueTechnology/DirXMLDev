@@ -421,6 +421,52 @@ export const tools = [
     },
   },
   {
+    name: "idm.trace.view",
+    title: "Trace as transactions",
+    description:
+      "bin/idm trace.view (--file F | --env E --driver D [--lines N | --since MIN | --ldap --seconds N]) [filters] --json. A driver trace as transactions: per driver and channel, the event's operation/class/DN, the policy sets and policies applied with their rules and actions, vetoes and <status> documents, worst status, and each transaction's input line ranges. Best effort: only the engine's own wording is read; anything a shim prints is kept and counted as unrecognized, never interpreted, so an empty status or veto list means none was recognized. Pass transaction: N for that transaction's raw text. A bounded read; never follows.",
+    annotations: READ_VAULT,
+    inputSchema: z.object({
+      file: z.string().min(1).optional().describe("--file: a trace file on this machine. Give this or env + driver."),
+      env: envName.optional().describe("--env, with driver: read the driver's trace from the environment."),
+      driver: z.string().min(1).optional().describe("With env: the driver whose trace to read. With file: keep only this trace name's transactions."),
+      lines: z.number().int().min(1).max(50000).optional().describe("--lines over SSH. CLI default is 2000."),
+      since: z.number().int().min(0).max(100000).optional().describe("--since, in minutes, over SSH."),
+      ldap: z.boolean().optional().describe("--ldap: live events over LDAP for `seconds` (the default when the environment has no sshHost)."),
+      seconds: z.number().int().min(1).max(300).optional().describe("--seconds for --ldap. CLI default is 30."),
+      channel: z.enum(["subscriber", "publisher", "service", "other"]).optional().describe("--channel filter."),
+      status: z.enum(["success", "warning", "retry", "error", "fatal"]).optional().describe("--status: transactions with a status document at this level."),
+      vetoed: z.boolean().optional().describe("--vetoed: transactions with a recognized veto."),
+      text: z.string().min(1).optional().describe("--text: a regular expression the transaction's raw text must match."),
+      last: z.number().int().min(1).max(500).optional().describe("--last: the most recent N matching transactions. CLI default is 20."),
+      transaction: z.number().int().min(1).optional().describe("--transaction N: that one transaction with its raw text."),
+    }),
+    bin: "idm",
+    build(a) {
+      const argv = ["trace.view"];
+      if (a.file !== undefined) {
+        if (a.env !== undefined) throw new Error("give file or env, not both");
+        argv.push("--file", safeValue("file", a.file));
+        if (a.driver !== undefined) argv.push("--driver", safeToken("driver", a.driver));
+      } else {
+        if (a.env === undefined || a.driver === undefined) throw new Error("give file, or env and driver");
+        argv.push("--env", safeToken("env", a.env), "--driver", safeToken("driver", a.driver));
+        if (a.lines !== undefined) argv.push("--lines", safeInt("lines", a.lines, { min: 1, max: 50000 }));
+        if (a.since !== undefined) argv.push("--since", safeInt("since", a.since, { min: 0, max: 100000 }));
+        if (a.ldap) argv.push("--ldap");
+        if (a.seconds !== undefined) argv.push("--seconds", safeInt("seconds", a.seconds, { min: 1, max: 300 }));
+      }
+      if (a.channel !== undefined) argv.push("--channel", a.channel);
+      if (a.status !== undefined) argv.push("--status", a.status);
+      if (a.vetoed) argv.push("--vetoed");
+      if (a.text !== undefined) argv.push("--text", safeValue("text", a.text));
+      if (a.last !== undefined) argv.push("--last", safeInt("last", a.last, { min: 1, max: 500 }));
+      if (a.transaction !== undefined) argv.push("--transaction", safeInt("transaction", a.transaction, { min: 1 }));
+      argv.push("--json");
+      return argv;
+    },
+  },
+  {
     name: "apps.permission",
     title: "PRD permission",
     description: "bin/apps --env E --json permission <PRD>. Whether the PRD is in the Identity Applications permission index, and its request form. Read-only.",

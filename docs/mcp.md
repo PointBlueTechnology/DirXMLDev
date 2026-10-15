@@ -57,7 +57,9 @@ Every tool returns one JSON object. `schemaVersion` is `1` on that envelope. Whe
 
 ## Tools
 
-Reads and dry-runs: `idm.context`, `idm.check`, `idm.validate`, `idm.query`, `idm.show`, `idm.refs`, `idm.package.diff`, `idm.tree.diff`, `idm.simulate`, `idm.form.list`, `idm.form.show`, `idm.prd.list`, `idm.prd.show`, `idm.prd.flow`, `idm.package.status`, `idm.vault.diff`, `idm.vault.verify`, `idm.vault.deploy.plan`, `idm.driverset.status`, `idm.driver.status`, `idm.driver.cache.view`, `idm.engine.version`, `idm.engine.stats`, `idm.driver.trace.show`, `idm.driver.trace.tail`.
+Reads and dry-runs: `idm.context`, `idm.check`, `idm.validate`, `idm.query`, `idm.show`, `idm.refs`, `idm.package.diff`, `idm.tree.diff`, `idm.simulate`, `idm.form.list`, `idm.form.show`, `idm.prd.list`, `idm.prd.show`, `idm.prd.flow`, `idm.package.status`, `idm.vault.diff`, `idm.vault.verify`, `idm.vault.deploy.plan`, `idm.driverset.status`, `idm.driver.status`, `idm.driver.cache.view`, `idm.engine.version`, `idm.engine.stats`, `idm.driver.trace.show`, `idm.driver.trace.tail`, `idm.trace.view`.
+
+`idm.trace.view` returns a trace as transactions: the event, the policies applied, vetoes and statuses, and each transaction's line ranges. It reads a file, or makes a bounded read of a driver's trace from an environment, and never follows. Its structure is best effort ([trace-view.md](trace-view.md)): only the engine's own wording is read, and a shim's own output is kept as text.
 
 Identity Applications, read-only: `apps.permission`, `apps.tasks`, `apps.task`, `apps.history`, `apps.token`.
 

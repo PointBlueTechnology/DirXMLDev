@@ -274,12 +274,13 @@ public class PlanTest {
     // ---- the mass-deletion guard (docs/vault-deploy.md, "Deploy never empties a kind") ------
 
     /**
-     * The vault has 3 entitlements on "AD" that the tree lacks entirely (the 2026-09-16 incident,
-     * generalized): the guard holds every delete back and records one note; {@code --delete-all
-     * entitlements} re-enables all three; a partial removal (tree keeps 1 of 3) is unaffected.
+     * The kind-wide guard counts a whole kind only: 3 entitlements on "AD" that the tree lacks
+     * entirely are one empty kind; a partial removal (the tree keeps 1 of 3) is none, and its deletes
+     * plan as usual. The guard's refusal and {@code --delete-all} override, end to end with the audit
+     * line, are {@code DeployerTest.deleteAllEntitlementsIsGuardedThenOverriddenAndAudited}.
      */
     @Test
-    public void kindWideAbsenceGuardHoldsBackDeletesUntilDeleteAll() {
+    public void kindWideAbsenceIsAWholeKind_notAPartialRemoval() {
         DriverSet from = VaultMappingTest.model();
         DriverSet to = VaultMappingTest.model();
         Driver fromAd = from.driver("AD");
@@ -288,8 +289,6 @@ public class PlanTest {
                 ValidatorTest.xml("<entitlement conflict-resolution=\"union\" display-name=\"" + name
                     + "\"><values multi-valued=\"true\"><value>a</value></values></entitlement>")));
         }
-        // to.driver("AD") has none: the guard applies
-
         ModelDiff diff = ModelDiff.of(from, to);
         assertEquals(3, diff.changes().size());
         assertEquals(1, diff.emptyKinds().size());
@@ -297,21 +296,8 @@ public class PlanTest {
         assertEquals("entitlements", diff.emptyKinds().get(0).kind);
         assertEquals(3, diff.emptyKinds().get(0).count);
 
-        Plan guarded = Plan.of(diff, to, DS, Secrets.none(), "none", Map.of(), true);
-        assertTrue(guarded.text("stg", DS), guarded.steps.isEmpty());
-        assertTrue(guarded.notes.toString(), guarded.notes.stream().anyMatch(n -> n.contains(
-            "driver 'AD': the tree has no entitlements but the vault has 3 — an older tree? "
-                + "re-import (import-live) to adopt them, or pass --delete-all entitlements to delete them")));
-
-        Plan overridden = Plan.of(diff, to, DS, Secrets.none(), "none", Map.of(), true, null, List.of("entitlements"));
-        assertEquals(3, overridden.steps.size());
-        assertTrue(overridden.steps.stream().allMatch(s -> s.op == Plan.Op.DELETE));
-        assertEquals(List.of("entitlements"), List.copyOf(overridden.deleteAllKinds));
-        assertTrue(overridden.text("stg", DS).contains("--delete-all entitlements"));
-
         // a partial removal (the tree keeps one of the three) is never guarded
-        Driver toAd = to.driver("AD");
-        toAd.entitlements.add(new Entitlement("E1", ValidatorTest.xml(
+        to.driver("AD").entitlements.add(new Entitlement("E1", ValidatorTest.xml(
             "<entitlement conflict-resolution=\"union\" display-name=\"E1\"><values multi-valued=\"true\"><value>a</value></values></entitlement>")));
         ModelDiff partialDiff = ModelDiff.of(from, to);
         assertTrue(partialDiff.emptyKinds().isEmpty());

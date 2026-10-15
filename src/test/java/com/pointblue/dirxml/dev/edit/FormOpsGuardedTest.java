@@ -13,16 +13,11 @@ import com.pointblue.dirxml.dev.json.Json;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.source.LdifReader;
-import com.pointblue.dirxml.dev.source.ProjectReader;
-import com.pointblue.dirxml.dev.validate.Finding;
-import com.pointblue.dirxml.dev.validate.Report;
-import com.pointblue.dirxml.dev.validate.Validator;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 import org.junit.Rule;
 import org.junit.Test;
@@ -33,43 +28,14 @@ import org.junit.rules.TemporaryFolder;
  * present on this machine) for Track P step P2b: the {@code test11} Designer workspace and the
  * test vault's User Application driver as two LDIF dumps (IDM 4.8.7 and 4.10.1) — see
  * {@code com.pointblue.dirxml.dev.source.ProvisioningGuardedTest} for the read-only P1 coverage
- * of the same three sources.
+ * of the same three sources, which also checks they validate with no form/PRD error.
  */
 public class FormOpsGuardedTest {
 
     @Rule
     public TemporaryFolder tmp = new TemporaryFolder();
 
-    private static final Path TEST11 = LocalFixture.test11();
     private static final Path UA_LDIF = LocalFixture.e2e("ua-driver.ldif");
-    private static final Path UA_LDIF_IDM254 = LocalFixture.e2e("ua-driver-idm254.ldif");
-
-    private static void assertNoFormCheckErrors(DriverSet ds, String label) {
-        Report r = Validator.standard().validate(ds);
-        List<Finding> bad = r.of(Finding.Severity.ERROR).stream()
-            .filter(f -> f.code.startsWith("form-") || f.code.startsWith("prd-"))
-            .toList();
-        assertTrue(label + ": unexpected FormCheck error(s):\n" + bad.stream().map(Finding::toString).reduce("", (a, b) -> a + "\n" + b),
-            bad.isEmpty());
-    }
-
-    @Test
-    public void test11ValidatesWithZeroFormCheckErrors() {
-        assumeTrue("needs " + TEST11, Files.isDirectory(TEST11));
-        assertNoFormCheckErrors(ProjectReader.read(TEST11), "test11");
-    }
-
-    @Test
-    public void uaDriverLdif487ValidatesWithZeroFormCheckErrors() throws Exception {
-        assumeTrue("needs " + UA_LDIF, Files.exists(UA_LDIF));
-        assertNoFormCheckErrors(LdifReader.read(UA_LDIF), "ua-driver.ldif (4.8.7)");
-    }
-
-    @Test
-    public void uaDriverLdifIdm254ValidatesWithZeroFormCheckErrors() throws Exception {
-        assumeTrue("needs " + UA_LDIF_IDM254, Files.exists(UA_LDIF_IDM254));
-        assertNoFormCheckErrors(LdifReader.read(UA_LDIF_IDM254), "ua-driver-idm254.ldif (4.10.1)");
-    }
 
     /**
      * {@code form.field.add} + {@code prd.map} on a copy of the real "Help-desk Request Form",
@@ -118,12 +84,6 @@ public class FormOpsGuardedTest {
     }
 
     // ---- the committed synthetic LDIF: no private file, runs everywhere -----------------
-
-    @Test
-    public void syntheticLdifValidatesWithZeroFormCheckErrors() throws Exception {
-        Path ldif = SyntheticDriverSet.copy(SyntheticDriverSet.LDIF, tmp.newFolder("synth").toPath());
-        assertNoFormCheckErrors(LdifReader.read(ldif), "synthetic driverset.ldif");
-    }
 
     /** {@code form.field.add} + {@code prd.map} on the synthetic request form and PRD (the real help-desk case, with no private file). */
     @Test

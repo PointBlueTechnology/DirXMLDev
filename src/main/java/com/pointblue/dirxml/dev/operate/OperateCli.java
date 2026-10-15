@@ -75,6 +75,9 @@ public final class OperateCli {
         if (cmd.equals("driver.trace") && "view".equals(sub)) {
             return ViewerCli.view(opts, json);   // the viewer opens its own connection; a file needs none
         }
+        if (cmd.equals("trace.view") && opts.containsKey("file")) {
+            return com.pointblue.dirxml.dev.trace.TraceViewCli.file(opts, json);   // a file needs no environment
+        }
         String envName = first(opts, "env");
         if (envName == null) {
             System.err.println("--env <name> is required (environments.properties; see docs/vault-deploy.md)");
@@ -323,6 +326,19 @@ public final class OperateCli {
                     break;
                 }
 
+                case "trace.view": {
+                    if (driver == null) {
+                        System.err.println(com.pointblue.dirxml.dev.trace.TraceViewCli.USAGE);
+                        return 2;
+                    }
+                    List<String> lines = new ArrayList<>();
+                    String source = fetchTrace(engine, env, driver, opts, lines);
+                    if (source == null) {
+                        return 1;
+                    }
+                    return com.pointblue.dirxml.dev.trace.TraceViewCli.print(source, lines, opts, json, first(opts, "trace-driver"));
+                }
+
                 case "driver.start-option": {
                     String option = first(opts, "option");
                     if (driver == null || option == null) {
@@ -538,6 +554,36 @@ public final class OperateCli {
             }
         }
         return 0;
+    }
+
+    /**
+     * The driver's trace lines for {@code trace.view}, bounded as {@code driver.trace tail} bounds them:
+     * over SSH the last {@code --lines} (default 2000) or {@code --since MIN} of its DirXML-TraceFile;
+     * over LDAP ({@code --ldap}, or no {@code sshHost}) {@code --seconds} (default 30) of live events.
+     * Returns a description of the source, or null (having said why) when there is none.
+     */
+    private static String fetchTrace(Operate.Engine engine, Environments.Environment env, String driver,
+                                     Map<String, List<String>> opts, List<String> into) throws Exception {
+        if (opts.containsKey("ldap") || env.sshHost == null) {
+            long seconds = opts.containsKey("seconds") ? Long.parseLong(first(opts, "seconds")) : 30;
+            into.addAll(LdapTrace.collect(env, driver, null, opts.containsKey("engine"), seconds));
+            return "env " + env.name + " driver " + driver + " (" + seconds + "s over LDAP)";
+        }
+        com.pointblue.dirxml.dev.deploy.Vault.Entry d = engine.read(
+            com.pointblue.dirxml.dev.deploy.VaultMapping.driverDn(env.driverSetDn, driver));
+        String file = d == null ? null : d.string(com.pointblue.dirxml.dev.deploy.Vault.TRACE_FILE);
+        if (file == null || file.isBlank()) {
+            System.err.println("driver '" + driver + "' has no DirXML-TraceFile; set one with driver.trace set --file, or use --ldap");
+            return null;
+        }
+        TraceTail tail = new TraceTail(env.sshUser, env.sshHost);
+        if (opts.containsKey("since")) {
+            into.addAll(tail.since(file, Integer.parseInt(first(opts, "since")), null));
+            return "env " + env.name + " driver " + driver + " " + file + " (last " + first(opts, "since") + " min)";
+        }
+        int lines = opts.containsKey("lines") ? Integer.parseInt(first(opts, "lines")) : 2000;
+        into.addAll(tail.tail(file, lines, null));
+        return "env " + env.name + " driver " + driver + " " + file + " (last " + lines + " lines)";
     }
 
     /**
