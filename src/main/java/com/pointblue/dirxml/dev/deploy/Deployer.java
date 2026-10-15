@@ -225,11 +225,18 @@ public final class Deployer {
         Environments.Environment env = o.env;
         String dsDn = env.driverSetDn;
 
-        // 1. the tree must validate clean — no way to skip
+        // 1. the tree must validate clean — no way to skip. A deploy scoped to drivers is held to what it
+        //    deploys (ValidationScope): an error in a driver it leaves alone is listed, not a refusal.
         Report validation = Validator.standard().validate(o.tree);
+        String validationNote = "";
         if (!validation.ok()) {
-            r.refusal = "the tree does not validate: " + validation.summary() + " — fix it first (idm validate)";
-            return r;
+            ValidationScope.Split split = o.drivers.isEmpty() ? null : ValidationScope.split(validation, o.tree, o.drivers);
+            if (split == null || !split.blocking.isEmpty()) {
+                r.refusal = "the tree does not validate: " + (split == null ? validation.summary()
+                    : split.blocking.size() + " error(s) in what this deploy writes:\n" + ValidationScope.list(split.blocking)) + " — fix it first (idm validate)";
+                return r;
+            }
+            validationNote = split.note();
         }
         for (String k : o.deleteAllKinds) {
             if (!VALID_DELETE_ALL_KINDS.contains(k)) {
@@ -265,7 +272,7 @@ public final class Deployer {
                 }
             }
             Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault, o.deleteAllKinds);
-            r.planText = overrideNote + plan.text(env.name, dsDn);
+            r.planText = validationNote + overrideNote + plan.text(env.name, dsDn);
             if (!plan.deleteDriverRefusals.isEmpty()) {
                 r.refusal = String.join("; ", plan.deleteDriverRefusals);
                 return r;
