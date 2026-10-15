@@ -499,7 +499,8 @@ public final class ModelDiff {
         List<EmptyKind> emptyKinds = emptyKinds();
         for (int i = 0; i < emptyKinds.size(); i++) {
             EmptyKind ek = emptyKinds.get(i);
-            sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(q(ek.driver))
+            // the driver set's own kinds (jobs, rbe-policies) have no driver: null, not a crash (DirXMLDevWeb#116)
+            sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(ek.driver == null ? "null" : q(ek.driver))
                 .append(",\"kind\":").append(q(ek.kind))
                 .append(",\"count\":").append(ek.count)
                 .append(",\"note\":").append(q(ek.note()))
@@ -1575,7 +1576,11 @@ public final class ModelDiff {
         return out;
     }
 
+    /** A JSON string; {@code null} for a null one, so a missing field never fails the whole diff. */
     private static String q(String s) {
+        if (s == null) {
+            return "null";
+        }
         StringBuilder sb = new StringBuilder("\"");
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);

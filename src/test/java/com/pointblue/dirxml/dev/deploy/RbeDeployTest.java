@@ -125,4 +125,22 @@ public class RbeDeployTest {
         // the tree still has a policy, so the guard does not hold the delete back
         assertTrue(p.notes.toString(), p.notes.stream().noneMatch(n -> n.contains("rbe-policies")));
     }
+
+    /**
+     * DirXMLDevWeb#116: the vault has RBE policies and the tree none, a driver-set-level empty kind with no
+     * driver; the diff's JSON (what the web's Compare reads) failed on it with a NullPointerException.
+     */
+    @Test
+    public void aDriverSetLevelEmptyKindRendersAsJson() throws Exception {
+        Path t = tree();
+        DriverSet from = AsCodeReader.read(t);
+        DriverSet to = AsCodeReader.read(t);
+        from.rbePolicies.add(policy("Only", 1));
+        ModelDiff diff = ModelDiff.of(from, to);
+        assertEquals(1, diff.emptyKinds().size());
+        assertEquals(null, diff.emptyKinds().get(0).driver);
+        String json = diff.json();
+        assertTrue(json, json.contains("\"emptyKinds\":[{\"driver\":null,\"kind\":\"rbe-policies\""));
+        assertTrue(json, json.contains("driver set: the tree has no rbe-policies"));
+    }
 }
