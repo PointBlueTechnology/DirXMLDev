@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-10-15
+
 ### Fixed
 
 - **Importing needs no engine jar.** `import-live`, `vault.diff`, deploy's read of the vault, and
