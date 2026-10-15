@@ -31,7 +31,10 @@ import static org.junit.Assert.assertTrue;
  */
 public class VendorFreeTest {
 
-    /** The console's calls into DirXMLDev (directory-console, 2026-10-15): owner, method name ("*" = all). */
+    /**
+     * The console's calls into DirXMLDev (directory-console main at 06e2035, 2026-10-15): owner, method name
+     * ("*" = all). When the console calls something new, add it here.
+     */
     static final String[][] ROOTS = {
         {"com/pointblue/dirxml/dev/operate/Operate", "vaultEngine"},
         {"com/pointblue/dirxml/dev/operate/Operate", "driverStatus"},
@@ -39,6 +42,20 @@ public class VendorFreeTest {
         {"com/pointblue/dirxml/dev/operate/Operate", "jobList"},
         {"com/pointblue/dirxml/dev/operate/Operate", "engineVersion"},
         {"com/pointblue/dirxml/dev/operate/Operate", "driversetServers"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "startOption"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "resync"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "passwordSync"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "migrate"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "migrateIntoApp"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "logLevelSet"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "lifecycle"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "jobAction"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "engineStats"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "driversetStatus"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "driversetActivation"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "driverHealth"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "driverAssociations"},
+        {"com/pointblue/dirxml/dev/operate/Operate", "cacheClear"},
         {"com/pointblue/dirxml/dev/operate/Operate$Engine", "*"},
         {"com/pointblue/dirxml/dev/operate/Operate$Result", "*"},
         {"com/pointblue/dirxml/dev/operate/Operate$CachePage", "*"},
@@ -47,6 +64,9 @@ public class VendorFreeTest {
         {"com/pointblue/dirxml/dev/deploy/Vault", "stateName"},
         {"com/pointblue/dirxml/dev/deploy/Vault$Entry", "*"},
         {"com/pointblue/dirxml/dev/deploy/Vault$JobState", "*"},
+        {"com/pointblue/dirxml/dev/deploy/Vault$VaultException", "*"},
+        {"com/pointblue/dirxml/dev/deploy/IdmOps", "*"},
+        {"com/pointblue/dirxml/dev/deploy/IdmOps$Reply", "*"},
         {"com/pointblue/dirxml/dev/deploy/Environments", "load"},
         {"com/pointblue/dirxml/dev/deploy/Environments$Environment", "*"},
         {"com/pointblue/dirxml/dev/LegacyTls", "enable"},
@@ -401,6 +421,10 @@ public class VendorFreeTest {
                 }
             }
         }
+        for (String[] r : ROOTS) {
+            boolean exists = seen.stream().anyMatch(k -> k.startsWith(r[0] + ".") && (r[1].equals("*") || k.startsWith(r[0] + "." + r[1] + "(")));
+            assertTrue("the console calls " + r[0] + "." + r[1] + ", which the walk did not find (renamed?)", exists);
+        }
         StringBuilder why = new StringBuilder();
         for (Map.Entry<String, Set<String>> b : bad.entrySet()) {
             StringBuilder chain = new StringBuilder(b.getKey());
@@ -411,6 +435,7 @@ public class VendorFreeTest {
             why.append("\n  ").append(chain).append("\n      names ").append(b.getValue());
         }
         assertTrue("reached " + seen.size() + " methods; these name vendor classes:" + why, bad.isEmpty());
+        assertTrue("the walk is the console's whole surface, not a corner of it (" + seen.size() + " methods)", seen.size() > 300);
         assertTrue("the walk reached the extended operations",
             seen.stream().anyMatch(s -> s.startsWith("com/pointblue/dirxml/dev/deploy/IdmOps.request")));
     }
