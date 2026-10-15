@@ -7,6 +7,31 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`bin/apps flush [--holder NAME]` and `bin/apps holders`.** These call the Identity Applications'
+  cache flush, `DELETE /IDMProv/rest/admin/cache/holder/items` (default holder `All Cache`). A PRD
+  deployed a moment ago is then requestable at once, with no 10-minute wait for the permission
+  index (live on idm254). The request, its required fields and the effect are in
+  docs/idapps-rest.md §3.1.
+- **`bin/apps permission <PRD> --wait SECONDS`** polls until the PRD is in the index, with one
+  sign-in.
+
+### Fixed
+
+- **`bin/apps` signs in once per process** and renews only near expiry. Every OSP password sign-in
+  grows the user's `oidpInstanceData`. On idm254 a loop of separate calls filled it, and every
+  sign-in for that user then failed (eDirectory -649). docs/idapps-rest.md §1 says how to recover
+  and avoid it.
+- **`bin/apps` prints OSP's own error** when a sign-in fails.
+
+### Documentation
+
+- **W3 live proof, part 2.** `start-flow` runs. `role-request` and `resource-request` are accepted as
+  written (their `GRANT`/`USER` children are enum literals) but on idm254 their grant fails fetching
+  the workflow administrator's OAuth token, which is lab configuration
+  (docs/spikes/w3-rest-live.md, docs/workflows.md §4 W3).
+
 ## [0.35.0] - 2026-10-14
 
 ### Fixed

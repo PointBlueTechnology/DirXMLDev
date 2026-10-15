@@ -15,12 +15,17 @@ The environment's keys (same file as vault.deploy; never committed):
 
 Commands (see docs/idapps-rest.md for the bodies and accepted values):
     token                          print token length + expiry (never the token)
-    permission <PRD name|DN>       PRD detail from the permission index (POST /permissions/item)
+    permission <PRD name|DN> [--wait SECONDS]
+                                   PRD detail from the permission index (POST /permissions/item); --wait polls until
+                                   it is there, with one sign-in (never a loop of bin/apps calls: see token())
     request <PRD name|DN> [--recipient DN] [--data key=value]...
                                    start the PRD (POST /requests/permissions/v2); --data may repeat,
                                    a repeated key becomes a multi-valued item
+    flush [--holder NAME]...       flush the applications' caches (DELETE /IDMProv/rest/admin/cache/holder/items; default
+                                   "All Cache"): a PRD deployed a moment ago is requestable at once (no 10-minute wait)
+    holders                        the cache holders a flush can name (GET /IDMProv/rest/admin/cache/holders)
     index <PRD name|DN> [--op ADD_OR_MODIFY|REMOVE|REFRESH]
-                                   tell the permission index about a PRD (POST /index/permissions); answers success but does not make a new PRD requestable sooner
+                                   tell the permission index about a PRD (POST /index/permissions); answers success but does not make a new PRD requestable sooner — flush does
     tasks [--q text] [--size N]    my open tasks (GET /tasks/list)
     task <taskId>                  one task with its data items (POST /tasks/item)
     approve|deny|claim|refuse|release <taskId>... [--process NAME] [--comment TEXT]
@@ -31,7 +36,7 @@ Commands (see docs/idapps-rest.md for the bodies and accepted values):
 
 Exit status 0 when the call reports success, 1 otherwise; --json prints the raw response.
 """
-import argparse, base64, json, os, ssl, sys, urllib.error, urllib.parse, urllib.request
+import argparse, base64, json, os, ssl, sys, time, urllib.error, urllib.parse, urllib.request
 
 PRD_SUFFIX = ",cn=RequestDefs,cn=AppConfig,cn=User Application Driver,cn=driverset1,o=system"
 
@@ -120,9 +125,13 @@ class Apps:
             self.ctx.check_hostname = False
             self.ctx.verify_mode = ssl.CERT_NONE
         self.token_info = None
+        self.token_at = 0.0
 
     def token(self):
-        if self.token_info:
+        # one sign-in per process, renewed only when it is about to expire: OSP keeps data on the user
+        # (oidpInstanceData) for every password sign-in, and a loop of separate calls fills it (eDirectory -649,
+        # every sign-in for that user then fails; docs/idapps-rest.md §1)
+        if self.token_info and time.time() - self.token_at < max(30, int(self.token_info.get("expires_in", 120)) - 20):
             return self.token_info["access_token"]
         auth = base64.b64encode((self.client + ":" + self.secret).encode()).decode()
         data = urllib.parse.urlencode({"grant_type": "password", "username": self.user, "password": self.password}).encode()
@@ -132,8 +141,15 @@ class Apps:
         try:
             with urllib.request.urlopen(req, context=self.ctx, timeout=30) as r:
                 self.token_info = json.load(r)
+                self.token_at = time.time()
         except urllib.error.HTTPError as e:
-            sys.exit("token: HTTP %d from %s (client %s, user %s)" % (e.code, self.base, self.client, self.user))
+            # OSP answers {"error": …, "error_description": …}: the reason, never a credential
+            try:
+                body = e.read().decode("utf-8", "replace").strip()[:300]
+            except Exception:
+                body = ""
+            sys.exit("token: HTTP %d from %s (client %s, user %s)%s" % (e.code, self.base, self.client, self.user,
+                                                                       (": " + body) if body else ""))
         return self.token_info["access_token"]
 
     def call(self, method, path, body=None, query=None, prefix="/IDMProv/rest/access"):
@@ -198,9 +214,14 @@ def main(argv):
         return 0
 
     if cmd == "permission":
-        o = sub([("prd", {})])
-        st, r = apps.call("POST", "/permissions/item", {"id": apps.prd_dn(o.prd), "entityType": "prd"})
-        ok = st == 200 and isinstance(r, dict) and "Fault" not in r
+        o = sub([("prd", {}), ("--wait", {"type": int, "default": 0})])
+        deadline = time.time() + o.wait
+        while True:
+            st, r = apps.call("POST", "/permissions/item", {"id": apps.prd_dn(o.prd), "entityType": "prd"})
+            ok = st == 200 and isinstance(r, dict) and "Fault" not in r
+            if ok or time.time() >= deadline:
+                break
+            time.sleep(20)
         if ok and not a.json:
             for k in ("name", "id", "entityType", "categories", "requestFormId", "isNewForm", "edition"):
                 print("  %-14s %s" % (k, r.get(k)))
@@ -224,7 +245,25 @@ def main(argv):
                     print("started: request %s for %s" % (s.get("requestId"), node.get("userDn")))
         elif isinstance(r, dict) and r.get("success") is False and not fault(r):
             print("not started — the PRD is not in the permission index yet (deploy < 10 min ago?); "
-                  "wait for the index interval (up to 10 minutes; 'bin/apps permission <PRD>' says when it is there — the index command does not shorten it)", file=sys.stderr)
+                  "'bin/apps flush' makes it requestable at once (or wait for the index interval, up to 10 minutes; the index command does not shorten it)", file=sys.stderr)
+        return out(st, r, ok)
+
+    if cmd == "flush":
+        o = sub([("--holder", {"action": "append", "default": None})])
+        holders = o.holder or ["All Cache"]
+        st, r = apps.call("DELETE", "/cache/holder/items", {"cacheHolderItems": [{"cacheHolderID": h} for h in holders]},
+                          prefix="/IDMProv/rest/admin")
+        ok = st in (200, 204)
+        if ok and not a.json:
+            print("flushed: %s" % ", ".join(holders))
+        return out(st, r, ok)
+
+    if cmd == "holders":
+        st, r = apps.call("GET", "/cache/holders", prefix="/IDMProv/rest/admin")
+        ok = st == 200 and isinstance(r, dict)
+        if ok and not a.json:
+            for h in r.get("cacheHolders", []):
+                print("  " + str(h.get("cacheHolderID")))
         return out(st, r, ok)
 
     if cmd == "index":

@@ -22,6 +22,7 @@ what the dashboard or the JSON form renderer sends.
 |---|---|
 | Base | `https://<apps host>/IDMProv/rest/access` for everything below (the dashboard's `_restAccess`). Catalog calls (`/prds`, roles, resources) live under `/IDMProv/rest/catalog`; caching/admin under `/IDMProv/rest/admin`. A path called under the wrong base is a Tomcat 404 **[live]**. |
 | Token | `POST https://<apps host>/osp/a/idm/auth/oauth2/token`, header `Authorization: Basic base64(<client>:<client secret>)`, `Content-Type: application/x-www-form-urlencoded`, body `grant_type=password&username=<user>&password=<password>`. Response `{"access_token","token_type":"bearer","expires_in","refresh_token"}`. **Required:** all three body fields and the client credentials. Client ids that work: `rbpmrest` (the documented REST client) and `rbpm` (the dashboard's own); on the lab both accept the lab's client secret **[live]**. |
+| Sign-ins fill a user's `oidpInstanceData` | OSP writes data to the signed-in user's `oidpInstanceData` (one value) on every password sign-in. At about 32 KB eDirectory refuses the write (`-649 insufficient buffer`) and **every sign-in for that user then fails**: `HTTP 500 {"error":"server_error","error_description":"Unexpected error.","sub_error":"exception"}`, with OSP's log reading "Error writing instance data for '<user DN>'" **[live, 2026-10-15]**. It filled on idm254 after two days of scripted runs that signed in once per call, finished by a 9-minute polling loop. Recover by deleting the attribute's value (OSP starts it afresh; the user's outstanding OSP sessions go). Avoid it by signing in once and reusing the token until it expires: `bin/apps` does so within a process, and `permission --wait` polls with one sign-in. |
 | Every call | `Authorization: Bearer <access_token>`, `Content-Type: application/json`, `Accept: application/json`. |
 | Errors | HTTP **489** (application error) or **400** (input rejected by the XSS filter) with `{"Fault":{"Code":{"Value":"Sender","Subcode":{"Value":"<code>"}},"Reason":{"Text":"…"}}}`. Subcodes seen/read: `PermissionIndexException` (permission not in the index), `InternalExceptionOccured`, `InvalidInput`, `SecurityException`, `NotFound`, `InvalidEnumValue` (a bad task action), `XSSValidationFailure` (400) **[live/server]**. A 200 with `"success": false` and no `Fault` is also a failure — see §2. |
 
@@ -77,7 +78,8 @@ vault on a timer: `com.netiq.idm.cis.rbpm.updateInterval.prd` (or the generic
 `…updateInterval`), in **minutes, default 10**. So a PRD deployed by
 `vault.deploy` is requestable over REST only once that interval has passed (the
 dashboard, which opens the form through its own session, showed it at once in
-the W4 proof — the search path differs). Two ways to know / hurry it:
+the W4 proof — the search path differs). **A cache flush makes it requestable at
+once** (§3.1). Ways to know and hurry it:
 
 - `POST /permissions/item {"id": <PRD DN>, "entityType": "prd"}` → 200 with
   the detail (§4) when indexed, 489 `PermissionIndexException` "Permission with
@@ -110,6 +112,13 @@ repeats, values `ROLE`/`RESOURCE`/`PRD`; `column` selects response attributes;
 `sortByName`; `proxyUser`) returned `arraySize 0` for `uaadmin` on idm254 even
 for stock PRDs, on three occasions — do not use it as the "is it indexed?"
 probe; use `/permissions/item` **[live]**.
+
+### 3.1 Flushing the caches — `/IDMProv/rest/admin/cache` **[live, 2026-10-15]**
+
+- `GET /IDMProv/rest/admin/cache/holders` → `{"cacheArraySize": 33, "cacheHolders": [{"cacheHolderID": "All Cache"}, {"cacheHolderID": "AdvancedEdition"}, …]}`: the holders a flush can name.
+- `DELETE /IDMProv/rest/admin/cache/holder/items` with body `{"cacheHolderItems": [{"cacheHolderID": "All Cache"}]}` → **204** (no body). **Required:** `cacheHolderItems`, each with a `cacheHolderID` from the list (`"All Cache"` is the Caching page's flush-all). The caller needs the applications' administration rights (uaadmin on the lab). `GET` on the same path is 405.
+- Effect: a PRD deployed 62 seconds before the flush was in the permission index immediately, where without one it took 7:57 and about 9 minutes in the two other runs (one sample). `ADD_OR_MODIFY`/`REFRESH` (above) do not do this.
+- `bin/apps flush [--holder NAME]...` (default `All Cache`) and `bin/apps holders`.
 
 ## 4. PRD detail — `POST /permissions/item` **[live]**
 
