@@ -46,17 +46,18 @@
             <artifactId>postgresql</artifactId>
             <version>${postgresql.version}</version>
         </dependency>
+        <!-- The LDAP client for the vault path (docs/vendor-free-vault.md): open-source JLDAP from Maven
+             Central, OpenLDAP Public License (THIRD-PARTY.md). The IDM extended operations are our own
+             encoding (deploy/IdmOps), so no vendor jar is needed to talk to a vault. -->
+        <dependency>
+            <groupId>com.novell.ldap</groupId>
+            <artifactId>jldap</artifactId>
+            <version>4.3</version>
+        </dependency>
         <dependency>
             <groupId>com.pointbluetech</groupId>
             <artifactId>dirxml-trace-core</artifactId>
             <version>${tracecore.version}</version>
-            <exclusions>
-                <!-- only its model package is used; the LDAP event source is the viewer's -->
-                <exclusion>
-                    <groupId>com.novell.ldap</groupId>
-                    <artifactId>jldap</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
@@ -142,7 +143,6 @@
                                         <file>${idm.lib}/dhutil.jar</file>
                                         <file>${idm.lib}/XDS.jar</file>
                                         <file>${idm.lib}/js.jar</file>
-                                        <file>${idm.lib}/ldap.jar</file>
                                         <file>${user.home}/.m2/repository/com/pointblue/dirxml/dirxml-simulator/${simulator.version}/dirxml-simulator-${simulator.version}.jar</file>
                                     </files>
                                 </requireFilesExist>
@@ -185,7 +185,6 @@
                 <dependency><groupId>com.netiq.idm</groupId><artifactId>dhutil</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/dhutil.jar</systemPath></dependency>
                 <dependency><groupId>com.netiq.idm</groupId><artifactId>XDS</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/XDS.jar</systemPath></dependency>
                 <dependency><groupId>com.netiq.idm</groupId><artifactId>js</artifactId><version>1.0.0</version><scope>system</scope><systemPath>${idm.lib}/js.jar</systemPath></dependency>
-                <dependency><groupId>com.novell.ldap</groupId><artifactId>jldap</artifactId><version>4.3</version><scope>system</scope><systemPath>${idm.lib}/ldap.jar</systemPath></dependency>
             </dependencies>
         </profile>
         <!-- Tests that compile without the engine or the simulator. GitHub Actions runs this

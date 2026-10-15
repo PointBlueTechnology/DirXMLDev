@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.operate;
 
+import com.pointblue.dirxml.dev.xml.Dom;
 import com.pointblue.dirxml.dev.deploy.DeployLog;
 import com.pointblue.dirxml.dev.deploy.Environments;
 import com.pointblue.dirxml.dev.deploy.Secrets;
@@ -1257,17 +1258,17 @@ public final class Operate {
         if (root == null) {
             return out;
         }
-        for (org.w3c.dom.Element in : com.pointblue.dirxml.sim.Xds.descendantsByName(root, "instance")) {
+        for (org.w3c.dom.Element in : com.pointblue.dirxml.dev.xml.Dom.descendantsByName(root, "instance")) {
             QueryInstance qi = new QueryInstance();
             qi.className = emptyToNull(in.getAttribute("class-name"));
             qi.srcDn = emptyToNull(in.getAttribute("src-dn"));
-            for (org.w3c.dom.Element a : com.pointblue.dirxml.sim.Xds.childrenByName(in, "association")) {
-                qi.association = emptyToNull(com.pointblue.dirxml.sim.Xds.text(a).trim());
+            for (org.w3c.dom.Element a : com.pointblue.dirxml.dev.xml.Dom.childrenByName(in, "association")) {
+                qi.association = emptyToNull(com.pointblue.dirxml.dev.xml.Dom.text(a).trim());
             }
-            for (org.w3c.dom.Element a : com.pointblue.dirxml.sim.Xds.childrenByName(in, "attr")) {
+            for (org.w3c.dom.Element a : com.pointblue.dirxml.dev.xml.Dom.childrenByName(in, "attr")) {
                 List<String> values = new ArrayList<>();
-                for (org.w3c.dom.Element v : com.pointblue.dirxml.sim.Xds.childrenByName(a, "value")) {
-                    values.add(com.pointblue.dirxml.sim.Xds.text(v));
+                for (org.w3c.dom.Element v : com.pointblue.dirxml.dev.xml.Dom.childrenByName(a, "value")) {
+                    values.add(com.pointblue.dirxml.dev.xml.Dom.text(v));
                 }
                 qi.attrs.put(a.getAttribute("attr-name"), values);
             }
@@ -1283,9 +1284,9 @@ public final class Operate {
             return null;
         }
         StringBuilder sb = new StringBuilder();
-        for (org.w3c.dom.Element st : com.pointblue.dirxml.sim.Xds.descendantsByName(root, "status")) {
+        for (org.w3c.dom.Element st : com.pointblue.dirxml.dev.xml.Dom.descendantsByName(root, "status")) {
             String level = st.getAttribute("level");
-            String desc = com.pointblue.dirxml.sim.Xds.text(st).trim();
+            String desc = com.pointblue.dirxml.dev.xml.Dom.text(st).trim();
             if (sb.length() > 0) {
                 sb.append("; ");
             }
@@ -1335,19 +1336,19 @@ public final class Operate {
         if (status == null) {
             t.append("  health status   none recorded (the Driver Health job has not evaluated this driver)\n");
         } else {
-            for (org.w3c.dom.Element hcs : com.pointblue.dirxml.sim.Xds.childrenByName(status, "health-config-status")) {
-                for (org.w3c.dom.Element last : com.pointblue.dirxml.sim.Xds.childrenByName(hcs, "last-state")) {
-                    for (org.w3c.dom.Element d : com.pointblue.dirxml.sim.Xds.childrenByName(last, "driver")) {
-                        for (org.w3c.dom.Element s : com.pointblue.dirxml.sim.Xds.childrenByName(d, "server")) {
+            for (org.w3c.dom.Element hcs : com.pointblue.dirxml.dev.xml.Dom.childrenByName(status, "health-config-status")) {
+                for (org.w3c.dom.Element last : com.pointblue.dirxml.dev.xml.Dom.childrenByName(hcs, "last-state")) {
+                    for (org.w3c.dom.Element d : com.pointblue.dirxml.dev.xml.Dom.childrenByName(last, "driver")) {
+                        for (org.w3c.dom.Element s : com.pointblue.dirxml.dev.xml.Dom.childrenByName(d, "server")) {
                             t.append("  health status   ").append(s.getAttribute("last-state")).append("  on ").append(s.getAttribute("dn")).append('\n');
                             j.append(n++ > 0 ? "," : "").append("{\"server\":").append(q(s.getAttribute("dn"))).append(",\"state\":").append(q(s.getAttribute("last-state"))).append("}");
                         }
                     }
                 }
-                for (org.w3c.dom.Element cs : com.pointblue.dirxml.sim.Xds.childrenByName(hcs, "custom-state")) {
-                    for (org.w3c.dom.Element last : com.pointblue.dirxml.sim.Xds.childrenByName(cs, "last-state")) {
-                        for (org.w3c.dom.Element d : com.pointblue.dirxml.sim.Xds.childrenByName(last, "driver")) {
-                            for (org.w3c.dom.Element s : com.pointblue.dirxml.sim.Xds.childrenByName(d, "server")) {
+                for (org.w3c.dom.Element cs : com.pointblue.dirxml.dev.xml.Dom.childrenByName(hcs, "custom-state")) {
+                    for (org.w3c.dom.Element last : com.pointblue.dirxml.dev.xml.Dom.childrenByName(cs, "last-state")) {
+                        for (org.w3c.dom.Element d : com.pointblue.dirxml.dev.xml.Dom.childrenByName(last, "driver")) {
+                            for (org.w3c.dom.Element s : com.pointblue.dirxml.dev.xml.Dom.childrenByName(d, "server")) {
                                 t.append("  custom state    ").append(cs.getAttribute("unique-id")).append(" = ").append(s.getAttribute("last-state")).append("  on ").append(s.getAttribute("dn")).append('\n');
                                 j.append(n++ > 0 ? "," : "").append("{\"server\":").append(q(s.getAttribute("dn"))).append(",\"customState\":").append(q(cs.getAttribute("unique-id"))).append(",\"state\":").append(q(s.getAttribute("last-state"))).append("}");
                             }
@@ -1362,21 +1363,21 @@ public final class Operate {
         j.append("],\"configured\":[");
         // 2. the configuration on the manifest
         org.w3c.dom.Element manifest = parseOrNull(e.string("DirXML-ConfigManifest"));
-        org.w3c.dom.Element hc = manifest == null ? null : com.pointblue.dirxml.sim.Xds.firstByName(manifest, "health-config");
+        org.w3c.dom.Element hc = manifest == null ? null : com.pointblue.dirxml.dev.xml.Dom.firstByName(manifest, "health-config");
         int c = 0;
         if (hc == null) {
             t.append("  health config   none on the driver (DirXML-ConfigManifest has no <health-config>)\n");
         } else {
-            for (org.w3c.dom.Element st : com.pointblue.dirxml.sim.Xds.childElements(hc)) {
+            for (org.w3c.dom.Element st : com.pointblue.dirxml.dev.xml.Dom.childElements(hc)) {
                 String name = st.getLocalName() != null ? st.getLocalName() : st.getNodeName();
                 if ("custom-state".equals(name) && !st.getAttribute("unique-id").isEmpty()) {
                     name = "custom-state " + st.getAttribute("unique-id");
                 }
                 int actions = 0;
-                for (org.w3c.dom.Element acts : com.pointblue.dirxml.sim.Xds.childrenByName(st, "actions")) {
-                    actions += com.pointblue.dirxml.sim.Xds.childElements(acts).size();
+                for (org.w3c.dom.Element acts : com.pointblue.dirxml.dev.xml.Dom.childrenByName(st, "actions")) {
+                    actions += com.pointblue.dirxml.dev.xml.Dom.childElements(acts).size();
                 }
-                int conditions = com.pointblue.dirxml.sim.Xds.descendantsByName(st, "and").size() + com.pointblue.dirxml.sim.Xds.descendantsByName(st, "or").size();
+                int conditions = com.pointblue.dirxml.dev.xml.Dom.descendantsByName(st, "and").size() + com.pointblue.dirxml.dev.xml.Dom.descendantsByName(st, "or").size();
                 t.append("  health config   ").append(name).append(": ").append(conditions).append(" condition group(s), ").append(actions).append(" action(s)\n");
                 j.append(c++ > 0 ? "," : "").append("{\"state\":").append(q(name)).append(",\"conditionGroups\":").append(conditions).append(",\"actions\":").append(actions).append("}");
             }
@@ -2233,7 +2234,7 @@ public final class Operate {
             if (root != null) {
                 for (org.w3c.dom.Element c : leafElements(root, new ArrayList<>())) {
                     String name = c.getLocalName() != null ? c.getLocalName() : c.getNodeName();
-                    String text = com.pointblue.dirxml.sim.Xds.text(c).trim();
+                    String text = com.pointblue.dirxml.dev.xml.Dom.text(c).trim();
                     if (!text.isEmpty()) {
                         t.append(String.format("  %-16s%s", name, text.length() > 120 ? text.substring(0, 120) + "…" : text)).append('\n');
                     }
@@ -2249,7 +2250,7 @@ public final class Operate {
 
     /** Every element under {@code e} that has no element children, in document order. */
     static List<org.w3c.dom.Element> leafElements(org.w3c.dom.Element e, List<org.w3c.dom.Element> into) {
-        List<org.w3c.dom.Element> kids = com.pointblue.dirxml.sim.Xds.childElements(e);
+        List<org.w3c.dom.Element> kids = com.pointblue.dirxml.dev.xml.Dom.childElements(e);
         if (kids.isEmpty()) {
             into.add(e);
         } else {
@@ -2833,7 +2834,7 @@ public final class Operate {
         String versionText;
         int[] parsed;
         try {
-            parsed = com.novell.nds.dirxml.util.DxConst.parseDirXMLVersion(packed);
+            parsed = com.pointblue.dirxml.dev.deploy.IdmOps.parseVersion(packed);
             versionText = parsed.length >= 5
                 ? String.format("%d.%d.%d.%d build %d", parsed[0], parsed[1], parsed[2], parsed[3], parsed[4])
                 : Arrays.toString(parsed);

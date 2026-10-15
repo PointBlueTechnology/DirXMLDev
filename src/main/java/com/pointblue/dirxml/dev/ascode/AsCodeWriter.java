@@ -39,6 +39,20 @@ import java.util.Set;
  */
 public final class AsCodeWriter {
 
+    /** Where a tree keeps the package baselines of customized packaged artifacts. */
+    public static final String BASELINE_DIR = ".package-baseline";
+
+    /** Where the artifact's package baseline lives in a tree (vendor-free: the vault path reads it). */
+    public static Path baselineFile(Path tree, Artifact a) {
+        String[] parts = a.path().split("/");
+        Path p = tree.resolve(BASELINE_DIR);
+        for (String part : parts) {
+            p = p.resolve(fileSafe(part));
+        }
+        return p.resolveSibling(p.getFileName() + extension(a));
+    }
+
+
     private AsCodeWriter() {
     }
 

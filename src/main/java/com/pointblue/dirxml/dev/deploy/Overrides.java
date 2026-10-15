@@ -4,7 +4,7 @@ import com.pointblue.dirxml.dev.edit.GcvOps;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
-import com.pointblue.dirxml.sim.Xds;
+import com.pointblue.dirxml.dev.xml.Dom;
 import org.w3c.dom.Element;
 
 import java.io.IOException;
@@ -231,7 +231,7 @@ public final class Overrides {
 
     /** The scalar value a definition holds ({@code <value>} text), or null when it has none. */
     public static String valueOf(Element definition) {
-        List<Element> values = Xds.childrenByName(definition, "value");
+        List<Element> values = Dom.childrenByName(definition, "value");
         return values.isEmpty() ? null : text(values.get(0));
     }
 
@@ -246,7 +246,7 @@ public final class Overrides {
     }
 
     private static void setValue(Element definition, String value) {
-        List<Element> values = Xds.childrenByName(definition, "value");
+        List<Element> values = Dom.childrenByName(definition, "value");
         if (values.isEmpty()) {
             Element v = definition.getOwnerDocument().createElementNS(null, "value");
             v.setTextContent(value);
