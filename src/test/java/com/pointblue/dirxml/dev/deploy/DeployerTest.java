@@ -4,6 +4,8 @@ import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Policy;
+import com.pointblue.dirxml.dev.model.PolicyLink;
+import com.pointblue.dirxml.dev.model.PolicySet;
 import com.pointblue.dirxml.dev.model.Scope;
 import com.pointblue.dirxml.dev.validate.ValidatorTest;
 import com.pointblue.dirxml.sim.LdifDriverSource;
@@ -273,5 +275,66 @@ public class DeployerTest {
         String files = gitOut(tree, "ls-tree", "-r", "--name-only", branch);
         assertFalse(files, files.contains("jobs/OldJob.xml"));
         assertTrue(files, files.contains("driverset.xml"));
+    }
+
+    // ---- the validation gate of a scoped deploy (ValidationScope) ----
+
+    /** model() plus a driver "Broken" whose policy names a GCV nobody defines: a validation error outside AD. */
+    private static DriverSet withBrokenDriver() {
+        DriverSet ds = VaultMappingTest.model();
+        Driver broken = new Driver("Broken");
+        broken.shimClass = "com.example.BrokenShim";
+        broken.config.put(Driver.DRIVER_FILTER, ValidatorTest.xml("<filter/>"));
+        broken.subscriber.policies.add(new Policy("sub-broken", Scope.SUBSCRIBER, "Broken", ValidatorTest.xml(
+            "<policy><rule><description>x</description><conditions/><actions><do-set-local-variable name=\"v\">"
+                + "<arg-string><token-global-variable name=\"no-such-gcv\"/></arg-string></do-set-local-variable></actions></rule></policy>")));
+        broken.links.add(new PolicyLink(PolicySet.SUB_EVENT, "drivers/Broken/subscriber/sub-broken", 0));
+        ds.drivers.add(broken);
+        return ds;
+    }
+
+    /** The same driver set with a new subscriber policy on AD: the change a scoped deploy carries. */
+    private static DriverSet withAdChange() {
+        DriverSet ds = withBrokenDriver();
+        Driver ad = ds.driver("AD");
+        ad.subscriber.policies.add(new Policy("sub-new", Scope.SUBSCRIBER, "AD", ValidatorTest.xml(
+            "<policy><rule><description>new</description><conditions/><actions/></rule></policy>")));
+        ad.links.add(new PolicyLink(PolicySet.SUB_COMMAND, "drivers/AD/subscriber/sub-new", 0));
+        return ds;
+    }
+
+    @Test
+    public void aDeployScopedToADriverIsNotHeldBackByAnErrorInAnotherDriver() throws Exception {
+        FakeVault vault = seedVault(withBrokenDriver());
+        Path tree = tmp.newFolder("scoped").toPath();
+        AsCodeWriter.write(withAdChange(), tree);
+        com.pointblue.dirxml.dev.validate.Report report = com.pointblue.dirxml.dev.validate.Validator.standard().validate(tree);
+        assertFalse("the fixture has an error", report.ok());
+        assertTrue(report.text(), report.of(com.pointblue.dirxml.dev.validate.Finding.Severity.ERROR).stream().allMatch(f -> f.path != null && f.path.startsWith("drivers/Broken")));
+
+        Deployer.Options o = options(tree, stgEnv("test"), List.of());
+        o.drivers = List.of("AD");
+        Deployer.Result r = new Deployer(o, vault).run();
+        assertTrue(r.text(), r.ok && r.verified);
+        assertTrue(r.planText, r.planText.startsWith("validation: 1 error(s) outside this deploy's scope, not deployed by it (Broken)"));
+        assertTrue(vault.exists("cn=sub-new,cn=Subscriber," + VaultMapping.driverDn(DS, "AD")));
+    }
+
+    @Test
+    public void aWholeSetDeployAndADeployScopedToTheBrokenDriverAreRefused() throws Exception {
+        FakeVault vault = seedVault(withBrokenDriver());
+        Path tree = tmp.newFolder("whole").toPath();
+        AsCodeWriter.write(withAdChange(), tree);
+
+        Deployer.Result whole = new Deployer(options(tree, stgEnv("test"), List.of()), vault).run();
+        assertFalse(whole.ok);
+        assertTrue(whole.refusal, whole.refusal.startsWith("the tree does not validate: FAIL"));
+
+        Deployer.Options o = options(tree, stgEnv("test"), List.of());
+        o.drivers = List.of("Broken");
+        Deployer.Result scoped = new Deployer(o, vault).run();
+        assertFalse(scoped.ok);
+        assertTrue(scoped.refusal, scoped.refusal.contains("1 error(s) in what this deploy writes") && scoped.refusal.contains("drivers/Broken/subscriber/sub-broken"));
+        assertFalse(vault.exists("cn=sub-new,cn=Subscriber," + VaultMapping.driverDn(DS, "AD")));
     }
 }

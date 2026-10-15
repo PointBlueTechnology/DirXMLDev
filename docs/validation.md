@@ -9,6 +9,18 @@ and exits 1 on any error. It is the first of the safeguards in
 and an agent editing policies runs it after every change (Phase 3 wires it into
 each edit operation).
 
+**A deploy scoped to drivers** (`vault.deploy --driver D`, or a driver chosen as the scope on the web
+page's Compare & deploy) is held only to the errors that can reach the vault through it
+(`deploy/ValidationScope`):
+- errors in the drivers it deploys;
+- errors in a Library artifact one of those drivers links;
+- errors in the RBE policies, when the Entitlements Service driver is in scope;
+- errors at the driver-set level (settings, schema, a finding with no path).
+
+An error in another driver, or in a driver-set job or template, is listed on the plan's first line
+(`validation: N error(s) outside this deploy's scope, …`) and doesn't refuse the deploy. A deploy of
+the whole driver set still needs the whole tree clean.
+
 The point of the design: **the checks are the engine's own checks wherever the
 engine has one.** A policy is compiled by the same `DirXMLScriptProcessor` /
 XSLT parser / schema-mapping processor the engine runs at driver start, in a
