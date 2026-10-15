@@ -7,6 +7,28 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`trace.view` and the MCP tool `idm.trace.view`** (docs/trace-view.md). These show a driver
+  trace as transactions: per driver and channel, the event's operation, class and DN, the policy
+  sets and policies applied with their rules and actions, vetoes, `<status>` documents and the worst
+  status, plus each transaction's line ranges.
+  - The input is a file (`--file`), or a bounded read from an environment: SSH `--lines` or
+    `--since`, or LDAP `--seconds`.
+  - Filters: `--channel`, `--status`, `--vetoed`, `--text`, `--last`. `--transaction N` returns that
+    transaction's raw text.
+  - It is best effort. Only the engine's own wording is read; anything a shim prints is kept and
+    counted, never interpreted.
+- **A new dependency: `dirxml-trace-core`.** It is the parser the trace viewer and the web share.
+  `bin/idm` takes it from `~/.m2` at `tracecore.version`; CI installs it from the DirXMLTraceViewer
+  release, and each core release attaches it (docs/install.md).
+
+### Changed
+
+- **The duplicate guarded tests are folded together.** The zero form/PRD-error checks now run
+  inside `ProvisioningGuardedTest`, and `PlanTest` keeps only the whole-kind versus
+  partial-removal case.
+
 ## [0.36.0] - 2026-10-15
 
 **Behaviour change:** `role.add`, `resource.add`, `role.set` and `resource.set` now check `--category`

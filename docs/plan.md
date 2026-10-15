@@ -539,11 +539,13 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   a tiny package jar under `src/test/resources`, point one round-trip of each suite at
   them, and keep a single opt-in test per suite on the real file through `LocalFixture`.
   Never commit the Amica project, the RFI export or the AD driver export.
-- **Duplicate guarded tests** (same review): `FormOpsGuardedTest`'s three zero-error
-  validation methods repeat `ProvisioningGuardedTest` on the same three sources (keep
-  the edit test); `PlanTest`'s empty-kind guard and `DeployerTest.deleteAllEntitlements…`
-  exercise one refusal at two layers (keep the Deployer one). Cheap duplication; fold
-  when either suite is next touched.
+- ~~**MCP trace view**~~ — built 2026-10-15: `trace.view` / `idm.trace.view`
+  ([trace-view.md](trace-view.md)), a trace as transactions on `dirxml-trace-core`; best
+  effort (engine wording only, a shim's output kept as text).
+- ~~**Duplicate guarded tests**~~ — folded 2026-10-15: the zero form/PRD-error
+  checks run inside `ProvisioningGuardedTest`'s reads of the same sources (test11, both
+  LDIFs, the synthetic LDIF); `PlanTest` keeps only what the deployer test does not cover
+  (a whole kind vs a partial removal), the refusal and override stay in `DeployerTest`.
 - ~~**`simulate --env X`**~~ — built 2026-09-28: `overrides/X.properties` applied to the
   tree and the `--against` tree before rendering (item 5 of the 2026-09-27 config review).
 

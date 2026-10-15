@@ -33,6 +33,9 @@
              warning prints the uninterpolated expression. This property is that directory. -->
         <idm.lib>${project.basedir}/lib</idm.lib>
         <postgresql.version>42.7.7</postgresql.version>
+        <!-- The trace parser the desktop viewer and the web share (trace.view, docs/trace-view.md).
+             Not on Maven Central: a DirXMLTraceViewer release attaches the jar (docs/install.md). -->
+        <tracecore.version>1.7.0</tracecore.version>
     </properties>
 
     <dependencies>
@@ -42,6 +45,18 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <version>${postgresql.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.pointbluetech</groupId>
+            <artifactId>dirxml-trace-core</artifactId>
+            <version>${tracecore.version}</version>
+            <exclusions>
+                <!-- only its model package is used; the LDAP event source is the viewer's -->
+                <exclusion>
+                    <groupId>com.novell.ldap</groupId>
+                    <artifactId>jldap</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>junit</groupId>

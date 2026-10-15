@@ -75,6 +75,15 @@ describe("argv matches bin/idm usage", () => {
     const view = argvFor("idm.driver.cache.view", { env: "stg", driver: "AD Driver", count: 3, out: "/tmp/x" });
     assert.deepEqual(view, ["driver.cache", "view", "--env", "stg", "--driver", "AD Driver", "--count", "3", "--json"]);
     assert.equal(view.includes("--out"), false);
+    assert.deepEqual(argvFor("idm.trace.view", { file: "/tmp/ad.trace", driver: "AD", status: "error", last: 5 }), [
+      "trace.view", "--file", "/tmp/ad.trace", "--driver", "AD", "--status", "error", "--last", "5", "--json",
+    ]);
+    assert.deepEqual(argvFor("idm.trace.view", { env: "stg", driver: "AD Driver", lines: 500, vetoed: true, transaction: 3 }), [
+      "trace.view", "--env", "stg", "--driver", "AD Driver", "--lines", "500", "--vetoed", "--transaction", "3", "--json",
+    ]);
+    assert.throws(() => argvFor("idm.trace.view", { env: "stg" }), /env and driver/);
+    assert.throws(() => argvFor("idm.trace.view", { file: "/tmp/x", env: "stg" }), /not both/);
+    assert.equal(argvFor("idm.trace.view", { env: "stg", driver: "AD", follow: true }).includes("--follow"), false);
     const tail = argvFor("idm.driver.trace.tail", { env: "stg", driver: "AD Driver", lines: 20, grep: "error", follow: true });
     assert.equal(tail.includes("--follow"), false);
     assert.deepEqual(argvFor("idm.driver.cache.clear", { confirm: true, env: "prd", driver: "AD Driver", confirmEnv: "prd" }), [
