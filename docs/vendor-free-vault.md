@@ -189,3 +189,13 @@ vendor's decoder and then live (see Verification).
   `AbortJob` on the already finished job answers "Other", as it does with the released vendor-class
   build. The deploy itself used our SetDriverStartOption and NotifyJobUpdate. The scratch driver and
   job were then removed (`--delete-driver`), and `vault.diff` showed no differences.
+
+**2026-10-15, later:** the directory-console (main at 06e2035) already runs on 0.37.0 with nothing at
+`/engine`. It now calls more of DirXMLDev:
+- `Operate`: `startOption`, `resync`, `passwordSync`, `migrate`, `migrateIntoApp`, `logLevelSet`,
+  `lifecycle`, `jobAction`, `engineStats`, `driversetStatus`, `driversetActivation`, `driverHealth`,
+  `driverAssociations`, `cacheClear`;
+- `IdmOps` directly.
+
+`VendorFreeTest` now starts from all of these and checks that each one exists. It walks 353 methods,
+and none reaches a vendor class. Keep its list in step with the console.
