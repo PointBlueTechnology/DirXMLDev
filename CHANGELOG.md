@@ -7,7 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+**Talking to a vault no longer needs any NetIQ/OpenText jar** (docs/vendor-free-vault.md). Default
+behaviour is unchanged. `ldap.jar` is no longer one of the jars `lib/` needs: the LDAP client is
+open-source JLDAP 4.3 from Maven Central, which a release attaches (THIRD-PARTY.md).
+
 ### Added
+
+- **The IDM extended operations are this project's own encoding** (`deploy/IdmOps`), byte for byte
+  the vendor's (a guarded test compares them), so `dirxml_misc.jar` is not needed for deploy, diff,
+  import-live or the `driver.*`, `driverset.*`, `engine.*` and `job.*` commands. Validate's compile
+  check, simulate and package checksums still use the engine jars.
+- **`doctor` reports `vault`**, the vault path's readiness, separately from `lib` (the engine jars).
+- **`VendorFreeTest`** walks from the methods the directory-console calls and fails if any reachable
+  code names a vendor class (or loads one by name).
 
 - **`trace.view` and the MCP tool `idm.trace.view`** (docs/trace-view.md). These show a driver
   trace as transactions: per driver and channel, the event's operation, class and DN, the policy

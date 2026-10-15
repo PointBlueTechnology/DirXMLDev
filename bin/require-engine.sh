@@ -5,7 +5,7 @@
 # runner is not a failed check. The jars are not in git and the simulator is not
 # on Maven Central. See docs/install.md section 2. This script never prints secrets.
 #
-# REQUIRED_JARS: dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar
+# REQUIRED_JARS: dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar
 set -e
 inform=0
 if [ "${1:-}" = "--inform" ]; then
@@ -21,7 +21,7 @@ if [ -L "$HERE/lib" ]; then
   links="${links}
   lib (directory symlink)"
 fi
-for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar ldap.jar; do
+for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar CommonDriverShim.jar jclient.jar dhutil.jar XDS.jar js.jar; do
   if [ -L "$HERE/lib/$j" ]; then
     links="${links}
   lib/${j} (symlink)"
@@ -70,7 +70,7 @@ Copy the jars into a real lib/ directory.
 
 Setup (docs/install.md, section 2):
   1. Copy dirxml.jar, dirxml_misc.jar, nxsl.jar, xp.jar, CommonDriverShim.jar,
-     jclient.jar, dhutil.jar, XDS.jar, js.jar, and ldap.jar into a real lib/
+     jclient.jar, dhutil.jar, XDS.jar and js.jar into a real lib/
      directory (regular files, not symlinks). Engines from 4.10.2 on ship
      xp.jar as xp-1.0.0.jar: copy it as xp.jar.
        mkdir -p lib && cp /path/to/DirXMLSimulator/lib/dirxml.jar lib/  # and the other nine
