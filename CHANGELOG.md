@@ -7,7 +7,24 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+**Behaviour change:** `role.add`, `resource.add`, `role.set` and `resource.set` now check `--category`
+against the tree's category list (`DirectoryModel/ChoiceDefs/roles-category` or
+`resources-category`). A key the list does not have is refused, and the refusal names the keys
+the list does have. Before this release `--category Sales` wrote the key `sales` unchecked, and
+the applications then showed no category (#70).
+
 ### Added
+
+- **Container and category are now separate (#70).** `role.add` and `resource.add` take
+  `--container NAME` for the container the object goes in, and `--category` for one or more category
+  keys. Keys are matched without regard to case and written as the list spells them. Without
+  `--container` the object goes in the container named like its first category, as before.
+- **`category.list`, `category.add`, `category.set` and `category.remove`** (`--for role|resource`)
+  read and edit the category lists: a key, plus a label per language. `category.remove` is refused
+  while a role or resource still uses the key. The lists are packaged objects, so the first edit
+  keeps a baseline, as for any packaged object.
+- **`validate` warns `appconfig-category-unknown`** when a role or resource names a key its list does
+  not have.
 
 - **`bin/apps flush [--holder NAME]` and `bin/apps holders`.** These call the Identity Applications'
   cache flush, `DELETE /IDMProv/rest/admin/cache/holder/items` (default holder `All Cache`). A PRD

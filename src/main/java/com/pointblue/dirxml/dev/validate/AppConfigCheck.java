@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.validate;
 
+import com.pointblue.dirxml.dev.model.AppCategories;
 import com.pointblue.dirxml.dev.model.AppConfigPolicy;
 import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Driver;
@@ -23,7 +24,8 @@ import java.util.Set;
  * {@code appconfig-role-level-mismatch} (E: {@code nrfRoleLevel} disagrees with the Level container),
  * {@code appconfig-ref-missing} (E: a DN-valued attribute names an object the tree does not have),
  * {@code appconfig-ref-outside} (I: a DN outside this driver's AppConfig, not checkable here),
- * {@code appconfig-localized-unparsable} (W: a localized string is not {@code lang~text|…}).
+ * {@code appconfig-localized-unparsable} (W: a localized string is not {@code lang~text|…}),
+ * {@code appconfig-category-unknown} (W: a role or resource names a category key its list does not have).
  */
 public final class AppConfigCheck implements Check {
 
@@ -72,6 +74,18 @@ public final class AppConfigCheck implements Check {
                 }
                 if (DN_ATTRS.contains(attr)) {
                     checkRef(p, o, attr, v, path, r);
+                }
+            }
+        }
+        AppCategories.For f = AppCategories.For.of(o.kind());
+        if (f != null) {
+            List<AppCategories.Category> cats = AppCategories.of(p, f);
+            if (cats != null) {
+                for (String key : o.all(f.attr)) {
+                    if (cats.stream().noneMatch(c -> c.key().equals(key))) {
+                        r.add(Finding.warning("appconfig-category-unknown", path, f.attr + " '" + key + "' is not a key of " + f.path()
+                            + " (the applications show no category for it; category.add --for " + f.key + " adds one)"));
+                    }
                 }
             }
         }

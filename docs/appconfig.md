@@ -355,10 +355,10 @@ strings are given as `lang=text` (bare text = English) and merged per language.
 appconfig.set    <tree> --path P --attr A --value V… | --file F | --remove     any attribute of any object
 appconfig.add    <tree> --path P --class C [--aux C,…] [--attr name=value …]   any object under an existing container
 appconfig.remove <tree> --path P                                              refuses: holds objects, referenced by DN, runtime container, packaged (unless --force)
-role.add         <tree> --name N --level 10|20|30 --category C [--display …] [--descr …] [--owner DN…] [--approver DN…] [--quorum Q]
+role.add         <tree> --name N --level 10|20|30 --category key[,key] [--container C] [--display …] [--descr …] [--owner DN…] [--approver DN…] [--quorum Q]
 role.set         <tree> --name N [--display …] [--descr …] [--category a,b] [--owner DN|-] [--approver DN|-] [--quorum Q] [--status S]
 role.remove      <tree> --name N
-resource.add     <tree> --name N --category C [--display …] [--descr …] [--entitlement DN [--param P]] [--multi] [--owner …] [--approver …]
+resource.add     <tree> --name N --category key[,key] [--container C] [--display …] [--descr …] [--entitlement DN [--param P]] [--multi] [--owner …] [--approver …]
 resource.set     <tree> --name N [… as above; --entitlement - unbinds] [--multi true|false] [--active true|false]
 resource.remove  <tree> --name N
 entity.add       <tree> --key K --object-class OC [--aux-class …] [--display …] [--search-root R] [--naming-attribute cn] [--creatable|--editable|--removable|--viewable|--auto-query true|false]
@@ -367,9 +367,35 @@ entity.remove    <tree> --key K                                              ref
 entity.attr.add  <tree> --entity K --key A --ldap L [--nds N] [--type String] [--display …] [--required|--multivalue|--editable|--readable|--searchable|--viewable|--hideable|--enabled true|false]
 entity.attr.set  <tree> --entity K --key A [--ldap L] [--type T] [--display …] [flags]
 entity.attr.remove <tree> --entity K --key A
+category.list    <tree> --for role|resource [--json]                          the keys, their labels, how many roles/resources use each
+category.add     <tree> --for role|resource --key K [--display …]            a new key in the list (labels default to the key)
+category.set     <tree> --for role|resource --key K --display …              change its labels, merged per language
+category.remove  <tree> --for role|resource --key K                          refuses while a role or resource uses it
 ```
 
-`role.add` and `resource.add` create the category container (`nrfRoleDefs`
+**Container and category are different things** (#70). A role sits in a
+*container*, `RoleConfig/RoleDefs/Level<n>/<container>` (a resource in
+`RoleConfig/ResourceDefs/<container>`). Its *categories* are keys in
+`nrfRoleCategoryKey` (`nrfCategoryKey` for a resource), taken from a choice list
+of the Directory Abstraction Layer: `DirectoryModel/ChoiceDefs/roles-category`
+or `resources-category`, each a `<list-items>` document in `XmlData` whose
+`<list-item>`s hold a `<key>` and a `<display xml:lang><label>` per language
+(idm254: roles `default`, `system`; resources `default`, `system`, `helpdesk`).
+A key the list lacks shows no category in the applications.
+
+- `--category` takes keys, checked against the list without regard to case and
+  written as the list has them; an unknown key is refused with the list's keys.
+  A tree without the list (a partial tree) takes them lower-cased, with a note.
+- `--container` names the container, created when absent. Without it the role or
+  resource goes in the container named like its first `--category`, an existing
+  one matched without regard to case (`--category system` → `System`) — what the
+  operations did before #70, which also used that name as the key unchecked.
+- `role.set`/`resource.set --category` check the keys the same way.
+- The `category.*` operations edit the list. It is a packaged object: the first
+  edit keeps a baseline and marks it customized, as for any packaged object.
+  `validate` warns (`appconfig-category-unknown`) of a key the list lacks.
+
+`role.add` and `resource.add` create the container (`nrfRoleDefs`
 under `Level<n>`, `nrfResourceDefs` under `ResourceDefs`) when it is missing,
 and set the defaults the vault holds (role `nrfStatus` 50; resource
 `nrfActive`/`nrfAllowAprOveride` FALSE, `nrfAllowMulti` per `--multi`). A
