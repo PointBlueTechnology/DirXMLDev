@@ -539,6 +539,9 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   a tiny package jar under `src/test/resources`, point one round-trip of each suite at
   them, and keep a single opt-in test per suite on the real file through `LocalFixture`.
   Never commit the Amica project, the RFI export or the AD driver export.
+- ~~**MCP trace view**~~ — built 2026-10-15: `trace.view` / `idm.trace.view`
+  ([trace-view.md](trace-view.md)), a trace as transactions on `dirxml-trace-core`; best
+  effort (engine wording only, a shim's output kept as text).
 - ~~**Duplicate guarded tests**~~ — folded 2026-10-15: the zero form/PRD-error
   checks run inside `ProvisioningGuardedTest`'s reads of the same sources (test11, both
   LDIFs, the synthetic LDIF); `PlanTest` keeps only what the deployer test does not cover
