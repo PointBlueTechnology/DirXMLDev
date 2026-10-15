@@ -25,6 +25,7 @@ Identity Applications helper). There is no server, no database and no GUI.
 | **git** | the tree is versioned; the deploy gate reads commits | `git --version` |
 | **Python 3.8+** | only for `bin/apps` (standard library, nothing to install) | `python3 --version` |
 | **The DirXML Policy Simulator** built and installed locally | the engine that validates and simulates policies | `ls ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/` |
+| **The trace parser** (`dirxml-trace-core`) | `trace.view` ([trace-view.md](trace-view.md)) reads traces with the parser the trace viewer and the web share. It is not on Maven Central, so take the jar from a [DirXMLTraceViewer release](https://github.com/PointBlueTechnology/DirXMLTraceViewer/releases) at the version `pom.xml` pins (`tracecore.version`), then `mvn install:install-file -Dfile=dirxml-trace-core-<v>.jar -DgroupId=com.pointbluetech -DartifactId=dirxml-trace-core -Dversion=<v> -Dpackaging=jar`. A DirXMLDev release attaches it too. | `ls ~/.m2/repository/com/pointbluetech/dirxml-trace-core/` |
 | **The Identity Manager engine jars** | proprietary; the simulator and the tool load the real policy compilers and the LDAP/extended-operation client | see §2 |
 | **Network access to the vault** | LDAPS to the eDirectory server that holds the driver set (port 636) | `nc -z host 636` |
 | Optional: **SSH to the engine host** | `driver.trace tail` can read the trace file over SSH; without it the trace streams over LDAP | `ssh user@host true` |
@@ -32,8 +33,8 @@ Identity Applications helper). There is no server, no database and no GUI.
 | Optional: **the Identity Applications** URL and an application user | `bin/apps` runs a workflow end to end without a browser | `bin/apps --env <env> token` |
 | Optional: **kubectl/SSH to the applications host** | reading the workflow engine log | your own `kubectl` or SSH access |
 
-Roles and resources are not in scope: they are managed in the Identity
-Applications, not in Designer and not by this tool.
+Roles and resources are in scope as AppConfig objects (`role.*`, `resource.*`, `category.*`;
+[appconfig.md](appconfig.md)). Assigning them to people happens in the Identity Applications.
 
 ## 2. Install
 
