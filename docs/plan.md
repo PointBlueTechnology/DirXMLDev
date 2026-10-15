@@ -511,7 +511,7 @@ driver's AppConfig in the vault) so it gets its own reader/writer.
   2026-09-21 (also `package.build`, `package.site`, `package.status` were missing).
 - ~~**`form.field.add --json '{…}'` is swallowed by the global `--json` output flag**~~ — fixed
   2026-09-21: the extra-properties flag is `--props`; `--json` is output everywhere.
-- ~~**A live run of a W3 integration activity**~~ — REST done 2026-10-14 ([spikes/w3-rest-live.md](spikes/w3-rest-live.md); found and fixed: the attributes are expressions, the output maps flowdata paths); role, resource and start-flow still unproven live. Was: (REST, role, resource,
+- ~~**A live run of a W3 integration activity**~~ — REST done 2026-10-14 ([spikes/w3-rest-live.md](spikes/w3-rest-live.md); found and fixed: the attributes are expressions, the output maps flowdata paths); start-flow done 2026-10-15; role-request and resource-request run as written but their grant fails on idm254's workflow-administrator OAuth token (lab configuration) — a grant is unproven until that works. Was: (REST, role, resource,
   entity) — the grammar is decompiled from `workflow.jar`'s binding classes
   and checked, but never executed on a lab; needs a REST endpoint or a role
   on idm254.

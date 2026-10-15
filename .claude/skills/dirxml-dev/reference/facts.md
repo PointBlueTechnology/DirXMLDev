@@ -172,8 +172,15 @@ version it was proven on unless stated.
   does not exist`. `POST /index/permissions` accepts `ADD_OR_MODIFY`/`REMOVE`/
   `REFRESH` (the vendor doc says REMOVE only) and answers success, but does
   **not** shorten the wait (live 2026-10-14: the PRD appeared at +7:57 either
-  way); poll `bin/apps permission <PRD>`. A changed PRD (same DN) is used at
-  once → `prd-rest-live.md`, `w3-rest-live.md`.
+  way). **A cache flush does**: `DELETE /IDMProv/rest/admin/cache/holder/items
+  {"cacheHolderItems":[{"cacheHolderID":"All Cache"}]}` → 204, and the PRD is
+  requestable at once (`bin/apps flush`; live 2026-10-15). A changed PRD (same
+  DN) is used at once → `prd-rest-live.md`, `w3-rest-live.md`.
+- **Every password sign-in grows the user's `oidpInstanceData`**; at ~32 KB the
+  write fails (`-649`) and every sign-in for that user answers HTTP 500
+  "Unexpected error". Sign in once and reuse the token (`bin/apps permission
+  --wait`, never a loop of `bin/apps` calls); recover by deleting the
+  attribute's value → `idapps-rest.md` §1.
 - **A `rest-activity`'s attributes are ECMAScript expressions** (`protocol`,
   `host`, `port`, `path`, `method`, the header attributes): `protocol="https"`
   fails with `ReferenceError: "https" is not defined` and takes the error link;
