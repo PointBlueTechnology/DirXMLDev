@@ -719,7 +719,10 @@ public final class Deployer {
             run("git", "-C", wt.toString(), "add", "-A");
             String commit;
             if (differs) {
-                run("git", "-C", wt.toString(), "commit", "-q", "-m", env.name + " as found " + ts);
+                List<String> commitCmd = new ArrayList<>(List.of("git", "-C", wt.toString()));
+                commitCmd.addAll(identityArgs(gitConfig(wt, "user.email")));
+                commitCmd.addAll(List.of("commit", "-q", "-m", env.name + " as found " + ts));
+                run(commitCmd.toArray(new String[0]));
                 commit = DeployLog.treeCommit(wt);
             } else {
                 commit = DeployLog.treeCommit(wt);   // the base itself: the vault matches it
@@ -755,6 +758,30 @@ public final class Deployer {
             // the branch stays; harmless
         }
         return sb.toString();
+    }
+
+    /**
+     * The identity the as-found commit needs when git has none: a container (the web image) has no
+     * {@code user.email} anywhere, and git then refuses to commit ("unable to auto-detect email address"),
+     * which stopped a capture before it recorded the vault's state. A configured identity is left alone.
+     */
+    static List<String> identityArgs(String configuredEmail) {
+        if (configuredEmail != null && !configuredEmail.isBlank()) {
+            return List.of();
+        }
+        return List.of("-c", "user.name=DirXMLDev", "-c", "user.email=dirxmldev@localhost");
+    }
+
+    /** {@code git config <key>} in {@code dir} (repository, global and system settings), or null when unset. */
+    static String gitConfig(Path dir, String key) {
+        try {
+            Process p = new ProcessBuilder("git", "-C", dir.toAbsolutePath().toString(), "config", "--get", key)
+                .redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
+            return p.waitFor() == 0 && !out.isEmpty() ? out : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** The tree's first commit (the import), or HEAD when it can't be found. */
