@@ -71,7 +71,8 @@ DirXMLDev's `lib/` takes the engine jars below. `ldap.jar` is no longer one of t
 is open-source JLDAP from Maven Central (THIRD-PARTY.md). The simulator's own `lib/` still lists it.
 Without `lib/`, the vault, driver and engine commands work; `validate` (compile check), `simulate`
 and the package checksum need the jars. The trace over LDAP (`driver.trace tail --ldap`,
-`trace.view --ldap`) also needs the simulator jar, which is ours and needs no engine jar for it.
+`trace.view --ldap`) needs neither the jars nor the simulator: it is the trace viewer's own stream
+(`dirxml-trace-core`) over JLDAP.
 
 ```bash
 git clone <this repository> ~/IdeaProjects/DirXMLDev
