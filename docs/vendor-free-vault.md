@@ -1,6 +1,6 @@
 # A vendor-free vault path (design note)
 
-**Status: proposed (2026-10-15). Confirm before building.**
+**Status: confirmed (Jerry, 2026-10-15); building V1–V4.**
 
 ## Why
 
