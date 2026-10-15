@@ -433,33 +433,47 @@ public final class Registry {
         register("appconfig.remove", "delete an AppConfig object; refuses while it holds objects or anything names its DN",
             a -> new AppConfigOps.Remove(a.get("driver"), a.get("path")),
             req("path", "object path under AppConfig or a unique name"), acDriver);
-        register("role.add", "create a role in the catalog (RoleConfig/RoleDefs/Level<n>/<category>), creating the category container",
-            a -> new AppConfigOps.RoleAdd(a.get("driver"), a.get("name"), a.get("level"), a.get("category"), a.get("display"),
-                a.get("descr"), a.get("owner"), a.get("approver"), a.get("quorum")),
+        Arg container = opt("container", "the container it goes in (default: named like the first --category; created when absent)");
+        register("role.add", "create a role in the catalog (RoleConfig/RoleDefs/Level<n>/<container>), creating the container",
+            a -> new AppConfigOps.RoleAdd(a.get("driver"), a.get("name"), a.get("level"), a.get("category"), a.get("container"),
+                a.get("display"), a.get("descr"), a.get("owner"), a.get("approver"), a.get("quorum")),
             req("name", "role name (cn)"), req("level", "10 (permission), 20 (IT) or 30 (business)"),
-            req("category", "category container under the level (System, Custom …); also the category key"),
+            req("category", "category keys, comma-separated: keys of DirectoryModel/ChoiceDefs/roles-category (category.list --for role)"),
+            container,
             display, descr, owners, approvers, opt("quorum", "approval quorum"), acDriver);
         register("role.set", "change a role's names, descriptions, categories, owners, approvers, quorum or status",
             a -> new AppConfigOps.RoleSet(a.get("driver"), a.get("name"), a.get("display"), a.get("descr"), a.get("category"),
                 a.get("owner"), a.get("approver"), a.get("quorum"), a.get("status")),
-            req("name", "role name or path"), display, descr, opt("category", "category keys, comma-separated (replaces)"),
+            req("name", "role name or path"), display, descr, opt("category", "category keys, comma-separated (replaces; checked against the list)"),
             owners, approvers, opt("quorum", "approval quorum"), opt("status", "nrfStatus (50 = active)"), acDriver);
         register("role.remove", "delete a role; refuses while anything names its DN",
             a -> new AppConfigOps.RoleRemove(a.get("driver"), a.get("name")), req("name", "role name or path"), acDriver);
-        register("resource.add", "create a resource (RoleConfig/ResourceDefs/<category>), optionally bound to an entitlement",
-            a -> new AppConfigOps.ResourceAdd(a.get("driver"), a.get("name"), a.get("category"), a.get("display"), a.get("descr"),
-                a.get("entitlement"), a.get("param"), a.containsKey("multi"), a.get("owner"), a.get("approver")),
-            req("name", "resource name (cn)"), req("category", "category container under ResourceDefs; also the category key"),
+        register("resource.add", "create a resource (RoleConfig/ResourceDefs/<container>), optionally bound to an entitlement",
+            a -> new AppConfigOps.ResourceAdd(a.get("driver"), a.get("name"), a.get("category"), a.get("container"), a.get("display"),
+                a.get("descr"), a.get("entitlement"), a.get("param"), a.containsKey("multi"), a.get("owner"), a.get("approver")),
+            req("name", "resource name (cn)"),
+            req("category", "category keys, comma-separated: keys of DirectoryModel/ChoiceDefs/resources-category (category.list --for resource)"),
+            container,
             display, descr, opt("entitlement", "DirXML-Entitlement DN the resource grants"), opt("param", "the entitlement parameter value"),
             opt("multi", "flag: allow multiple assignment"), owners, approvers, acDriver);
         register("resource.set", "change a resource's names, descriptions, categories, entitlement binding, flags, owners or approvers",
             a -> new AppConfigOps.ResourceSet(a.get("driver"), a.get("name"), a.get("display"), a.get("descr"), a.get("category"),
                 a.get("entitlement"), a.get("param"), boolOrNull(a.get("multi")), boolOrNull(a.get("active")), a.get("owner"), a.get("approver")),
-            req("name", "resource name or path"), display, descr, opt("category", "category keys, comma-separated (replaces)"),
+            req("name", "resource name or path"), display, descr, opt("category", "category keys, comma-separated (replaces; checked against the list)"),
             opt("entitlement", "entitlement DN ('-' unbinds)"), opt("param", "entitlement parameter"), opt("multi", "true|false"),
             opt("active", "true|false"), owners, approvers, acDriver);
         register("resource.remove", "delete a resource; refuses while anything names its DN",
             a -> new AppConfigOps.ResourceRemove(a.get("driver"), a.get("name")), req("name", "resource name or path"), acDriver);
+        Arg catFor = req("for", "role or resource: which category list");
+        register("category.add", "add a key to the role or resource category list (DirectoryModel/ChoiceDefs/<roles|resources>-category)",
+            a -> new CategoryOps.Add(a.get("driver"), a.get("for"), a.get("key"), a.get("display")),
+            catFor, req("key", "the category key (letters, digits, . _ -)"), opt("display", "label, lang=text or bare text for English (repeatable; default: the key)"), acDriver);
+        register("category.set", "change a category's labels (merged per language)",
+            a -> new CategoryOps.Set(a.get("driver"), a.get("for"), a.get("key"), a.get("display")),
+            catFor, req("key", "the category key"), req("display", "label, lang=text or bare text for English (repeatable)"), acDriver);
+        register("category.remove", "remove a key from the category list; refuses while a role or resource uses it",
+            a -> new CategoryOps.Remove(a.get("driver"), a.get("for"), a.get("key")),
+            catFor, req("key", "the category key"), acDriver);
         register("entity.add", "create a directory-abstraction entity (DirectoryModel/EntityDefs) with no attributes yet",
             a -> new AppConfigOps.EntityAdd(a.get("driver"), a.get("key"), a.get("object-class"), a.get("aux-class"), a.get("display"),
                 a.get("search-root"), a.get("naming-attribute"), flagMap(a, AppConfigOps.ENTITY_FLAGS)),

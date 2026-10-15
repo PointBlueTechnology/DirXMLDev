@@ -2,6 +2,7 @@ package com.pointblue.dirxml.dev.edit;
 
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.ascode.DsObjectXml;
+import com.pointblue.dirxml.dev.model.AppCategories;
 import com.pointblue.dirxml.dev.model.AppConfigPolicy;
 import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Driver;
@@ -451,24 +452,30 @@ public final class AppConfigOps {
         o.put(attr, vs);
     }
 
-    /** Create a role under {@code RoleConfig/RoleDefs/Level<n>/<category>}, the category container included. */
+    /**
+     * Create a role under {@code RoleConfig/RoleDefs/Level<n>/<container>}, the container included. Its
+     * category keys are checked against the roles' category list ({@link CategoryOps}); without
+     * {@code --container} the role goes in the container named like its first category (as before #70).
+     */
     public static final class RoleAdd implements Operation {
         private final String driver;
         private final String roleName;
         private final String level;
-        private final String category;
+        private final List<String> categories;
+        private final String container;
         private final List<String> display;
         private final List<String> descr;
         private final List<String> owners;
         private final List<String> approvers;
         private final String quorum;
 
-        public RoleAdd(String driver, String roleName, String level, String category, String display, String descr,
+        public RoleAdd(String driver, String roleName, String level, String category, String container, String display, String descr,
                        String owners, String approvers, String quorum) {
             this.driver = driver;
             this.roleName = roleName;
             this.level = level == null ? null : level.trim().toLowerCase(Locale.ROOT).replace("level", "");
-            this.category = category;
+            this.categories = commaList(category);
+            this.container = container == null || container.isBlank() ? null : container.trim();
             this.display = list(display);
             this.descr = list(descr);
             this.owners = list(owners);
@@ -489,8 +496,8 @@ public final class AppConfigOps {
             if (level == null || !level.matches("10|20|30")) {
                 throw new Operation.Refusal("--level must be 10 (permission), 20 (IT) or 30 (business)");
             }
-            if (category == null || category.isBlank()) {
-                throw new Operation.Refusal("--category is required (the container under Level" + level + ", e.g. System)");
+            if (categories.isEmpty()) {
+                throw new Operation.Refusal("--category is required (a key of the roles' category list, e.g. system)");
             }
             Driver d = driverFor(ds, driver);
             Provisioning p = d.provisioning;
@@ -503,14 +510,15 @@ public final class AppConfigOps {
                     throw new Operation.Refusal("a role named '" + roleName + "' already exists at " + o.path());
                 }
             }
-            AppObject cat = ensureContainer(p, List.of("RoleConfig", "RoleDefs", "Level" + level, category), "nrfRoleDefs", tx, d);
+            List<String> keys = CategoryOps.resolve(p, AppCategories.For.ROLE, categories, tx);
+            AppObject cat = ensureContainer(p, List.of("RoleConfig", "RoleDefs", "Level" + level, containerName(container, categories)), "nrfRoleDefs", tx, d);
             AppObject role = new AppObject(List.of("RoleConfig", "RoleDefs", "Level" + level, cat.name(), roleName));
             role.classes.add("Top");
             role.classes.add("nrfRole");
             role.meta.put("objectClass", "nrfRole");
             role.put("nrfRoleLevel", List.of(level));
             role.put("nrfStatus", List.of("50"));
-            role.put("nrfRoleCategoryKey", List.of(category.toLowerCase(Locale.ROOT)));
+            role.put("nrfRoleCategoryKey", keys);
             role.put("nrfLocalizedNames", List.of(mergeLocalized(null, display.isEmpty() ? List.of(roleName) : display)));
             if (!descr.isEmpty()) {
                 role.put("nrfLocalizedDescrs", List.of(mergeLocalized(null, descr)));
@@ -525,6 +533,15 @@ public final class AppConfigOps {
             tx.touched(path(d, role));
             tx.note("created role " + role.path() + " (level " + level + ")");
         }
+    }
+
+    /** The container a new role or resource goes in: {@code --container}, else the first category as given. */
+    static String containerName(String container, List<String> categories) throws Operation.Refusal {
+        String c = container != null ? container : categories.get(0);
+        if (c.contains("/") || c.contains(",") || c.contains("=")) {
+            throw new Operation.Refusal("--container '" + c + "' must be one name (no '/', ',' or '=')");
+        }
+        return c;
     }
 
     /** Change a role's names, descriptions, category keys, owners, approvers, quorum or status. */
@@ -565,12 +582,7 @@ public final class AppConfigOps {
             applyLocalized(role, "nrfLocalizedNames", display);
             applyLocalized(role, "nrfLocalizedDescrs", descr);
             if (!categories.isEmpty()) {
-                List<String> vs = new ArrayList<>();
-                for (String c : categories) {
-                    vs.add(c.toLowerCase(Locale.ROOT));
-                }
-                vs.sort(null);
-                role.put("nrfRoleCategoryKey", vs);
+                role.put("nrfRoleCategoryKey", CategoryOps.resolve(d.provisioning, AppCategories.For.ROLE, categories, tx));
             }
             applyDns(role, "owner", owners, true);
             applyDns(role, "nrfApprovers", approvers, true);
@@ -635,11 +647,15 @@ public final class AppConfigOps {
         return dn + "#0#<ref><src>UA</src><id/><param>" + DsObjectXml.esc(param == null ? "" : param) + "</param></ref>";
     }
 
-    /** Create a resource under {@code RoleConfig/ResourceDefs/<category>}, bound to an entitlement when given. */
+    /**
+     * Create a resource under {@code RoleConfig/ResourceDefs/<container>}, bound to an entitlement when given.
+     * Category keys and the container as for {@link RoleAdd}.
+     */
     public static final class ResourceAdd implements Operation {
         private final String driver;
         private final String resName;
-        private final String category;
+        private final List<String> categories;
+        private final String container;
         private final List<String> display;
         private final List<String> descr;
         private final String entitlement;
@@ -648,11 +664,12 @@ public final class AppConfigOps {
         private final List<String> owners;
         private final List<String> approvers;
 
-        public ResourceAdd(String driver, String resName, String category, String display, String descr, String entitlement,
-                           String param, boolean multi, String owners, String approvers) {
+        public ResourceAdd(String driver, String resName, String category, String container, String display, String descr,
+                           String entitlement, String param, boolean multi, String owners, String approvers) {
             this.driver = driver;
             this.resName = resName;
-            this.category = category;
+            this.categories = commaList(category);
+            this.container = container == null || container.isBlank() ? null : container.trim();
             this.display = list(display);
             this.descr = list(descr);
             this.entitlement = entitlement == null || entitlement.isBlank() ? null : entitlement.trim();
@@ -672,8 +689,8 @@ public final class AppConfigOps {
             if (resName == null || resName.isBlank()) {
                 throw new Operation.Refusal("--name is required");
             }
-            if (category == null || category.isBlank()) {
-                throw new Operation.Refusal("--category is required (the container under ResourceDefs, e.g. System)");
+            if (categories.isEmpty()) {
+                throw new Operation.Refusal("--category is required (a key of the resources' category list, e.g. system)");
             }
             Driver d = driverFor(ds, driver);
             Provisioning p = d.provisioning;
@@ -688,12 +705,13 @@ public final class AppConfigOps {
             if (param != null && entitlement == null) {
                 throw new Operation.Refusal("--param needs --entitlement");
             }
-            AppObject cat = ensureContainer(p, List.of("RoleConfig", "ResourceDefs", category), "nrfResourceDefs", tx, d);
+            List<String> keys = CategoryOps.resolve(p, AppCategories.For.RESOURCE, categories, tx);
+            AppObject cat = ensureContainer(p, List.of("RoleConfig", "ResourceDefs", containerName(container, categories)), "nrfResourceDefs", tx, d);
             AppObject r = new AppObject(List.of("RoleConfig", "ResourceDefs", cat.name(), resName));
             r.classes.add("Top");
             r.classes.add("nrfResource");
             r.meta.put("objectClass", "nrfResource");
-            r.put("nrfCategoryKey", List.of(category.toLowerCase(Locale.ROOT)));
+            r.put("nrfCategoryKey", keys);
             r.put("nrfLocalizedNames", List.of(mergeLocalized(null, display.isEmpty() ? List.of(resName) : display)));
             if (!descr.isEmpty()) {
                 r.put("nrfLocalizedDescrs", List.of(mergeLocalized(null, descr)));
@@ -754,12 +772,7 @@ public final class AppConfigOps {
             applyLocalized(r, "nrfLocalizedNames", display);
             applyLocalized(r, "nrfLocalizedDescrs", descr);
             if (!categories.isEmpty()) {
-                List<String> vs = new ArrayList<>();
-                for (String c : categories) {
-                    vs.add(c.toLowerCase(Locale.ROOT));
-                }
-                vs.sort(null);
-                r.put("nrfCategoryKey", vs);
+                r.put("nrfCategoryKey", CategoryOps.resolve(d.provisioning, AppCategories.For.RESOURCE, categories, tx));
             }
             if (entitlement != null) {
                 if (entitlement.equals("-")) {

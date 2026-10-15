@@ -219,6 +219,7 @@ check:
 | `appconfig-ref-missing` | E | a DN-valued attribute (`nrfRequestDef`, the role configuration's `nrf*RequestDef`/`nrf*Container`) names an object the tree does not have |
 | `appconfig-ref-outside` | I | such a DN points outside this driver's AppConfig (the driver itself, for `nrfUADContainer`); not checked |
 | `appconfig-localized-unparsable` | W | a `*LocalizedNames`/`*LocalizedDescrs` value is not `lang~text|…` |
+| `appconfig-category-unknown` | W | a role's `nrfRoleCategoryKey` or a resource's `nrfCategoryKey` is not a key of `DirectoryModel/ChoiceDefs/roles-category`/`resources-category` (only when the tree has the list) |
 | `override-malformed` | E | a line of `overrides/<env>.properties` is not `key = value` |
 | `override-unknown` | E | an override key names a driver, GCV or shim parameter the tree does not define |
 | `override-missing-env` | W | a key set in one environment's file is absent from another's, which then gets the base value |

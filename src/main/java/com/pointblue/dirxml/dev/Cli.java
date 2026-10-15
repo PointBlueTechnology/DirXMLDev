@@ -247,6 +247,9 @@ public final class Cli {
             if (args.length >= 1 && args[0].equals("appconfig.list")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.appConfigList(args));
             }
+            if (args.length >= 1 && args[0].equals("category.list")) {
+                System.exit(com.pointblue.dirxml.dev.edit.ReadCli.categoryList(args));
+            }
             if (args.length >= 1 && args[0].equals("appconfig.show")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.appConfigShow(args));
             }
@@ -512,6 +515,7 @@ public final class Cli {
         System.err.println("AppConfig objects (docs/appconfig.md; entities, roles, resources, reports, nav items … under the UA driver's AppConfig):");
         System.err.println("  appconfig.list <asCodeDir> [--driver D] [--kind entity|role|resource|…] [--containers] [--json]");
         System.err.println("  appconfig.show <asCodeDir> <path-or-name> [--driver D] [--attr A] [--json]   an object's classes and attributes");
+        System.err.println("  category.list <asCodeDir> --for role|resource [--driver D] [--json]   the category keys, their labels and how many use each");
         System.err.println("entitlements (docs/entitlements.md; DirXML-Entitlement objects hanging off a driver):");
         System.err.println("  entitlement.list <asCodeDir> [--driver D]                    every entitlement: conflict, multi-valued, display-name, packaged mark");
         System.err.println("  entitlement.show <asCodeDir> --driver D --name N [--json]    an entitlement's document + which PRDs reference it");
