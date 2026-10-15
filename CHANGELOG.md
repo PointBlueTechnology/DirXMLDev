@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **`validate` without the engine jars no longer crashes.** A check that runs the Identity Manager
+  engine (compile, ECMAScript, forms, flows) is skipped with an info finding,
+  `check-skipped-no-engine`, that names the missing class. The other checks run and the result can
+  be OK. It used to stop with `NoClassDefFoundError`, for example in the web's container with no
+  `lib/` mounted.
+
 ## [0.38.0] - 2026-10-15
 
 **`driver.trace tail --ldap` prints lines as a trace file has them**
