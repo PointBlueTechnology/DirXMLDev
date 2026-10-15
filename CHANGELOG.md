@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-10-15
+
 ### Fixed
 
 - **`validate` without the engine jars no longer crashes.** A check that runs the Identity Manager
