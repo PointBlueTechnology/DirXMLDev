@@ -60,6 +60,11 @@ public final class Deployer {
         /** {@code --delete-all} kinds ({@code entitlements}, {@code forms}, {@code prds}), repeatable. */
         public List<String> deleteAllKinds = List.of();
         public int restartWaitSeconds = 180;
+        /**
+         * Hears each step as it happens, one line each ("snapshot: …", "write 3/9: modify cn=…", "restarting AD: waiting
+         * for Running, up to 180 s"), for a caller that shows a deploy's progress (the web page). Never null; must not throw.
+         */
+        public java.util.function.Consumer<String> progress = line -> { };
     }
 
     public static final class Result {
@@ -227,6 +232,7 @@ public final class Deployer {
 
         // 1. the tree must validate clean — no way to skip. A deploy scoped to drivers is held to what it
         //    deploys (ValidationScope): an error in a driver it leaves alone is listed, not a refusal.
+        o.progress.accept("validating the tree");
         Report validation = Validator.standard().validate(o.tree);
         String validationNote = "";
         if (!validation.ok()) {
@@ -251,6 +257,7 @@ public final class Deployer {
         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
         Overrides.applySecretShimAuthIds(to, secrets);   // ids the secrets file supplies win over the tree's (never shown)
 
+        o.progress.accept("reading the vault");
         try (VaultAccess vault = openPrimary(env)) {
             // 2. diff and plan — the other servers' own driver settings included, read through their connections
             DriverSet from = VaultDiff.fromVault(vault, dsDn);
@@ -273,6 +280,7 @@ public final class Deployer {
             }
             Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault, o.deleteAllKinds);
             r.planText = validationNote + overrideNote + plan.text(env.name, dsDn);
+            o.progress.accept("planned: " + plan.steps.size() + " write(s), " + (plan.restart.size() + plan.serverRestarts.size()) + " restart(s)");
             if (!plan.deleteDriverRefusals.isEmpty()) {
                 r.refusal = String.join("; ", plan.deleteDriverRefusals);
                 return r;
@@ -315,11 +323,13 @@ public final class Deployer {
                     driverDns.add(VaultMapping.driverDn(dsDn, name));
                 }
             }
+            o.progress.accept("taking a snapshot of what the plan changes");
             Snapshot snap = Snapshot.capture(vault, env.name, dsDn, plan.touchedDns, driverDns, treeCommit,
                 "deploy", r.planText, List.of(to.templatesCollectionDn()));
             Path snapDir = o.tree.resolve("deploy-snapshots").resolve(env.name);
             Path snapFile = snap.write(snapDir);
             r.snapshot = o.tree.toAbsolutePath().relativize(snapFile.toAbsolutePath()).toString().replace('\\', '/');
+            o.progress.accept("snapshot: " + r.snapshot);
             // the other servers' own copies of what the plan writes there: one snapshot per server
             // (vault.rollback --server <dn> restores it through that server's connection)
             Map<String, Set<String>> perServerDns = new LinkedHashMap<>();
@@ -351,7 +361,10 @@ public final class Deployer {
                 if (o.step) {
                     stopped = !stepThrough(vault, env, plan, to, dsDn, secrets, r);
                 } else {
+                    int i = 0;
                     for (Plan.Step s : plan.steps) {
+                        o.progress.accept("write " + (++i) + "/" + plan.steps.size() + ": " + s.op.name().toLowerCase(java.util.Locale.ROOT) + " " + s.dn
+                            + (s.server == null ? "" : " @ " + s.server));
                         execute(vaultFor(vault, env, s.server), s, secrets, r);
                     }
                 }
@@ -366,9 +379,11 @@ public final class Deployer {
                     try {
                         int st = vault.driverState(dn);
                         if (st == Vault.STATE_RUNNING || st == Vault.STATE_STARTING) {
+                            o.progress.accept("restarting " + name + ": waiting for Running, up to " + o.restartWaitSeconds + " s");
                             vault.restartDriver(dn);
                             String seen = vault.waitForState(dn, Vault.STATE_RUNNING, o.restartWaitSeconds);
                             r.restarted.add(name + " (" + seen + ")");
+                            o.progress.accept(name + ": " + seen);
                         } else {
                             r.skipped.add("restart " + name + " — driver is " + Vault.stateName(st) + "; it will load the new configuration when started");
                         }
@@ -388,8 +403,11 @@ public final class Deployer {
                             VaultAccess sv = vaultFor(vault, env, server);
                             int st = sv.driverState(dn);
                             if (st == Vault.STATE_RUNNING || st == Vault.STATE_STARTING) {
+                                o.progress.accept("restarting " + e.getKey() + " @ " + server + ": waiting for Running, up to " + o.restartWaitSeconds + " s");
                                 sv.restartDriver(dn);
-                                r.restarted.add(e.getKey() + " @ " + server + " (" + sv.waitForState(dn, Vault.STATE_RUNNING, o.restartWaitSeconds) + ")");
+                                String seen = sv.waitForState(dn, Vault.STATE_RUNNING, o.restartWaitSeconds);
+                                r.restarted.add(e.getKey() + " @ " + server + " (" + seen + ")");
+                                o.progress.accept(e.getKey() + " @ " + server + ": " + seen);
                             } else {
                                 r.skipped.add("restart " + e.getKey() + " @ " + server + " — driver is " + Vault.stateName(st) + " there");
                             }
@@ -402,6 +420,7 @@ public final class Deployer {
             }
 
             // 7. verify — the other servers' own settings re-read too
+            o.progress.accept("verifying: reading the vault again");
             DriverSet after = VaultDiff.fromVault(vault, dsDn);
             Servers.readOverrides(after, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
             ModelDiff verify = VaultDiff.of(after, to, o.drivers.isEmpty() ? diff.affectedDrivers() : o.drivers);
@@ -437,6 +456,7 @@ public final class Deployer {
                 log.detail = (log.detail == null || log.detail.isBlank()) ? daMsg : log.detail + "; " + daMsg;
             }
             DeployLog.append(o.tree, log);
+            o.progress.accept(r.ok ? "done: verified" : "done: " + log.outcome + (r.failure != null ? " — " + r.failure : r.verified ? "" : " — the vault differs from the tree"));
             return r;
         } finally {
             closeServerConnections();
@@ -864,6 +884,12 @@ public final class Deployer {
 
     /** {@code serverDn} non-null: restore through that server's own connection (a per-server snapshot). */
     public static Result rollback(Path tree, Environments.Environment env, Path snapshotFile, boolean yes, String serverDn) throws IOException {
+        return rollback(tree, env, snapshotFile, yes, serverDn, line -> { });
+    }
+
+    /** As above; {@code progress} hears each step as it happens (see {@link Options#progress}). */
+    public static Result rollback(Path tree, Environments.Environment env, Path snapshotFile, boolean yes, String serverDn,
+                                  java.util.function.Consumer<String> progress) throws IOException {
         Result r = new Result();
         Snapshot snap = Snapshot.read(snapshotFile);
         r.planText = "rollback to " + snapshotFile + ":\n" + snap.text();
@@ -904,10 +930,13 @@ public final class Deployer {
                     extraRoots.add(dn.substring(dn.indexOf(',') + 1));
                 }
             }
+            progress.accept("taking a snapshot of the current state");
             Snapshot before = Snapshot.capture(vault, env.name, env.driverSetDn, dns, driverDns,
                 DeployLog.treeCommit(tree), "before-rollback", null, extraRoots);
             Path snapFile = before.write(tree.resolve("deploy-snapshots").resolve(env.name));
             r.snapshot = tree.toAbsolutePath().relativize(snapFile.toAbsolutePath()).toString().replace('\\', '/');
+            progress.accept("snapshot: " + r.snapshot);
+            progress.accept("restoring " + snap.entries.size() + " object(s) and the drivers' states");
             Snapshot.RestoreResult rr = snap.restore(vault);
             r.done.addAll(rr.actions);
             if (!rr.ok()) {
@@ -915,6 +944,7 @@ public final class Deployer {
                 rr.failures.forEach((dn, why) -> f.add(dn + ": " + why));
                 r.failure = String.join("; ", f);
             }
+            progress.accept("verifying: comparing the vault with the snapshot");
             List<String> diffs = snap.differences(vault);
             r.verified = diffs.isEmpty();
             r.verifyText = diffs.isEmpty() ? "" : String.join("\n", diffs) + "\n";
@@ -925,6 +955,7 @@ public final class Deployer {
             log.outcome = r.ok ? "ok" : "failed";
             log.detail = "restored " + snapshotFile + (r.failure == null ? "" : "; " + r.failure);
             DeployLog.append(tree, log);
+            progress.accept(r.ok ? "done: verified" : "done: failed" + (r.failure != null ? " — " + r.failure : " — the vault differs from the snapshot"));
         }
         return r;
     }
