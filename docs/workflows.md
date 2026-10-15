@@ -293,8 +293,20 @@ Recommendation: **B, with A's parameters as the first operations**
   `protocol="https"` is `ReferenceError: "https" is not defined`, error link
   taken), and the output maps are flowdata paths. `flow.activity.add`/`.set`
   now quote a plain value and prefix a bare output name; `FlowCheck` reports
-  `flow-rest-unquoted` and `flow-rest-output-map`. `role-request`,
-  `resource-request` and `start-flow` are still unproven live.
+  `flow-rest-unquoted` and `flow-rest-output-map`.
+
+  **Live proof, the other three (idm254, 2026-10-15; same spike, part 2).**
+  `start-flow` started the named PRD as a correlated flow (`Start_Correlated_Workflow`)
+  and went forward; the child flow's own task came up. `role-request` and
+  `resource-request` were accepted as written (the bare `GRANT`/`USER` children
+  are enum literals, not expressions) and reached the engine's request call
+  (`RoleRequestActivity.processTarget` / `ResourceRequestActivity.requestResource`
+  → `IDMApplicationClientImpl.requestPermission`), which failed on this lab
+  fetching the workflow administrator's OAuth token
+  (`OAuthTokenManager.fetchToken` NullPointerException, before any call reached
+  OSP) and took the error link. That is the applications' configuration, not the
+  activity: the grammar holds; a grant itself is unproven until the lab's
+  workflow-administrator token works.
 
   All four are `ActivityBean`s like every other kind: `activity-id`
   (required), `audit`, `digital-signature-type`, `legal-disclaimer-id`,

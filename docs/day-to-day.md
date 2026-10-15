@@ -280,11 +280,15 @@ bin/apps --env stg history
 ```
 
 A PRD deployed less than about ten minutes ago is not in the permission index
-yet, and `request` says it was not started. Nothing shortens the wait:
-`bin/apps index "Widget Access"` (`ADD_OR_MODIFY`, or `--op REFRESH`) answers
-success but the PRD still appears only on the index's own interval (measured on
-idm254: about 8 minutes after the deploy). `bin/apps permission "Widget Access"`
-says when it is there; a change to an existing PRD is picked up at once. Bodies
+yet, and `request` says it was not started. `bin/apps flush` (the applications'
+cache flush) makes it requestable at once; `bin/apps index` (`ADD_OR_MODIFY`,
+`REFRESH`) answers success but does not. Without a flush the PRD appears on the
+index's own interval (measured on idm254: 8–9 minutes after the deploy);
+`bin/apps permission "Widget Access" --wait 600` waits for it with one sign-in.
+Don't poll with a loop of `bin/apps` calls: each signs in, and enough sign-ins
+fill the user's `oidpInstanceData` until every sign-in fails
+([idapps-rest.md](idapps-rest.md) §1). A change to an existing PRD is picked up at
+once. Bodies
 and status codes: [idapps-rest.md](idapps-rest.md).
 
 ## 5. Operate
