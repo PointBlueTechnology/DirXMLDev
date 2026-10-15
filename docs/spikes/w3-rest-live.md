@@ -1,4 +1,7 @@
-# Spike: a W3 REST activity, live — PASS after two fixes (2026-10-14, idm254)
+# Spike: W3 integration activities, live (2026-10-14/15, idm254)
+
+Part 1 (2026-10-14): REST — PASS after two fixes. Part 2 (2026-10-15): start-flow PASS; role-request
+and resource-request accepted, their grant blocked by the lab's workflow-administrator token.
 
 Two open checks from docs/plan.md, run together on idm254 (Identity Manager 4.10.1, Identity
 Applications 24.4): does `POST /index/permissions ADD_OR_MODIFY` make a just-deployed PRD
@@ -55,3 +58,38 @@ requestable at once, and does a `rest-activity` authored by `flow.activity.add` 
   DockerHost1. The Identity Applications (k3s) are at 192.168.103.98 (`nam-k3s`).
 - A log activity's message does not appear in the applications' log at the default level; an
   approval task is the readable witness of a path taken.
+
+## Part 2 (2026-10-15): role-request, resource-request, start-flow
+
+Scratch objects on a fresh `import-live` (diff "no differences"): a request form; a role
+(`role.add … --level 20 --category System`) and a resource (`resource.add … --category System`), no
+entitlement; four PRDs from NoApproval: *Role Req* (`role-request`: the role's DN quoted, target
+`recipient`, `GRANT`), *Resource Req* (`resource-request`, likewise), *Child* (an approval task) and
+*Start* (`start-flow`: *Child*'s DN quoted, recipient `recipient`). In each, the forward link and an added
+error link go to differently named approval tasks, so the path taken shows in the task list.
+
+- **start-flow — PASS.** `Start_Correlated_Workflow` → *Child* started → *Start* went forward; tasks "W3
+  start went forward" and "W3 child flow ran".
+- **role-request, resource-request — accepted, grant blocked.** Both evaluated their children (the bare
+  `GRANT`/`USER` are enum literals, unlike the REST attributes) and reached
+  `IDMApplicationClientImpl.requestPermission`, which threw `NullPointerException` in
+  `OAuthTokenManager.fetchToken` (`getWFAdminToken`) — before any request reached OSP — so the activity
+  took its error link ("W3 role took the error link", "W3 resource took the error link"). Retried after the
+  `oidpInstanceData` fix and a cache flush: the same. The workflow administrator's OAuth settings in the
+  applications' configuration are the place to look; reading them from the pod was not permitted in this
+  session. uaadmin was granted nothing (`nrfAssignedRoles`/`nrfAssignedResources` checked).
+- **Found: sign-ins fill `oidpInstanceData`.** At 13:05 every uaadmin sign-in began failing (HTTP 500,
+  OSP "Error writing instance data … -649 insufficient buffer"). The attribute held ~32 KB, filled by two
+  days of one-sign-in-per-call runs and a 9-minute polling loop. Cleared (Jerry's go-ahead); sign-ins
+  worked at once. `bin/apps` now reuses its token and has `permission --wait`.
+- **Found: a cache flush makes a new PRD requestable at once.** `DELETE
+  /IDMProv/rest/admin/cache/holder/items {"cacheHolderItems":[{"cacheHolderID":"All Cache"}]}` → 204;
+  the PRDs deployed 62 s earlier were in the permission index immediately (`bin/apps flush`).
+- **Found: `role.add`/`resource.add` take the category key from the container name.** A role's container
+  (`RoleDefs/Level<n>/<container>`) and its category key (`nrfRoleCategoryKey`, a key of the Directory
+  Abstraction Layer's `roles-category` choice list: `default`, `system` on idm254) are separate; the
+  operations set the key to the container's name lower-cased, and nothing checks it against the list
+  (follow-up issue).
+- Clean-up: tasks approved or denied (the two error-path tasks would not approve, "Failed to get task
+  details"; denied), every scratch object deleted (7, then 5 after the retry), `vault.diff` "no
+  differences".
