@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
+import com.pointblue.dirxml.dev.model.AppCategories;
 import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Provisioning;
@@ -120,11 +121,12 @@ public class AppConfigOpsTest {
 
     @Test
     public void roleLifecycle() throws Exception {
-        Result bad = run(new AppConfigOps.RoleAdd(null, "auditor", "40", "Custom", null, null, null, null, null));
+        Result bad = run(new AppConfigOps.RoleAdd(null, "auditor", "40", "Custom", null, null, null, null, null, null));
         assertTrue(bad.refusal, bad.refusal.contains("--level"));
-        Result r = run(new AppConfigOps.RoleAdd(null, "auditor", "20", "Custom", "Auditor\nde=Prüfer", "Audits things", "cn=boss,o=data", null, "2"));
+        Result r = run(new AppConfigOps.RoleAdd(null, "auditor", "20", "Custom", null, "Auditor\nde=Prüfer", "Audits things", "cn=boss,o=data", null, "2"));
         assertTrue(r.text(), r.ok());
         assertTrue(r.notes.toString(), r.notes.stream().anyMatch(n -> n.contains("created container RoleConfig/RoleDefs/Level20/Custom")));
+        assertTrue("no list in this tree: the keys are not checked", r.notes.stream().anyMatch(n -> n.contains("category keys not checked")));
         Provisioning p = prov();
         AppObject cat = p.object("RoleConfig/RoleDefs/Level20/Custom");
         assertEquals("nrfRoleDefs", cat.structuralClass());
@@ -137,7 +139,7 @@ public class AppConfigOpsTest {
         assertEquals(List.of("custom"), role.all("nrfRoleCategoryKey"));
         assertEquals("cn=boss,o=data", role.first("owner"));
         assertEquals("2", role.first("nrfQuorum"));
-        assertTrue(run(new AppConfigOps.RoleAdd(null, "auditor", "20", "Other", null, null, null, null, null)).refusal.contains("already exists"));
+        assertTrue(run(new AppConfigOps.RoleAdd(null, "auditor", "20", "Other", null, null, null, null, null, null)).refusal.contains("already exists"));
 
         Result s = run(new AppConfigOps.RoleSet(null, "auditor", "fr=Auditeur", null, "custom,audit", "-", null, null, "10"));
         assertTrue(s.text(), s.ok());
@@ -157,12 +159,12 @@ public class AppConfigOpsTest {
 
     @Test
     public void resourceLifecycle() throws Exception {
-        Result none = run(new AppConfigOps.ResourceAdd(null, "r1", "Custom", null, null, null, null, false, null, null));
+        Result none = run(new AppConfigOps.ResourceAdd(null, "r1", "Custom", null, null, null, null, null, false, null, null));
         assertTrue(none.refusal, none.refusal.contains("ResourceDefs"));
         assertTrue(run(new AppConfigOps.Add(null, "RoleConfig/ResourceDefs", "nrfResourceDefs", null, null)).ok());
-        Result param = run(new AppConfigOps.ResourceAdd(null, "r1", "Custom", null, null, null, "p", false, null, null));
+        Result param = run(new AppConfigOps.ResourceAdd(null, "r1", "Custom", null, null, null, null, "p", false, null, null));
         assertTrue(param.refusal, param.refusal.contains("--param needs --entitlement"));
-        Result r = run(new AppConfigOps.ResourceAdd(null, "r1", "Custom", "Resource One", null,
+        Result r = run(new AppConfigOps.ResourceAdd(null, "r1", "Custom", null, "Resource One", null,
             "cn=Groups,cn=LB,cn=driverset1,o=system", "\\T\\G1", true, null, null));
         assertTrue(r.text(), r.ok());
         AppObject res = prov().object("RoleConfig/ResourceDefs/Custom/r1");
@@ -179,6 +181,81 @@ public class AppConfigOpsTest {
         assertEquals("en~Grants G1", res.first("nrfLocalizedDescrs"));
         assertTrue(run(new AppConfigOps.ResourceRemove(null, "r1")).ok());
         assertNull(prov().object("RoleConfig/ResourceDefs/Custom/r1"));
+    }
+
+    private static final String ROLES_CATEGORY = "<list-items protected=\"true\"><display xml:lang=\"en\"><label>Roles Category</label></display>"
+        + "<list-item><key>default</key><display xml:lang=\"en\"><label>Default</label></display></list-item>"
+        + "<list-item><key>system</key><display xml:lang=\"en\"><label>System Roles</label></display>"
+        + "<display xml:lang=\"de\"><label>Systemrollen</label></display></list-item></list-items>";
+
+    private void rolesCategoryList() throws Exception {
+        assertTrue(run(new AppConfigOps.Add(null, "DirectoryModel/ChoiceDefs", "srvprvChoiceDefs", null, null)).ok());
+        Result r = run(new AppConfigOps.Add(null, "DirectoryModel/ChoiceDefs/roles-category", "srvprvChoice", null, "XmlData=" + ROLES_CATEGORY));
+        assertTrue(r.text(), r.ok());
+    }
+
+    @Test
+    public void theCategoryIsAKeyOfTheListAndTheContainerIsSeparate() throws Exception {
+        rolesCategoryList();
+        Result unknown = run(new AppConfigOps.RoleAdd(null, "auditor", "20", "Sales", null, null, null, null, null, null));
+        assertTrue(unknown.refusal, unknown.refusal.contains("no role category 'Sales'") && unknown.refusal.contains("its keys: default, system"));
+        // the key as the list has it, whatever the case given; the container is its own name
+        Result r = run(new AppConfigOps.RoleAdd(null, "auditor", "20", "SYSTEM,default", "Audit", null, null, null, null, null));
+        assertTrue(r.text(), r.ok());
+        AppObject role = prov().object("RoleConfig/RoleDefs/Level20/Audit/auditor");
+        assertNotNull(role);
+        assertEquals(List.of("default", "system"), role.all("nrfRoleCategoryKey"));
+        // without --container: the container named like the first category, an existing one matched without regard to case
+        assertTrue(run(new AppConfigOps.RoleAdd(null, "watcher", "20", "system", null, null, null, null, null, null)).ok());
+        assertNotNull(prov().object("RoleConfig/RoleDefs/Level20/System/watcher"));
+        assertTrue(run(new AppConfigOps.RoleAdd(null, "x", "20", "system", "a/b", null, null, null, null, null)).refusal.contains("one name"));
+        // role.set checks the keys the same way
+        assertTrue(run(new AppConfigOps.RoleSet(null, "auditor", null, null, "bogus", null, null, null, null)).refusal.contains("no role category 'bogus'"));
+        assertTrue(run(new AppConfigOps.RoleSet(null, "auditor", null, null, "System", null, null, null, null)).ok());
+        assertEquals(List.of("system"), prov().object("RoleConfig/RoleDefs/Level20/Audit/auditor").all("nrfRoleCategoryKey"));
+    }
+
+    @Test
+    public void categoryListAddSetRemove() throws Exception {
+        assertTrue(run(new CategoryOps.Add(null, "role", "sales", null)).refusal.contains("import-live"));
+        rolesCategoryList();
+        assertTrue(run(new CategoryOps.Add(null, "group", "sales", null)).refusal.contains("--for must be role or resource"));
+        assertTrue(run(new CategoryOps.Add(null, "role", "sa les", null)).refusal.contains("letters, digits"));
+        assertTrue(run(new CategoryOps.Add(null, "role", "System", null)).refusal.contains("already has the key 'system'"));
+        Result add = run(new CategoryOps.Add(null, "roles", "sales", "Sales Roles\nde=Vertriebsrollen"));
+        assertTrue(add.text(), add.ok());
+        List<AppCategories.Category> cats = AppCategories.of(prov(), AppCategories.For.ROLE);
+        assertEquals(List.of("default", "system", "sales"), cats.stream().map(AppCategories.Category::key).toList());
+        assertEquals(Map.of("en", "Sales Roles", "de", "Vertriebsrollen"), cats.get(2).labels());
+        String xml = prov().object("DirectoryModel/ChoiceDefs/roles-category").first("XmlData");
+        assertTrue(xml, xml.contains("<list-item><key>sales</key><display xml:lang=\"en\"><label>Sales Roles</label></display>")
+            || xml.contains("<key>sales</key>"));
+
+        assertTrue(run(new CategoryOps.Set(null, "role", "sales", null)).refusal.contains("--display"));
+        assertTrue(run(new CategoryOps.Set(null, "role", "nope", "x")).refusal.contains("has no key 'nope'"));
+        assertTrue(run(new CategoryOps.Set(null, "role", "sales", "Sales Roles")).refusal.contains("nothing to change"));
+        assertTrue(run(new CategoryOps.Set(null, "role", "SALES", "fr=Rôles commerciaux")).ok());
+        assertEquals("Rôles commerciaux", AppCategories.of(prov(), AppCategories.For.ROLE).get(2).labels().get("fr"));
+
+        assertTrue(run(new AppConfigOps.RoleAdd(null, "seller", "20", "sales", "Sales", null, null, null, null, null)).ok());
+        Result used = run(new CategoryOps.Remove(null, "role", "sales"));
+        assertTrue(used.refusal, used.refusal.contains("still used by") && used.refusal.contains("RoleConfig/RoleDefs/Level20/Sales/seller"));
+        assertTrue(run(new AppConfigOps.RoleRemove(null, "seller")).ok());
+        assertTrue(run(new CategoryOps.Remove(null, "role", "sales")).ok());
+        assertEquals(2, AppCategories.of(prov(), AppCategories.For.ROLE).size());
+        assertTrue(run(new CategoryOps.Remove(null, "role", "sales")).refusal.contains("has no key"));
+    }
+
+    @Test
+    public void validateWarnsOfAKeyTheListLacks() throws Exception {
+        rolesCategoryList();
+        com.pointblue.dirxml.dev.validate.Report rep = new com.pointblue.dirxml.dev.validate.Report();
+        new com.pointblue.dirxml.dev.validate.AppConfigCheck().run(AsCodeReader.read(tree), rep);
+        assertTrue("provManager's 'system' is in the list", rep.findings().stream().noneMatch(x -> x.code.equals("appconfig-category-unknown")));
+        assertTrue(run(new AppConfigOps.Set(null, "provManager", "nrfRoleCategoryKey", "sales", null, false)).ok());
+        rep = new com.pointblue.dirxml.dev.validate.Report();
+        new com.pointblue.dirxml.dev.validate.AppConfigCheck().run(AsCodeReader.read(tree), rep);
+        assertTrue(rep.findings().toString(), rep.findings().stream().anyMatch(x -> x.code.equals("appconfig-category-unknown") && x.message.contains("'sales'")));
     }
 
     @Test
@@ -232,7 +309,7 @@ public class AppConfigOpsTest {
     public void everyOperationIsRegistered() {
         for (String n : List.of("appconfig.set", "appconfig.add", "appconfig.remove", "role.add", "role.set", "role.remove",
             "resource.add", "resource.set", "resource.remove", "entity.add", "entity.set", "entity.remove",
-            "entity.attr.add", "entity.attr.set", "entity.attr.remove")) {
+            "entity.attr.add", "entity.attr.set", "entity.attr.remove", "category.add", "category.set", "category.remove")) {
             assertNotNull(n, Registry.get(n));
         }
         assertTrue(Registry.usage(Registry.get("role.add")).contains("--level"));
