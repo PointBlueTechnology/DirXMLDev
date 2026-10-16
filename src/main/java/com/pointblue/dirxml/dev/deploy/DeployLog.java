@@ -98,29 +98,109 @@ public final class DeployLog {
         return out;
     }
 
-    /** The last successful deploy to an environment, or null. */
+    /**
+     * The last successful deploy to an environment, or null: the latest by its timestamp, not the last line — two
+     * branches' logs merged with the union driver ({@link #GITATTRIBUTES}) interleave their lines.
+     */
     public static Record lastOk(Path tree, String env) throws IOException {
-        List<Record> all = read(tree, env);
-        for (int i = all.size() - 1; i >= 0; i--) {
-            Record r = all.get(i);
-            if ("deploy".equals(r.operation) && "ok".equals(r.outcome)) {
-                return r;
+        Record best = null;
+        Instant bestAt = null;
+        for (Record r : read(tree, env)) {
+            if (!"deploy".equals(r.operation) || !"ok".equals(r.outcome)) {
+                continue;
+            }
+            Instant at = instant(r.timestamp);
+            if (best == null || (at != null && (bestAt == null || !at.isBefore(bestAt)))) {
+                best = r;
+                bestAt = at;
             }
         }
-        return null;
+        return best;
     }
 
-    /** True if a green deploy of {@code commit} to {@code env} is on record. */
+    private static Instant instant(String ts) {
+        try {
+            return ts == null ? null : Instant.parse(ts);
+        } catch (java.time.format.DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    /**
+     * True if a green deploy of {@code commit} to {@code env} is on record — or of a commit with the same content:
+     * one that differs from it only in the deploy's own outputs ({@code deploy-log/}, {@code deploy-snapshots/}).
+     * Committing the record of a test deploy makes a new commit; production deploying that commit deploys exactly
+     * what was tested, and so does a merge that brought nothing else in.
+     */
     public static boolean hasOkDeploy(Path tree, String env, String commit) throws IOException {
         if (commit == null) {
             return false;
         }
+        java.util.Set<String> tried = new java.util.HashSet<>();
         for (Record r : read(tree, env)) {
-            if ("deploy".equals(r.operation) && "ok".equals(r.outcome) && commit.equals(r.treeCommit)) {
+            if (!"deploy".equals(r.operation) || !"ok".equals(r.outcome) || r.treeCommit == null) {
+                continue;
+            }
+            if (commit.equals(r.treeCommit)) {
+                return true;
+            }
+            if (tried.add(r.treeCommit) && sameContent(tree, r.treeCommit, commit)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** True when the tree's content at {@code a} and {@code b} is the same but for the deploy's own outputs. */
+    static boolean sameContent(Path tree, String a, String b) {
+        try {
+            Process p = new ProcessBuilder("git", "-C", tree.toAbsolutePath().toString(), "diff", "--quiet", a, b,
+                "--", ".", ":!" + DIR, ":!deploy-snapshots")
+                .redirectErrorStream(true).start();
+            try (InputStream in = p.getInputStream()) {
+                in.readAllBytes();
+            }
+            return p.waitFor() == 0;   // 1: they differ; 128: a commit this repository does not have
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * The tree's {@code .gitattributes}: content is byte-exact vault data, never normalised; and a deploy log is
+     * merged by keeping both sides' lines (each line is one whole record), so two branches that both deployed
+     * merge without a conflict in {@code deploy-log/}.
+     */
+    public static final String GITATTRIBUTES = "# IDM-as-code: content is byte-exact vault data; never normalize line endings\n* -text\n"
+        + "# a deploy log keeps every branch's records when branches merge\n" + DIR + "/*.jsonl merge=union\n";
+
+    /** Write {@link #GITATTRIBUTES} at {@code dir}, or add the deploy-log line to the one there. */
+    public static void writeAttributes(Path dir) throws IOException {
+        Path f = dir.resolve(".gitattributes");
+        if (!Files.exists(f)) {
+            Files.writeString(f, GITATTRIBUTES, StandardCharsets.UTF_8);
+            return;
+        }
+        String have = Files.readString(f, StandardCharsets.UTF_8);
+        if (!have.contains("merge=union")) {
+            Files.writeString(f, (have.isEmpty() || have.endsWith("\n") ? have : have + "\n")
+                + "# a deploy log keeps every branch's records when branches merge\n" + DIR + "/*.jsonl merge=union\n", StandardCharsets.UTF_8);
+        }
+    }
+
+    /** The branch the tree's checkout is on, or null (not in git, or a detached HEAD). */
+    public static String treeBranch(Path tree) {
+        try {
+            Process p = new ProcessBuilder("git", "-C", tree.toAbsolutePath().toString(), "rev-parse", "--abbrev-ref", "HEAD")
+                .redirectErrorStream(true).start();
+            String out;
+            try (InputStream in = p.getInputStream()) {
+                out = new String(in.readAllBytes(), StandardCharsets.UTF_8).strip();
+            }
+            return p.waitFor() == 0 && !out.isEmpty() && !out.equals("HEAD") ? out : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** The tree's git HEAD commit, or null when it isn't a git checkout (or git isn't available). */
