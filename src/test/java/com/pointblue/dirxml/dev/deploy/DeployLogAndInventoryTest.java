@@ -54,6 +54,53 @@ public class DeployLogAndInventoryTest {
         assertNull(DeployLog.treeCommit(tree));   // not a git checkout
     }
 
+    /** Two branches that both deployed merge without a conflict in deploy-log/ (the union driver), and the last deploy is the latest by time. */
+    @Test
+    public void twoBranchesLogsMergeAndTheLatestDeployWins() throws Exception {
+        Path tree = Files.createTempDirectory("idm-log-merge");
+        DeployLog.writeAttributes(tree);
+        assertTrue(Files.readString(tree.resolve(".gitattributes")).contains("deploy-log/*.jsonl merge=union"));
+        DeployLog.writeAttributes(tree);   // idempotent
+        assertEquals(1, Files.readString(tree.resolve(".gitattributes")).split("merge=union", -1).length - 1);
+        git(tree, "init", "-q", "-b", "main");
+        DeployLog.Record first = DeployLog.record("dev", "deploy");
+        first.timestamp = "2026-10-16T09:00:00Z";
+        first.treeCommit = "1".repeat(40);
+        first.outcome = "ok";
+        DeployLog.append(tree, first);
+        commit(tree, "first");
+        git(tree, "checkout", "-q", "-b", "feature");
+        DeployLog.Record later = DeployLog.record("dev", "deploy");
+        later.timestamp = "2026-10-16T11:00:00.5Z";
+        later.treeCommit = "3".repeat(40);
+        later.outcome = "ok";
+        DeployLog.append(tree, later);
+        commit(tree, "feature deploy");
+        git(tree, "checkout", "-q", "main");
+        DeployLog.Record mid = DeployLog.record("dev", "deploy");
+        mid.timestamp = "2026-10-16T10:00:00Z";
+        mid.treeCommit = "2".repeat(40);
+        mid.outcome = "ok";
+        DeployLog.append(tree, mid);
+        commit(tree, "main deploy");
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "merge", "-q", "--no-edit", "feature");
+        assertEquals(3, DeployLog.read(tree, "dev").size());
+        assertEquals("3".repeat(40), DeployLog.lastOk(tree, "dev").treeCommit);
+    }
+
+    private static void commit(Path dir, String message) throws Exception {
+        git(dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "add", "-A");
+        git(dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", message);
+    }
+
+    private static void git(Path dir, String... args) throws Exception {
+        List<String> cmd = new java.util.ArrayList<>(List.of("git", "-C", dir.toString()));
+        cmd.addAll(List.of(args));
+        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+        String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals(out, 0, p.waitFor());
+    }
+
     @Test
     public void inventoryFindsEverySecretKind() {
         DriverSet ds = ValidatorTest.clean();

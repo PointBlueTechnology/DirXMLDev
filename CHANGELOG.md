@@ -7,6 +7,28 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-10-16
+
+### Fixed
+
+- **`prd.requires=stg` accepts the commit of a deploy record.** "Commit the deploy record" after the
+  STG deploy made a new commit, so production saw a different commit and refused, though nothing had
+  changed. A green STG deploy now counts for any commit with the same content, differing only in
+  `deploy-log/` and `deploy-snapshots/`. A content change since the STG deploy is still refused.
+- **"The last deploy" is the latest by its timestamp.** It used to be the last line of the log, and
+  the lines of two merged logs interleave.
+- **`docs/vault-deploy.md` said the production gate runs `simulate`.** It doesn't, and the doc now
+  says so. It also says that every tier validates.
+
+### Added
+
+- **`vault.deploy --base-branch <b>`.** A production deploy is refused unless the tree is on that
+  branch. The web page passes the project's base branch, so production takes only what was merged.
+- **Deploy logs merge without conflicts.** The tree's `.gitattributes` now carries
+  `deploy-log/*.jsonl merge=union`, so two branches that both deployed merge cleanly.
+  `export-project` writes the line, or adds it to an existing `.gitattributes`.
+  `DeployLog.writeAttributes` is the shared writer.
+
 ## [0.43.0] - 2026-10-16
 
 ### Fixed

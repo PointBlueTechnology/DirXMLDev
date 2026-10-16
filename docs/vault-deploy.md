@@ -495,9 +495,19 @@ The gate, by tier:
 
 | tier | to deploy |
 |---|---|
-| `dev` | `--yes` or `--step` |
-| `stg` | `--yes` or `--step`; validate clean |
-| `prd` | `--confirm prd` (the environment's name typed out) with `--yes` or `--step`; validate clean; **current state known** (no drift vs the last deploy recorded in `deploy-log/prd.jsonl`, or `--capture-drift` first); `simulate` green if the tree has a corpus (`--cases`); and, when the environment sets `prd.requires=stg`, a green STG deploy of the same tree commit in `deploy-log/stg.jsonl` |
+| `dev` | `--yes` or `--step`; validate clean (within the deploy's scope) |
+| `stg` | `--yes` or `--step`; validate clean (within the deploy's scope) |
+| `prd` | `--confirm prd` (the environment's name typed out) with `--yes` or `--step`; validate clean; the tree committed, nothing uncommitted; with `--base-branch main`, the tree on `main`; when the environment sets `prd.requires=stg`, a green STG deploy in `deploy-log/stg.jsonl` of this commit **or of one with the same content** (differing only in `deploy-log/` and `deploy-snapshots/`, as the commit of a deploy record does); and **current state known** (no drift vs the last deploy recorded in `deploy-log/prd.jsonl`, or `--capture-drift` first) |
+
+The gate does not run `simulate`: run it yourself (or in CI) before a
+production deploy when the tree has a corpus.
+
+`--base-branch` is how a team says production takes only what was merged:
+the web page sets it to the project's base branch for every production
+deploy. A deploy log is merged line by line (`deploy-log/*.jsonl
+merge=union` in the tree's `.gitattributes`, written by `export-project`),
+so two branches that both deployed merge without a conflict there, and "the
+last deploy" is the latest by its timestamp, not the last line.
 
 A deploy identity per environment, with rights only on its driver set, is the
 client's job; the tool never writes outside `driverSet`.
