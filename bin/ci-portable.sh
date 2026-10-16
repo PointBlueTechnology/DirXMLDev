@@ -25,6 +25,7 @@ javac --release 21 -encoding UTF-8 -cp "$CP" -d "$OUT" \
   src/main/java/com/pointblue/dirxml/dev/deploy/SecretSource.java \
   src/main/java/com/pointblue/dirxml/dev/deploy/Secrets.java \
   src/main/java/com/pointblue/dirxml/dev/deploy/Environments.java \
+  src/main/java/com/pointblue/dirxml/dev/deploy/PinnedTrust.java \
   src/main/java/com/pointblue/dirxml/dev/deploy/AgentWriteGate.java \
   src/main/java/com/pointblue/dirxml/dev/operate/TraceViewer.java \
   src/main/java/com/pointblue/dirxml/dev/deploy/IdmOps.java \

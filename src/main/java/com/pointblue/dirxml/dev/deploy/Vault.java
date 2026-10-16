@@ -66,6 +66,8 @@ public final class Vault implements VaultAccess {
         public String bindDn;
         public String password;
         public boolean trustAll = false;   // opt in: accept any certificate (a lab, a tunnel); verified otherwise
+        /** The vault certificate's SHA-256 the environment trusts besides the JVM's roots ({@code <env>.certSha256}); null: none. */
+        public String certSha256;
         /** Attributes beyond {@link #BINARY_ATTRS} to read as bytes (a clone marks every octet-string attribute of the source schema). */
         public java.util.Collection<String> binaryAttrs = List.of();
 
@@ -76,6 +78,7 @@ public final class Vault implements VaultAccess {
             c.bindDn = bindDn;
             c.password = password;
             c.trustAll = trustAll;
+            c.certSha256 = certSha256;
             c.binaryAttrs = binaryAttrs;
             return c;
         }
@@ -159,6 +162,15 @@ public final class Vault implements VaultAccess {
                 // through an SSH tunnel (127.0.0.1:6637) presents its own hostname's certificate, and JNDI's
                 // LDAPS endpoint identification would otherwise turn that into "simple bind failed"
                 System.setProperty("com.sun.jndi.ldap.object.disableEndpointIdentification", "true");
+            } else if (c.url.startsWith("ldaps")) {
+                // the JVM's trust, or the environment's pinned certificate (PinnedTrust); a refusal names the certificate
+                env.put("java.naming.ldap.factory.socket", PinnedSockets.class.getName());
+                PinnedSockets.PIN.set(c.certSha256);
+                try {
+                    return new Vault(c, new InitialDirContext(env));
+                } finally {
+                    PinnedSockets.PIN.remove();
+                }
             }
             return new Vault(c, new InitialDirContext(env));
         } catch (Exception e) {
@@ -466,7 +478,7 @@ public final class Vault implements VaultAccess {
                 LDAPConnection conn;
                 if ("ldaps".equals(u.getScheme())) {
                     SSLContext ctx = SSLContext.getInstance("TLS");
-                    ctx.init(null, config.trustAll ? new TrustManager[] {TRUST_ALL} : null, new java.security.SecureRandom());
+                    ctx.init(null, new TrustManager[] {config.trustAll ? TRUST_ALL : new PinnedTrust(config.certSha256)}, new java.security.SecureRandom());
                     // the JNDI channel gets host-name checking from the JVM; a raw JSSE socket does not
                     // unless asked, so ask (trustAll opts out of both, as documented)
                     conn = new LDAPConnection(new LDAPJSSESecureSocketFactory(

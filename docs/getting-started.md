@@ -127,10 +127,16 @@ secret.
 - `servers` — `<serverDn>=<url>;…`: the other servers of a multi-server
   driver set, when their URLs cannot be derived from the tree; import, deploy
   and the clone reach each server's own driver settings through them.
-- `trustAll` — LDAPS verifies the server certificate against the JDK
-  truststore ([install.md](install.md) §4.3). `trustAll=true` opts in to
-  accepting any certificate and skips the host-name check, for a lab with a
-  private CA or an SSH tunnel; never on production.
+- `certSha256`: LDAPS verifies the server certificate against the JDK truststore
+  ([install.md](install.md) §4.3). A vault whose certificate the JDK doesn't trust (a private CA, a
+  host name that doesn't match, a tunnel) is reached by **pinning** its certificate: give its SHA-256,
+  in hex, colons optional. That one certificate is then trusted, whatever its issuer or name. Anything
+  else is refused, and a changed certificate is refused naming both fingerprints. This is the way for
+  production. To get the fingerprint, run
+  `openssl s_client -connect host:636 </dev/null | openssl x509 -noout -fingerprint -sha256`, or use
+  DirXMLDevWeb's Connections page, which shows it and pins it for you.
+- `trustAll`: `trustAll=true` accepts any certificate and skips the host-name check. Use it for a
+  throwaway lab or a tunnel, never on production. Prefer `certSha256`.
 - `formsUrl`, `appsUser`, `appsPassword` (any of the four forms), optional
   `appsClient` (default `rbpmrest`) and `appsSecret` — only for `bin/apps`
   and for `form.edit --env`.

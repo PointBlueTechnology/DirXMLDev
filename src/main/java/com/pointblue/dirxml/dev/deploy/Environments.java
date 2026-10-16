@@ -61,6 +61,8 @@ public final class Environments {
         public EventsConfig events;
         /** {@code <env>.servers=<serverDn>=<url>;…}, the tree's other servers when it cannot describe them; null when unset. */
         public String servers;
+        /** {@code <env>.certSha256}: the vault certificate trusted besides the JVM's roots (a pin); null when unset. */
+        public String certSha256;
 
         Environment(String name, String url, String bindDn, String password, String driverSetDn,
                     Tier tier, String requires, Path secretsFile, boolean trustAll, String sshHost, String sshUser) {
@@ -91,6 +93,7 @@ public final class Environments {
             c.bindDn = bindDn;
             c.password = password;
             c.trustAll = trustAll;
+            c.certSha256 = certSha256;
             return c;
         }
 
@@ -392,6 +395,7 @@ public final class Environments {
             sshUser == null || sshUser.isBlank() ? null : sshUser.trim());
         env.events = eventsOf(name);
         env.servers = property(name, "servers");
+        env.certSha256 = PinnedTrust.normalize(property(name, "certSha256"));
         return env;
     }
 
