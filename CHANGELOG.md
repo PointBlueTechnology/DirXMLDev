@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **`<env>.servers=<serverDn>=<url>` matches the whole server DN.** The value was split at the
+  first `=`, so `cn=idm2,ou=servers,o=system=ldaps://…` became the key `cn`, and no server's address
+  was ever used. That affected the trace, import, deploy and the clone. The address now starts at
+  `=ldap://` or `=ldaps://`.
+
 ### Added
 
 - **Certificate pinning: `<env>.certSha256`.** A vault whose certificate the JDK doesn't trust (a

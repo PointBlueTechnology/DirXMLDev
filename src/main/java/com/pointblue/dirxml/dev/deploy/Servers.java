@@ -54,6 +54,8 @@ public final class Servers {
     private Servers() {
     }
 
+    private static final java.util.regex.Pattern SERVER_URL = java.util.regex.Pattern.compile("(?i)^(.+?)=((?:ldaps?)://.+)$");
+
     /** {@code <env>.servers=<serverDn>=<url>;<serverDn>=<url>} — the tree's other servers, when it cannot describe them. */
     public static Map<String, String> urls(Environments.Environment env) {
         Map<String, String> out = new LinkedHashMap<>();
@@ -62,9 +64,10 @@ public final class Servers {
             return out;
         }
         for (String part : raw.split(";")) {
-            int eq = part.indexOf('=');
-            if (eq > 0) {
-                out.put(part.substring(0, eq).trim(), part.substring(eq + 1).trim());
+            // the server's DN has '=' of its own (cn=idm2,ou=servers,o=system): the address starts at "=ldap"
+            java.util.regex.Matcher m = SERVER_URL.matcher(part.trim());
+            if (m.matches()) {
+                out.put(m.group(1).trim(), m.group(2).trim());
             }
         }
         return out;
