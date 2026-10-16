@@ -445,9 +445,13 @@ doctor --env <env-name>tun and engine.version --env <env-name>tun.
 If the handshake fails without a tunnel, the JDK does not trust the vault CA
 yet. Ask me for the CA file, then either import it
 (keytool -importcert -cacerts -alias idm-ca -file ca.pem) or point
-IDM_JAVA_OPTS at a truststore (-Djavax.net.ssl.trustStore=...). On a lab you
-may set <env-name>.trustAll=true instead. Never set trustAll=true on
-production.
+IDM_JAVA_OPTS at a truststore (-Djavax.net.ssl.trustStore=...). Or pin the
+vault's certificate: show me its SHA-256 fingerprint (openssl s_client
+-connect host:636 </dev/null | openssl x509 -noout -fingerprint -sha256),
+confirm it is the vault's, and set <env-name>.certSha256=<that fingerprint>.
+Only that certificate is then trusted, which is fine for production. On a
+throwaway lab you may set <env-name>.trustAll=true instead. Never set
+trustAll=true on production.
 
 If the failure is a bad password or a missing Keychain item, the error
 names the fix. Print the security add-generic-password command with nothing

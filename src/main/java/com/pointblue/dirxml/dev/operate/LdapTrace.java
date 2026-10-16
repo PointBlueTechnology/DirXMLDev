@@ -24,17 +24,29 @@ import java.util.regex.Pattern;
  * file has it ({@code [timestamp]:Driver ST:text}, an XML document's lines after it), so
  * {@code trace.view} and the trace viewer read it; a continuation belongs to the driver before it.
  * <p>
- * Certificates: one the JVM does not trust is accepted for this run when the environment says
- * {@code trustAll} (a lab, a tunnel), and refused otherwise — the core's vault connections do the same.
+ * Certificates: one the JVM does not trust is accepted for this run when it is the environment's pinned
+ * certificate ({@code certSha256}) or the environment says {@code trustAll} (a lab, a tunnel), and refused
+ * otherwise — the core's vault connections do the same.
  */
 public final class LdapTrace {
 
     /** host:port of the servers whose environment says trustAll. */
     private static final Set<String> TRUSTED = ConcurrentHashMap.newKeySet();
 
+    /** host:port → the certificate SHA-256 its environment pins ({@code certSha256}). */
+    private static final java.util.Map<String, String> PINS = new ConcurrentHashMap<>();
+
     static {
-        CertificateTrust.setPrompt(req -> TRUSTED.contains(req.host() + ":" + req.port())
-            ? CertificateTrust.Decision.ONCE : CertificateTrust.Decision.REJECT);
+        CertificateTrust.setPrompt(LdapTrace::decide);
+    }
+
+    /** Trusted for this run: the server's environment says trustAll, or the certificate is the one it pins. */
+    static CertificateTrust.Decision decide(CertificateTrust.Request req) {
+        String key = req.host() + ":" + req.port();
+        if (TRUSTED.contains(key) || com.pointblue.dirxml.dev.deploy.PinnedTrust.matches(PINS.get(key), req.certificate())) {
+            return CertificateTrust.Decision.ONCE;
+        }
+        return CertificateTrust.Decision.REJECT;
     }
 
     private final String driver;
@@ -78,6 +90,9 @@ public final class LdapTrace {
         ConnectionSettings settings = settings(env);
         if (env.trustAll) {
             TRUSTED.add(settings.host() + ":" + settings.port());
+        }
+        if (env.certSha256 != null) {
+            PINS.put(settings.host() + ":" + settings.port(), env.certSha256);
         }
         TraceParser parser = new TraceParser();
         long[] count = {0};
