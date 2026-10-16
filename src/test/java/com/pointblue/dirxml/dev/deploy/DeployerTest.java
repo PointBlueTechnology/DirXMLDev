@@ -277,6 +277,67 @@ public class DeployerTest {
         assertTrue(files, files.contains("driverset.xml"));
     }
 
+    /**
+     * Promotion (DirXMLDevWeb docs/git-workflow.md): production's {@code requires=stg} is met by a commit whose only
+     * difference from the one tested is the deploy record ("Commit the deploy record" after the test deploy); not by
+     * a commit that changed content since; and with {@code --base-branch main} a production deploy from any other
+     * branch is refused.
+     */
+    @Test
+    public void productionTakesTheTestedContentFromTheBaseBranch() throws Exception {
+        DriverSet live = VaultMappingTest.model();
+        FakeVault vault = seedVault(live);
+        DriverSet changed = VaultMappingTest.model();
+        Driver ad = changed.driver("AD");
+        ad.subscriber.policies.add(new Policy("sub-new", Scope.SUBSCRIBER, "AD", ValidatorTest.xml(
+            "<policy><rule><description>new</description><conditions/><actions/></rule></policy>")));
+        ad.links.add(new PolicyLink(PolicySet.SUB_COMMAND, "drivers/AD/subscriber/sub-new", 0));
+        Path tree = tmp.newFolder("promote").toPath();
+        AsCodeWriter.write(changed, tree);
+        git(tree, "init", "-q", "-b", "main");
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "add", "-A");
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "the change");
+        String tested = gitOut(tree, "rev-parse", "HEAD").trim();
+
+        // the test deploy's record, committed on its own: a new commit, the same content
+        DeployLog.Record rec = DeployLog.record("stg", "deploy");
+        rec.treeCommit = tested;
+        rec.outcome = "ok";
+        DeployLog.append(tree, rec);
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "add", "-A");
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "deploy record");
+
+        Environments.Environment prd = new Environments.Environment("prd", "ldaps://fake:636", "cn=admin,o=system", "pw", DS,
+            Environments.Tier.PRD, "stg", null, true, null, null);
+        Deployer.Options o = options(tree, prd, List.of());
+        o.confirm = "prd";
+        o.baseBranch = "main";
+        Deployer.Result r = new Deployer(o, vault).run();
+        // past the branch and requires checks: what stops it now is production's unknown state
+        assertTrue(r.text(), r.refusal != null && r.refusal.contains("no deploy to 'prd' is on record"));
+
+        // a content change since the test deploy: not what was tested
+        Path policy;
+        try (java.util.stream.Stream<Path> found = Files.walk(tree)) {
+            policy = found.filter(f -> f.getFileName().toString().startsWith("sub-new") && f.toString().endsWith(".xml")).findFirst().orElseThrow();
+        }
+        Files.writeString(policy, Files.readString(policy).replace("<description>new</description>", "<description>changed after the test</description>"));
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-am", "untested");
+        Deployer.Options again = options(tree, prd, List.of());
+        again.confirm = "prd";
+        again.baseBranch = "main";
+        r = new Deployer(again, vault).run();
+        assertTrue(r.text(), r.refusal != null && r.refusal.contains("requires a green deploy of this commit"));
+
+        // another branch: refused before anything else
+        git(tree, "checkout", "-q", "-b", "feature/x");
+        Deployer.Options branch = options(tree, prd, List.of());
+        branch.confirm = "prd";
+        branch.baseBranch = "main";
+        r = new Deployer(branch, vault).run();
+        assertTrue(r.text(), r.refusal != null && r.refusal.startsWith("a production deploy comes from main; this tree is on feature/x"));
+    }
+
     // ---- the validation gate of a scoped deploy (ValidationScope) ----
 
     /** model() plus a driver "Broken" whose policy names a GCV nobody defines: a validation error outside AD. */

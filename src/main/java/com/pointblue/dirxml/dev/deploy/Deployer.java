@@ -55,6 +55,11 @@ public final class Deployer {
         public String secretsMode = "none";
         public boolean allowMissingSecrets;
         public boolean captureDrift;
+        /**
+         * {@code --base-branch}: a production deploy comes from this branch only (the web page sets the project's base,
+         * usually main), so what reaches production is what was merged and reviewed. Null: any branch.
+         */
+        public String baseBranch;
         public boolean json;
         public List<String> deleteDrivers = List.of();
         /** {@code --delete-all} kinds ({@code entitlements}, {@code forms}, {@code prds}), repeatable. */
@@ -672,9 +677,16 @@ public final class Deployer {
         if (DeployLog.treeDirty(o.tree)) {
             return "the tree has uncommitted changes; commit them first so the deploy records what was deployed";
         }
+        if (o.baseBranch != null) {
+            String on = DeployLog.treeBranch(o.tree);
+            if (!o.baseBranch.equals(on)) {
+                return "a production deploy comes from " + o.baseBranch + "; this tree is on " + (on == null ? "no branch" : on)
+                    + " — merge it into " + o.baseBranch + " and deploy from there";
+            }
+        }
         if (env.requires != null && !DeployLog.hasOkDeploy(o.tree, env.requires, treeCommit)) {
             return "environment '" + env.name + "' requires a green deploy of this commit (" + treeCommit.substring(0, 12)
-                + ") to '" + env.requires + "' first (deploy-log/" + env.requires + ".jsonl has none)";
+                + "), or of one with the same content, to '" + env.requires + "' first (deploy-log/" + env.requires + ".jsonl has none)";
         }
         // known state: the vault must match what was last deployed here
         DeployLog.Record last = DeployLog.lastOk(o.tree, env.name);
@@ -731,10 +743,7 @@ public final class Deployer {
             for (String managed : AsCodeWriter.MANAGED_PATHS) {
                 deleteRecursively(wt.resolve(managed));
             }
-            Path attrs = wt.resolve(".gitattributes");
-            if (!Files.exists(attrs)) {
-                Files.writeString(attrs, "# IDM-as-code: content is byte-exact vault data; never normalize line endings\n* -text\n");
-            }
+            DeployLog.writeAttributes(wt);
             AsCodeWriter.write(live, wt);
             run("git", "-C", wt.toString(), "add", "-A");
             String commit;

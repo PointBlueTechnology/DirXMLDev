@@ -12,7 +12,7 @@ import java.util.Map;
  * <pre>
  *   vault.diff     <tree> --env <name> [--driver D…] [--json]
  *   vault.deploy   <tree> --env <name> [--driver D…] [--dry-run | --yes | --step] [--confirm <name>]
- *                  [--no-restart] [--secrets none|missing|all] [--allow-missing-secrets] [--capture-drift] [--json]
+ *                  [--no-restart] [--secrets none|missing|all] [--allow-missing-secrets] [--capture-drift] [--base-branch B] [--json]
  *                  [--delete-driver D…] [--delete-all entitlements|jobs|rbe-policies|templates|forms|prds|roles|entities|… …]
  *   vault.verify   <tree> --env <name> [--driver D…] [--json]
  *   vault.rollback --env <name> --snapshot <file> [--yes] [--json]
@@ -93,6 +93,7 @@ public final class DeployCli {
                 o.secretsMode = opts.containsKey("secrets") ? first(opts, "secrets") : "none";
                 o.allowMissingSecrets = opts.containsKey("allow-missing-secrets");
                 o.captureDrift = opts.containsKey("capture-drift");
+                o.baseBranch = first(opts, "base-branch");
                 o.json = json;
                 o.deleteDrivers = opts.getOrDefault("delete-driver", List.of());
                 o.deleteAllKinds = opts.getOrDefault("delete-all", List.of());
