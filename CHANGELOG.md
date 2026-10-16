@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-10-16
+
 ### Fixed
 
 - **`<env>.servers=<serverDn>=<url>` matches the whole server DN.** The value was split at the
