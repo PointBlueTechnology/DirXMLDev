@@ -244,4 +244,14 @@ public class ServersTest {
             plan.steps.stream().noneMatch(s -> s.server == null && VaultMapping.SHIM_AUTH_SERVER.equals(s.attr)));
         assertEquals(java.util.Set.of(S2), plan.serverRestarts.get("AD"));
     }
+
+    @Test
+    public void serverAddressesKeyOnTheWholeDn() {
+        Environments.Environment env = Environments.Environment.forService("test", DS, Environments.Tier.DEV);
+        env.servers = S2 + "=ldaps://10.0.0.2:636; " + S1 + "=LDAPS://idm1.example:636;junk;cn=x=notaurl";
+        java.util.Map<String, String> urls = Servers.urls(env);
+        assertEquals("ldaps://10.0.0.2:636", urls.get(S2));
+        assertEquals("LDAPS://idm1.example:636", urls.get(S1));
+        assertEquals("a part without an ldap(s) address is ignored", 2, urls.size());
+    }
 }

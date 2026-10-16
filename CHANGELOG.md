@@ -7,6 +7,31 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **`<env>.servers=<serverDn>=<url>` matches the whole server DN.** The value was split at the
+  first `=`, so `cn=idm2,ou=servers,o=system=ldaps://…` became the key `cn`, and no server's address
+  was ever used. That affected the trace, import, deploy and the clone. The address now starts at
+  `=ldap://` or `=ldaps://`.
+
+### Added
+
+- **Certificate pinning: `<env>.certSha256`.** A vault whose certificate the JDK doesn't trust (a
+  private CA, a host name that doesn't match, a tunnel) is reached by pinning that one certificate's
+  SHA-256, instead of `trustAll`.
+  - The pinned certificate is trusted whatever its issuer or name. Anything else is refused, and a
+    changed certificate is refused naming both fingerprints.
+  - `PinnedTrust` is used on the JNDI connection (`PinnedSockets`), the extended-operation
+    connection and the LDAP trace.
+  - `trustAll` still works.
+- **`SignIn`: a sign-in's outcome in words**, for the web's Connections page.
+  - `SignIn.probe(url)` shows the certificate a vault presents (subject, issuer, validity, SHA-256)
+    and whether the JDK trusts it, without signing in.
+  - `SignIn.check(config)` says **rejected** (with eDirectory's reason: wrong password, expired,
+    locked out, account expired, and so on), **certificate**, **unreachable** or **ok**. When it's
+    ok, it also gives the account's `passwordExpirationTime` (days left) and `loginGraceRemaining`,
+    where the account may read them.
+
 ## [0.42.0] - 2026-10-15
 
 ### Added
