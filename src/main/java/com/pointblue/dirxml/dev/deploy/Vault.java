@@ -155,6 +155,8 @@ public final class Vault implements VaultAccess {
             List<String> binary = new ArrayList<>(BINARY_ATTRS);
             binary.addAll(c.binaryAttrs);
             env.put("java.naming.ldap.attributes.binary", String.join(" ", binary));
+            // an unreachable vault answers in seconds, not after the OS's TCP timeout (a page checks sign-ins on load)
+            env.put("com.sun.jndi.ldap.connect.timeout", "10000");
             com.pointblue.dirxml.dev.LegacyTls.enable();   // before the TLS stack initialises: eDirectory often offers static-RSA suites only
             if (c.url.startsWith("ldaps") && c.trustAll) {
                 env.put("java.naming.ldap.factory.socket", TrustAllSockets.class.getName());
