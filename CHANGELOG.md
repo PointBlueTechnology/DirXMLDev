@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-10-16
+
 ### Fixed
 
 - **`prd.requires=stg` accepts the commit of a deploy record.** "Commit the deploy record" after the
