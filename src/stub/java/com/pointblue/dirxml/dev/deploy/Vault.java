@@ -12,6 +12,7 @@ public final class Vault implements AutoCloseable {
         public String bindDn;
         public String password;
         public boolean trustAll;
+        public String certSha256;
     }
 
     public static Vault connect(Config config) {
