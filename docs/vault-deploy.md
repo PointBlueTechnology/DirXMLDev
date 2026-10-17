@@ -383,6 +383,21 @@ the tool saw one server's copy. Now:
   the environment's own server; a driver running elsewhere needs an environment
   whose URL is that server.
 
+- **validate** counts a GCV as defined when any server of the set defines it
+  for the driver (#134, 2026-10-17). The tree doesn't record which servers a
+  driver runs on, so a driver that runs only on another server is checked
+  against that server's values too. The compile check gets them as well, after
+  the primary's (the primary's value wins where both define one).
+- **`driver.server.copy --from S --to S [--driver D] [--only gcv,shim,ecv,auth-server,auth-id]`**
+  copies a driver's server-specific settings from one server to another in the
+  tree, for one driver or every driver: the target then holds what the source
+  holds, for example when a driver moves to another server or a new server
+  joins the set. A server is named by its DN, its name (`servers/<name>/`) or
+  `primary`. No other server changes: when the target is the primary, a server
+  that held the primary's old value keeps it as its own. The tree keeps only
+  what differs from the primary. A deploy then writes the copy to the target
+  server.
+
 On a single-server set none of this shows: no overrides, no server steps.
 
 ## Rollback
