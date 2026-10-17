@@ -7,6 +7,26 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-10-17
+
+### Fixed
+
+- **A GCV defined only on another server of the driver set was `gcv-undefined` (#134).** Each server
+  holds its own `DirXML-ConfigValues` for a driver, so a driver that runs only on another server has
+  its GCVs there. Validation never looked at them, and refused a deploy of the whole driver set.
+  Validation and the compile check now count every server's values.
+- **The note for a server an import couldn't reach** names Connections → Edit → Servers, where its
+  address is given.
+
+### Added
+
+- **`driver.server.copy`** copies a driver's server-specific settings from one server of the set to
+  another: GCV values, shim parameters, engine control values, the shim's server and account.
+  - `--from` and `--to` take a server's DN, its name, or `primary`.
+  - `--driver D`, or every driver without it. `--only` picks some of `gcv,shim,ecv,auth-server,auth-id`.
+  - No other server changes, and the tree keeps only what differs from the primary.
+  - A deploy writes the copy to the target server.
+
 ## [0.44.0] - 2026-10-16
 
 ### Fixed
