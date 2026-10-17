@@ -70,14 +70,18 @@ final class Model {
     }
 
     /**
-     * GCV names defined for a driver: its own config-values, GCV-definition resources
-     * linked in policy set 14 (driver linkage), the driver set's config-values, and
-     * GCV-definition resources linked from the driver set itself (recorded as
+     * GCV names defined for a driver: its own config-values, the config-values each other
+     * server of the driver set holds for it ({@link #serverGcvValues}), GCV-definition
+     * resources linked in policy set 14 (driver linkage), the driver set's config-values,
+     * and GCV-definition resources linked from the driver set itself (recorded as
      * {@code driverset.linkage.N} meta by the readers).
      */
     static Set<String> definedGcvs(DriverSet ds, Driver d, Map<String, Artifact> index) {
         Set<String> names = new LinkedHashSet<>();
         addDefinitions(names, d.config.get(Driver.CONFIG_VALUES));
+        for (Element e : serverGcvValues(d)) {
+            addDefinitions(names, e);
+        }
         for (Resource r : linkedResources(ds, d, PolicySet.byId(14), index)) {
             addDefinitions(names, r.content);
         }
@@ -86,6 +90,23 @@ final class Model {
             addDefinitions(names, r.content);
         }
         return names;
+    }
+
+    /**
+     * The config-values another server of the driver set holds for this driver, where they differ from
+     * the primary's (#134, {@code drivers/<d>/servers/<s>/config-values.xml}). {@code DirXML-ConfigValues}
+     * is never-sync: a driver that runs only on another server has its GCVs there. The model doesn't say
+     * which servers a driver runs on, so every server's count: a GCV defined on any of them is defined.
+     */
+    static List<Element> serverGcvValues(Driver d) {
+        List<Element> out = new ArrayList<>();
+        for (Map<String, Element> blobs : d.serverConfig.values()) {
+            Element e = blobs.get(Driver.CONFIG_VALUES);
+            if (e != null) {
+                out.add(e);
+            }
+        }
+        return out;
     }
 
     /** GCV-definition resources the driver set links (from {@code driverset.linkage.N} meta, by leaf name). */

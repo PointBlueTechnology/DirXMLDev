@@ -556,6 +556,12 @@ public final class Registry {
         register("override.remove", "remove an environment's override, so it takes the tree's base value",
             a -> new OverrideOps.Remove(a.get("env"), a.get("key")),
             req("env", "environment name"), req("key", "the override key"));
+        register("driver.server.copy", "copy a driver's server-specific settings (GCV values, shim parameters, engine control values, the shim's server and account) from one server of the set to another; without --driver, every driver's",
+            a -> new ServerOps.Copy(a.get("from"), a.get("to"), a.get("driver"), a.get("only")),
+            req("from", "the server to copy from: its DN, its name, or primary"),
+            req("to", "the server to copy to: its DN, its name, or primary"),
+            opt("driver", "one driver (default: every driver)"),
+            opt("only", "some of gcv,shim,ecv,auth-server,auth-id (default: all)"));
         register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, param:<shim parameter>, engine:<engine control value>",
             a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.containsKey("clear") ? "" : a.get("value")),
             drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), opt("value", "the value"),
