@@ -323,6 +323,22 @@ what the audit log says was last deployed there (the tree at that commit):
 The pre-deploy snapshot is always taken, so the state immediately before any
 production change is also on disk (and, with `--capture-drift`, in git).
 
+Since 0.46.0 (DirXMLDev-web #136):
+
+- **A plan sees the checks first.** `vault.deploy --dry-run` against a `prd` tier runs the same
+  checks, without the confirmation and without capturing. It reports what a deploy would be refused
+  for as `gate`, with its kind as `gateKind`: `not-in-git`, `uncommitted`, `branch`, `requires`,
+  `unknown-state` or `drift`.
+- **`--capture-only` is the capture on its own**, with no plan, no deploy and no `--confirm`. It
+  reads the vault and compares it with the last deploy on record, then does one of three things:
+  - records the vault's state as an `as-found/<env>/<time>` branch (`captured`, `capturedBranch`);
+  - records the commit the vault matches exactly (`verified`);
+  - or reports there is nothing to do (`known`).
+
+  It writes nothing to the vault.
+- **Where the capture writes:** the tree's own folder in the worktree (`tree/` in a page project),
+  never the repository's top.
+
 ## Values that differ per stage (2026-09-27)
 
 `overrides/<env>.properties` beside the tree, one file per environment, one
