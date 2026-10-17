@@ -60,6 +60,12 @@ public final class Deployer {
          * usually main), so what reaches production is what was merged and reviewed. Null: any branch.
          */
         public String baseBranch;
+        /**
+         * Capture only (the web page's "Capture the vault's state"): read the vault, and when it differs from the last
+         * deploy on record — or nothing is on record — record its state on an {@code as-found/<env>/<time>} branch, as
+         * {@link #captureDrift} does; when it matches, say so. Writes nothing to the vault, needs no confirmation.
+         */
+        public boolean captureOnly;
         public boolean json;
         public List<String> deleteDrivers = List.of();
         /** {@code --delete-all} kinds ({@code entitlements}, {@code forms}, {@code prds}), repeatable. */
@@ -75,6 +81,16 @@ public final class Deployer {
     public static final class Result {
         public boolean ok;
         public String refusal;
+        /**
+         * Which production check stopped this run (with {@link #refusal}), or what the plan's preflight found (with
+         * {@link #gate}): confirm, not-in-git, uncommitted, branch, requires, unknown-state, drift; after a capture,
+         * captured or verified. Null when nothing stood in the way.
+         */
+        public String gateKind;
+        /** A dry run against production: what the production checks would refuse, so the plan can say it before a deploy is tried. */
+        public String gate;
+        /** The as-found branch a capture made, or null. */
+        public String capturedBranch;
         public String planText = "";
         public String diffText = "";
         public String snapshot;
@@ -133,6 +149,9 @@ public final class Deployer {
             sb.append(",\"verified\":").append(verified);
             sb.append(",\"verify\":").append(verifyText == null ? "null" : DeployLog.q(verifyText));
             sb.append(",\"plan\":").append(DeployLog.q(planText)).append(",\"diff\":").append(DeployLog.q(diffText));
+            sb.append(",\"gateKind\":").append(gateKind == null ? "null" : DeployLog.q(gateKind));
+            sb.append(",\"gate\":").append(gate == null ? "null" : DeployLog.q(gate));
+            sb.append(",\"capturedBranch\":").append(capturedBranch == null ? "null" : DeployLog.q(capturedBranch));
             return sb.append('}').toString();
         }
 
@@ -273,6 +292,11 @@ public final class Deployer {
                 closeServerConnections();
                 return r;
             }
+            if (o.captureOnly) {
+                capture(r, env, from);
+                closeServerConnections();
+                return r;
+            }
             ModelDiff diff = VaultDiff.of(from, to, o.drivers);
             r.diffText = diff.text();
             Map<String, List<String>> liveNamed = new LinkedHashMap<>();
@@ -303,13 +327,20 @@ public final class Deployer {
             if (o.dryRun) {
                 r.ok = true;
                 r.planText += "(dry run — nothing written)\n";
+                if (env.tier == Environments.Tier.PRD) {
+                    // the production checks a deploy would make, so the plan says what stands in the way first
+                    r.gate = gate(env, treeCommit, from, vault, true);
+                    r.gateKind = r.gate == null ? null : gateKind;
+                }
                 return r;
             }
 
             // 3. the gate
-            String gate = gate(env, treeCommit, from, vault);
+            String gate = gate(env, treeCommit, from, vault, false);
             if (gate != null) {
                 r.refusal = gate;
+                r.gateKind = gateKind;
+                r.capturedBranch = capturedBranch;
                 return r;
             }
             if (!o.yes && !o.step) {
@@ -663,35 +694,72 @@ public final class Deployer {
 
     // ---- the gate ----
 
-    /** Null when the deploy may proceed; else the reason it may not. */
-    private String gate(Environments.Environment env, String treeCommit, DriverSet live, VaultAccess vault) throws IOException {
+    /** What the last {@link #gate} found ({@link Result#gateKind}); set with each refusal it returns. */
+    private String gateKind;
+    /** The as-found branch the last capture made, or null (an empty capture leaves none). */
+    private String capturedBranch;
+
+    /**
+     * Null when the deploy may proceed; else the reason it may not. {@code preflight}: a dry run asking what a deploy
+     * would meet — no confirmation needed, and an unknown or drifted state is reported, never captured.
+     */
+    private String gate(Environments.Environment env, String treeCommit, DriverSet live, VaultAccess vault, boolean preflight) throws IOException {
+        gateKind = null;
         if (env.tier != Environments.Tier.PRD) {
             return null;
         }
-        if (o.confirm == null || !o.confirm.equals(env.name)) {
+        if (!preflight && (o.confirm == null || !o.confirm.equals(env.name))) {
+            gateKind = "confirm";
             return "a production deploy needs --confirm " + env.name;
         }
         if (treeCommit == null) {
+            gateKind = "not-in-git";
             return "a production deploy needs the tree in git (no commit found for " + o.tree + ")";
         }
         if (DeployLog.treeDirty(o.tree)) {
+            gateKind = "uncommitted";
             return "the tree has uncommitted changes; commit them first so the deploy records what was deployed";
         }
         if (o.baseBranch != null) {
             String on = DeployLog.treeBranch(o.tree);
             if (!o.baseBranch.equals(on)) {
+                gateKind = "branch";
                 return "a production deploy comes from " + o.baseBranch + "; this tree is on " + (on == null ? "no branch" : on)
                     + " — merge it into " + o.baseBranch + " and deploy from there";
             }
         }
         if (env.requires != null && !DeployLog.hasOkDeploy(o.tree, env.requires, treeCommit)) {
+            gateKind = "requires";
             return "environment '" + env.name + "' requires a green deploy of this commit (" + treeCommit.substring(0, 12)
                 + "), or of one with the same content, to '" + env.requires + "' first (deploy-log/" + env.requires + ".jsonl has none)";
         }
-        // known state: the vault must match what was last deployed here
+        String known = knownState(env, live);
+        if (known == null) {
+            return null;
+        }
+        boolean unknownState = DeployLog.lastOk(o.tree, env.name) == null;
+        gateKind = unknownState ? "unknown-state" : "drift";
+        if (preflight) {
+            return known;
+        }
+        String why = driftRefusal(env, live, lastDrift, known);
+        if (o.captureDrift) {
+            gateKind = capturedBranch != null ? "captured" : "verified";
+        }
+        return why;
+    }
+
+    private ModelDiff lastDrift;
+
+    /**
+     * Null when the vault matches the last deploy to {@code env} on record; else why its state isn't known: nothing on
+     * record, or how it differs ({@link #lastDrift} holds the difference). Reads the last deployed commit's tree.
+     */
+    private String knownState(Environments.Environment env, DriverSet live) throws IOException {
+        lastDrift = null;
         DeployLog.Record last = DeployLog.lastOk(o.tree, env.name);
         if (last == null || last.treeCommit == null) {
-            return driftRefusal(env, live, null, "no deploy to '" + env.name + "' is on record, so its current state is unknown");
+            return "no deploy to '" + env.name + "' is on record, so its current state is unknown";
         }
         Path known = checkout(last.treeCommit);
         if (known == null) {
@@ -702,7 +770,8 @@ public final class Deployer {
             // deploy neither restarts for it nor clobbers policy because of it
             ModelDiff drift = ModelDiff.of(readWithOverrides(known, env), live);
             if (!drift.isEmptyButForIcons()) {
-                return driftRefusal(env, live, drift, "the vault differs from the last deploy on record (" + last.treeCommit.substring(0, 12) + ")");
+                lastDrift = drift;
+                return "the vault differs from the last deploy on record (" + last.treeCommit.substring(0, 12) + ")";
             }
         } finally {
             deleteRecursively(known);
@@ -710,11 +779,37 @@ public final class Deployer {
         return null;
     }
 
+    /** {@link Options#captureOnly}: the vault's state recorded when it isn't the known one; nothing written to the vault. */
+    private void capture(Result r, Environments.Environment env, DriverSet live) throws IOException {
+        if (DeployLog.treeCommit(o.tree) == null) {
+            r.refusal = "the tree is not in git: a capture records the vault's state as a commit";
+            r.gateKind = "not-in-git";
+            return;
+        }
+        String known = knownState(env, live);
+        r.ok = true;
+        if (known == null) {
+            r.gateKind = "known";
+            r.planText = "the vault matches the last deploy to '" + env.name + "' on record: its state is known, nothing to capture\n";
+            return;
+        }
+        boolean was = o.captureDrift;
+        o.captureDrift = true;
+        try {
+            r.planText = driftRefusal(env, live, lastDrift, known) + "\n";
+        } finally {
+            o.captureDrift = was;
+        }
+        r.capturedBranch = capturedBranch;
+        r.gateKind = capturedBranch != null ? "captured" : "verified";
+    }
+
     private String driftRefusal(Environments.Environment env, DriverSet live, ModelDiff drift, String why) throws IOException {
         StringBuilder sb = new StringBuilder(why);
         if (drift != null) {
             sb.append(":\n").append(drift.text());
         }
+        capturedBranch = null;
         if (!o.captureDrift) {
             sb.append("\nrun again with --capture-drift to record the vault's current state in the repo as its own commit, then deploy on top of it");
             return sb.toString();
@@ -729,23 +824,26 @@ public final class Deployer {
         DeployLog.Record last = DeployLog.lastOk(o.tree, env.name);
         String base = last != null && last.treeCommit != null ? last.treeCommit : rootCommit();
         run("git", "-C", o.tree.toAbsolutePath().toString(), "worktree", "add", "-b", branch, wt.toString(), base);
+        // the worktree is the whole repository: the tree is where it sits in it (tree/ in a page's project)
+        Path wtTree = wt.resolve(treePrefix());
         try {
             // does the vault differ from the base commit? decided on bytes through the
             // model, never through git's view (which may normalize line endings)
             boolean differs;
             try {
-                differs = !ModelDiff.of(readWithOverrides(wt, env), live).isEmptyButForIcons();
+                differs = !ModelDiff.of(readWithOverrides(wtTree, env), live).isEmptyButForIcons();
             } catch (RuntimeException | IOException e) {
                 differs = true;
             }
             // exactly the live state: clear the managed paths first so nothing stale survives,
             // and make sure git stores the bytes as they are
+            Files.createDirectories(wtTree);
             for (String managed : AsCodeWriter.MANAGED_PATHS) {
-                deleteRecursively(wt.resolve(managed));
+                deleteRecursively(wtTree.resolve(managed));
             }
-            DeployLog.writeAttributes(wt);
-            AsCodeWriter.write(live, wt);
-            run("git", "-C", wt.toString(), "add", "-A");
+            DeployLog.writeAttributes(wtTree);
+            AsCodeWriter.write(live, wtTree);
+            run("git", "-C", wtTree.toString(), "add", "-A", "--", ".");
             String commit;
             if (differs) {
                 List<String> commitCmd = new ArrayList<>(List.of("git", "-C", wt.toString()));
@@ -764,6 +862,7 @@ public final class Deployer {
                 : "vault verified to match this commit (--capture-drift), nothing deployed";
             DeployLog.append(o.tree, rec);
             if (differs) {
+                capturedBranch = branch;
                 sb.append("\ncaptured the vault's state as branch ").append(branch).append(" (commit ")
                     .append(commit == null ? "?" : commit.substring(0, 12))
                     .append(") and recorded it as the known state; put your change on top of it — `git rebase ")
@@ -782,6 +881,7 @@ public final class Deployer {
             p.getInputStream().readAllBytes();
             if (p.waitFor() == 0) {
                 run("git", "-C", o.tree.toAbsolutePath().toString(), "branch", "-D", branch);
+                capturedBranch = null;
             }
         } catch (Exception ignored) {
             // the branch stays; harmless
@@ -814,6 +914,21 @@ public final class Deployer {
     }
 
     /** The tree's first commit (the import), or HEAD when it can't be found. */
+    /** Where the tree sits in its repository ({@code git rev-parse --show-prefix}): "" at the top, else e.g. "tree/". */
+    private String treePrefix() {
+        try {
+            Process p = new ProcessBuilder("git", "-C", o.tree.toAbsolutePath().toString(), "rev-parse", "--show-prefix")
+                .redirectErrorStream(true).start();
+            String out;
+            try (java.io.InputStream in = p.getInputStream()) {
+                out = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).strip();
+            }
+            return p.waitFor() == 0 ? out : "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     private String rootCommit() {
         try {
             Process p = new ProcessBuilder("git", "-C", o.tree.toAbsolutePath().toString(), "rev-list", "--max-parents=0", "HEAD")

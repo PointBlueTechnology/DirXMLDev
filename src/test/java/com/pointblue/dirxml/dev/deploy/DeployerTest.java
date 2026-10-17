@@ -23,6 +23,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -336,6 +337,84 @@ public class DeployerTest {
         branch.baseBranch = "main";
         r = new Deployer(branch, vault).run();
         assertTrue(r.text(), r.refusal != null && r.refusal.startsWith("a production deploy comes from main; this tree is on feature/x"));
+    }
+
+    /**
+     * #136: a plan against production says what a deploy would meet (the preflight), and a capture on its own records
+     * the vault's state without a confirmation or a deploy.
+     */
+    @Test
+    public void thePlanForeseesTheProductionCheckAndACaptureStandsAlone() throws Exception {
+        DriverSet vaultSide = VaultMappingTest.model();
+        FakeVault vault = seedVault(vaultSide);
+        DriverSet treeSide = VaultMappingTest.model();
+        treeSide.jobs.add(new com.pointblue.dirxml.dev.model.Job("OldJob", ValidatorTest.xml("<job-aggregation><job-definition><java-class>x.Job</java-class></job-definition></job-aggregation>")));
+        Path tree = tmp.newFolder("preflight").toPath();
+        AsCodeWriter.write(treeSide, tree);
+        git(tree, "init", "-q", "-b", "main");
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "add", "-A");
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "import");
+        Environments.Environment prd = new Environments.Environment("prd", "ldaps://fake:636", "cn=admin,o=system", "pw", DS,
+            Environments.Tier.PRD, null, null, true, null, null);
+
+        Deployer.Options plan = options(tree, prd, List.of());
+        plan.yes = false;
+        plan.dryRun = true;
+        Deployer.Result p = new Deployer(plan, vault).run();
+        assertTrue(p.text(), p.ok);
+        assertEquals("unknown-state", p.gateKind);
+        assertTrue(p.gate, p.gate.contains("no deploy to 'prd' is on record"));
+        assertTrue("a plan captures nothing", gitOut(tree, "branch", "--list", "as-found/*").isBlank());
+
+        Deployer.Options cap = options(tree, prd, List.of());
+        cap.yes = false;
+        cap.captureOnly = true;
+        Deployer.Result c = new Deployer(cap, vault).run();
+        assertTrue(c.text(), c.ok);
+        assertEquals("captured", c.gateKind);
+        assertTrue(c.capturedBranch, c.capturedBranch != null && c.capturedBranch.startsWith("as-found/prd/"));
+        assertTrue(gitOut(tree, "branch", "--list", "as-found/*").contains(c.capturedBranch));
+        assertTrue("recorded as the known state", DeployLog.lastOk(tree, "prd") != null);
+
+        // the deploy itself, once the capture is on record and merged, meets no unknown state
+        Deployer.Options again = options(tree, prd, List.of());
+        again.yes = false;
+        again.captureOnly = true;
+        git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "merge", "-q", "--no-edit", c.capturedBranch);
+        Deployer.Result known = new Deployer(again, vault).run();
+        assertEquals("known", known.gateKind);
+        assertNull(known.capturedBranch);
+    }
+
+    /**
+     * A tree in a subfolder of its repository (tree/, as every page project): the capture writes the vault's state
+     * into that folder, not the repository's top — the as-found commit used to add the whole driver set at the top.
+     */
+    @Test
+    public void aCaptureWritesIntoTheTreesOwnFolder() throws Exception {
+        DriverSet vaultSide = VaultMappingTest.model();
+        FakeVault vault = seedVault(vaultSide);
+        DriverSet treeSide = VaultMappingTest.model();
+        treeSide.jobs.add(new com.pointblue.dirxml.dev.model.Job("OldJob", ValidatorTest.xml("<job-aggregation><job-definition><java-class>x.Job</java-class></job-definition></job-aggregation>")));
+        Path repo = tmp.newFolder("repo").toPath();
+        Path tree = repo.resolve("tree");
+        AsCodeWriter.write(treeSide, tree);
+        git(repo, "init", "-q", "-b", "main");
+        git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "add", "-A");
+        git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "import");
+        Environments.Environment prd = new Environments.Environment("prd", "ldaps://fake:636", "cn=admin,o=system", "pw", DS,
+            Environments.Tier.PRD, null, null, true, null, null);
+        Deployer.Options cap = options(tree, prd, List.of());
+        cap.yes = false;
+        cap.captureOnly = true;
+        Deployer.Result c = new Deployer(cap, vault).run();
+        assertEquals(c.text(), "captured", c.gateKind);
+        String changed = gitOut(repo, "diff", "--name-only", "main", c.capturedBranch);
+        assertTrue(changed, !changed.isBlank());
+        for (String f : changed.strip().split("\n")) {
+            assertTrue("written under tree/: " + f, f.startsWith("tree/"));
+        }
+        assertTrue(changed, changed.contains("tree/jobs/OldJob"));
     }
 
     // ---- the validation gate of a scoped deploy (ValidationScope) ----
