@@ -7,6 +7,27 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-10-17
+
+### Fixed
+
+- **A capture (`--capture-drift`) of a tree in a subfolder of its repository wrote the vault's state
+  at the repository's top.** A page project's tree is in `tree/`. The as-found commit added the
+  whole driver set beside it, so every file looked new, and merging it duplicated the driver set.
+  The capture now writes into the tree's own folder.
+
+### Added
+
+- **A plan against production runs the production checks too.** A dry run reports what a deploy
+  would be refused for, as `gate` and `gateKind` (`not-in-git`, `uncommitted`, `branch`, `requires`,
+  `unknown-state`, `drift`), and captures nothing.
+- **`vault.deploy --capture-only`** records the vault's state when it isn't the known one, writing
+  nothing to the vault and needing no confirmation:
+  - an as-found branch (`gateKind` `captured`, `capturedBranch`);
+  - the matching commit (`verified`);
+  - or nothing to do (`known`).
+- **A refusal carries `gateKind`, and a capture `capturedBranch`,** in the result and its JSON.
+
 ## [0.45.0] - 2026-10-17
 
 ### Fixed
