@@ -133,6 +133,10 @@ public final class CompileCheck implements Check {
         // descending precedence: the driver's own values first, the driver set's last.
         if (d != null) {
             merge(gcv, d.config.get(Driver.CONFIG_VALUES));
+            // then what the driver set's other servers hold for it (#134): the primary's value wins where both define one
+            for (Element e : Model.serverGcvValues(d)) {
+                merge(gcv, e);
+            }
             for (Resource r : Model.linkedResources(ds, d, PolicySet.GCV, index)) {
                 merge(gcv, r.content);
             }

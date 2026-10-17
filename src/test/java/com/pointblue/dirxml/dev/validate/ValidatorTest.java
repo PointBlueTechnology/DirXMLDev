@@ -284,6 +284,22 @@ public class ValidatorTest {
         assertTrue(f.get(0).message, f.get(0).message.endsWith("drv.missing"));
     }
 
+    /** #134: a driver that runs on another server of the set has its GCVs in that server's never-sync copy. */
+    @Test
+    public void gcvDefinedOnlyOnAnotherServerIsDefined() {
+        DriverSet ds = clean();
+        addSub(ds, "gcv", "<policy><rule><description>r</description><conditions/><actions>"
+            + "<do-set-local-variable name=\"x\"><arg-string><token-global-variable name=\"srv2.only\"/>"
+            + "</arg-string></do-set-local-variable></actions></rule></policy>");
+        assertEquals(1, owned().validate(ds).withCode("gcv-undefined").size());
+        java.util.Map<String, org.w3c.dom.Element> server2 = new java.util.LinkedHashMap<>();
+        server2.put(Driver.CONFIG_VALUES, xml("<configuration-values><definitions><definition display-name=\"s\" name=\"srv2.only\" type=\"string\"><value>1</value></definition></definitions></configuration-values>"));
+        server2.put(Driver.ENGINE_CONTROL_VALUES, null);
+        ad(ds).serverConfig.put("cn=idm2,ou=servers,o=system", server2);
+        Report r = owned().validate(ds);
+        assertTrue(r.text(), r.withCode("gcv-undefined").isEmpty());
+    }
+
     @Test
     public void gcvDefinedByDriverSetResource() {
         DriverSet ds = clean();

@@ -180,8 +180,8 @@ public final class Servers {
                 notes.accept("server " + s + " unreachable: " + e.getMessage());
             }
             if (other == null) {
-                notes.accept("server " + s + ": not read — its server-specific driver settings are unknown to this tree "
-                    + "(give " + "<env>.servers=" + s + "=ldaps://host:port)");
+                notes.accept("server " + s + ": not read — its server-specific driver settings are unknown to this tree; "
+                    + "give its address under Connections → Edit → Servers, or <env>.servers=" + s + "=ldaps://host:port");
                 continue;
             }
             try {
@@ -247,7 +247,8 @@ public final class Servers {
         return s == null ? "" : s;
     }
 
-    static boolean sameXml(Element a, Element b) {
+    /** True when both are absent, or both hold the same XML (canonically). */
+    public static boolean sameXml(Element a, Element b) {
         if (a == null || b == null) {
             return a == null && b == null;
         }
