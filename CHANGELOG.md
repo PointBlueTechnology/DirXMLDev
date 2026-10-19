@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-10-19
+
+### Fixed
+
+- **A value eDirectory can't return no longer stops a compare.** One damaged value, or a value that
+  doesn't fit its attribute's syntax, makes eDirectory fail a whole subtree search with "invalid
+  attribute syntax" (LDAP 21, NDS -325), and the error names only the driver set. The read now
+  falls back to reading object by object when that happens. An object that still fails is read
+  attribute by attribute, and the one eDirectory can't return is left out. A note names the object
+  and the attribute: the compare goes on, and you know what to fix. This applies to compare, the
+  live read, and a deploy's plan and verify. New `VaultAccess.names` (a search with no attributes)
+  and `attributeNames` (attribute types only).
+
 ## [0.47.0] - 2026-10-19
 
 ### Changed
