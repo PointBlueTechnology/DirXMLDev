@@ -245,3 +245,9 @@ repository is the loop around it.
 ## License
 
 The [DirXMLDev source](LICENSE) is MIT; proprietary NetIQ/OpenText engine jars and any third-party simulator packaging remain under their own terms and are not redistributed by this license.
+
+## Trademarks
+
+DirXMLDev is made by [Point Blue Technology](https://pointbluetech.com). It is not affiliated with,
+endorsed by or supported by OpenText. NetIQ, eDirectory, Identity Manager and OpenText are trademarks of
+OpenText or its affiliates; other names belong to their owners.
