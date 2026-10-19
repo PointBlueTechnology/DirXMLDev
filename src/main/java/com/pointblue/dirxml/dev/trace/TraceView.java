@@ -202,7 +202,9 @@ public final class TraceView {
                 }
                 s.policies.add(p);
                 openPolicy.put(key, p);
-            } else if (m != null && m != TraceMarker.LOG_EVENT) {
+            } else if (m != null && m != TraceMarker.LOG_EVENT && m != TraceMarker.POLICY_RESULT) {
+                // a log event, or a policy's query result ("Query from policy result", trace-core 1.8.0), happens inside
+                // the policy running: neither ends it (the viewer's folding treats them the same way)
                 openPolicy.remove(key);
                 if (m != TraceMarker.SUBSCRIBER_EVENT && m != TraceMarker.PUBLISHER_EVENT && m != TraceMarker.DRIVER_START) {
                     openSet.remove(key);
