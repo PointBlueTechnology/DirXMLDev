@@ -14,3 +14,9 @@ bundle, another product such as the directory-console).
 `nxsl.jar` …). The features that run the engine (validate's compile check, simulate, package GCV
 checksums) load them from a local `lib/` that you supply (docs/install.md). Talking to a vault
 needs none of them.
+
+## Not affiliated with OpenText
+
+DirXMLDev is made by [Point Blue Technology](https://pointbluetech.com). It is not affiliated with,
+endorsed by or supported by OpenText. NetIQ, eDirectory, Identity Manager and OpenText are trademarks of
+OpenText or its affiliates; other names belong to their owners.
