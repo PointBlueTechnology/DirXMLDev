@@ -257,6 +257,74 @@ public final class Vault implements VaultAccess {
         return read(dn) != null;
     }
 
+    @Override
+    public List<String> names(String base, String filter, int scope) {
+        List<String> out = new ArrayList<>();
+        try {
+            SearchControls sc = new SearchControls();
+            sc.setSearchScope(scope);
+            sc.setReturningAttributes(new String[] {"1.1"});   // no attributes: nothing to encode
+            NamingEnumeration<SearchResult> results = ldap.search(base, filter, sc);
+            try {
+                while (results.hasMore()) {
+                    out.add(results.next().getNameInNamespace());
+                }
+            } finally {
+                results.close();
+            }
+        } catch (NameNotFoundException e) {
+            return out;
+        } catch (Exception e) {
+            throw new VaultException("search " + base + " " + filter + ": " + e.getMessage(), e);
+        }
+        return out;
+    }
+
+    @Override
+    public List<String> attributeNames(String dn) {
+        DirContext types = null;
+        try {
+            // a context of its own on the same connection, asking for attribute types only
+            types = (DirContext) ldap.lookup("");
+            types.addToEnvironment("java.naming.ldap.typesOnly", "true");
+            List<String> out = new ArrayList<>();
+            NamingEnumeration<String> ids = types.getAttributes(dn).getIDs();
+            while (ids.hasMore()) {
+                out.add(ids.next());
+            }
+            return out;
+        } catch (NameNotFoundException e) {
+            return List.of();
+        } catch (Exception e) {
+            throw new VaultException("read the attribute names of " + dn + ": " + e.getMessage(), e);
+        } finally {
+            if (types != null) {
+                try {
+                    types.close();
+                } catch (Exception ignore) {
+                    // the shared connection stays open
+                }
+            }
+        }
+    }
+
+    /**
+     * eDirectory's "invalid attribute syntax" (LDAP 21, NDS -325): a value the server can't return in
+     * its attribute's syntax. One such value fails a whole search, naming only the search's base.
+     */
+    public static boolean invalidSyntax(Throwable t) {
+        for (Throwable c = t; c != null; c = c.getCause()) {
+            if (c instanceof javax.naming.directory.InvalidAttributeValueException) {
+                return true;
+            }
+            String m = c.getMessage();
+            if (m != null && (m.contains("(-325)") || m.contains("error code 21 "))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** One-level children of {@code base} (all attributes). */
     public List<Entry> children(String base) {
         return search(base, "(objectClass=*)", SearchControls.ONELEVEL_SCOPE);

@@ -24,6 +24,21 @@ public interface VaultAccess extends AutoCloseable {
     /** {@code Vault.search}: e.g. a subtree search for {@code --delete-driver}. */
     List<Vault.Entry> search(String base, String filter, int scope);
 
+    /** The names a search finds, no attributes asked for: works when a value can't be returned. */
+    default List<String> names(String base, String filter, int scope) {
+        List<String> out = new java.util.ArrayList<>();
+        for (Vault.Entry e : search(base, filter, scope)) {
+            out.add(e.dn);
+        }
+        return out;
+    }
+
+    /** The names of the attributes an object holds, without their values. */
+    default List<String> attributeNames(String dn) {
+        Vault.Entry e = read(dn);
+        return e == null ? List.of() : new java.util.ArrayList<>(e.attrs.keySet());
+    }
+
     void add(String dn, List<String> objectClasses, Map<String, List<byte[]>> attrs);
 
     void addObjectClasses(String dn, List<String> classes);
