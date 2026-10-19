@@ -41,15 +41,68 @@ public final class FakeVault implements VaultAccess {
         driverStates.put(key(driverDn), state);
     }
 
+    /** dn (any case) → an attribute the "server" can't return: reading it, or a search finding it, fails as eDirectory's -325 does. */
+    public final Map<String, String> unreadable = new HashMap<>();
+
+    private String unreadableIn(String dn) {
+        Vault.Entry e = byDn.get(key(dn));
+        String attr = unreadable.get(key(dn));
+        return e != null && attr != null && e.attrs.containsKey(attr) ? attr : null;
+    }
+
+    private static Vault.VaultException invalidSyntax(String what) {
+        return new Vault.VaultException(what + ": [LDAP: error code 21 - NDS error: no additional information available (-325)]",
+            new javax.naming.directory.InvalidAttributeValueException("[LDAP: error code 21 - NDS error: no additional information available (-325)]"));
+    }
+
     @Override
     public Vault.Entry read(String dn) {
         open();
+        if (unreadableIn(dn) != null) {
+            throw invalidSyntax("read " + dn);
+        }
         return byDn.get(key(dn));
     }
 
     @Override
     public Vault.Entry read(String dn, String... attrs) {
-        return read(dn);
+        if (unreadable.isEmpty()) {
+            return read(dn);
+        }
+        open();
+        Vault.Entry e = byDn.get(key(dn));
+        if (e == null) {
+            return null;
+        }
+        Vault.Entry out = new Vault.Entry(e.dn);
+        for (String a : attrs) {
+            if (a.equalsIgnoreCase(unreadableIn(dn))) {
+                throw invalidSyntax("read " + dn);
+            }
+            if (e.attrs.containsKey(a)) {
+                out.attrs.put(a, e.attrs.get(a));
+            }
+        }
+        return out;
+    }
+
+    @Override
+    public List<String> names(String base, String filter, int scope) {
+        open();
+        String b = key(base);
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<String, Vault.Entry> e : byDn.entrySet()) {
+            if (b.isEmpty() || e.getKey().equals(b) || e.getKey().endsWith("," + b)) {
+                out.add(e.getValue().dn);
+            }
+        }
+        return out;
+    }
+
+    @Override
+    public List<String> attributeNames(String dn) {
+        Vault.Entry e = byDn.get(key(dn));
+        return e == null ? List.of() : new ArrayList<>(e.attrs.keySet());
     }
 
     @Override
@@ -65,6 +118,9 @@ public final class FakeVault implements VaultAccess {
         List<Vault.Entry> out = new ArrayList<>();
         for (Map.Entry<String, Vault.Entry> e : byDn.entrySet()) {
             if (b.isEmpty() || e.getKey().equals(b) || e.getKey().endsWith("," + b)) {
+                if (unreadableIn(e.getKey()) != null) {
+                    throw invalidSyntax("search " + base + " " + filter);
+                }
                 out.add(e.getValue());
             }
         }
