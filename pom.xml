@@ -6,7 +6,7 @@
 
     <groupId>com.pointblue.dirxml</groupId>
     <artifactId>dirxml-dev</artifactId>
-    <version>0.46.0</version>
+    <version>0.47.0</version>
     <packaging>jar</packaging>
 
     <name>DirXML Dev</name>
@@ -35,7 +35,7 @@
         <postgresql.version>42.7.7</postgresql.version>
         <!-- The trace parser the desktop viewer and the web share (trace.view, docs/trace-view.md).
              Not on Maven Central: a DirXMLTraceViewer release attaches the jar (docs/install.md). -->
-        <tracecore.version>1.7.0</tracecore.version>
+        <tracecore.version>1.8.0</tracecore.version>
     </properties>
 
     <dependencies>
