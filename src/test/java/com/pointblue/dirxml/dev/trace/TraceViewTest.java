@@ -137,4 +137,26 @@ public class TraceViewTest {
         assertTrue(out, out.contains("VETO") && out.contains("status error") && out.contains("(no event in view)")
             && out.contains("(no end in view)") && out.contains("Best effort"));
     }
+
+    /** trace-core 1.8.0's POLICY_RESULT: a policy's query result is part of the running policy, not the end of it. */
+    @Test
+    public void aPolicysQueryResultDoesNotEndThePolicy() {
+        List<String> lines = List.of(
+            "[10/19/26 10:00:00.000]:AD ST:Start transaction.",
+            "[10/19/26 10:00:00.100]:AD ST:Applying event transformation policies.",
+            "[10/19/26 10:00:00.110]:AD ST:Applying policy: sub-etp-Lookup.",
+            "[10/19/26 10:00:00.120]:AD ST:  Applying rule Find the manager.",
+            "[10/19/26 10:00:00.130]:AD ST:    Action: do-set-local-variable(\"mgr\").",
+            "[10/19/26 10:00:00.140]:AD ST:Query from policy result",
+            "<nds><output><instance class-name=\"User\" src-dn=\"\\T\\data\\boss\"/></output></nds>",
+            "[10/19/26 10:00:00.150]:AD ST:    Action: do-set-dest-attr-value(\"manager\").",
+            "[10/19/26 10:00:00.200]:AD ST:End transaction.");
+        TraceView.Result r = TraceView.of(TraceView.records(lines));
+        assertEquals(TraceMarker.POLICY_RESULT, TraceMarker.of(TraceView.records(lines).get(5).record()));
+        TraceView.Transaction t = r.transactions.get(0);
+        assertEquals(1, t.sets.size());
+        TraceView.Policy p = t.sets.get(0).policies.get(0);
+        assertEquals("sub-etp-Lookup", p.name);
+        assertTrue(p.actions.toString(), p.actions.stream().anyMatch(a -> a.contains("do-set-dest-attr-value")));
+    }
 }

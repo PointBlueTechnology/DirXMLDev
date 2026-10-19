@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-10-19
+
 ### Fixed
 
 - **A value eDirectory can't return no longer stops a compare.** One damaged value, or a value that
@@ -17,6 +19,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   and the attribute: the compare goes on, and you know what to fix. This applies to compare, the
   live read, and a deploy's plan and verify. New `VaultAccess.names` (a search with no attributes)
   and `attributeNames` (attribute types only).
+
+## [0.47.0] - 2026-10-19
+
+### Changed
+
+- **dirxml-trace-core 1.8.0** (DirXMLTraceViewer). Its new `POLICY_RESULT` marker matches the engine's
+  "Query from policy result" line. `trace.view` keeps such a line inside the policy running, as it
+  does a log event, instead of ending the policy there. Before, the rules and actions after a
+  policy's query were lost from its step. A release now attaches `dirxml-trace-core-1.8.0.jar`.
+
+### Added
+
+- **Not affiliated with OpenText:** `THIRD-PARTY.md` and the README now carry the trademark notice.
 
 ## [0.46.0] - 2026-10-17
 
