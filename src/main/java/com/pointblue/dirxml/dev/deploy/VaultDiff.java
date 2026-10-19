@@ -35,7 +35,7 @@ public final class VaultDiff {
     public static DriverSet readLive(Environments.Environment env, java.util.function.Consumer<String> notes) {
         java.util.List<Vault> opened = new java.util.ArrayList<>();
         try (Vault v = Vault.connect(env.vaultConfig())) {
-            DriverSet ds = fromVault(v, env.driverSetDn, env.url + "/" + env.driverSetDn);
+            DriverSet ds = fromVault(v, env.driverSetDn, env.url + "/" + env.driverSetDn, notes);
             Servers.readOverrides(ds, env.driverSetDn, v, serverDn -> {
                 String url = Servers.urlOf(env, v, serverDn);
                 if (url == null) {
@@ -60,7 +60,7 @@ public final class VaultDiff {
     /** Every attribute of the driver-set subtree (package stamps included), through our own connection. */
     public static DriverSet readLive(Vault.Config config, String driverSetDn) {
         try (Vault v = Vault.connect(config)) {
-            return fromVault(v, driverSetDn, config.url + "/" + driverSetDn);
+            return fromVault(v, driverSetDn, config.url + "/" + driverSetDn, System.err::println);
         }
     }
 
@@ -70,12 +70,16 @@ public final class VaultDiff {
      * second connection.
      */
     static DriverSet fromVault(VaultAccess v, String driverSetDn) {
-        return fromVault(v, driverSetDn, driverSetDn);
+        return fromVault(v, driverSetDn, driverSetDn, System.err::println);
     }
 
-    private static DriverSet fromVault(VaultAccess v, String driverSetDn, String sourceName) {
+    static DriverSet fromVault(VaultAccess v, String driverSetDn, java.util.function.Consumer<String> notes) {
+        return fromVault(v, driverSetDn, driverSetDn, notes);
+    }
+
+    private static DriverSet fromVault(VaultAccess v, String driverSetDn, String sourceName, java.util.function.Consumer<String> notes) {
         List<com.pointblue.dirxml.sim.LdifDriverSource.Entry> entries = new java.util.ArrayList<>();
-        Vault.Entry root = v.read(driverSetDn);
+        Vault.Entry root = readTolerant(v, driverSetDn, notes);
         if (root == null) {
             throw new IllegalArgumentException("driver set " + driverSetDn + " not found");
         }
@@ -83,7 +87,23 @@ public final class VaultDiff {
         // the one binary attribute the model carries: kept as bytes beside the text entries
         // (a source entry holds text only — see LdifReader.fromEntries)
         java.util.Map<String, byte[]> driverImages = new java.util.HashMap<>();
-        for (Vault.Entry e : v.search(driverSetDn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
+        List<Vault.Entry> all;
+        try {
+            all = v.search(driverSetDn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+        } catch (RuntimeException e) {
+            if (!Vault.invalidSyntax(e)) {
+                throw e;
+            }
+            // one value the server can't return fails the whole search: read object by object instead
+            all = new java.util.ArrayList<>();
+            for (String dn : v.names(driverSetDn, "(objectClass=*)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
+                Vault.Entry one = dn.equalsIgnoreCase(root.dn) ? root : readTolerant(v, dn, notes);
+                if (one != null) {
+                    all.add(one);
+                }
+            }
+        }
+        for (Vault.Entry e : all) {
             if (!e.dn.equalsIgnoreCase(root.dn)) {
                 entries.add(toSourceEntry(e));
             }
@@ -103,6 +123,37 @@ public final class VaultDiff {
             // no cn=Security, or no rights to it: a tree without templates
         }
         return LdifReader.fromEntries(entries, sourceName, driverImages);
+    }
+
+    /**
+     * The object, all its attributes; when the server can't return one of them (invalid attribute syntax,
+     * -325), every other attribute, read one at a time, and a note naming the one left out.
+     */
+    static Vault.Entry readTolerant(VaultAccess v, String dn, java.util.function.Consumer<String> notes) {
+        try {
+            return v.read(dn);
+        } catch (RuntimeException e) {
+            if (!Vault.invalidSyntax(e)) {
+                throw e;
+            }
+        }
+        Vault.Entry out = new Vault.Entry(dn);
+        for (String attr : v.attributeNames(dn)) {
+            try {
+                Vault.Entry one = v.read(dn, attr);
+                if (one != null) {
+                    out.attrs.putAll(one.attrs);
+                }
+            } catch (RuntimeException e) {
+                if (!Vault.invalidSyntax(e)) {
+                    throw e;
+                }
+                notes.accept(dn + ": the server can't return attribute " + attr + " (invalid attribute syntax, eDirectory -325), so it was"
+                    + " left out of the comparison: a value there is damaged or doesn't fit the attribute's syntax. A deploy would write"
+                    + " the tree's value of it, if the tree has one. Look at it with iManager or Designer, and fix or clear the value.");
+            }
+        }
+        return out;
     }
 
     static com.pointblue.dirxml.sim.LdifDriverSource.Entry toSourceEntry(Vault.Entry e) {
