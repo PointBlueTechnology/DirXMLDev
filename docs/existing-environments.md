@@ -1,0 +1,140 @@
+# Taking on existing environments
+
+*Status: design, 2026-10-20. Parts 1–3 are built on the `driver-environments` branches (core and web); parts 4–7 are proposed. Decisions marked **D1…** are Jerry's.*
+
+The usual case is not a clean start. A customer has a production tree and one or more others (QA,
+test, dev), each changed by hand over the years: drivers added in one and not the other, the same
+driver under two names, hot fixes made in production and never carried back, work in QA never
+promoted, host names typed into policies. The tool has to take that on without asking anyone to
+clean it up first, and it has to help decide what genuinely needs resolving.
+
+## What a real pair of environments looks like
+
+A customer's QA and production driver sets, read from two LDIF exports (2026-10-20):
+
+| | Production | QA |
+|---|---|---|
+| objects in the driver set | 1,143 | 1,542 |
+| drivers | 41 | 43 |
+| servers | 4 | 2 |
+| driver set DN | `…,ou=SERVICES,o=…` | `…,ou=services,o=…` |
+
+Compared driver by driver (QA against production, production as the tree):
+
+- **Drivers in one only:** 7 in production only, 9 in QA only. Among them one is plainly the same
+  driver renamed (20 of 20 policies in common, names one character apart); one production driver has
+  four QA counterparts (one QA certificate-revocation driver per CA where production has one); and two
+  drivers look alike because each pushes to the environment below (production→QA, QA→dev), which only
+  a person can call the same driver or not.
+- **Values:** 81 scalar values differ: 69 shim parameters, 5 engine control values, 4 driver GCVs, 3
+  driver-set GCVs. These are what overrides are for.
+- **Everything else:** 879 differences. 52 differ only in letter case (`OU=services` against
+  `OU=SERVICES`; eDirectory reads them as the same) and are set aside. The other 827:
+
+| | count | what it suggests |
+|---|---:|---|
+| only in QA | 402 | QA-only objects; 350 are role-based entitlement policies |
+| only in production | 57 | production has them, QA never got them |
+| lines only production has | 37 | a change made in production, not carried back |
+| lines only QA has | 26 | work in QA not yet promoted |
+| package versions differ | 13 | the newer side is known |
+| cosmetic (descriptions, comments, display names) | 6 | align freely |
+| environment text inside content | 7 | a host or server name typed into a policy: belongs in a GCV |
+| both sides changed | 268 | needs a person; mostly User Application objects and PRDs |
+
+Two more things the data shows. Jobs differ by schedule (production runs them on a schedule, QA
+doesn't), which an override can't carry yet. And jobs, the driver set's server list and per-server
+settings name servers by DN. Tree names and server names are globally unique, so two environments
+never share a server: every environment but the base needs its servers mapped, here four production
+servers onto two in QA.
+
+## The process
+
+One environment at a time, the production tree first.
+
+1. **Base.** Import production into `main`. `main` is what production runs; everything any other
+   environment has beyond it shows up as a change to look at, not as something already on its way to
+   production. *(built)*
+2. **Connect the next environment** under Connections, and add it to the project.
+3. **Set up that environment**: a guided read (*Vault → Environments → Set up QA…*, proposed) that
+   proposes, for review, everything it needs. Nothing is written until you apply; you commit the
+   result.
+   1. **Match drivers.** Same name: matched. Otherwise a likely match by shim class, name and policies
+      in common, which you confirm (a `drivers/<d>.name` override) or reject. Proposals are one-to-one;
+      one production driver is never matched to two. *(matching proposed; the name override is built)*
+   2. **Membership.** A driver only that environment has is marked as its own
+      (`environments="QA"` in `driver.xml`); a tree driver that environment lacks is marked as not
+      deployed there. *(built: the marks, compare, deploy and update follow them)*
+   3. **Values.** Each differing value becomes that environment's override, ticked by default (the
+      tree holds production's value). *(built: recorded one at a time from the Environments tab; bulk
+      proposed)*
+   4. **Servers.** Map the tree's servers to that environment's (several to one allowed), so jobs and
+      per-server settings line up. Required for every environment but the base, since no two
+      environments share a server. *(proposed: see "Servers")*
+   5. **What's left: analyse, then decide** (next section).
+4. **Compare again.** What remains is what you decided to leave, and from then on only new
+   differences show.
+
+## Analysing what's left
+
+Each remaining difference gets a likely cause from the comparison itself, as in the table above, and
+the page groups them by driver with counts, cause first, so that 827 differences read as a short list
+of drivers with a few kinds of problem each. For each you choose:
+
+- **Production is right:** leave the tree as it is; a deploy to QA (when you choose to) brings QA in
+  line. Suggested for *only in production*, *lines only production has* and an older package in QA.
+- **QA is ahead:** take QA's version into a branch (*Update this branch from QA…*, ticking those
+  files), to promote through the normal flow. Suggested for *lines only QA has* and a newer package in
+  QA.
+- **Needs fixing:** both sides wrong or a design problem, such as a host name typed into a policy.
+  Opens the file; the suggestion names the fix (move the literal into a GCV, then override it).
+- **Different on purpose:** this environment's content genuinely differs and no value can carry it.
+  Recorded as known (**D1**).
+- **Decide later:** recorded as known, with who and when, so it stops hiding new differences but
+  stays listed.
+
+Resolving is then ordinary work on branches: each decision either leaves the tree, changes it on a
+branch, or records the difference as known.
+
+## Known differences (D1)
+
+A file per environment beside the overrides, `overrides/<env>.known.json`, listing differences
+accepted as they are: the object's path, a fingerprint of both sides, the decision, who and when. A
+compare shows them collapsed under "known" and shows anything whose fingerprint changed as new. A
+deploy to that environment still writes what the tree holds; the plan says which of its changes
+overwrite a known difference, so nobody flattens one by accident.
+
+## Servers
+
+Server names are globally unique, so the server DNs in the tree (the driver set's server list, each
+driver's `servers/<server>/` settings, jobs' servers) are the base environment's. Every other
+environment maps them in its overrides file, one line per tree server:
+
+```
+# overrides/QA.properties
+servers.cn=VAULT01,ou=servers,o=acme = cn=vault01qa,ou=servers,o=acme
+servers.cn=VAULT02,ou=servers,o=acme = cn=vault01qa,ou=servers,o=acme
+servers.cn=VAULT03,ou=servers,o=acme = cn=vault02qa,ou=servers,o=acme
+servers.cn=VAULT04,ou=servers,o=acme = cn=vault02qa,ou=servers,o=acme
+```
+
+The tree's servers act as roles. Compare, plan and deploy against QA read and write each role on the
+server it maps to; an import from QA maps the other way. Two roles mapped to one server must agree
+on that server's settings, or the setup flags the conflict. A server of QA that no role maps to is
+reported, as is a role left unmapped (validation: `server-unmapped`). The guided setup proposes the
+map by name and by which drivers run where, for you to confirm.
+
+## Decisions
+
+- **D1 — Known differences.** Record accepted differences per environment as above, or only compare
+  and leave triage to people's notes?
+- **D2 — Objects of the driver set other than drivers.** Role-based entitlement policies (350 only in
+  QA), notification templates and driver-set jobs: give them the same environments list as drivers, or
+  treat them only through known differences?
+- **D3 — Servers.** *Decided: required* (tree and server names are globally unique). Open: the map
+  in each environment's overrides file as above, or in the environment's connection settings, beside
+  the servers' addresses?
+- **D4 — Job schedules and enabled state** as override keys (`drivers/<d>.job.<job>.schedule`,
+  `.disabled`), since environments run jobs on different schedules.
+- **D5 — The guided setup** as a page flow (*Set up QA…*) proposing steps 3.1–3.5 at once, or the
+  Environments tab used step by step as now.
