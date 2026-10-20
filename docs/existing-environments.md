@@ -1,6 +1,6 @@
 # Taking on existing environments
 
-*Status: design, 2026-10-20. Parts 1–3 are built on the `driver-environments` branches (core and web); parts 4–7 are proposed. Decisions marked **D1…** are Jerry's.*
+*Status: decided 2026-10-20; being built on the `driver-environments` branches (core and web).*
 
 The usual case is not a clean start. A customer has a production tree and one or more others (QA,
 test, dev), each changed by hand over the years: drivers added in one and not the other, the same
@@ -124,17 +124,18 @@ on that server's settings, or the setup flags the conflict. A server of QA that 
 reported, as is a role left unmapped (validation: `server-unmapped`). The guided setup proposes the
 map by name and by which drivers run where, for you to confirm.
 
-## Decisions
+## Decisions (taken 2026-10-20)
 
-- **D1 — Known differences.** Record accepted differences per environment as above, or only compare
-  and leave triage to people's notes?
-- **D2 — Objects of the driver set other than drivers.** Role-based entitlement policies (350 only in
-  QA), notification templates and driver-set jobs: give them the same environments list as drivers, or
-  treat them only through known differences?
-- **D3 — Servers.** *Decided: required* (tree and server names are globally unique). Open: the map
-  in each environment's overrides file as above, or in the environment's connection settings, beside
-  the servers' addresses?
-- **D4 — Job schedules and enabled state** as override keys (`drivers/<d>.job.<job>.schedule`,
-  `.disabled`), since environments run jobs on different schedules.
-- **D5 — The guided setup** as a page flow (*Set up QA…*) proposing steps 3.1–3.5 at once, or the
-  Environments tab used step by step as now.
+- **D1 — Known differences: recorded** per environment in `overrides/<env>.known.json`, as above.
+- **D2 — Driver-set objects get an environments list like drivers:** role-based entitlement
+  policies, notification templates and driver-set jobs. Compare and deploy leave them out of other
+  environments; an update from an environment marks the ones new to the tree as its own.
+- **D3 — Servers: required, mapped in each environment's overrides file** (`servers.<tree server> =
+  <env server>`). Fewer servers outside production is the normal case, so several tree servers mapping
+  to one is the rule. A driver whose settings differ between two tree servers that map to the same
+  server is flagged, and the person picks which that server takes
+  (`servers.<env server>.prefer = <tree server>`).
+- **D4 — Job schedules and enabled state are override keys:** `drivers/<d>.job.<job>.schedule`,
+  `drivers/<d>.job.<job>.disabled`, and `driverset.job.<job>.…` for the set's jobs.
+- **D5 — A guided *Set up <environment>…* flow** proposing 3.1–3.5 together, reviewed before anything
+  is written, then committed.
