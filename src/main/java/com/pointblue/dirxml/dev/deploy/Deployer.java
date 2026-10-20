@@ -277,8 +277,15 @@ public final class Deployer {
         DriverSet to = AsCodeReader.read(o.tree);
         Overrides.Applied overrides = Overrides.apply(to, env.name);
         String overrideNote = overrides.summary() == null ? "" : overrides.summary() + "\n";
+        String notDeployedHere = overrides.refusalFor(o.drivers);
+        if (notDeployedHere != null) {
+            r.refusal = notDeployedHere;
+            return r;
+        }
+        // the drivers asked for, as this environment's vault names them (the request uses the tree's names)
+        List<String> scope = overrides.vaultNames(o.drivers);
         String treeCommit = DeployLog.treeCommit(o.tree);
-        Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
+        Secrets secrets = (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).withNames(overrides.renamed);
         Overrides.applySecretShimAuthIds(to, secrets);   // ids the secrets file supplies win over the tree's (never shown)
 
         o.progress.accept("reading the vault");
@@ -286,7 +293,7 @@ public final class Deployer {
             // 2. diff and plan — the other servers' own driver settings included, read through their connections
             DriverSet from = VaultDiff.fromVault(vault, dsDn);
             Servers.readOverrides(from, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
-            String unknown = VaultDiff.unknownDrivers(from, to, o.drivers);
+            String unknown = VaultDiff.unknownDrivers(from, to, scope);
             if (unknown != null) {
                 r.refusal = unknown;
                 closeServerConnections();
@@ -297,12 +304,12 @@ public final class Deployer {
                 closeServerConnections();
                 return r;
             }
-            ModelDiff diff = VaultDiff.of(from, to, o.drivers);
+            ModelDiff diff = VaultDiff.of(from, to, scope);
             r.diffText = diff.text();
             Map<String, List<String>> liveNamed = new LinkedHashMap<>();
             if ("missing".equals(o.secretsMode)) {
                 for (var d : to.drivers) {
-                    if (o.drivers.isEmpty() || o.drivers.contains(d.name)) {
+                    if (scope.isEmpty() || scope.contains(d.name)) {
                         liveNamed.put(d.name, vault.namedPasswords(VaultMapping.driverDn(dsDn, d.name)));
                     }
                 }
@@ -459,7 +466,7 @@ public final class Deployer {
             o.progress.accept("verifying: reading the vault again");
             DriverSet after = VaultDiff.fromVault(vault, dsDn);
             Servers.readOverrides(after, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
-            ModelDiff verify = VaultDiff.of(after, to, o.drivers.isEmpty() ? diff.affectedDrivers() : o.drivers);
+            ModelDiff verify = VaultDiff.of(after, to, scope.isEmpty() ? diff.affectedDrivers() : scope);
             r.verified = verify.isEmpty();
             r.verifyText = verify.isEmpty() ? "" : verify.text();
             // affectedDrivers() never includes a deleted driver (never restarted), so its removal
@@ -502,8 +509,8 @@ public final class Deployer {
     /** A tree read for comparison with an environment's vault: the base with that environment's overrides and secret shim auth ids applied. */
     private static DriverSet readWithOverrides(Path tree, Environments.Environment env) throws IOException {
         DriverSet ds = AsCodeReader.read(tree);
-        Overrides.apply(ds, env.name);
-        Overrides.applySecretShimAuthIds(ds, env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile));
+        Overrides.Applied applied = Overrides.apply(ds, env.name);
+        Overrides.applySecretShimAuthIds(ds, (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).withNames(applied.renamed));
         return ds;
     }
 
