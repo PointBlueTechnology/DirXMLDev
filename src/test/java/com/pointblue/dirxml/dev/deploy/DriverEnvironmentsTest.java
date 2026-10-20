@@ -254,6 +254,41 @@ public class DriverEnvironmentsTest {
         assertFalse("a job key is not a name key", Overrides.isName("drivers/AD.job.x.name"));
     }
 
+    /** Drift accepted as known stays out of the comparison until the object changes again; the file round-trips. */
+    @Test
+    public void anAcceptedDifferenceStaysOutUntilItChanges() throws Exception {
+        java.util.function.Supplier<DriverSet> qaSide = () -> {
+            DriverSet qa = VaultMappingTest.model();
+            Policy sub = (Policy) qa.resolve("drivers/AD/subscriber/sub-ctp");
+            sub.content = ValidatorTest.xml("<policy><rule><description>qa only</description><conditions/><actions/></rule></policy>");
+            return qa;
+        };
+        DriverSet tree = VaultMappingTest.model();
+        EnvironmentCompare first = EnvironmentCompare.of(VaultMappingTest.model(), "PROD", qaSide.get(), "QA", tree);
+        assertEquals(1, first.drift.changes().size());
+        ModelDiff.Change ch = first.drift.changes().get(0);
+        new com.pointblue.dirxml.dev.edit.KnownOps.Accept("QA", "PROD", ch.path, first.fingerprints.get(0), "intended", ch.summary, "QA's test rule", "me").apply(tree, null);
+
+        Path dir = tmp.newFolder("known").toPath();
+        AsCodeWriter.write(tree, dir);
+        assertTrue(Files.readString(dir.resolve("overrides/QA.known.json"), StandardCharsets.UTF_8).contains("QA's test rule"));
+        DriverSet back = AsCodeReader.read(dir);
+
+        EnvironmentCompare again = EnvironmentCompare.of(VaultMappingTest.model(), "PROD", qaSide.get(), "QA", back);
+        assertTrue(again.drift.text(), again.drift.isEmpty());
+        assertEquals(1, again.accepted.size());
+
+        DriverSet qaChanged = qaSide.get();
+        ((Policy) qaChanged.resolve("drivers/AD/subscriber/sub-ctp")).content = ValidatorTest.xml("<policy><rule><description>changed again</description><conditions/><actions/></rule></policy>");
+        EnvironmentCompare later = EnvironmentCompare.of(VaultMappingTest.model(), "PROD", qaChanged, "QA", back);
+        assertEquals(1, later.drift.changes().size());
+        assertTrue(later.changedSinceAccepted.contains(ch.path));
+
+        new com.pointblue.dirxml.dev.edit.KnownOps.Forget("QA", "PROD", ch.path).apply(back, null);
+        AsCodeWriter.write(back, dir);
+        assertFalse("the emptied file goes", Files.exists(dir.resolve("overrides/QA.known.json")));
+    }
+
     @Test
     public void aSecretAnswersToEitherName() throws Exception {
         Path f = tmp.newFile("qa.secrets").toPath();

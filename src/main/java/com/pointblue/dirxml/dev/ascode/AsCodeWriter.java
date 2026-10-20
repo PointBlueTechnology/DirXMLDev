@@ -101,6 +101,7 @@ public final class AsCodeWriter {
         }
         writeText(root.resolve(DRIVERSET_MANIFEST), m.toXml());
         com.pointblue.dirxml.dev.deploy.Overrides.write(root, ds.overrides);
+        com.pointblue.dirxml.dev.deploy.KnownDifferences.write(root, ds.known);
 
         // library
         Path lib = root.resolve("library");

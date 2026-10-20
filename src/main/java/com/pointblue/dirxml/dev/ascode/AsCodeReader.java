@@ -59,6 +59,7 @@ public final class AsCodeReader {
         readRbePolicies(dsm, root, ds.rbePolicies);
         readTemplates(dsm, root, ds.templates);
         ds.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(root));
+        ds.known.putAll(com.pointblue.dirxml.dev.deploy.KnownDifferences.read(root));
 
         // library
         Path lib = root.resolve("library");
