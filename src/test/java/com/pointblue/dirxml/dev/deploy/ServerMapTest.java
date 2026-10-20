@@ -122,4 +122,21 @@ public class ServerMapTest {
         }
         assertEquals(Map.of(P1, Q1), ServerMap.of(parsed, ds.servers));
     }
+
+    /** Validation: a map that leaves a tree server out is warned about; map and name keys don't need every file. */
+    @Test
+    public void validationWantsEveryServerMapped() {
+        DriverSet ds = prod();
+        Map<String, String> qa = qaFile(false);
+        qa.remove("servers.vault04");
+        qa.put("drivers/AD.name", "AD-QA");
+        ds.overrides.put("QA", qa);
+        ds.overrides.put("PROD", new LinkedHashMap<>(Map.of("drivers/AD.shim-auth-server", "ldap://prod")));
+        com.pointblue.dirxml.dev.validate.Report r = new com.pointblue.dirxml.dev.validate.Report();
+        new com.pointblue.dirxml.dev.validate.OverridesCheck().run(ds, r);
+        assertEquals(r.findings().toString(), 1, r.withCode("server-unmapped").size());
+        assertTrue(r.withCode("server-unmapped").get(0).toString(), r.withCode("server-unmapped").get(0).toString().contains("VAULT04"));
+        assertTrue("map and name keys are exempt", r.withCode("override-missing-env").stream().noneMatch(f -> f.toString().contains("servers.") || f.toString().contains(".name")));
+        assertEquals("the shim auth server is set for PROD only", 1, r.withCode("override-missing-env").size());
+    }
 }
