@@ -67,13 +67,18 @@ public final class EnvironmentCompare {
         public final String b;
         /** One of the two environments' overrides files sets this key. */
         public final boolean expected;
+        /** The tree's own (base) value, when the tree has the key; tells which environment's override to record. */
+        public final String tree;
+        public final boolean inTree;
 
-        Value(String driver, String key, String a, String b, boolean expected) {
+        Value(String driver, String key, String a, String b, boolean expected, String tree, boolean inTree) {
             this.driver = driver;
             this.key = key;
             this.a = a;
             this.b = b;
             this.expected = expected;
+            this.tree = tree;
+            this.inTree = inTree;
         }
     }
 
@@ -171,12 +176,13 @@ public final class EnvironmentCompare {
 
         Map<String, String> va = values(a);
         Map<String, String> vb = values(b);
+        Map<String, String> vt = tree == null ? Map.of() : values(tree);
         for (Map.Entry<String, String> e : va.entrySet()) {
             if (!vb.containsKey(e.getKey()) || Objects.equals(e.getValue(), vb.get(e.getKey()))) {
                 continue;
             }
             String key = e.getKey();
-            c.values.add(new Value(driverOf(key), key, e.getValue(), vb.get(key), filesA.containsKey(key) || filesB.containsKey(key)));
+            c.values.add(new Value(driverOf(key), key, e.getValue(), vb.get(key), filesA.containsKey(key) || filesB.containsKey(key), vt.get(key), vt.containsKey(key)));
             Overrides.Target t = Overrides.resolve(a, key);
             if (t.resolved() && (vb.get(key) != null || t.jobDefinition != null || t.job != null)) {
                 t.set(vb.get(key) == null ? "" : vb.get(key));   // a job without a schedule: none is a value too
@@ -560,7 +566,8 @@ public final class EnvironmentCompare {
         for (int i = 0; i < values.size(); i++) {
             Value v = values.get(i);
             sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(q(v.driver)).append(",\"key\":").append(q(v.key))
-              .append(",\"a\":").append(q(v.a)).append(",\"b\":").append(q(v.b)).append(",\"expected\":").append(v.expected).append('}');
+              .append(",\"a\":").append(q(v.a)).append(",\"b\":").append(q(v.b)).append(",\"expected\":").append(v.expected)
+              .append(",\"tree\":").append(q(v.tree)).append(",\"inTree\":").append(v.inTree).append('}');
         }
         sb.append("],\"drift\":").append(drift == null ? "null" : drift.json()).append(",\"causes\":[");
         for (int i = 0; i < causes.size(); i++) {
