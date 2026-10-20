@@ -112,6 +112,11 @@ public final class Driver {
      * the others ({@code docs/vault-deploy.md}, "Drivers that only some environments get").
      */
     public final List<String> environments = new ArrayList<>();
+    /**
+     * A deploy's choice, never written to the tree: the server a driver new to the environment runs on, when not the
+     * one the deploy connects through. That server gets the start option, every other server of the set "disabled".
+     */
+    public String runsOn;
 
     /** True when a deploy to {@code env} gets this driver: no list, or {@code env} in it (any case). */
     public boolean deploysTo(String env) {
