@@ -87,6 +87,13 @@ public final class EnvironmentCompare {
     /** Changes whose every changed line differs only in letter case (a DN's {@code OU=services} against {@code OU=SERVICES}): eDirectory reads them as the same. Kept apart from the drift. */
     public final List<ModelDiff.Change> caseOnly = new ArrayList<>();
     public final List<String> notes = new ArrayList<>();
+    /** Each side's servers as its vault names them, and the tree's: what a server map ({@link ServerMap}) pairs up. */
+    public final List<String> serversA = new ArrayList<>();
+    public final List<String> serversB = new ArrayList<>();
+    public final List<String> treeServers = new ArrayList<>();
+    /** The server map each side's overrides file holds (the tree's server to that environment's). */
+    public final Map<String, String> mapA = new LinkedHashMap<>();
+    public final Map<String, String> mapB = new LinkedHashMap<>();
 
     private EnvironmentCompare(String envA, String envB) {
         this.envA = envA;
@@ -104,6 +111,15 @@ public final class EnvironmentCompare {
         Map<String, String> filesB = tree == null ? Map.of() : Objects.requireNonNullElse(tree.overrides.get(envB), Map.of());
         c.notes.addAll(Overrides.toTreeNames(a, filesA));
         c.notes.addAll(Overrides.toTreeNames(b, filesB));
+        c.serversA.addAll(a.servers);
+        c.serversB.addAll(b.servers);
+        if (tree != null) {
+            c.treeServers.addAll(tree.servers);
+        }
+        if (tree != null) {
+            c.mapA.putAll(ServerMap.of(filesA, tree.servers));
+            c.mapB.putAll(ServerMap.of(filesB, tree.servers));
+        }
         // each side's servers as the tree names them, so per-server settings and jobs line up
         c.notes.addAll(ServerMap.toTree(a, filesA, tree));
         c.notes.addAll(ServerMap.toTree(b, filesB, tree));
@@ -150,28 +166,30 @@ public final class EnvironmentCompare {
             }
         }
         c.drift = rest.only(ch -> !c.caseOnly.contains(ch) && !oneSided.contains(ch));
-        // words that mark environment-specific text: the environments' names and their servers' names
+        // servers each side names (a difference naming one is the server map's), and words that mark
+        // environment-specific text: the environments' own names
+        java.util.Set<String> servers = new java.util.HashSet<>();
+        for (List<String> side : List.of(c.serversA, c.serversB)) {
+            for (String server : side) {
+                servers.add(server.toLowerCase(java.util.Locale.ROOT));
+            }
+        }
         java.util.Set<String> envWords = new java.util.HashSet<>();
         envWords.add(envA.toLowerCase(java.util.Locale.ROOT));
         envWords.add(envB.toLowerCase(java.util.Locale.ROOT));
-        for (DriverSet side : List.of(a, b)) {
-            for (String server : side.servers) {
-                String rdn = server.split(",")[0];
-                envWords.add(rdn.substring(rdn.indexOf('=') + 1).toLowerCase(java.util.Locale.ROOT));
-            }
-        }
         for (ModelDiff.Change ch : c.drift.changes()) {
-            c.causes.add(cause(ch, envA, envB, envWords));
+            c.causes.add(cause(ch, envA, envB, servers, envWords));
         }
         return c;
     }
 
     /**
      * A change's likely cause, from the change alone: one side only ("only in A"/"only in B"), lines only one side has,
-     * package versions, cosmetic (descriptions, comments, display names), environment-specific text (a name of either
-     * environment or of one of their servers on a changed line), or "both changed" (a person reviews it).
+     * package versions, servers (every changed line names a server: the server map's to pair them), cosmetic
+     * (descriptions, comments, display names), environment-specific text (an environment's name on a changed line), or
+     * "both changed" (a person reviews it).
      */
-    static String cause(ModelDiff.Change ch, String envA, String envB, java.util.Set<String> envWords) {
+    static String cause(ModelDiff.Change ch, String envA, String envB, java.util.Set<String> servers, java.util.Set<String> envWords) {
         String k = ch.kind.name();
         if (k.endsWith("_REMOVED")) {
             return "only in " + envA;
@@ -206,6 +224,9 @@ public final class EnvironmentCompare {
         }
         List<String> all = new ArrayList<>(fromA);
         all.addAll(fromB);
+        if (all.stream().allMatch(l -> servers.stream().anyMatch(sv -> l.toLowerCase(java.util.Locale.ROOT).contains(sv)))) {
+            return "servers differ";
+        }
         if (all.stream().allMatch(l -> l.contains("<description") || l.contains("</description>") || l.trim().startsWith("<!--")
             || l.trim().isEmpty() || l.contains("display-name="))) {
             return "cosmetic";
@@ -379,7 +400,9 @@ public final class EnvironmentCompare {
         for (int i = 0; i < causes.size(); i++) {
             sb.append(i == 0 ? "" : ",").append(q(causes.get(i)));
         }
-        sb.append("],\"caseOnly\":[");
+        sb.append("],\"servers\":{\"a\":").append(list(serversA)).append(",\"b\":").append(list(serversB))
+          .append(",\"tree\":").append(list(treeServers)).append(",\"treeNames\":").append(list(treeServers.stream().map(Servers::dirName).toList())).append(",\"mapA\":").append(map(mapA)).append(",\"mapB\":").append(map(mapB)).append('}');
+        sb.append(",\"caseOnly\":[");
         for (int i = 0; i < caseOnly.size(); i++) {
             ModelDiff.Change ch = caseOnly.get(i);
             sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(q(ch.driver)).append(",\"path\":").append(q(ch.path)).append(",\"summary\":").append(q(ch.summary)).append('}');
@@ -389,6 +412,23 @@ public final class EnvironmentCompare {
             sb.append(i == 0 ? "" : ",").append(q(notes.get(i)));
         }
         return sb.append("]}").toString();
+    }
+
+    private static String list(List<String> l) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < l.size(); i++) {
+            sb.append(i == 0 ? "" : ",").append(q(l.get(i)));
+        }
+        return sb.append(']').toString();
+    }
+
+    private static String map(Map<String, String> m) {
+        StringBuilder sb = new StringBuilder("{");
+        int i = 0;
+        for (Map.Entry<String, String> e : m.entrySet()) {
+            sb.append(i++ == 0 ? "" : ",").append(q(e.getKey())).append(':').append(q(e.getValue()));
+        }
+        return sb.append('}').toString();
     }
 
     private static String q(String s) {

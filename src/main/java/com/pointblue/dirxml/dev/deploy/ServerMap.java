@@ -15,11 +15,13 @@ import java.util.Map;
  * The tree's servers as an environment's ({@code docs/existing-environments.md}, "Servers"). Tree and server
  * names are globally unique, so the servers the tree names (the set's server list, each driver's
  * {@code servers/<server>/} settings, jobs' servers) are the base environment's; every other environment
- * maps them in its overrides file, one line per tree server, several onto one where it has fewer:
+ * maps them in its overrides file, one line per tree server, several onto one where it has fewer. A key names a
+ * server by its name ({@link Servers#dirName}, the {@code servers/<name>/} folder's), since the file splits a line at
+ * its first {@code =}; the value is the environment's server's DN:
  * <pre>
- *   servers.cn=VAULT01,ou=servers,o=acme = cn=vault01qa,ou=servers,o=acme
- *   servers.cn=VAULT02,ou=servers,o=acme = cn=vault01qa,ou=servers,o=acme
- *   servers.cn=vault01qa,ou=servers,o=acme.prefer = cn=VAULT02,ou=servers,o=acme
+ *   servers.vault01 = cn=vault01qa,ou=servers,o=acme
+ *   servers.vault02 = cn=vault01qa,ou=servers,o=acme
+ *   servers.vault01qa.prefer = vault02
  * </pre>
  * Where several tree servers land on one, that server takes the settings of the one listed first, or of
  * the one its {@code .prefer} line names; a driver whose settings differ between them is reported.
@@ -39,29 +41,56 @@ public final class ServerMap {
         return key.startsWith(PREFIX) && key.length() > PREFIX.length();
     }
 
-    /** The tree's server (as written) to the environment's, in file order; empty when the file maps none. */
-    public static Map<String, String> of(Map<String, String> values) {
+    /**
+     * The tree's server (its DN, from {@code treeServers}) to the environment's (a DN), in file order; empty when the
+     * file maps none. A key naming no server of the tree is left out (validation reports it).
+     */
+    public static Map<String, String> of(Map<String, String> values, List<String> treeServers) {
         Map<String, String> out = new LinkedHashMap<>();
         if (values != null) {
             for (Map.Entry<String, String> e : values.entrySet()) {
                 if (isKey(e.getKey()) && !e.getKey().endsWith(PREFER) && !e.getValue().isBlank()) {
-                    out.put(e.getKey().substring(PREFIX.length()), e.getValue().trim());
+                    String tree = server(treeServers, e.getKey().substring(PREFIX.length()));
+                    if (tree != null) {
+                        out.put(tree, e.getValue().trim());
+                    }
                 }
             }
         }
         return out;
     }
 
-    /** For each environment server, the tree server whose settings it takes: its {@code .prefer} line, else the first mapped to it. */
-    public static Map<String, String> preferred(Map<String, String> values) {
+    /** The server of {@code servers} a key or value names: by its name ({@link Servers#dirName}) or its DN, any case; null when none. */
+    public static String server(List<String> servers, String nameOrDn) {
+        String n = nameOrDn.trim();
+        for (String s : servers) {
+            if (s.equalsIgnoreCase(n) || Servers.dirName(s).equals(n.toLowerCase(Locale.ROOT))) {
+                return s;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * For each environment server (by its DN, lower case), the tree server whose settings it takes: the one its
+     * {@code servers.<its name>.prefer} line names, else the first mapped to it.
+     */
+    public static Map<String, String> preferred(Map<String, String> values, List<String> treeServers) {
         Map<String, String> out = new LinkedHashMap<>();
-        for (Map.Entry<String, String> m : of(values).entrySet()) {
+        Map<String, String> map = of(values, treeServers);
+        for (Map.Entry<String, String> m : map.entrySet()) {
             out.putIfAbsent(key(m.getValue()), m.getKey());
         }
         if (values != null) {
             for (Map.Entry<String, String> e : values.entrySet()) {
                 if (isKey(e.getKey()) && e.getKey().endsWith(PREFER) && !e.getValue().isBlank()) {
-                    out.put(key(e.getKey().substring(PREFIX.length(), e.getKey().length() - PREFER.length())), e.getValue().trim());
+                    String envName = e.getKey().substring(PREFIX.length(), e.getKey().length() - PREFER.length());
+                    String tree = server(treeServers, e.getValue());
+                    for (String env : map.values()) {
+                        if (tree != null && (env.equalsIgnoreCase(envName) || Servers.dirName(env).equals(envName.toLowerCase(Locale.ROOT)))) {
+                            out.put(key(env), tree);
+                        }
+                    }
                 }
             }
         }
@@ -75,14 +104,14 @@ public final class ServerMap {
      */
     public static List<String> apply(DriverSet ds, Map<String, String> values) {
         List<String> problems = new ArrayList<>();
-        Map<String, String> map = of(values);
+        Map<String, String> map = of(values, ds.servers);
         if (map.isEmpty()) {
             return problems;
         }
-        Map<String, String> prefer = preferred(values);
+        Map<String, String> prefer = preferred(values, ds.servers);
         for (String s : ds.servers) {
             if (find(map, s) == null) {
-                problems.add("server " + s + " is not mapped (" + PREFIX + s + " = <this environment's server>)");
+                problems.add("server " + s + " is not mapped (" + PREFIX + Servers.dirName(s) + " = <this environment's server's DN>)");
             }
         }
         replaceAll(ds.servers, map);
@@ -107,24 +136,27 @@ public final class ServerMap {
      */
     public static List<String> toTree(DriverSet live, Map<String, String> values, DriverSet base) {
         List<String> notes = new ArrayList<>();
-        Map<String, String> map = of(values);
+        if (base == null) {
+            return notes;
+        }
+        Map<String, String> map = of(values, base.servers);
         if (map.isEmpty()) {
             return notes;
         }
-        Map<String, String> prefer = preferred(values);
+        Map<String, String> prefer = preferred(values, base.servers);
         // the set's list: the tree's own when it maps onto exactly what the vault holds
-        if (base != null && sameServers(mapped(base.servers, map), live.servers)) {
+        if (sameServers(mapped(base.servers, map), live.servers)) {
             live.servers.clear();
             live.servers.addAll(base.servers);
         } else {
             replaceBack(live.servers, prefer, notes);
         }
         for (Job j : live.jobs) {
-            Job mine = base == null ? null : findJob(base.jobs, j.name);
+            Job mine = findJob(base.jobs, j.name);
             restoreJob(j, mine, map, prefer, notes);
         }
         for (Driver d : live.drivers) {
-            Driver mine = base == null ? null : base.driver(d.name);
+            Driver mine = base.driver(d.name);
             for (Job j : d.jobs) {
                 restoreJob(j, mine == null ? null : findJob(mine.jobs, j.name), map, prefer, notes);
             }
@@ -191,7 +223,7 @@ public final class ServerMap {
             for (String other : r.getValue()) {
                 if (!other.equalsIgnoreCase(chosen) && !same(get(byServer, other), held, xml)) {
                     problems.add("driver '" + d.name + "': " + chosen + " and " + other + " both map to " + env + " but hold different settings; "
-                        + env + " takes " + chosen + "'s (" + PREFIX + env + PREFER + " = <tree server> to choose another)");
+                        + env + " takes " + chosen + "'s (" + PREFIX + Servers.dirName(env) + PREFER + " = <tree server's name> to choose another)");
                 }
             }
             if (held != null) {
