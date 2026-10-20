@@ -203,7 +203,7 @@ public final class VaultDiff {
         if (!applied.serverMap.isEmpty()) {
             Servers.foldPrimary(to, from.meta.get(Servers.PRIMARY_META));
         }
-        return of(from, to, applied.vaultNames(onlyDrivers));
+        return applied.leaveAlone(of(from, to, applied.vaultNames(onlyDrivers)));
     }
 
     /** {@link ModelDiff#of} with both models narrowed to {@code onlyDrivers} (empty = all). */

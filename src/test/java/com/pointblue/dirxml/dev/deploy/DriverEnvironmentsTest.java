@@ -289,6 +289,23 @@ public class DriverEnvironmentsTest {
         assertFalse("the emptied file goes", Files.exists(dir.resolve("overrides/QA.known.json")));
     }
 
+    /** A policy the tree keeps for production only is never deleted from QA's vault by a deploy to QA, nor drift there. */
+    @Test
+    public void anEnvironmentsOwnCopyOfAnExcludedObjectIsLeftAlone() {
+        DriverSet qaVault = VaultMappingTest.model();
+        com.pointblue.dirxml.dev.model.EntitlementPolicy theirs = new com.pointblue.dirxml.dev.model.EntitlementPolicy("Prod Policy");
+        qaVault.rbePolicies.add(theirs);
+        DriverSet to = VaultMappingTest.model();
+        com.pointblue.dirxml.dev.model.EntitlementPolicy mine = new com.pointblue.dirxml.dev.model.EntitlementPolicy("Prod Policy");
+        mine.environments.add("PROD");
+        to.rbePolicies.add(mine);
+        Overrides.Applied a = Overrides.apply(to, "QA");
+        ModelDiff raw = ModelDiff.of(qaVault, to);
+        assertTrue("without the rule a deploy would delete it", raw.changes().stream().anyMatch(ch -> ch.kind == ModelDiff.Kind.RBE_REMOVED));
+        assertTrue(a.leaveAlone(raw).text(), a.leaveAlone(raw).isEmpty());
+        assertTrue("nor drift, the other way round", a.ignoreNotDeployed(ModelDiff.of(to, qaVault)).isEmpty());
+    }
+
     @Test
     public void aSecretAnswersToEitherName() throws Exception {
         Path f = tmp.newFile("qa.secrets").toPath();

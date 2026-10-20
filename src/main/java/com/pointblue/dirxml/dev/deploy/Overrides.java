@@ -401,6 +401,28 @@ public final class Overrides {
             return out;
         }
 
+        /**
+         * {@code diff} without removals of objects the tree doesn't deploy here: "this environment doesn't get it" means
+         * a deploy leaves that environment's own copy alone, never that it deletes one, as with drivers only in the vault.
+         */
+        public ModelDiff leaveAlone(ModelDiff diff) {
+            if (notDeployedObjects.isEmpty()) {
+                return diff;
+            }
+            return diff.only(ch -> !(ch.kind.name().endsWith("_REMOVED") && notDeployedObjects.contains(ch.path)));
+        }
+
+        /**
+         * {@code diff} without anything about what the tree doesn't deploy here, in either direction: a driver or object
+         * this environment doesn't get is not drift, whether or not the environment holds a copy of its own.
+         */
+        public ModelDiff ignoreNotDeployed(ModelDiff diff) {
+            if (notDeployed.isEmpty() && notDeployedObjects.isEmpty()) {
+                return diff;
+            }
+            return diff.only(ch -> !notDeployedObjects.contains(ch.path) && (ch.driver == null || !notDeployed.contains(ch.driver)));
+        }
+
         /** The refusal for a scoped request naming drivers this environment doesn't get, or null. */
         public String refusalFor(java.util.Collection<String> treeNames) {
             if (treeNames == null) {
