@@ -143,5 +143,11 @@ map by name and by which drivers run where, for you to confirm.
   (`servers.<env server>.prefer = <tree server>`).
 - **D4 — Job schedules and enabled state are override keys:** `drivers/<d>.job.<job>.schedule`,
   `drivers/<d>.job.<job>.disabled`, and `driverset.job.<job>.…` for the set's jobs.
+- **D6 — A new driver's server, chosen at deploy:** promoting a driver to an environment with several
+  servers asks which one runs it (default: the one the deploy connects through). That server gets the
+  driver's start option, manual, and every other server of the set gets disabled
+  (`vault.deploy --driver-server "D=<server>"`; *Runs on* in the plan). A deploy choice, not a tree value:
+  it matters only when the driver is created there. The step waits for the driver to replicate to that
+  server first.
 - **D5 — A guided *Set up <environment>…* flow** proposing 3.1–3.5 together, reviewed before anything
   is written, then committed.

@@ -68,6 +68,8 @@ public final class Deployer {
         public boolean captureOnly;
         public boolean json;
         public List<String> deleteDrivers = List.of();
+        /** A driver new to the environment (the tree's name) to the server it runs on, when not the one the deploy connects through. */
+        public Map<String, String> driverServers = Map.of();
         /** {@code --delete-all} kinds ({@code entitlements}, {@code forms}, {@code prds}), repeatable. */
         public List<String> deleteAllKinds = List.of();
         public int restartWaitSeconds = 180;
@@ -284,6 +286,12 @@ public final class Deployer {
         }
         // the drivers asked for, as this environment's vault names them (the request uses the tree's names)
         List<String> scope = overrides.vaultNames(o.drivers);
+        for (Map.Entry<String, String> ds : o.driverServers.entrySet()) {
+            com.pointblue.dirxml.dev.model.Driver d = to.driver(overrides.renamed.getOrDefault(ds.getKey(), ds.getKey()));
+            if (d != null && ds.getValue() != null && !ds.getValue().isBlank()) {
+                d.runsOn = ds.getValue().trim();
+            }
+        }
         String treeCommit = DeployLog.treeCommit(o.tree);
         Secrets secrets = (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).withNames(overrides.renamed);
         Overrides.applySecretShimAuthIds(to, secrets);   // ids the secrets file supplies win over the tree's (never shown)
@@ -565,7 +573,19 @@ public final class Deployer {
                 }
                 break;
             case START_OPTION:
-                vault.setDriverStartOption(s.dn, Vault.START_MANUAL);
+                if (s.server != null) {
+                    // created through the primary: wait for the replica on this server before setting its start option there
+                    long until = System.currentTimeMillis() + 120_000;
+                    while (!vault.exists(s.dn) && System.currentTimeMillis() < until) {
+                        try {
+                            Thread.sleep(2000);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+                vault.setDriverStartOption(s.dn, "disabled".equals(s.attr) ? Vault.START_DISABLED : Vault.START_MANUAL);
                 break;
             case NOTIFY_JOB:
                 vault.notifyJobUpdate(s.dn);
