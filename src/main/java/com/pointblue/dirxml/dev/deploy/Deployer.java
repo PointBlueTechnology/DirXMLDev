@@ -315,7 +315,7 @@ public final class Deployer {
                 closeServerConnections();
                 return r;
             }
-            ModelDiff diff = VaultDiff.of(from, to, scope);
+            ModelDiff diff = overrides.leaveAlone(VaultDiff.of(from, to, scope));
             r.diffText = diff.text();
             Map<String, List<String>> liveNamed = new LinkedHashMap<>();
             if ("missing".equals(o.secretsMode)) {
@@ -477,7 +477,7 @@ public final class Deployer {
             o.progress.accept("verifying: reading the vault again");
             DriverSet after = VaultDiff.fromVault(vault, dsDn);
             Servers.readOverrides(after, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
-            ModelDiff verify = VaultDiff.of(after, to, scope.isEmpty() ? diff.affectedDrivers() : scope);
+            ModelDiff verify = overrides.leaveAlone(VaultDiff.of(after, to, scope.isEmpty() ? diff.affectedDrivers() : scope));
             r.verified = verify.isEmpty();
             r.verifyText = verify.isEmpty() ? "" : verify.text();
             // affectedDrivers() never includes a deleted driver (never restarted), so its removal
@@ -518,11 +518,20 @@ public final class Deployer {
     }
 
     /** A tree read for comparison with an environment's vault: the base with that environment's overrides and secret shim auth ids applied. */
-    private static DriverSet readWithOverrides(Path tree, Environments.Environment env) throws IOException {
+    private record ReadApplied(DriverSet ds, Overrides.Applied applied) {
+    }
+
+    private static ReadApplied readApplied(Path tree, Environments.Environment env) throws IOException {
         DriverSet ds = AsCodeReader.read(tree);
         Overrides.Applied applied = Overrides.apply(ds, env.name);
         Overrides.applySecretShimAuthIds(ds, (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).withNames(applied.renamed));
-        return ds;
+        return new ReadApplied(ds, applied);
+    }
+
+    /** The tree (as {@code env} gets it) against the live vault, what the tree doesn't deploy there set aside either way. */
+    private static ModelDiff driftOf(Path tree, Environments.Environment env, DriverSet live) throws IOException {
+        ReadApplied r = readApplied(tree, env);
+        return r.applied().ignoreNotDeployed(ModelDiff.of(r.ds(), live));
     }
 
     /** Execute one step; records it in the result; throws on failure. */
@@ -798,7 +807,7 @@ public final class Deployer {
         try {
             // an icon set in Designer since the last deploy is not drift worth refusing over: the
             // deploy neither restarts for it nor clobbers policy because of it
-            ModelDiff drift = ModelDiff.of(readWithOverrides(known, env), live);
+            ModelDiff drift = driftOf(known, env, live);
             if (!drift.isEmptyButForIcons()) {
                 lastDrift = drift;
                 return "the vault differs from the last deploy on record (" + last.treeCommit.substring(0, 12) + ")";
@@ -861,7 +870,7 @@ public final class Deployer {
             // model, never through git's view (which may normalize line endings)
             boolean differs;
             try {
-                differs = !ModelDiff.of(readWithOverrides(wtTree, env), live).isEmptyButForIcons();
+                differs = !driftOf(wtTree, env, live).isEmptyButForIcons();
             } catch (RuntimeException | IOException e) {
                 differs = true;
             }
