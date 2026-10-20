@@ -110,6 +110,12 @@ public final class EnvironmentCompare {
     public ModelDiff drift;
     /** For each change of {@link #drift}, in order, its likely cause ({@link #cause}): the analysis a person starts from. */
     public final List<String> causes = new ArrayList<>();
+    /** For each change of {@link #drift}, in order, its fingerprint ({@link KnownDifferences#fingerprint}): what accepting it records. */
+    public final List<String> fingerprints = new ArrayList<>();
+    /** Drift accepted as known for this pair ({@code overrides/<env>.known.json}) and unchanged since. */
+    public final List<com.pointblue.dirxml.dev.model.KnownDifference> accepted = new ArrayList<>();
+    /** Paths of drift accepted once that has changed since: shown again, as new. */
+    public final java.util.Set<String> changedSinceAccepted = new java.util.TreeSet<>();
     /** Changes whose every changed line differs only in letter case (a DN's {@code OU=services} against {@code OU=SERVICES}): eDirectory reads them as the same. Kept apart from the drift. */
     public final List<ModelDiff.Change> caseOnly = new ArrayList<>();
     public final List<String> notes = new ArrayList<>();
@@ -193,7 +199,29 @@ public final class EnvironmentCompare {
                 c.caseOnly.add(ch);
             }
         }
-        c.drift = rest.only(ch -> !c.caseOnly.contains(ch) && !oneSided.contains(ch));
+        // what was accepted as known for this pair stays out while it is unchanged
+        List<com.pointblue.dirxml.dev.model.KnownDifference> known = tree == null ? List.of() : KnownDifferences.forPair(tree.known, envA, envB);
+        List<ModelDiff.Change> acceptedChanges = new ArrayList<>();
+        for (ModelDiff.Change ch : rest.changes()) {
+            if (c.caseOnly.contains(ch) || oneSided.contains(ch)) {
+                continue;
+            }
+            String fp = KnownDifferences.fingerprint(ch);
+            for (com.pointblue.dirxml.dev.model.KnownDifference k : known) {
+                if (k.path.equals(ch.path)) {
+                    if (fp.equals(k.fingerprint)) {
+                        acceptedChanges.add(ch);
+                        c.accepted.add(k);
+                    } else {
+                        c.changedSinceAccepted.add(ch.path);
+                    }
+                }
+            }
+        }
+        c.drift = rest.only(ch -> !c.caseOnly.contains(ch) && !oneSided.contains(ch) && !acceptedChanges.contains(ch));
+        for (ModelDiff.Change ch : c.drift.changes()) {
+            c.fingerprints.add(KnownDifferences.fingerprint(ch));
+        }
         // servers each side names (a difference naming one is the server map's), and words that mark
         // environment-specific text: the environments' own names
         java.util.Set<String> servers = new java.util.HashSet<>();
@@ -537,6 +565,13 @@ public final class EnvironmentCompare {
         sb.append("],\"drift\":").append(drift == null ? "null" : drift.json()).append(",\"causes\":[");
         for (int i = 0; i < causes.size(); i++) {
             sb.append(i == 0 ? "" : ",").append(q(causes.get(i)));
+        }
+        sb.append("],\"fingerprints\":").append(list(fingerprints)).append(",\"changedSinceAccepted\":").append(list(new ArrayList<>(changedSinceAccepted)));
+        sb.append(",\"accepted\":[");
+        for (int i = 0; i < accepted.size(); i++) {
+            com.pointblue.dirxml.dev.model.KnownDifference k = accepted.get(i);
+            sb.append(i == 0 ? "" : ",").append("{\"path\":").append(q(k.path)).append(",\"with\":").append(q(k.with)).append(",\"decision\":").append(q(k.decision))
+              .append(",\"summary\":").append(q(k.summary)).append(",\"note\":").append(q(k.note)).append(",\"by\":").append(q(k.by)).append(",\"at\":").append(q(k.at)).append('}');
         }
         sb.append("],\"servers\":{\"a\":").append(list(serversA)).append(",\"b\":").append(list(serversB))
           .append(",\"tree\":").append(list(treeServers)).append(",\"treeNames\":").append(list(treeServers.stream().map(Servers::dirName).toList())).append(",\"mapA\":").append(map(mapA)).append(",\"mapB\":").append(map(mapB)).append('}');

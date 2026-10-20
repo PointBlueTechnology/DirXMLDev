@@ -558,6 +558,14 @@ public final class Registry {
             req("paths", "tree paths, one per line: drivers/<d>, drivers/<d>/jobs/<n>, jobs/<n>, rbe-policies/<n>, templates/<n>"),
             opt("environments", "the environments that get them, comma-separated"), opt("every", "flag: every environment gets them"),
             opt("planned", "environments they are planned for, not promoted to yet"), opt("no-plan", "flag: nothing planned"));
+        register("known.accept", "accept a difference between two environments as it is (overrides/<env>.known.json): comparisons leave it out while it is unchanged",
+            a -> new KnownOps.Accept(a.get("env"), a.get("with"), a.get("path"), a.get("fingerprint"), a.get("decision"), a.get("summary"), a.get("note"), a.get("by")),
+            req("env", "the environment whose file records it"), req("with", "the other environment of the pair"), req("path", "the changed object's tree path"),
+            req("fingerprint", "the change's fingerprint, from vault.compare-envs"), opt("decision", "intended (default: different on purpose) or later (to decide)"),
+            opt("summary", "what differs, in a few words"), opt("note", "why"), opt("by", "who accepted it"));
+        register("known.forget", "stop accepting a known difference: comparisons show it again",
+            a -> new KnownOps.Forget(a.get("env"), a.get("with"), a.get("path")),
+            req("env", "environment name"), opt("with", "the other environment"), req("path", "the object's tree path"));
         register("override.remove", "remove an environment's override, so it takes the tree's base value",
             a -> new OverrideOps.Remove(a.get("env"), a.get("key")),
             req("env", "environment name"), req("key", "the override key"));
