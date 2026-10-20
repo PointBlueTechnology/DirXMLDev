@@ -6,6 +6,8 @@ import com.pointblue.dirxml.dev.model.DriverSet;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Function;
+import com.pointblue.dirxml.dev.model.EnvironmentList;
 
 /**
  * Drivers that only some environments get ({@code driver.xml}'s {@code environments}, empty = every
@@ -24,6 +26,34 @@ import java.util.List;
 public final class DriverEnvironments {
 
     private DriverEnvironments() {
+    }
+
+    /**
+     * Removes from {@code ds}, in place, the driver-set objects and drivers' jobs a deploy to {@code env} doesn't get
+     * (role-based entitlement policies, notification templates, jobs); returns their tree paths
+     * ({@code rbe-policies/<n>}, {@code templates/<n>}, {@code jobs/<n>}, {@code drivers/<d>/jobs/<n>}).
+     */
+    public static List<String> filterObjects(DriverSet ds, String env) {
+        List<String> out = new ArrayList<>();
+        if (env == null) {
+            return out;
+        }
+        drop(ds.rbePolicies, p -> p.environments, p -> "rbe-policies/" + p.name, env, out);
+        drop(ds.templates, t -> t.environments, t -> "templates/" + t.name, env, out);
+        drop(ds.jobs, j -> j.environments, j -> "jobs/" + j.name, env, out);
+        for (Driver d : ds.drivers) {
+            drop(d.jobs, j -> j.environments, j -> "drivers/" + d.name + "/jobs/" + j.name, env, out);
+        }
+        return out;
+    }
+
+    private static <T> void drop(List<T> list, Function<T, List<String>> envs, Function<T, String> path, String env, List<String> out) {
+        for (T o : new ArrayList<>(list)) {
+            if (!EnvironmentList.includes(envs.apply(o), env)) {
+                list.remove(o);
+                out.add(path.apply(o));
+            }
+        }
     }
 
     /** Removes from {@code ds}, in place, the drivers a deploy to {@code env} doesn't get; returns their names. */
@@ -74,10 +104,18 @@ public final class DriverEnvironments {
             } else if (theirs != null) {
                 theirs.environments.clear();
                 theirs.environments.addAll(mine.environments);
+                theirs.planned.clear();
+                theirs.planned.addAll(mine.planned);
                 if (mine.dn != null) {
                     theirs.dn = mine.dn;   // the DN the tree recorded: another environment's set may sit elsewhere
                 }
+                keep(theirs.jobs, mine.jobs, j -> j.name, j -> j.environments, env, markNew, "'" + mine.name + "' job", notes);
             }
+        }
+        if (names == null) {
+            keep(live.rbePolicies, base.rbePolicies, p -> p.name, p -> p.environments, env, markNew, "entitlement policy", notes);
+            keep(live.templates, base.templates, t -> t.name, t -> t.environments, env, markNew, "template", notes);
+            keep(live.jobs, base.jobs, j -> j.name, j -> j.environments, env, markNew, "job", notes);
         }
         if (markNew) {
             for (Driver d : live.drivers) {
@@ -89,5 +127,68 @@ public final class DriverEnvironments {
             }
         }
         return notes;
+    }
+
+    /**
+     * One list of named objects read from {@code env}'s vault, against the tree's: those the tree doesn't deploy to
+     * {@code env} stay as the tree has them, the others keep their lists, and (with {@code markNew}) one only the vault
+     * has is marked as {@code env}'s. A run of new ones is summed up in one note.
+     */
+    private static <T> void keep(List<T> live, List<T> base, Function<T, String> name, Function<T, List<String>> envs,
+                                 String env, boolean markNew, String what, List<String> notes) {
+        for (T mine : base) {
+            T theirs = find(live, name, name.apply(mine));
+            if (theirs != null) {
+                planned(theirs).clear();
+                planned(theirs).addAll(planned(mine));
+            }
+            if (!EnvironmentList.includes(envs.apply(mine), env)) {
+                if (theirs != null) {
+                    live.remove(theirs);
+                }
+                live.add(mine);
+            } else if (theirs != null) {
+                envs.apply(theirs).clear();
+                envs.apply(theirs).addAll(envs.apply(mine));
+            }
+        }
+        if (markNew) {
+            int marked = 0;
+            for (T o : live) {
+                if (find(base, name, name.apply(o)) == null && envs.apply(o).isEmpty()) {
+                    envs.apply(o).add(env);
+                    marked++;
+                }
+            }
+            if (marked > 0) {
+                notes.add(marked + " " + what + (marked == 1 ? "" : "s") + " new to the tree: marked as " + env + "'s only");
+            }
+        }
+    }
+
+    /** The object's planned list (drivers' jobs, the set's jobs, policies, templates). */
+    static List<String> planned(Object o) {
+        if (o instanceof com.pointblue.dirxml.dev.model.Job j) {
+            return j.planned;
+        }
+        if (o instanceof com.pointblue.dirxml.dev.model.EntitlementPolicy p) {
+            return p.planned;
+        }
+        if (o instanceof com.pointblue.dirxml.dev.model.NotificationTemplate t) {
+            return t.planned;
+        }
+        if (o instanceof Driver d) {
+            return d.planned;
+        }
+        return new ArrayList<>();
+    }
+
+    private static <T> T find(List<T> list, Function<T, String> name, String n) {
+        for (T o : list) {
+            if (name.apply(o).equals(n)) {
+                return o;
+            }
+        }
+        return null;
     }
 }

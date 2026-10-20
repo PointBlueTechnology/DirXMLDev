@@ -25,6 +25,10 @@ public final class NotificationTemplate {
     public Element data;
     /** DN, package stamps, and other source-specific extras. */
     public final Map<String, String> meta = new LinkedHashMap<>();
+    /** The environments this is deployed to; empty = every environment ({@link EnvironmentList}). */
+    public final java.util.List<String> environments = new java.util.ArrayList<>();
+    /** Environments it is meant to reach but isn't promoted to yet; empty = none, its list is for good. */
+    public final java.util.List<String> planned = new java.util.ArrayList<>();
 
     public NotificationTemplate(String name, Element data) {
         this.name = name;

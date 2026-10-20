@@ -562,9 +562,9 @@ public final class Registry {
             req("to", "the server to copy to: its DN, its name, or primary"),
             opt("driver", "one driver (default: every driver)"),
             opt("only", "some of gcv,shim,ecv,auth-server,auth-id (default: all)"));
-        register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, environments (the environments it is deployed to, comma-separated; --clear = every environment), param:<shim parameter>, engine:<engine control value>",
+        register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, environments (the environments it is deployed to, comma-separated; --clear = every environment), planned (environments it is meant to reach but isn't promoted to yet), param:<shim parameter>, engine:<engine control value>",
             a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.containsKey("clear") ? "" : a.get("value")),
-            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|environments|param:<name>|engine:<name>"), opt("value", "the value"),
+            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|environments|planned|param:<name>|engine:<name>"), opt("value", "the value"),
             opt("clear", "flag: make the setting empty (an empty --value reads as missing on the command line)"));
         register("driver.setting.add", "add a shim parameter (param:<name>, into a section of the shim config) or an engine control value (engine:<name>): its definition with display name, type and value",
             a -> new ConfigOps.DriverSettingAdd(a.get("driver"), a.get("key"), a.get("type"), a.get("display"), a.get("value"), a.get("section"), a.get("description")),

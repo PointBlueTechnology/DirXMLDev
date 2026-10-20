@@ -102,6 +102,40 @@ defect the earlier analysis had found, which only that context explains.
 Resolving is then ordinary work on branches: each decision either leaves the tree, changes it on a
 branch, or records the difference as known.
 
+## Drivers only some environments get: for now, or for good
+
+An item that only some environments get may be waiting (built in QA, not yet promoted to production) or
+permanent (a test loopback, a feed that only exists in QA). The tree says which, beside the list:
+
+```xml
+<driver name="Slack Driver"  environments="QA" planned="PROD">   <!-- waiting for promotion to PROD -->
+<driver name="Test Loopback" environments="QA">                  <!-- QA's own, for good -->
+```
+
+The same two attributes go on jobs, role-based entitlement policies and notification templates. A
+compare against production lists the planned ones as waiting for promotion and leaves the permanent ones
+quiet; promoting moves the environment from `planned` to `environments`, one reviewed change; a plan for
+production names what is planned for it and not promoted yet.
+
+## Feeds between environments
+
+Keeping a lower environment's data current from production is common: an eDirectory-to-eDirectory link
+whose sending end is a driver in production (for example "VaultProdToVaultQA") and whose receiving end is
+a driver in QA ("VaultQAToVaultProd"); QA may feed dev the same way ("VaultQAToVaultDev"). Each end is its
+own driver. Two ways to keep them:
+
+- **Each end its environment's, for good** (`environments="PROD"`, `environments="QA"`): the simple
+  default, and right when the ends differ in more than where they point.
+- **One tree driver per role, named per environment**: "send to the environment below" is the same
+  configuration in production (VaultProdToVaultQA) and QA (VaultQAToVaultDev), aimed at a different tree.
+  One tree driver with `drivers/<d>.name` per environment and the remote tree's address as each
+  environment's override keeps a fix to one end in step with the other.
+
+Names that carry environment names, and a remote address that is another environment of the project, are
+how the setup recognises a feed; it proposes, and a person decides. A feed's remote address must be an
+override in every environment that gets the driver (validation: `feed-remote-not-overridden`), so a
+deploy never points one environment's feed at another's target.
+
 ## Known differences (D1)
 
 A file per environment beside the overrides, `overrides/<env>.known.json`, listing differences
