@@ -108,7 +108,8 @@ public final class Overrides {
 
     public static String format(String env, Map<String, String> values) {
         StringBuilder sb = new StringBuilder("# Values for environment '" + env + "' that differ from the tree's base values.\n"
-            + "# key = value; keys: drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, .shim-auth-server, .shim-auth-id; driverset.gcv.<name>\n");
+            + "# key = value; keys: drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, .shim-auth-server, .shim-auth-id, .name; driverset.gcv.<name>;\n"
+            + "# servers.<tree server's name> = <this environment's server's DN> (and servers.<its server's name>.prefer = <tree server's name>)\n");
         for (Map.Entry<String, String> e : new TreeMap<>(values).entrySet()) {
             if (!e.getKey().startsWith("?")) {
                 sb.append(e.getKey()).append(" = ").append(e.getValue()).append('\n');
@@ -186,8 +187,9 @@ public final class Overrides {
             if (prefer) {
                 return new Target(null, null, ServerMap.PREFIX, null);   // names this environment's server; checked against the map by the setup
             }
-            return ds.servers.stream().anyMatch(s -> s.equalsIgnoreCase(server)) ? new Target(null, null, ServerMap.PREFIX, null)
-                : new Target(null, "the tree names no server '" + server + "' (driverset.xml)");
+            return ServerMap.server(ds.servers, server) != null ? new Target(null, null, ServerMap.PREFIX, null)
+                : new Target(null, "the tree names no server '" + server + "' (driverset.xml; a key names a server by its name, e.g. "
+                    + (ds.servers.isEmpty() ? "vault01" : Servers.dirName(ds.servers.get(0))) + ")");
         }
         if (key.startsWith("driverset.gcv.")) {
             String name = key.substring("driverset.gcv.".length());
@@ -372,7 +374,7 @@ public final class Overrides {
             }
         }
         // the tree's servers as this environment's (several onto one where it has fewer)
-        a.serverMap.putAll(ServerMap.of(values));
+        a.serverMap.putAll(ServerMap.of(values, ds.servers));
         a.problems.addAll(ServerMap.apply(ds, values));
         return a;
     }

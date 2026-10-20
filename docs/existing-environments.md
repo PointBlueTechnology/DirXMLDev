@@ -148,14 +148,16 @@ overwrite a known difference, so nobody flattens one by accident.
 
 Server names are globally unique, so the server DNs in the tree (the driver set's server list, each
 driver's `servers/<server>/` settings, jobs' servers) are the base environment's. Every other
-environment maps them in its overrides file, one line per tree server:
+environment maps them in its overrides file, one line per tree server. The key names the tree's server by
+its name (the `servers/<name>/` folder's), since the file splits a line at its first `=`; the value is the
+environment's server's DN:
 
 ```
 # overrides/QA.properties
-servers.cn=VAULT01,ou=servers,o=acme = cn=vault01qa,ou=servers,o=acme
-servers.cn=VAULT02,ou=servers,o=acme = cn=vault01qa,ou=servers,o=acme
-servers.cn=VAULT03,ou=servers,o=acme = cn=vault02qa,ou=servers,o=acme
-servers.cn=VAULT04,ou=servers,o=acme = cn=vault02qa,ou=servers,o=acme
+servers.vault01 = cn=vault01qa,ou=servers,o=acme
+servers.vault02 = cn=vault01qa,ou=servers,o=acme
+servers.vault03 = cn=vault02qa,ou=servers,o=acme
+servers.vault04 = cn=vault02qa,ou=servers,o=acme
 ```
 
 The tree's servers act as roles. Compare, plan and deploy against QA read and write each role on the
@@ -170,11 +172,11 @@ map by name and by which drivers run where, for you to confirm.
 - **D2 — Driver-set objects get an environments list like drivers:** role-based entitlement
   policies, notification templates and driver-set jobs. Compare and deploy leave them out of other
   environments; an update from an environment marks the ones new to the tree as its own.
-- **D3 — Servers: required, mapped in each environment's overrides file** (`servers.<tree server> =
-  <env server>`). Fewer servers outside production is the normal case, so several tree servers mapping
+- **D3 — Servers: required, mapped in each environment's overrides file** (`servers.<tree server's name> =
+  <env server's DN>`). Fewer servers outside production is the normal case, so several tree servers mapping
   to one is the rule. A driver whose settings differ between two tree servers that map to the same
   server is flagged, and the person picks which that server takes
-  (`servers.<env server>.prefer = <tree server>`).
+  (`servers.<env server's name>.prefer = <tree server's name>`).
 - **D4 — Job schedules and enabled state are override keys:** `drivers/<d>.job.<job>.schedule`,
   `drivers/<d>.job.<job>.disabled`, and `driverset.job.<job>.…` for the set's jobs.
 - **D6 — A new driver's server, chosen at deploy:** promoting a driver to an environment with several

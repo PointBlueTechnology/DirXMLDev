@@ -49,12 +49,12 @@ public class ServerMapTest {
 
     private static Map<String, String> qaFile(boolean preferP2) {
         Map<String, String> f = new LinkedHashMap<>();
-        f.put("servers." + P1, Q1);
-        f.put("servers." + P2, Q1);
-        f.put("servers." + P3, Q2);
-        f.put("servers." + P4, Q2);
+        f.put("servers.VAULT01", Q1);
+        f.put("servers.vault02", Q1);   // names in any case
+        f.put("servers.vault03", Q2);
+        f.put("servers.vault04", Q2);
         if (preferP2) {
-            f.put("servers." + Q1 + ".prefer", P2);
+            f.put("servers.vault01qa.prefer", "vault02");
         }
         return f;
     }
@@ -110,9 +110,16 @@ public class ServerMapTest {
     @Test
     public void theKeysAreValidOnlyForTheTreesServers() {
         DriverSet ds = prod();
-        assertTrue(Overrides.resolve(ds, "servers." + P3).resolved());
-        assertTrue("any case", Overrides.resolve(ds, "servers." + P3.toUpperCase()).resolved());
-        assertFalse(Overrides.resolve(ds, "servers.cn=nope,o=acme").resolved());
-        assertTrue(Overrides.resolve(ds, "servers." + Q1 + ".prefer").resolved());
+        assertTrue(Overrides.resolve(ds, "servers.vault03").resolved());
+        assertTrue("any case", Overrides.resolve(ds, "servers.VAULT03").resolved());
+        assertFalse(Overrides.resolve(ds, "servers.nope").resolved());
+        assertTrue(Overrides.resolve(ds, "servers.vault01qa.prefer").resolved());
+        // through the file as it is read: the first '=' splits, so a name key keeps the DN value whole
+        Map<String, String> parsed = new LinkedHashMap<>();
+        for (String line : List.of("servers.vault01 = " + Q1)) {
+            int eq = line.indexOf('=');
+            parsed.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
+        }
+        assertEquals(Map.of(P1, Q1), ServerMap.of(parsed, ds.servers));
     }
 }
