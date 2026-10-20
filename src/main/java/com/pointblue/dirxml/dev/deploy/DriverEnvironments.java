@@ -47,6 +47,43 @@ public final class DriverEnvironments {
         return out;
     }
 
+    /**
+     * What the tree doesn't deploy to {@code env} yet but means to (its {@code planned} names {@code env}): drivers by
+     * name, other objects by path. Read before {@link #filter} and {@link #filterObjects} take them out.
+     */
+    public static List<String> plannedFor(DriverSet ds, String env) {
+        List<String> out = new ArrayList<>();
+        if (env == null) {
+            return out;
+        }
+        for (Driver d : ds.drivers) {
+            if (!d.deploysTo(env) && !d.planned.isEmpty() && EnvironmentList.includes(d.planned, env)) {
+                out.add(d.name);
+            }
+            for (com.pointblue.dirxml.dev.model.Job j : d.jobs) {
+                if (!EnvironmentList.includes(j.environments, env) && !j.planned.isEmpty() && EnvironmentList.includes(j.planned, env)) {
+                    out.add("drivers/" + d.name + "/jobs/" + j.name);
+                }
+            }
+        }
+        for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : ds.rbePolicies) {
+            if (!EnvironmentList.includes(p.environments, env) && !p.planned.isEmpty() && EnvironmentList.includes(p.planned, env)) {
+                out.add("rbe-policies/" + p.name);
+            }
+        }
+        for (com.pointblue.dirxml.dev.model.NotificationTemplate t : ds.templates) {
+            if (!EnvironmentList.includes(t.environments, env) && !t.planned.isEmpty() && EnvironmentList.includes(t.planned, env)) {
+                out.add("templates/" + t.name);
+            }
+        }
+        for (com.pointblue.dirxml.dev.model.Job j : ds.jobs) {
+            if (!EnvironmentList.includes(j.environments, env) && !j.planned.isEmpty() && EnvironmentList.includes(j.planned, env)) {
+                out.add("jobs/" + j.name);
+            }
+        }
+        return out;
+    }
+
     private static <T> void drop(List<T> list, Function<T, List<String>> envs, Function<T, String> path, String env, List<String> out) {
         for (T o : new ArrayList<>(list)) {
             if (!EnvironmentList.includes(envs.apply(o), env)) {

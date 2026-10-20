@@ -384,6 +384,8 @@ public final class Overrides {
         public final List<String> notDeployed = new ArrayList<>();
         /** Entitlement policies, templates and jobs the tree doesn't deploy to this environment, by tree path. */
         public final List<String> notDeployedObjects = new ArrayList<>();
+        /** Of those (drivers by name, objects by path), the ones planned for this environment: waiting for promotion. */
+        public final List<String> plannedHere = new ArrayList<>();
         /** The tree's name to this environment's, for drivers its vault names differently. */
         public final Map<String, String> renamed = new java.util.LinkedHashMap<>();
         /** The tree's servers to this environment's ({@link ServerMap}); empty for the base environment. */
@@ -454,6 +456,9 @@ public final class Overrides {
             if (!notDeployedObjects.isEmpty()) {
                 parts.add(notDeployedObjects.size() + " other object(s) not deployed to '" + env + "' (environments)");
             }
+            if (!plannedHere.isEmpty()) {
+                parts.add("planned for '" + env + "', not promoted yet: " + String.join(", ", plannedHere));
+            }
             return parts.isEmpty() ? null : String.join("; ", parts);
         }
     }
@@ -466,9 +471,11 @@ public final class Overrides {
      */
     public static Applied apply(DriverSet ds, String env) {
         Applied a = applyValues(ds, env);
+        List<String> planned = DriverEnvironments.plannedFor(ds, env);
         Map<String, String> values = ds.overrides.get(env);
         // the drivers this environment doesn't get leave the model after the values, so a value set for one is still placed
         a.notDeployed.addAll(DriverEnvironments.filter(ds, env));
+        a.plannedHere.addAll(planned);
         a.notDeployedObjects.addAll(DriverEnvironments.filterObjects(ds, env));
         // and the names this environment's vault uses come last: every key above names the tree's driver
         for (Map.Entry<String, String> r : renames(values).entrySet()) {
