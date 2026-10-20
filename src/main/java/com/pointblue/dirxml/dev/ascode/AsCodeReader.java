@@ -84,14 +84,8 @@ public final class AsCodeReader {
         d.shimClass = attr(m, "shim-class");
         d.shimAuthServer = attr(m, "shim-auth-server");
         d.shimAuthId = attr(m, "shim-auth-id");
-        String environments = attr(m, "environments");
-        if (environments != null) {
-            for (String e : environments.split(",")) {
-                if (!e.isBlank()) {
-                    d.environments.add(e.trim());
-                }
-            }
-        }
+        d.environments.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(m, "environments")));
+            d.planned.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(m, "planned")));
         readMeta(m, d.meta);
         for (Element c : children(m, "config")) {
             d.config.put(attr(c, "kind"), xml(dir.resolve(attr(c, "file"))));
@@ -340,6 +334,8 @@ public final class AsCodeReader {
                 }
             }
             readMeta(je, j.meta);
+            j.environments.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(je, "environments")));
+            j.planned.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(je, "planned")));
             into.add(j);
         }
     }
@@ -350,6 +346,8 @@ public final class AsCodeReader {
             com.pointblue.dirxml.dev.model.NotificationTemplate t = new com.pointblue.dirxml.dev.model.NotificationTemplate(attr(te, "name"), file != null && Files.exists(file) ? xml(file) : null);
             t.subject = attr(te, "subject");
             readMeta(te, t.meta);
+            t.environments.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(te, "environments")));
+            t.planned.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(te, "planned")));
             into.add(t);
         }
     }
@@ -360,6 +358,8 @@ public final class AsCodeReader {
             Element doc = file != null && Files.exists(file) ? xml(file) : null;
             com.pointblue.dirxml.dev.model.EntitlementPolicy p = rbePolicyFrom(attr(pe, "name"), doc);
             readMeta(pe, p.meta);
+            p.environments.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(pe, "environments")));
+            p.planned.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(pe, "planned")));
             into.add(p);
         }
     }

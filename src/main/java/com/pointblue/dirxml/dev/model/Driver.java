@@ -113,6 +113,11 @@ public final class Driver {
      */
     public final List<String> environments = new ArrayList<>();
     /**
+     * Environments the driver is meant to reach but isn't promoted to yet ({@code driver.xml}'s {@code planned}): a
+     * driver not yet in production names it here; one that never will be leaves it empty.
+     */
+    public final List<String> planned = new ArrayList<>();
+    /**
      * A deploy's choice, never written to the tree: the server a driver new to the environment runs on, when not the
      * one the deploy connects through. That server gets the start option, every other server of the set "disabled".
      */
@@ -120,15 +125,7 @@ public final class Driver {
 
     /** True when a deploy to {@code env} gets this driver: no list, or {@code env} in it (any case). */
     public boolean deploysTo(String env) {
-        if (environments.isEmpty() || env == null) {
-            return true;
-        }
-        for (String e : environments) {
-            if (e.equalsIgnoreCase(env)) {
-                return true;
-            }
-        }
-        return false;
+        return EnvironmentList.includes(environments, env);
     }
 
     public Driver(String name) {
