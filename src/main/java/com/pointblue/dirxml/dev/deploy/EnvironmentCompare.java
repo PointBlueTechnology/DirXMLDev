@@ -172,8 +172,8 @@ public final class EnvironmentCompare {
             String key = e.getKey();
             c.values.add(new Value(driverOf(key), key, e.getValue(), vb.get(key), filesA.containsKey(key) || filesB.containsKey(key)));
             Overrides.Target t = Overrides.resolve(a, key);
-            if (t.resolved() && vb.get(key) != null) {
-                t.set(vb.get(key));
+            if (t.resolved() && (vb.get(key) != null || t.jobDefinition != null || t.job != null)) {
+                t.set(vb.get(key) == null ? "" : vb.get(key));   // a job without a schedule: none is a value too
             }
         }
 
@@ -428,7 +428,7 @@ public final class EnvironmentCompare {
             return null;
         }
         String rest = key.substring("drivers/".length());
-        for (String marker : List.of(".gcv.", ".shim.", ".ecv.", "." + Driver.SHIM_AUTH_SERVER, "." + Driver.SHIM_AUTH_ID)) {
+        for (String marker : List.of(".job.", ".gcv.", ".shim.", ".ecv.", "." + Driver.SHIM_AUTH_SERVER, "." + Driver.SHIM_AUTH_ID)) {
             int i = rest.indexOf(marker);
             if (i > 0) {
                 return rest.substring(0, i);
@@ -441,8 +441,10 @@ public final class EnvironmentCompare {
     static Map<String, String> values(DriverSet ds) {
         Map<String, String> out = new LinkedHashMap<>();
         definitions(ds.configValues, "driverset.gcv.", out);
+        jobs(ds.jobs, "driverset.job.", out);
         for (Driver d : ds.drivers) {
             String p = "drivers/" + d.name + ".";
+            jobs(d.jobs, p + "job.", out);
             definitions(d.config.get(Driver.CONFIG_VALUES), p + "gcv.", out);
             definitions(d.config.get(Driver.SHIM_CONFIG_INFO), p + "shim.", out);
             definitions(d.config.get(Driver.ENGINE_CONTROL_VALUES), p + "ecv.", out);
@@ -450,6 +452,19 @@ public final class EnvironmentCompare {
             out.put(p + Driver.SHIM_AUTH_ID, d.shimAuthId);
         }
         return out;
+    }
+
+    private static void jobs(List<com.pointblue.dirxml.dev.model.Job> jobs, String prefix, Map<String, String> out) {
+        for (com.pointblue.dirxml.dev.model.Job j : jobs) {
+            Element def = Overrides.jobDefinition(j);
+            for (String attribute : Overrides.JOB_ATTRIBUTES) {
+                if (attribute.startsWith("trace-")) {
+                    out.put(prefix + j.name + "." + attribute, j.meta.get(attribute));
+                } else if (def != null) {
+                    out.put(prefix + j.name + "." + attribute, def.hasAttribute(attribute) ? def.getAttribute(attribute) : null);
+                }
+            }
+        }
     }
 
     private static void definitions(Element blob, String prefix, Map<String, String> out) {

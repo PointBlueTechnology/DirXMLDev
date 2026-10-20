@@ -130,6 +130,11 @@ public final class Overrides {
         public final Driver driver;
         public final String setting;
         public final String problem;
+        /** A job's {@code <job-definition>} and the attribute an override sets on it ({@code schedule}, {@code disabled}). */
+        public Element jobDefinition;
+        public String jobAttribute;
+        /** A job's trace setting an override sets, kept in its manifest ({@code trace-level}, {@code trace-file}, {@code trace-size-limit}). */
+        public com.pointblue.dirxml.dev.model.Job job;
 
         Target(Element definition, String problem) {
             this(definition, null, null, problem);
@@ -150,8 +155,28 @@ public final class Overrides {
             return problem == null;
         }
 
+        static Target ofJobTrace(com.pointblue.dirxml.dev.model.Job job, String key) {
+            Target t = new Target(null, null, "job:" + key, null);
+            t.job = job;
+            t.jobAttribute = key;
+            return t;
+        }
+
+        static Target ofJob(Element jobDefinition, String attribute) {
+            Target t = new Target(null, null, "job:" + attribute, null);
+            t.jobDefinition = jobDefinition;
+            t.jobAttribute = attribute;
+            return t;
+        }
+
         /** The value the model holds for the key, or null when it holds none. */
         public String value() {
+            if (job != null) {
+                return job.meta.get(jobAttribute);
+            }
+            if (jobDefinition != null) {
+                return jobDefinition.hasAttribute(jobAttribute) ? jobDefinition.getAttribute(jobAttribute) : null;
+            }
             if (definition != null) {
                 return valueOf(definition);
             }
@@ -165,6 +190,23 @@ public final class Overrides {
         }
 
         public void set(String value) {
+            if (job != null) {
+                if (value == null || value.isEmpty()) {
+                    job.meta.remove(jobAttribute);
+                } else {
+                    job.meta.put(jobAttribute, value);
+                }
+                return;
+            }
+            if (jobDefinition != null) {
+                // an empty schedule removes it: the job runs only when started
+                if (value == null || value.isEmpty()) {
+                    jobDefinition.removeAttribute(jobAttribute);
+                } else {
+                    jobDefinition.setAttribute(jobAttribute, value);
+                }
+                return;
+            }
             if (definition != null) {
                 setValue(definition, value);
             } else if (driver != null && !NAME.equals(setting)) {   // a name is applied by renaming, never set
@@ -190,6 +232,16 @@ public final class Overrides {
             return ServerMap.server(ds.servers, server) != null ? new Target(null, null, ServerMap.PREFIX, null)
                 : new Target(null, "the tree names no server '" + server + "' (driverset.xml; a key names a server by its name, e.g. "
                     + (ds.servers.isEmpty() ? "vault01" : Servers.dirName(ds.servers.get(0))) + ")");
+        }
+        if (key.startsWith("driverset.job.")) {
+            return jobTarget(ds.jobs, key.substring("driverset.job.".length()), "the driver set");
+        }
+        if (key.startsWith("drivers/") && key.indexOf(".job.") > "drivers/".length()) {
+            int at = key.indexOf(".job.");
+            Driver d = ds.driver(key.substring("drivers/".length(), at));
+            if (d != null) {
+                return jobTarget(d.jobs, key.substring(at + ".job.".length()), "driver '" + d.name + "'");
+            }
         }
         if (key.startsWith("driverset.gcv.")) {
             String name = key.substring("driverset.gcv.".length());
@@ -249,6 +301,42 @@ public final class Overrides {
                 return def == null ? new Target(null, "driver '" + d.name + "' has no engine control value '" + name + "'") : new Target(def, null);
             }
         }
+    }
+
+    /** Job attributes an override can set: when it runs, whether it is switched off ({@code <job-definition>}), and its trace. */
+    public static final List<String> JOB_ATTRIBUTES = List.of("schedule", "disabled", "trace-level", "trace-file", "trace-size-limit");
+    private static final List<String> JOB_TRACE = List.of("trace-level", "trace-file", "trace-size-limit");
+
+    /** {@code <job>.schedule} / {@code <job>.disabled} among {@code jobs}. */
+    private static Target jobTarget(List<com.pointblue.dirxml.dev.model.Job> jobs, String rest, String owner) {
+        int dot = rest.lastIndexOf('.');
+        String attribute = dot < 0 ? "" : rest.substring(dot + 1);
+        String name = dot < 0 ? rest : rest.substring(0, dot);
+        if (!JOB_ATTRIBUTES.contains(attribute)) {
+            return new Target(null, "a job key ends in ." + String.join(" or .", JOB_ATTRIBUTES));
+        }
+        for (com.pointblue.dirxml.dev.model.Job j : jobs) {
+            if (j.name.equals(name) && JOB_TRACE.contains(attribute)) {
+                return Target.ofJobTrace(j, attribute);
+            }
+            if (j.name.equals(name)) {
+                Element def = jobDefinition(j);
+                return def == null ? new Target(null, "job '" + name + "' has no definition") : Target.ofJob(def, attribute);
+            }
+        }
+        return new Target(null, owner + " has no job '" + name + "'");
+    }
+
+    /** A job's {@code <job-definition>}: the document itself (Designer's) or the first inside its {@code <job-aggregation>}. */
+    public static Element jobDefinition(com.pointblue.dirxml.dev.model.Job j) {
+        if (j.definition == null) {
+            return null;
+        }
+        if ("job-definition".equals(j.definition.getLocalName() == null ? j.definition.getNodeName() : j.definition.getLocalName())) {
+            return j.definition;
+        }
+        List<Element> defs = Dom.childrenByName(j.definition, "job-definition");
+        return defs.isEmpty() ? null : defs.get(0);
     }
 
     /** The scalar value a definition holds ({@code <value>} text), or null when it has none. */
@@ -410,7 +498,7 @@ public final class Overrides {
         }
         // drivers/AD.gcv.drv.domain.dns.name is a GCV called drv.domain.dns.name, not a name
         String driver = key.substring("drivers/".length(), key.length() - NAME.length() - 1);
-        return !driver.contains(".gcv.") && !driver.contains(".shim.") && !driver.contains(".ecv.");
+        return !driver.contains(".gcv.") && !driver.contains(".shim.") && !driver.contains(".ecv.") && !driver.contains(".job.");
     }
 
     /** An environment file's {@code drivers/<driver>.name} lines: the tree's name to the name in that vault, in file order. */

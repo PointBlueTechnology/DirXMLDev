@@ -231,6 +231,29 @@ public class DriverEnvironmentsTest {
         }
     }
 
+    /** A job's schedule, enabled state and trace are values an environment overrides; an empty schedule removes it. */
+    @Test
+    public void aJobsScheduleAndTraceAreOverrides() {
+        DriverSet ds = VaultMappingTest.model();
+        com.pointblue.dirxml.dev.model.Job job = new com.pointblue.dirxml.dev.model.Job("nightly", ValidatorTest.xml(
+            "<job-aggregation><job-definition disabled=\"false\" schedule=\"00 03 * * 1\" type=\"java\"/></job-aggregation>"));
+        job.meta.put("trace-level", "3");
+        ds.driver("AD").jobs.add(job);
+        ds.overrides.put("QA", new LinkedHashMap<>(Map.of(
+            "drivers/AD.job.nightly.schedule", "",
+            "drivers/AD.job.nightly.disabled", "true",
+            "drivers/AD.job.nightly.trace-level", "10")));
+        Overrides.Applied a = Overrides.apply(ds, "QA");
+        assertTrue(a.problems.toString(), a.problems.isEmpty());
+        org.w3c.dom.Element def = Overrides.jobDefinition(job);
+        assertFalse("no schedule in QA", def.hasAttribute("schedule"));
+        assertEquals("true", def.getAttribute("disabled"));
+        assertEquals("10", job.meta.get("trace-level"));
+        assertFalse(Overrides.resolve(ds, "drivers/AD.job.nightly.colour").resolved());
+        assertFalse(Overrides.resolve(ds, "drivers/AD.job.nope.schedule").resolved());
+        assertFalse("a job key is not a name key", Overrides.isName("drivers/AD.job.x.name"));
+    }
+
     @Test
     public void aSecretAnswersToEitherName() throws Exception {
         Path f = tmp.newFile("qa.secrets").toPath();
