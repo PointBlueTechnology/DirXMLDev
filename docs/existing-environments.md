@@ -132,9 +132,9 @@ own driver. Two ways to keep them:
   environment's override keeps a fix to one end in step with the other.
 
 Names that carry environment names, and a remote address that is another environment of the project, are
-how the setup recognises a feed; it proposes, and a person decides. A feed's remote address must be an
-override in every environment that gets the driver (validation: `feed-remote-not-overridden`), so a
-deploy never points one environment's feed at another's target.
+how the setup recognises a feed; it proposes, and a person decides. Keep a feed's remote address an
+override in every environment that gets the driver, so a deploy never points one environment's feed at
+another's target. (A validation check for this is a possible follow-up; the setup flags feeds today.)
 
 ## Known differences (D1)
 

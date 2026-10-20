@@ -85,6 +85,29 @@ connection settings (`drivers/<driver>.gcv.<name>`, `.ecv.<name>`,
 files keep the base value; a deploy to that environment applies its file. See
 [getting-started.md](getting-started.md) §3.1.
 
+What else differs per environment goes in the same file
+([existing-environments.md](existing-environments.md)):
+
+- `drivers/<driver>.name = <name>`: that environment's vault calls the driver
+  something else; compare, plan and deploy use that name, an import maps it
+  back.
+- `servers.<tree server's name> = <that environment's server's DN>`: one line
+  per server of the tree, several onto one where the environment has fewer;
+  `servers.<its server's name>.prefer = <tree server's name>` picks whose
+  per-server settings a shared server takes. Required for every environment
+  but the base: no two environments share a server.
+- `drivers/<driver>.job.<job>.schedule` (empty = none), `.disabled`,
+  `.trace-level`, `.trace-file`, `.trace-size-limit`, and
+  `driverset.job.<job>.…`: a job's schedule, state and trace.
+
+### `overrides/<env>.known.json`
+
+Differences between two environments accepted as they are: each entry names
+the other environment, the object's path, a fingerprint of the change, the
+decision (`intended` or `later`), a note, who and when. A comparison leaves an
+entry's difference out while the fingerprint matches, and shows it again once
+the object changes. Written by `known.accept` / `known.forget`.
+
 ### `library/`
 
 Policies, ECMAScript, mapping tables, and GCV objects shared by more than one
@@ -95,7 +118,9 @@ the file stays in `library/`.
 ### `drivers/<driver>/driver.xml`
 
 That driver's manifest: shim class, authentication server and id (not the
-password), which config files exist, every policy and resource, the
+password), which environments get it (`environments="QA, PROD"`, absent = every
+environment) and which it is planned for but not promoted to yet
+(`planned="PROD"`), which config files exist, every policy and resource, the
 entitlements, and the **linkage** — which object runs in which policy set, in
 which order. The linkage is what Designer's policy flow shows.
 `query tree/ chain "<driver>" sub` prints the subscriber order.
@@ -130,6 +155,14 @@ path. Quote it when the driver name contains spaces.
 | `icon.gif` (or `.png`) | The icon Designer and iManager show. Opaque bytes. A tree without one leaves the vault's icon alone |
 
 Passwords are not in these files. They live in `secrets-<env>.properties`.
+
+### `environments` and `planned` on other entries
+
+The `<job>`, `<rbe-policy>` and `<template>` entries of `driverset.xml` (and a
+driver's `<job>` entries) carry the same two attributes as a driver:
+`environments` (absent = every environment) and `planned`. Compare and deploy
+to an environment leave out what it doesn't get. `environments.set` sets them,
+several objects at once.
 
 ### `jobs/`
 
