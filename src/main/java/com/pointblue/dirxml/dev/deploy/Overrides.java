@@ -180,6 +180,15 @@ public final class Overrides {
         if (key.startsWith("?")) {
             return new Target(null, "not a 'key = value' line");
         }
+        if (ServerMap.isKey(key)) {
+            boolean prefer = key.endsWith(ServerMap.PREFER);
+            String server = key.substring(ServerMap.PREFIX.length(), key.length() - (prefer ? ServerMap.PREFER.length() : 0));
+            if (prefer) {
+                return new Target(null, null, ServerMap.PREFIX, null);   // names this environment's server; checked against the map by the setup
+            }
+            return ds.servers.stream().anyMatch(s -> s.equalsIgnoreCase(server)) ? new Target(null, null, ServerMap.PREFIX, null)
+                : new Target(null, "the tree names no server '" + server + "' (driverset.xml)");
+        }
         if (key.startsWith("driverset.gcv.")) {
             String name = key.substring("driverset.gcv.".length());
             GcvOps.Home home = GcvOps.find(ds, null, name, ds.index());
@@ -285,6 +294,8 @@ public final class Overrides {
         public final List<String> notDeployed = new ArrayList<>();
         /** The tree's name to this environment's, for drivers its vault names differently. */
         public final Map<String, String> renamed = new java.util.LinkedHashMap<>();
+        /** The tree's servers to this environment's ({@link ServerMap}); empty for the base environment. */
+        public final Map<String, String> serverMap = new java.util.LinkedHashMap<>();
 
         /** Names a scoped request gave (the tree's) as this environment's model now has them. */
         public List<String> vaultNames(java.util.Collection<String> treeNames) {
@@ -354,6 +365,9 @@ public final class Overrides {
                     ? "no driver '" + r.getKey() + "' in the tree" : "the tree already has a driver '" + r.getValue() + "'") + ")");
             }
         }
+        // the tree's servers as this environment's (several onto one where it has fewer)
+        a.serverMap.putAll(ServerMap.of(values));
+        a.problems.addAll(ServerMap.apply(ds, values));
         return a;
     }
 
@@ -366,7 +380,7 @@ public final class Overrides {
         Map<String, String> values = ds.overrides.get(env);
         if (values != null) {
             for (Map.Entry<String, String> e : values.entrySet()) {
-                if (isName(e.getKey())) {
+                if (isName(e.getKey()) || ServerMap.isKey(e.getKey())) {
                     continue;
                 }
                 Target t = resolve(ds, e.getKey());
@@ -435,8 +449,8 @@ public final class Overrides {
             return notes;
         }
         for (Map.Entry<String, String> e : new ArrayList<>(values.entrySet())) {
-            if (isName(e.getKey())) {
-                continue;   // a name stays as the file has it: toTreeNames already used it
+            if (isName(e.getKey()) || ServerMap.isKey(e.getKey())) {
+                continue;   // a name or a server stays as the file has it: the import already used it
             }
             Target t = resolve(live, e.getKey());
             if (!t.resolved()) {

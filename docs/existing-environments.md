@@ -93,6 +93,12 @@ of drivers with a few kinds of problem each. For each you choose:
 - **Decide later:** recorded as known, with who and when, so it stops hiding new differences but
   stays listed.
 
+What's known about a driver helps decide. When the repository holds notes on a driver (a summary,
+known defects; for example `docs/drivers/<driver>.md` from an earlier analysis), the setup shows them
+beside that driver's differences. In the customer data above, production carries an extra rule that
+vetoes every user event on one driver's subscriber channel, and QA doesn't: a production stopgap for a
+defect the earlier analysis had found, which only that context explains.
+
 Resolving is then ordinary work on branches: each decision either leaves the tree, changes it on a
 branch, or records the difference as known.
 

@@ -200,6 +200,9 @@ public final class VaultDiff {
         Secrets secrets = (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).withNames(applied.renamed);
         Overrides.applySecretShimAuthIds(to, secrets);
         DriverSet from = readLive(env);
+        if (!applied.serverMap.isEmpty()) {
+            Servers.foldPrimary(to, from.meta.get(Servers.PRIMARY_META));
+        }
         return of(from, to, applied.vaultNames(onlyDrivers));
     }
 

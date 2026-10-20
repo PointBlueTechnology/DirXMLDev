@@ -293,6 +293,9 @@ public final class Deployer {
             // 2. diff and plan — the other servers' own driver settings included, read through their connections
             DriverSet from = VaultDiff.fromVault(vault, dsDn);
             Servers.readOverrides(from, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
+            if (!overrides.serverMap.isEmpty()) {
+                Servers.foldPrimary(to, Servers.primary(vault));   // a mapped server that is this environment's primary holds the base values
+            }
             String unknown = VaultDiff.unknownDrivers(from, to, scope);
             if (unknown != null) {
                 r.refusal = unknown;
