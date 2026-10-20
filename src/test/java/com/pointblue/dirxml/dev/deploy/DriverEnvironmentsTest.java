@@ -70,6 +70,12 @@ public class DriverEnvironmentsTest {
         assertNotNull(a.refusalFor(List.of("QA Loopback")));
         assertNull(a.refusalFor(List.of("AD")));
 
+        DriverSet planned = withQaOnly();
+        planned.driver("QA Loopback").planned.add("PROD");
+        Overrides.Applied p = Overrides.apply(planned, "PROD");
+        assertEquals(List.of("QA Loopback"), p.plannedHere);
+        assertTrue(p.summary(), p.summary().contains("planned for 'PROD', not promoted yet: QA Loopback"));
+
         DriverSet qa = withQaOnly();
         assertTrue(Overrides.apply(qa, "qa").notDeployed.isEmpty());   // names match in any case
         assertNotNull(qa.driver("QA Loopback"));
