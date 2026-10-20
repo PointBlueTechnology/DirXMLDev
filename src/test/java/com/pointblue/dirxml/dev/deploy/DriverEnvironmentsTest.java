@@ -186,6 +186,51 @@ public class DriverEnvironmentsTest {
         assertTrue(c.json(), c.json().contains("\"expected\":true"));
     }
 
+    /** Drivers only one side holds, under names one character apart and the same policies: proposed as one, one to one. */
+    @Test
+    public void aRenamedDriverIsProposedAsAMatch() {
+        DriverSet prod = VaultMappingTest.model();
+        DriverSet qa = VaultMappingTest.model();
+        assertTrue(qa.renameDriver("AD", "AD2"));
+        Driver other = new Driver("AD3");   // a second candidate: same shim, no policies in common
+        other.shimClass = qa.driver("AD2").shimClass;
+        qa.drivers.add(other);
+        EnvironmentCompare c = EnvironmentCompare.of(prod, "PROD", qa, "QA", null);
+        assertEquals(1, c.matches.size());
+        assertEquals("AD", c.matches.get(0).a);
+        assertEquals("AD2", c.matches.get(0).b);
+        assertFalse(c.matches.get(0).feed);
+
+        DriverSet p2 = VaultMappingTest.model();
+        assertTrue(p2.renameDriver("AD", "VaultProdToVaultQA"));
+        DriverSet q2 = VaultMappingTest.model();
+        assertTrue(q2.renameDriver("AD", "VaultQAToVaultDev"));
+        EnvironmentCompare f = EnvironmentCompare.of(p2, "PROD", q2, "QA", null);
+        assertTrue("names carrying an environment's name: a feed, for a person to judge", f.matches.get(0).feed);
+    }
+
+    /** environments.set marks several objects at once; an object not in the tree is refused by path. */
+    @Test
+    public void severalObjectsAreMarkedAtOnce() throws Exception {
+        DriverSet ds = withQaOnly();
+        ds.jobs.add(new com.pointblue.dirxml.dev.model.Job("StatisticsJob", null));
+        com.pointblue.dirxml.dev.model.EntitlementPolicy p = new com.pointblue.dirxml.dev.model.EntitlementPolicy("Test Policy");
+        ds.rbePolicies.add(p);
+        new com.pointblue.dirxml.dev.edit.EnvironmentOps.Set("jobs/StatisticsJob\nrbe-policies/Test Policy\ndrivers/AD", "QA", "PROD").apply(ds, null);
+        assertEquals(List.of("QA"), ds.jobs.get(0).environments);
+        assertEquals(List.of("PROD"), p.planned);
+        assertEquals(List.of("QA"), ds.driver("AD").environments);
+        DriverSet prod = ds;
+        Overrides.Applied a = Overrides.apply(prod, "PROD");
+        assertTrue(a.notDeployedObjects.toString(), a.notDeployedObjects.containsAll(List.of("jobs/StatisticsJob", "rbe-policies/Test Policy")));
+        try {
+            new com.pointblue.dirxml.dev.edit.EnvironmentOps.Set("rbe-policies/Nope", "QA", null).apply(withQaOnly(), null);
+            throw new AssertionError("an unknown path was accepted");
+        } catch (com.pointblue.dirxml.dev.edit.Operation.Refusal expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("rbe-policies/Nope"));
+        }
+    }
+
     @Test
     public void aSecretAnswersToEitherName() throws Exception {
         Path f = tmp.newFile("qa.secrets").toPath();
