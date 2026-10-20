@@ -30,19 +30,30 @@ import java.util.Objects;
  */
 public final class EnvironmentCompare {
 
-    /** A driver one environment's vault holds and the other's doesn't. */
+    /**
+     * Something one environment's vault holds and the other's doesn't: a driver ({@code driver} set, {@code path}
+     * {@code drivers/<d>}), or a role-based entitlement policy, template or job ({@code path} {@code rbe-policies/<n>},
+     * {@code templates/<n>}, {@code jobs/<n>}, {@code drivers/<d>/jobs/<n>}).
+     */
     public static final class OnlyIn {
         public final String driver;
+        public final String path;
+        public final String kind;
         public final String env;
-        /** The tree doesn't deploy it to the other environment. */
+        /** The tree doesn't deploy it to the other environment, for good or for now. */
         public final boolean expected;
-        /** The tree has no driver of this name. */
+        /** The tree means it to reach the other environment later ({@code planned}): waiting for promotion. */
+        public final boolean planned;
+        /** The tree has nothing of this name. */
         public final boolean notInTree;
 
-        OnlyIn(String driver, String env, boolean expected, boolean notInTree) {
+        OnlyIn(String driver, String path, String kind, String env, boolean expected, boolean planned, boolean notInTree) {
             this.driver = driver;
+            this.path = path;
+            this.kind = kind;
             this.env = env;
             this.expected = expected;
+            this.planned = planned;
             this.notInTree = notInTree;
         }
     }
@@ -71,6 +82,8 @@ public final class EnvironmentCompare {
     public final List<OnlyIn> onlyIn = new ArrayList<>();
     public final List<Value> values = new ArrayList<>();
     public ModelDiff drift;
+    /** For each change of {@link #drift}, in order, its likely cause ({@link #cause}): the analysis a person starts from. */
+    public final List<String> causes = new ArrayList<>();
     /** Changes whose every changed line differs only in letter case (a DN's {@code OU=services} against {@code OU=SERVICES}): eDirectory reads them as the same. Kept apart from the drift. */
     public final List<ModelDiff.Change> caseOnly = new ArrayList<>();
     public final List<String> notes = new ArrayList<>();
@@ -123,13 +136,89 @@ public final class EnvironmentCompare {
         // the drivers only one side holds are listed above; what's left of the rest is drift, but for differences of letter case
         ModelDiff rest = ModelDiff.of(a, b).only(ch -> ch.kind != ModelDiff.Kind.DRIVER_ADDED && ch.kind != ModelDiff.Kind.DRIVER_REMOVED
             && (ch.driver == null || (a.driver(ch.driver) != null && b.driver(ch.driver) != null)));
+        List<ModelDiff.Change> oneSided = new ArrayList<>();
         for (ModelDiff.Change ch : rest.changes()) {
-            if (onlyLetterCase(ch.detail)) {
+            boolean setObject = ch.kind.isRbe() || ch.kind.isTemplate() || ch.kind.isJob();
+            boolean added = ch.kind.name().endsWith("_ADDED");
+            boolean removed = ch.kind.name().endsWith("_REMOVED");
+            if (setObject && (added || removed)) {
+                // from = a, to = b: "removed" is a's only, "added" b's only
+                c.onlyIn.add(objectOnlyIn(ch, removed ? envA : envB, removed ? envB : envA, tree));
+                oneSided.add(ch);
+            } else if (onlyLetterCase(ch.detail)) {
                 c.caseOnly.add(ch);
             }
         }
-        c.drift = rest.only(ch -> !c.caseOnly.contains(ch));
+        c.drift = rest.only(ch -> !c.caseOnly.contains(ch) && !oneSided.contains(ch));
+        // words that mark environment-specific text: the environments' names and their servers' names
+        java.util.Set<String> envWords = new java.util.HashSet<>();
+        envWords.add(envA.toLowerCase(java.util.Locale.ROOT));
+        envWords.add(envB.toLowerCase(java.util.Locale.ROOT));
+        for (DriverSet side : List.of(a, b)) {
+            for (String server : side.servers) {
+                String rdn = server.split(",")[0];
+                envWords.add(rdn.substring(rdn.indexOf('=') + 1).toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+        for (ModelDiff.Change ch : c.drift.changes()) {
+            c.causes.add(cause(ch, envA, envB, envWords));
+        }
         return c;
+    }
+
+    /**
+     * A change's likely cause, from the change alone: one side only ("only in A"/"only in B"), lines only one side has,
+     * package versions, cosmetic (descriptions, comments, display names), environment-specific text (a name of either
+     * environment or of one of their servers on a changed line), or "both changed" (a person reviews it).
+     */
+    static String cause(ModelDiff.Change ch, String envA, String envB, java.util.Set<String> envWords) {
+        String k = ch.kind.name();
+        if (k.endsWith("_REMOVED")) {
+            return "only in " + envA;
+        }
+        if (k.endsWith("_ADDED")) {
+            return "only in " + envB;
+        }
+        if (ch.kind == ModelDiff.Kind.DRIVER_STAMPS) {
+            return "package versions differ";
+        }
+        if (ch.detail == null) {
+            return "both changed";
+        }
+        List<String> fromA = new ArrayList<>();
+        List<String> fromB = new ArrayList<>();
+        for (String line : ch.detail.split("\n")) {
+            String t = line.stripLeading();
+            if (t.startsWith("- ")) {
+                fromA.add(t.substring(2));
+            } else if (t.startsWith("+ ")) {
+                fromB.add(t.substring(2));
+            }
+        }
+        if (fromA.isEmpty() && fromB.isEmpty()) {
+            return "both changed";
+        }
+        if (fromA.isEmpty()) {
+            return "lines only " + envB + " has";
+        }
+        if (fromB.isEmpty()) {
+            return "lines only " + envA + " has";
+        }
+        List<String> all = new ArrayList<>(fromA);
+        all.addAll(fromB);
+        if (all.stream().allMatch(l -> l.contains("<description") || l.contains("</description>") || l.trim().startsWith("<!--")
+            || l.trim().isEmpty() || l.contains("display-name="))) {
+            return "cosmetic";
+        }
+        for (String l : all) {
+            String low = l.toLowerCase(java.util.Locale.ROOT);
+            for (String w : envWords) {
+                if (w.length() >= 2 && java.util.regex.Pattern.compile("(^|[^a-z0-9])" + java.util.regex.Pattern.quote(w) + "([^a-z0-9]|$)").matcher(low).find()) {
+                    return "environment-specific text";
+                }
+            }
+        }
+        return "both changed";
     }
 
     /** True when a change's detail has removed and added lines and they are the same lines but for letter case. */
@@ -152,7 +241,49 @@ public final class EnvironmentCompare {
 
     private static OnlyIn onlyIn(String name, String in, String other, DriverSet tree) {
         Driver t = tree == null ? null : tree.driver(name);
-        return new OnlyIn(name, in, t != null && !t.deploysTo(other), tree != null && t == null);
+        return new OnlyIn(name, "drivers/" + name, "driver", in, t != null && !t.deploysTo(other),
+            t != null && com.pointblue.dirxml.dev.model.EnvironmentList.includes(t.planned, other) && !t.planned.isEmpty(), tree != null && t == null);
+    }
+
+    /** A one-sided policy, template or job: its tree object's lists, by path. */
+    private static OnlyIn objectOnlyIn(ModelDiff.Change ch, String in, String other, DriverSet tree) {
+        List<String> envs = null;
+        List<String> planned = null;
+        if (tree != null) {
+            Object o = treeObject(tree, ch.path);
+            if (o instanceof com.pointblue.dirxml.dev.model.EntitlementPolicy p) {
+                envs = p.environments;
+                planned = p.planned;
+            } else if (o instanceof com.pointblue.dirxml.dev.model.NotificationTemplate t) {
+                envs = t.environments;
+                planned = t.planned;
+            } else if (o instanceof com.pointblue.dirxml.dev.model.Job j) {
+                envs = j.environments;
+                planned = j.planned;
+            }
+        }
+        String kind = ch.kind.isRbe() ? "entitlement policy" : ch.kind.isTemplate() ? "template" : "job";
+        boolean expected = envs != null && !com.pointblue.dirxml.dev.model.EnvironmentList.includes(envs, other);
+        boolean isPlanned = planned != null && !planned.isEmpty() && com.pointblue.dirxml.dev.model.EnvironmentList.includes(planned, other);
+        return new OnlyIn(ch.driver, ch.path, kind, in, expected, isPlanned, tree != null && envs == null);
+    }
+
+    private static Object treeObject(DriverSet tree, String path) {
+        String[] p = path.split("/");
+        if (p.length == 2 && p[0].equals("rbe-policies")) {
+            return tree.rbePolicies.stream().filter(x -> x.name.equals(p[1])).findFirst().orElse(null);
+        }
+        if (p.length == 2 && p[0].equals("templates")) {
+            return tree.templates.stream().filter(x -> x.name.equals(p[1])).findFirst().orElse(null);
+        }
+        if (p.length == 2 && p[0].equals("jobs")) {
+            return tree.jobs.stream().filter(x -> x.name.equals(p[1])).findFirst().orElse(null);
+        }
+        if (p.length == 4 && p[0].equals("drivers") && p[2].equals("jobs")) {
+            Driver d = tree.driver(p[1]);
+            return d == null ? null : d.jobs.stream().filter(x -> x.name.equals(p[3])).findFirst().orElse(null);
+        }
+        return null;
     }
 
     private static String driverOf(String key) {
@@ -211,8 +342,9 @@ public final class EnvironmentCompare {
             return sb.append("no differences\n").toString();
         }
         for (OnlyIn o : onlyIn) {
-            sb.append("  only in ").append(o.env).append(": ").append(o.driver)
-              .append(o.expected ? "  (expected: the tree doesn't deploy it to " + (o.env.equals(envA) ? envB : envA) + ")" : "")
+            String other = o.env.equals(envA) ? envB : envA;
+            sb.append("  only in ").append(o.env).append(": ").append(o.kind).append(' ').append(o.path)
+              .append(o.planned ? "  (planned for " + other + ", not promoted yet)" : o.expected ? "  (expected: the tree doesn't deploy it to " + other + ")" : "")
               .append(o.notInTree ? "  (not in the tree)" : "").append('\n');
         }
         for (Value v : values) {
@@ -233,8 +365,9 @@ public final class EnvironmentCompare {
         StringBuilder sb = new StringBuilder("{\"a\":").append(q(envA)).append(",\"b\":").append(q(envB)).append(",\"onlyIn\":[");
         for (int i = 0; i < onlyIn.size(); i++) {
             OnlyIn o = onlyIn.get(i);
-            sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(q(o.driver)).append(",\"env\":").append(q(o.env))
-              .append(",\"expected\":").append(o.expected).append(",\"notInTree\":").append(o.notInTree).append('}');
+            sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(q(o.driver)).append(",\"path\":").append(q(o.path)).append(",\"kind\":").append(q(o.kind))
+              .append(",\"env\":").append(q(o.env)).append(",\"expected\":").append(o.expected).append(",\"planned\":").append(o.planned)
+              .append(",\"notInTree\":").append(o.notInTree).append('}');
         }
         sb.append("],\"values\":[");
         for (int i = 0; i < values.size(); i++) {
@@ -242,7 +375,11 @@ public final class EnvironmentCompare {
             sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(q(v.driver)).append(",\"key\":").append(q(v.key))
               .append(",\"a\":").append(q(v.a)).append(",\"b\":").append(q(v.b)).append(",\"expected\":").append(v.expected).append('}');
         }
-        sb.append("],\"drift\":").append(drift == null ? "null" : drift.json()).append(",\"caseOnly\":[");
+        sb.append("],\"drift\":").append(drift == null ? "null" : drift.json()).append(",\"causes\":[");
+        for (int i = 0; i < causes.size(); i++) {
+            sb.append(i == 0 ? "" : ",").append(q(causes.get(i)));
+        }
+        sb.append("],\"caseOnly\":[");
         for (int i = 0; i < caseOnly.size(); i++) {
             ModelDiff.Change ch = caseOnly.get(i);
             sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(q(ch.driver)).append(",\"path\":").append(q(ch.path)).append(",\"summary\":").append(q(ch.summary)).append('}');
