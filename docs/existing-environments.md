@@ -177,8 +177,10 @@ map by name and by which drivers run where, for you to confirm.
   to one is the rule. A driver whose settings differ between two tree servers that map to the same
   server is flagged, and the person picks which that server takes
   (`servers.<env server's name>.prefer = <tree server's name>`).
-- **D4 — Job schedules and enabled state are override keys:** `drivers/<d>.job.<job>.schedule`,
-  `drivers/<d>.job.<job>.disabled`, and `driverset.job.<job>.…` for the set's jobs.
+- **D4 — Job schedules, enabled state and trace are override keys:** `drivers/<d>.job.<job>.schedule`
+  (empty = no schedule), `.disabled`, `.trace-level`, `.trace-file`, `.trace-size-limit`, and
+  `driverset.job.<job>.…` for the set's jobs. The comparison lists them as values. In the customer data,
+  two production jobs run on a schedule QA's don't, and job trace levels and files differ.
 - **D6 — A new driver's server, chosen at deploy:** promoting a driver to an environment with several
   servers asks which one runs it (default: the one the deploy connects through). That server gets the
   driver's start option, manual, and every other server of the set gets disabled
