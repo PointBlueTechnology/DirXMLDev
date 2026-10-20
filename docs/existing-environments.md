@@ -39,7 +39,7 @@ Compared driver by driver (QA against production, production as the tree):
 | lines only QA has | 26 | work in QA not yet promoted |
 | package versions differ | 13 | the newer side is known |
 | cosmetic (descriptions, comments, display names) | 6 | align freely |
-| environment text inside content | 7 | a host or server name typed into a policy: belongs in a GCV |
+| environment text inside content | 7 | a changed line names an environment or server: if it is a literal in a policy, it belongs in a GCV |
 | both sides changed | 268 | needs a person; mostly User Application objects and PRDs |
 
 Two more things the data shows. Jobs differ by schedule (production runs them on a schedule, QA
