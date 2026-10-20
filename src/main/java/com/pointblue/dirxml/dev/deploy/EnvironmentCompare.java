@@ -77,6 +77,32 @@ public final class EnvironmentCompare {
         }
     }
 
+    /**
+     * A driver only one side holds that looks like one only the other side holds, under another name: same shim class,
+     * a similar name, policies in common. Proposed, never applied: a person confirms it (the environment's
+     * {@code drivers/<d>.name}) or rejects it.
+     */
+    public static final class Match {
+        public final String a;
+        public final String b;
+        public final double score;
+        /** Policies (and resources) of the same name, and how many the larger side has. */
+        public final int common;
+        public final int of;
+        /** Either name carries an environment's name: likely the two ends or roles of a feed between environments, for a person to judge. */
+        public final boolean feed;
+
+        Match(String a, String b, double score, int common, int of, boolean feed) {
+            this.a = a;
+            this.b = b;
+            this.score = score;
+            this.common = common;
+            this.of = of;
+            this.feed = feed;
+        }
+    }
+
+    public final List<Match> matches = new ArrayList<>();
     public final String envA;
     public final String envB;
     public final List<OnlyIn> onlyIn = new ArrayList<>();
@@ -134,6 +160,8 @@ public final class EnvironmentCompare {
                 c.onlyIn.add(onlyIn(d.name, envB, envA, tree));
             }
         }
+
+        c.matches.addAll(matches(a, b, envA, envB));
 
         Map<String, String> va = values(a);
         Map<String, String> vb = values(b);
@@ -258,6 +286,94 @@ public final class EnvironmentCompare {
             }
         }
         return !removed.isEmpty() && removed.equals(added);
+    }
+
+    /** One-to-one likely counterparts among the drivers only one side holds, best first. */
+    static List<Match> matches(DriverSet a, DriverSet b, String envA, String envB) {
+        List<Match> all = new ArrayList<>();
+        for (Driver x : a.drivers) {
+            if (b.driver(x.name) != null) {
+                continue;
+            }
+            for (Driver y : b.drivers) {
+                if (a.driver(y.name) != null || !java.util.Objects.equals(x.shimClass, y.shimClass)) {
+                    continue;
+                }
+                java.util.Set<String> mine = artifactNames(x);
+                java.util.Set<String> theirs = artifactNames(y);
+                int common = 0;
+                for (String n : theirs) {
+                    if (mine.contains(n)) {
+                        common++;
+                    }
+                }
+                int of = Math.max(mine.size(), theirs.size());
+                double overlap = of == 0 ? 0 : (double) common / of;
+                double nameSim = 1.0 - (double) distance(x.name.toLowerCase(java.util.Locale.ROOT), y.name.toLowerCase(java.util.Locale.ROOT))
+                    / Math.max(x.name.length(), y.name.length());
+                double score = 0.4 + 0.3 * nameSim + 0.3 * overlap;
+                if (score >= 0.6) {
+                    all.add(new Match(x.name, y.name, score, common, of, carries(x.name, envA, envB) || carries(y.name, envA, envB)));
+                }
+            }
+        }
+        all.sort((p, q) -> Double.compare(q.score, p.score));
+        List<Match> out = new ArrayList<>();
+        java.util.Set<String> usedA = new java.util.HashSet<>();
+        java.util.Set<String> usedB = new java.util.HashSet<>();
+        for (Match m : all) {
+            if (!usedA.contains(m.a) && !usedB.contains(m.b)) {
+                usedA.add(m.a);
+                usedB.add(m.b);
+                out.add(m);
+            }
+        }
+        return out;
+    }
+
+    private static java.util.Set<String> artifactNames(Driver d) {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        for (com.pointblue.dirxml.dev.model.Artifact x : d.policies) {
+            out.add(x.name);
+        }
+        for (com.pointblue.dirxml.dev.model.Artifact x : d.resources) {
+            out.add(x.name);
+        }
+        for (com.pointblue.dirxml.dev.model.Artifact x : d.subscriber.policies) {
+            out.add("s:" + x.name);
+        }
+        for (com.pointblue.dirxml.dev.model.Artifact x : d.publisher.policies) {
+            out.add("p:" + x.name);
+        }
+        return out;
+    }
+
+    /** True when a driver's name carries an environment's name as a word part ("VaultProdToVaultQA" carries PROD and QA). */
+    private static boolean carries(String name, String envA, String envB) {
+        String n = name.toLowerCase(java.util.Locale.ROOT);
+        for (String e : List.of(envA, envB)) {
+            String w = e.toLowerCase(java.util.Locale.ROOT);
+            if (w.length() >= 2 && n.contains(w)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int distance(String a, String b) {
+        int[] prev = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) {
+            prev[j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            int[] cur = new int[b.length() + 1];
+            cur[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                cur[j] = Math.min(Math.min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + (a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1));
+            }
+            prev = cur;
+        }
+        return prev[b.length()];
     }
 
     private static OnlyIn onlyIn(String name, String in, String other, DriverSet tree) {
@@ -389,6 +505,13 @@ public final class EnvironmentCompare {
             sb.append(i == 0 ? "" : ",").append("{\"driver\":").append(q(o.driver)).append(",\"path\":").append(q(o.path)).append(",\"kind\":").append(q(o.kind))
               .append(",\"env\":").append(q(o.env)).append(",\"expected\":").append(o.expected).append(",\"planned\":").append(o.planned)
               .append(",\"notInTree\":").append(o.notInTree).append('}');
+        }
+        sb.append("],\"matches\":[");
+        for (int i = 0; i < matches.size(); i++) {
+            Match m = matches.get(i);
+            sb.append(i == 0 ? "" : ",").append("{\"a\":").append(q(m.a)).append(",\"b\":").append(q(m.b))
+              .append(",\"score\":").append(String.format(java.util.Locale.ROOT, "%.2f", m.score)).append(",\"common\":").append(m.common)
+              .append(",\"of\":").append(m.of).append(",\"feed\":").append(m.feed).append('}');
         }
         sb.append("],\"values\":[");
         for (int i = 0; i < values.size(); i++) {

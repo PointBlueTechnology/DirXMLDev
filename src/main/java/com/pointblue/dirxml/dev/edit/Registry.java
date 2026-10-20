@@ -553,6 +553,11 @@ public final class Registry {
             req("env", "environment name"),
             req("key", "drivers/<driver>.gcv.<name> | .shim.<name> | .ecv.<name> | .shim-auth-server | .shim-auth-id | .name (the driver's name in that vault) | driverset.gcv.<name>"),
             req("value", "the environment's value"));
+        register("environments.set", "which environments get objects and which they are planned for (driver.xml / driverset.xml environments, planned); several objects at once, one tree path per line",
+            a -> new EnvironmentOps.Set(a.get("paths"), a.containsKey("every") ? "" : a.get("environments"), a.containsKey("no-plan") ? "" : a.get("planned")),
+            req("paths", "tree paths, one per line: drivers/<d>, drivers/<d>/jobs/<n>, jobs/<n>, rbe-policies/<n>, templates/<n>"),
+            opt("environments", "the environments that get them, comma-separated"), opt("every", "flag: every environment gets them"),
+            opt("planned", "environments they are planned for, not promoted to yet"), opt("no-plan", "flag: nothing planned"));
         register("override.remove", "remove an environment's override, so it takes the tree's base value",
             a -> new OverrideOps.Remove(a.get("env"), a.get("key")),
             req("env", "environment name"), req("key", "the override key"));
