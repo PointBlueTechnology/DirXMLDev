@@ -91,6 +91,9 @@ public final class EnvironmentCompare {
         Map<String, String> filesB = tree == null ? Map.of() : Objects.requireNonNullElse(tree.overrides.get(envB), Map.of());
         c.notes.addAll(Overrides.toTreeNames(a, filesA));
         c.notes.addAll(Overrides.toTreeNames(b, filesB));
+        // each side's servers as the tree names them, so per-server settings and jobs line up
+        c.notes.addAll(ServerMap.toTree(a, filesA, tree));
+        c.notes.addAll(ServerMap.toTree(b, filesB, tree));
 
         for (Driver d : a.drivers) {
             if (b.driver(d.name) == null) {

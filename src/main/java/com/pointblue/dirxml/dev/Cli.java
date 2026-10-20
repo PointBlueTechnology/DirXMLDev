@@ -121,6 +121,9 @@ public final class Cli {
                     for (String n : com.pointblue.dirxml.dev.deploy.Overrides.toTreeNames(live, base.overrides.get(envName))) {
                         System.err.println("note: " + n);
                     }
+                    for (String n : com.pointblue.dirxml.dev.deploy.ServerMap.toTree(live, base.overrides.get(envName), base)) {
+                        System.err.println("note: " + n);
+                    }
                     for (String n : com.pointblue.dirxml.dev.deploy.DriverEnvironments.keepOnImport(live, envName, base, markNewDrivers, null)) {
                         System.err.println("note: " + n);
                     }
