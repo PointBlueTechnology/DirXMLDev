@@ -436,6 +436,16 @@ public final class ConfigOps {
                 case "shim-class": d.shimClass = value; return;
                 case "shim-auth-server": d.shimAuthServer = value; return;
                 case "shim-auth-id": d.shimAuthId = value; return;
+                case "environments": {
+                    // the environments this driver is deployed to, comma-separated; empty = every environment
+                    d.environments.clear();
+                    for (String e : (value == null ? "" : value).split(",")) {
+                        if (!e.isBlank() && d.environments.stream().noneMatch(x -> x.equalsIgnoreCase(e.trim()))) {
+                            d.environments.add(e.trim());
+                        }
+                    }
+                    return;
+                }
                 default:
             }
             if (key.startsWith("param:") || key.startsWith("engine:")) {

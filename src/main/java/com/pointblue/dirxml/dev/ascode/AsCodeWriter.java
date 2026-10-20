@@ -119,7 +119,8 @@ public final class AsCodeWriter {
         Files.createDirectories(dir);
         Manifest m = new Manifest("driver");
         m.attr("name", d.name).attr("dn", d.dn).attr("shim-class", d.shimClass)
-         .attr("shim-auth-server", d.shimAuthServer).attr("shim-auth-id", d.shimAuthId);
+         .attr("shim-auth-server", d.shimAuthServer).attr("shim-auth-id", d.shimAuthId)
+         .attr("environments", d.environments.isEmpty() ? null : String.join(", ", d.environments));
         m.meta(d.meta);
 
         List<String> kinds = new ArrayList<>(d.config.keySet());

@@ -46,6 +46,8 @@ import java.util.stream.Stream;
 public final class Overrides {
 
     public static final String DIR = "overrides";
+    /** {@code drivers/<driver>.name = <name>}: the name this environment's vault gives the driver, when it differs from the tree's. */
+    public static final String NAME = "name";
     public static final String EXT = ".properties";
 
     private Overrides() {
@@ -155,13 +157,16 @@ public final class Overrides {
             if (driver == null) {
                 return null;
             }
+            if (NAME.equals(setting)) {
+                return driver.name;
+            }
             return Driver.SHIM_AUTH_SERVER.equals(setting) ? driver.shimAuthServer : driver.shimAuthId;
         }
 
         public void set(String value) {
             if (definition != null) {
                 setValue(definition, value);
-            } else if (driver != null) {
+            } else if (driver != null && !NAME.equals(setting)) {   // a name is applied by renaming, never set
                 if (Driver.SHIM_AUTH_SERVER.equals(setting)) {
                     driver.shimAuthServer = value;
                 } else {
@@ -185,6 +190,12 @@ public final class Overrides {
                 + "drivers/<driver>." + Driver.SHIM_AUTH_SERVER + ", drivers/<driver>." + Driver.SHIM_AUTH_ID + " or driverset.gcv.");
         }
         String rest = key.substring("drivers/".length());
+        // the name this environment's vault gives the driver: applied by renames(), after the values
+        if (isName(key)) {
+            String driverName = rest.substring(0, rest.length() - NAME.length() - 1);
+            Driver d = ds.driver(driverName);
+            return d == null ? new Target(null, "no driver '" + driverName + "' in the tree") : Target.ofSetting(d, NAME);
+        }
         // the driver's own settings: drivers/<driver>.shim-auth-server, drivers/<driver>.shim-auth-id
         for (String setting : List.of(Driver.SHIM_AUTH_SERVER, Driver.SHIM_AUTH_ID)) {
             if (rest.endsWith("." + setting)) {
@@ -270,41 +281,144 @@ public final class Overrides {
         public final String env;
         public final List<String> applied = new ArrayList<>();
         public final List<String> problems = new ArrayList<>();
+        /** Drivers the tree doesn't deploy to this environment ({@link DriverEnvironments}), left out of the model. */
+        public final List<String> notDeployed = new ArrayList<>();
+        /** The tree's name to this environment's, for drivers its vault names differently. */
+        public final Map<String, String> renamed = new java.util.LinkedHashMap<>();
+
+        /** Names a scoped request gave (the tree's) as this environment's model now has them. */
+        public List<String> vaultNames(java.util.Collection<String> treeNames) {
+            if (treeNames == null) {
+                return null;
+            }
+            List<String> out = new ArrayList<>();
+            for (String n : treeNames) {
+                out.add(renamed.getOrDefault(n, n));
+            }
+            return out;
+        }
+
+        /** The refusal for a scoped request naming drivers this environment doesn't get, or null. */
+        public String refusalFor(java.util.Collection<String> treeNames) {
+            if (treeNames == null) {
+                return null;
+            }
+            List<String> named = new ArrayList<>();
+            for (String n : treeNames) {
+                if (notDeployed.contains(n)) {
+                    named.add("'" + n + "'");
+                }
+            }
+            return named.isEmpty() ? null : String.join(", ", named) + (named.size() == 1 ? " is" : " are") + " not deployed to '" + env
+                + "' (driver.xml environments). Add " + env + " to " + (named.size() == 1 ? "its" : "their") + " environments to deploy " + (named.size() == 1 ? "it" : "them") + " there.";
+        }
 
         Applied(String env) {
             this.env = env;
         }
 
         public String summary() {
-            if (applied.isEmpty() && problems.isEmpty()) {
-                return null;
+            List<String> parts = new ArrayList<>();
+            if (!applied.isEmpty() || !problems.isEmpty()) {
+                parts.add("overrides for '" + env + "': " + applied.size() + " value(s) applied from " + DIR + "/" + env + EXT
+                    + (problems.isEmpty() ? "" : "; not applied: " + String.join("; ", problems)));
             }
-            return "overrides for '" + env + "': " + applied.size() + " value(s) applied from " + DIR + "/" + env + EXT
-                + (problems.isEmpty() ? "" : "; not applied: " + String.join("; ", problems));
+            if (!notDeployed.isEmpty()) {
+                parts.add("not deployed to '" + env + "' (driver.xml environments): " + String.join(", ", notDeployed));
+            }
+            return parts.isEmpty() ? null : String.join("; ", parts);
         }
     }
 
     /**
-     * Put environment {@code env}'s values into the model, in place: the model is a throwaway read
-     * of the tree that a diff or a deploy compares and writes, never written back as the tree.
-     * An environment without a file applies nothing.
+     * Put environment {@code env}'s values into the model, in place, and take out the drivers {@code env}
+     * doesn't get ({@link DriverEnvironments}): the model is a throwaway read of the tree that a diff or a
+     * deploy compares and writes, never written back as the tree. An environment without a file applies
+     * no values.
      */
     public static Applied apply(DriverSet ds, String env) {
-        Applied a = new Applied(env);
+        Applied a = applyValues(ds, env);
         Map<String, String> values = ds.overrides.get(env);
-        if (values == null) {
-            return a;
-        }
-        for (Map.Entry<String, String> e : values.entrySet()) {
-            Target t = resolve(ds, e.getKey());
-            if (!t.resolved()) {
-                a.problems.add(e.getKey() + " (" + t.problem + ")");
+        // the drivers this environment doesn't get leave the model after the values, so a value set for one is still placed
+        a.notDeployed.addAll(DriverEnvironments.filter(ds, env));
+        // and the names this environment's vault uses come last: every key above names the tree's driver
+        for (Map.Entry<String, String> r : renames(values).entrySet()) {
+            if (a.notDeployed.contains(r.getKey())) {
                 continue;
             }
-            t.set(e.getValue());
-            a.applied.add(e.getKey());
+            if (ds.renameDriver(r.getKey(), r.getValue())) {
+                a.renamed.put(r.getKey(), r.getValue());
+                a.applied.add("drivers/" + r.getKey() + "." + NAME);
+            } else if (!r.getKey().equals(r.getValue())) {
+                a.problems.add("drivers/" + r.getKey() + "." + NAME + " (" + (ds.driver(r.getKey()) == null
+                    ? "no driver '" + r.getKey() + "' in the tree" : "the tree already has a driver '" + r.getValue() + "'") + ")");
+            }
         }
         return a;
+    }
+
+    /**
+     * Environment {@code env}'s values alone, every driver kept under the tree's name: for the simulator,
+     * whose cases name the tree's drivers.
+     */
+    public static Applied applyValues(DriverSet ds, String env) {
+        Applied a = new Applied(env);
+        Map<String, String> values = ds.overrides.get(env);
+        if (values != null) {
+            for (Map.Entry<String, String> e : values.entrySet()) {
+                if (isName(e.getKey())) {
+                    continue;
+                }
+                Target t = resolve(ds, e.getKey());
+                if (!t.resolved()) {
+                    a.problems.add(e.getKey() + " (" + t.problem + ")");
+                    continue;
+                }
+                t.set(e.getValue());
+                a.applied.add(e.getKey());
+            }
+        }
+        return a;
+    }
+
+    /** True for {@code drivers/<driver>.name}. */
+    public static boolean isName(String key) {
+        if (!key.startsWith("drivers/") || !key.endsWith("." + NAME) || key.length() <= "drivers/".length() + NAME.length() + 1) {
+            return false;
+        }
+        // drivers/AD.gcv.drv.domain.dns.name is a GCV called drv.domain.dns.name, not a name
+        String driver = key.substring("drivers/".length(), key.length() - NAME.length() - 1);
+        return !driver.contains(".gcv.") && !driver.contains(".shim.") && !driver.contains(".ecv.");
+    }
+
+    /** An environment file's {@code drivers/<driver>.name} lines: the tree's name to the name in that vault, in file order. */
+    public static Map<String, String> renames(Map<String, String> values) {
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        if (values != null) {
+            for (Map.Entry<String, String> e : values.entrySet()) {
+                if (isName(e.getKey()) && !e.getValue().isBlank()) {
+                    out.put(e.getKey().substring("drivers/".length(), e.getKey().length() - NAME.length() - 1), e.getValue().trim());
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A model read from {@code env}'s vault, its drivers given the tree's names ({@code drivers/<tree>.name =
+     * <vault>} read backwards), in place, so it compares with or folds into the tree. Returns notes.
+     */
+    public static List<String> toTreeNames(DriverSet live, Map<String, String> values) {
+        List<String> notes = new ArrayList<>();
+        for (Map.Entry<String, String> r : renames(values).entrySet()) {
+            if (live.driver(r.getValue()) == null) {
+                continue;
+            }
+            if (!live.renameDriver(r.getValue(), r.getKey())) {
+                notes.add("'" + r.getValue() + "' was not given the tree's name '" + r.getKey() + "': the vault has a driver of that name too");
+            }
+        }
+        return notes;
     }
 
     /**
@@ -321,6 +435,9 @@ public final class Overrides {
             return notes;
         }
         for (Map.Entry<String, String> e : new ArrayList<>(values.entrySet())) {
+            if (isName(e.getKey())) {
+                continue;   // a name stays as the file has it: toTreeNames already used it
+            }
             Target t = resolve(live, e.getKey());
             if (!t.resolved()) {
                 notes.add(e.getKey() + ": " + t.problem + " (left as recorded)");

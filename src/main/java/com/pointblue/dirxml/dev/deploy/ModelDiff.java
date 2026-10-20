@@ -237,6 +237,17 @@ public final class ModelDiff {
         return Collections.unmodifiableList(changes);
     }
 
+    /** The same two sides with only the changes {@code keep} accepts. */
+    public ModelDiff only(java.util.function.Predicate<Change> keep) {
+        ModelDiff d = new ModelDiff(from, to);
+        for (Change c : changes) {
+            if (keep.test(c)) {
+                d.changes.add(c);
+            }
+        }
+        return d;
+    }
+
     /**
      * The {@link EmptyKind} guards this diff trips: for each driver + kind ({@code "entitlements"},
      * {@code "forms"}, {@code "prds"}) with one or more REMOVED changes, true when the tree side
@@ -1578,7 +1589,7 @@ public final class ModelDiff {
     }
 
     /** A JSON string; {@code null} for a null one, so a missing field never fails the whole diff. */
-    private static String q(String s) {
+    static String q(String s) {
         if (s == null) {
             return "null";
         }

@@ -84,6 +84,14 @@ public final class AsCodeReader {
         d.shimClass = attr(m, "shim-class");
         d.shimAuthServer = attr(m, "shim-auth-server");
         d.shimAuthId = attr(m, "shim-auth-id");
+        String environments = attr(m, "environments");
+        if (environments != null) {
+            for (String e : environments.split(",")) {
+                if (!e.isBlank()) {
+                    d.environments.add(e.trim());
+                }
+            }
+        }
         readMeta(m, d.meta);
         for (Element c : children(m, "config")) {
             d.config.put(attr(c, "kind"), xml(dir.resolve(attr(c, "file"))));

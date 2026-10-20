@@ -60,6 +60,17 @@ public final class DeployCli {
         List<String> drivers = opts.getOrDefault("driver", List.of());
 
         switch (cmd) {
+            case "vault.compare-envs": {
+                String with = first(opts, "with");
+                if (with == null || with.isEmpty()) {
+                    System.err.println("usage: vault.compare-envs [<tree>] --env A --with B [--json]");
+                    return 2;
+                }
+                EnvironmentCompare c = VaultDiff.compareEnvironments(env, Environments.load().get(with),
+                    pos.isEmpty() ? null : Paths.get(pos.get(0)), n -> System.err.println("note: " + n));
+                System.out.print(json ? c.json() + "\n" : c.text());
+                return c.isEmpty() ? 0 : 1;
+            }
             case "vault.diff":
             case "vault.verify": {
                 if (pos.isEmpty()) {

@@ -19,7 +19,7 @@ public class VaultDiffTest {
 
     private static final String DS = "cn=dvs,o=system";   // matches VaultMappingTest's fixture DNs
 
-    private static FakeVault seedVault(DriverSet ds) {
+    static FakeVault seedVault(DriverSet ds) {
         FakeVault vault = new FakeVault();
         for (LdifDriverSource.Entry e : VaultMappingTest.entries(ds)) {
             Vault.Entry ve = new Vault.Entry(e.dn);

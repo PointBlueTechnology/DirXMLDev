@@ -25,7 +25,8 @@ public final class Driver {
     public static final String SHIM_AUTH_SERVER = "shim-auth-server";
     public static final String SHIM_AUTH_ID = "shim-auth-id";
 
-    public final String name;
+    /** The tree's name; {@link DriverSet#renameDriver} changes it on a throwaway model (an environment that names the driver differently). */
+    public String name;
     public String dn;
     public String shimClass;
     public String shimAuthServer;
@@ -105,6 +106,25 @@ public final class Driver {
     public final List<Entitlement> entitlements = new ArrayList<>();
     /** The driver's jobs ({@code DirXML-Job} objects under it, docs/console-gaps.md §1). */
     public final List<Job> jobs = new ArrayList<>();
+    /**
+     * The environments this driver is deployed to, by name ({@code driver.xml}'s {@code environments});
+     * empty means every environment. A driver that is not yet in production, or never will be, names
+     * the others ({@code docs/vault-deploy.md}, "Drivers that only some environments get").
+     */
+    public final List<String> environments = new ArrayList<>();
+
+    /** True when a deploy to {@code env} gets this driver: no list, or {@code env} in it (any case). */
+    public boolean deploysTo(String env) {
+        if (environments.isEmpty() || env == null) {
+            return true;
+        }
+        for (String e : environments) {
+            if (e.equalsIgnoreCase(env)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public Driver(String name) {
         this.name = Objects.requireNonNull(name, "name");
