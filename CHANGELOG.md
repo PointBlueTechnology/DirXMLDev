@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-10-20
+
 ### Added
 
 - **Environments that differ in more than values** (docs/existing-environments.md, decisions D1–D6).
