@@ -7,6 +7,34 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-10-20
+
+### Added
+
+- **Environments that differ in more than values** (docs/existing-environments.md, decisions D1–D6).
+  Taking on an existing system with production and QA trees that have grown apart:
+  - **Which environments get what:** `environments` and `planned` on drivers (`driver.xml`), jobs,
+    role-based entitlement policies and templates. Compare, plan and deploy leave out what an
+    environment doesn't get; `planned` tells "not yet" from "never". `driver.set environments|planned`,
+    `environments.set` for several objects at once.
+  - **Names per environment:** `drivers/<d>.name` in an environment's overrides file. Compare, plan
+    and deploy use that name; imports map it back; secrets answer to either name.
+  - **Servers per environment:** `servers.<tree server's name> = <env server's DN>`, several onto one,
+    `.prefer` to choose whose settings a shared server takes; validation `server-unmapped`.
+  - **Jobs per environment:** schedule, disabled and trace settings as override keys.
+  - **A new driver's server** chosen at deploy: `--driver-server "D=<server>"`.
+  - **Two environments compared:** `vault.compare-envs`: one-sided objects, values (expected or
+    not, with the tree's value), likely renames (feeds flagged), drift with likely causes,
+    case-only DN differences apart.
+  - **Known differences:** `overrides/<env>.known.json`, `known.accept` / `known.forget`, matched by
+    fingerprint so a changed object shows again.
+  - **Import:** keeps the tree's drivers an environment doesn't get; `--mark-new-drivers`.
+
+### Changed
+
+- `override-missing-env` no longer warns about server maps and driver names, which belong to the
+  environments that need them.
+
 ## [0.48.0] - 2026-10-19
 
 ### Fixed

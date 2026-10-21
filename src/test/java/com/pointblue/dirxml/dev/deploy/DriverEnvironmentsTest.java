@@ -1,0 +1,324 @@
+package com.pointblue.dirxml.dev.deploy;
+
+import com.pointblue.dirxml.dev.ascode.AsCodeReader;
+import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
+import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Policy;
+import com.pointblue.dirxml.dev.validate.ValidatorTest;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+/**
+ * Environments that hold different drivers, or name a driver differently: the tree says which environments a
+ * driver goes to ({@code driver.xml} environments) and what an environment's vault calls it
+ * ({@code drivers/<d>.name} in its overrides file); compare, deploy and import follow both.
+ */
+public class DriverEnvironmentsTest {
+
+    @Rule
+    public TemporaryFolder tmp = new TemporaryFolder();
+
+    private static final String DS = "cn=dvs,o=system";
+
+    /** The lab model plus a loopback driver only QA gets. */
+    private static DriverSet withQaOnly() {
+        DriverSet ds = VaultMappingTest.model();
+        Driver qa = new Driver("QA Loopback");
+        qa.dn = "cn=QA Loopback," + DS;
+        qa.shimClass = "com.example.Loopback";
+        qa.config.put(Driver.CONFIG_VALUES, ValidatorTest.xml("<configuration-values><definitions/></configuration-values>"));
+        qa.environments.add("QA");
+        ds.drivers.add(qa);
+        return ds;
+    }
+
+    @Test
+    public void theListIsKeptInDriverXml() throws Exception {
+        Path dir = tmp.newFolder("tree").toPath();
+        AsCodeWriter.write(withQaOnly(), dir);
+        assertTrue(Files.readString(dir.resolve("drivers/QA Loopback/driver.xml"), StandardCharsets.UTF_8).contains("environments=\"QA\""));
+        assertFalse(Files.readString(dir.resolve("drivers/AD/driver.xml"), StandardCharsets.UTF_8).contains("environments="));
+        DriverSet back = AsCodeReader.read(dir);
+        assertEquals(List.of("QA"), back.driver("QA Loopback").environments);
+        assertTrue(back.driver("AD").environments.isEmpty());
+    }
+
+    @Test
+    public void anEnvironmentGetsOnlyItsDrivers() throws Exception {
+        DriverSet prod = withQaOnly();
+        Overrides.Applied a = Overrides.apply(prod, "PROD");
+        assertNull(prod.driver("QA Loopback"));
+        assertNotNull(prod.driver("AD"));
+        assertEquals(List.of("QA Loopback"), a.notDeployed);
+        assertTrue(a.summary(), a.summary().contains("not deployed to 'PROD'"));
+        assertNotNull(a.refusalFor(List.of("QA Loopback")));
+        assertNull(a.refusalFor(List.of("AD")));
+
+        DriverSet planned = withQaOnly();
+        planned.driver("QA Loopback").planned.add("PROD");
+        Overrides.Applied p = Overrides.apply(planned, "PROD");
+        assertEquals(List.of("QA Loopback"), p.plannedHere);
+        assertTrue(p.summary(), p.summary().contains("planned for 'PROD', not promoted yet: QA Loopback"));
+
+        DriverSet qa = withQaOnly();
+        assertTrue(Overrides.apply(qa, "qa").notDeployed.isEmpty());   // names match in any case
+        assertNotNull(qa.driver("QA Loopback"));
+
+        // PROD's vault never had the QA driver: nothing to deploy, rather than "added"
+        FakeVault prodVault = VaultDiffTest.seedVault(VaultMappingTest.model());
+        DriverSet to = withQaOnly();
+        Overrides.apply(to, "PROD");
+        ModelDiff diff = ModelDiff.of(VaultDiff.fromVault(prodVault, DS), to);
+        assertTrue(diff.text(), diff.isEmpty());
+    }
+
+    @Test
+    public void aDriverNamedDifferentlyInAnEnvironmentComparesUnderThatName() throws Exception {
+        DriverSet qaModel = VaultMappingTest.model();
+        assertTrue(qaModel.renameDriver("AD", "AD-QA"));
+        FakeVault qaVault = VaultDiffTest.seedVault(qaModel);
+
+        DriverSet to = VaultMappingTest.model();
+        to.overrides.put("QA", new LinkedHashMap<>(Map.of("drivers/AD.name", "AD-QA")));
+        Overrides.Applied a = Overrides.apply(to, "QA");
+        assertEquals(Map.of("AD", "AD-QA"), a.renamed);
+        Driver renamed = to.driver("AD-QA");
+        assertNotNull(renamed);
+        assertEquals("cn=AD-QA," + DS, renamed.dn);
+        assertTrue(renamed.links.stream().anyMatch(l -> l.ref.equals("drivers/AD-QA/PKG-GCVs")));
+        assertEquals(List.of("AD-QA"), a.vaultNames(List.of("AD")));
+        ModelDiff diff = ModelDiff.of(VaultDiff.fromVault(qaVault, DS), to);
+        assertTrue(diff.text(), diff.isEmpty());
+
+        // and back: what QA's vault holds takes the tree's name, matching the tree as it is
+        DriverSet live = VaultDiff.fromVault(qaVault, DS);
+        assertTrue(Overrides.toTreeNames(live, Map.of("drivers/AD.name", "AD-QA")).isEmpty());
+        assertNotNull(live.driver("AD"));
+        ModelDiff back = ModelDiff.of(live, VaultMappingTest.model());
+        assertTrue(back.text(), back.isEmpty());
+
+        // a name key is a valid key for a driver of the tree, and only for one
+        assertTrue(Overrides.resolve(VaultMappingTest.model(), "drivers/AD.name").resolved());
+        assertFalse(Overrides.resolve(VaultMappingTest.model(), "drivers/Nope.name").resolved());
+        assertFalse("a GCV whose name ends in .name", Overrides.isName("drivers/AD.gcv.drv.domain.dns.name"));
+        assertFalse(Overrides.isName("drivers/AD.shim.host.name"));
+        assertTrue(Overrides.isName("drivers/AD Driver.name"));
+    }
+
+    @Test
+    public void anImportKeepsTheDriversThatEnvironmentDoesntGet() {
+        // reading PROD, which lacks the QA driver: the tree keeps it, list and all
+        DriverSet live = VaultMappingTest.model();
+        List<String> notes = DriverEnvironments.keepOnImport(live, "PROD", withQaOnly(), false, null);
+        assertTrue(notes.toString(), notes.isEmpty());
+        assertEquals(List.of("QA"), live.driver("QA Loopback").environments);
+
+        // PROD holding a driver of that name anyway: the tree's stays, and the import says so
+        DriverSet live2 = VaultMappingTest.model();
+        Driver stray = new Driver("QA Loopback");
+        stray.shimClass = "com.example.Other";
+        live2.drivers.add(stray);
+        notes = DriverEnvironments.keepOnImport(live2, "PROD", withQaOnly(), false, null);
+        assertEquals("com.example.Loopback", live2.driver("QA Loopback").shimClass);
+        assertTrue(notes.toString(), notes.get(0).contains("kept as the tree has it"));
+
+        // reading QA into a tree without its driver: marked as QA's only
+        DriverSet fromQa = withQaOnly();
+        fromQa.driver("QA Loopback").environments.clear();
+        notes = DriverEnvironments.keepOnImport(fromQa, "QA", VaultMappingTest.model(), true, null);
+        assertEquals(List.of("QA"), fromQa.driver("QA Loopback").environments);
+        assertTrue(notes.toString(), notes.get(0).contains("new to the tree"));
+        // an update of some drivers only looks at those
+        DriverSet some = withQaOnly();
+        some.driver("QA Loopback").environments.clear();
+        assertTrue(DriverEnvironments.keepOnImport(some, "QA", VaultMappingTest.model(), true, List.of("AD")).isEmpty());
+        assertTrue(some.driver("QA Loopback").environments.isEmpty());
+    }
+
+    @Test
+    public void twoEnvironmentsSideBySide() {
+        DriverSet tree = withQaOnly();
+        tree.overrides.put("QA", new LinkedHashMap<>(Map.of("drivers/AD.shim-auth-server", "ldap://qa")));
+
+        DriverSet prod = VaultMappingTest.model();
+        DriverSet qa = withQaOnly();
+        qa.driver("QA Loopback").environments.clear();               // a vault records no lists
+        qa.driver("AD").shimAuthServer = "ldap://qa";               // expected: QA's file sets it
+        Overrides.Target users = Overrides.resolve(qa, "drivers/AD.gcv.drv.users");
+        users.set("qa-users");                                       // not expected: no file sets it
+        Policy sub = (Policy) qa.resolve("drivers/AD/subscriber/sub-ctp");
+        sub.content = ValidatorTest.xml("<policy><rule><description>qa only</description><conditions/><actions/></rule></policy>");
+
+        EnvironmentCompare c = EnvironmentCompare.of(prod, "PROD", qa, "QA", tree);
+        assertEquals(1, c.onlyIn.size());
+        assertEquals("QA Loopback", c.onlyIn.get(0).driver);
+        assertEquals("QA", c.onlyIn.get(0).env);
+        assertTrue(c.onlyIn.get(0).expected);
+
+        Map<String, EnvironmentCompare.Value> byKey = new LinkedHashMap<>();
+        for (EnvironmentCompare.Value v : c.values) {
+            byKey.put(v.key, v);
+        }
+        assertTrue(byKey.toString(), byKey.get("drivers/AD.shim-auth-server").expected);
+        EnvironmentCompare.Value u = byKey.get("drivers/AD.gcv.drv.users");
+        assertFalse(u.expected);
+        assertEquals("users", u.a);
+        assertEquals("qa-users", u.b);
+        assertEquals(2, byKey.size());
+
+        // the values set aside, the policy is what remains
+        List<String> drift = new ArrayList<>();
+        for (ModelDiff.Change ch : c.drift.changes()) {
+            drift.add(ch.kind + " " + ch.path);
+        }
+        assertEquals(drift.toString(), 1, drift.size());
+        assertTrue(drift.toString(), drift.get(0).contains("sub-ctp"));
+        assertTrue(c.json(), c.json().contains("\"expected\":true"));
+    }
+
+    /** Drivers only one side holds, under names one character apart and the same policies: proposed as one, one to one. */
+    @Test
+    public void aRenamedDriverIsProposedAsAMatch() {
+        DriverSet prod = VaultMappingTest.model();
+        DriverSet qa = VaultMappingTest.model();
+        assertTrue(qa.renameDriver("AD", "AD2"));
+        Driver other = new Driver("AD3");   // a second candidate: same shim, no policies in common
+        other.shimClass = qa.driver("AD2").shimClass;
+        qa.drivers.add(other);
+        EnvironmentCompare c = EnvironmentCompare.of(prod, "PROD", qa, "QA", null);
+        assertEquals(1, c.matches.size());
+        assertEquals("AD", c.matches.get(0).a);
+        assertEquals("AD2", c.matches.get(0).b);
+        assertFalse(c.matches.get(0).feed);
+
+        DriverSet p2 = VaultMappingTest.model();
+        assertTrue(p2.renameDriver("AD", "VaultProdToVaultQA"));
+        DriverSet q2 = VaultMappingTest.model();
+        assertTrue(q2.renameDriver("AD", "VaultQAToVaultDev"));
+        EnvironmentCompare f = EnvironmentCompare.of(p2, "PROD", q2, "QA", null);
+        assertTrue("names carrying an environment's name: a feed, for a person to judge", f.matches.get(0).feed);
+    }
+
+    /** environments.set marks several objects at once; an object not in the tree is refused by path. */
+    @Test
+    public void severalObjectsAreMarkedAtOnce() throws Exception {
+        DriverSet ds = withQaOnly();
+        ds.jobs.add(new com.pointblue.dirxml.dev.model.Job("StatisticsJob", null));
+        com.pointblue.dirxml.dev.model.EntitlementPolicy p = new com.pointblue.dirxml.dev.model.EntitlementPolicy("Test Policy");
+        ds.rbePolicies.add(p);
+        new com.pointblue.dirxml.dev.edit.EnvironmentOps.Set("jobs/StatisticsJob\nrbe-policies/Test Policy\ndrivers/AD", "QA", "PROD").apply(ds, null);
+        assertEquals(List.of("QA"), ds.jobs.get(0).environments);
+        assertEquals(List.of("PROD"), p.planned);
+        assertEquals(List.of("QA"), ds.driver("AD").environments);
+        DriverSet prod = ds;
+        Overrides.Applied a = Overrides.apply(prod, "PROD");
+        assertTrue(a.notDeployedObjects.toString(), a.notDeployedObjects.containsAll(List.of("jobs/StatisticsJob", "rbe-policies/Test Policy")));
+        try {
+            new com.pointblue.dirxml.dev.edit.EnvironmentOps.Set("rbe-policies/Nope", "QA", null).apply(withQaOnly(), null);
+            throw new AssertionError("an unknown path was accepted");
+        } catch (com.pointblue.dirxml.dev.edit.Operation.Refusal expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("rbe-policies/Nope"));
+        }
+    }
+
+    /** A job's schedule, enabled state and trace are values an environment overrides; an empty schedule removes it. */
+    @Test
+    public void aJobsScheduleAndTraceAreOverrides() {
+        DriverSet ds = VaultMappingTest.model();
+        com.pointblue.dirxml.dev.model.Job job = new com.pointblue.dirxml.dev.model.Job("nightly", ValidatorTest.xml(
+            "<job-aggregation><job-definition disabled=\"false\" schedule=\"00 03 * * 1\" type=\"java\"/></job-aggregation>"));
+        job.meta.put("trace-level", "3");
+        ds.driver("AD").jobs.add(job);
+        ds.overrides.put("QA", new LinkedHashMap<>(Map.of(
+            "drivers/AD.job.nightly.schedule", "",
+            "drivers/AD.job.nightly.disabled", "true",
+            "drivers/AD.job.nightly.trace-level", "10")));
+        Overrides.Applied a = Overrides.apply(ds, "QA");
+        assertTrue(a.problems.toString(), a.problems.isEmpty());
+        org.w3c.dom.Element def = Overrides.jobDefinition(job);
+        assertFalse("no schedule in QA", def.hasAttribute("schedule"));
+        assertEquals("true", def.getAttribute("disabled"));
+        assertEquals("10", job.meta.get("trace-level"));
+        assertFalse(Overrides.resolve(ds, "drivers/AD.job.nightly.colour").resolved());
+        assertFalse(Overrides.resolve(ds, "drivers/AD.job.nope.schedule").resolved());
+        assertFalse("a job key is not a name key", Overrides.isName("drivers/AD.job.x.name"));
+    }
+
+    /** Drift accepted as known stays out of the comparison until the object changes again; the file round-trips. */
+    @Test
+    public void anAcceptedDifferenceStaysOutUntilItChanges() throws Exception {
+        java.util.function.Supplier<DriverSet> qaSide = () -> {
+            DriverSet qa = VaultMappingTest.model();
+            Policy sub = (Policy) qa.resolve("drivers/AD/subscriber/sub-ctp");
+            sub.content = ValidatorTest.xml("<policy><rule><description>qa only</description><conditions/><actions/></rule></policy>");
+            return qa;
+        };
+        DriverSet tree = VaultMappingTest.model();
+        EnvironmentCompare first = EnvironmentCompare.of(VaultMappingTest.model(), "PROD", qaSide.get(), "QA", tree);
+        assertEquals(1, first.drift.changes().size());
+        ModelDiff.Change ch = first.drift.changes().get(0);
+        new com.pointblue.dirxml.dev.edit.KnownOps.Accept("QA", "PROD", ch.path, first.fingerprints.get(0), "intended", ch.summary, "QA's test rule", "me").apply(tree, null);
+
+        Path dir = tmp.newFolder("known").toPath();
+        AsCodeWriter.write(tree, dir);
+        assertTrue(Files.readString(dir.resolve("overrides/QA.known.json"), StandardCharsets.UTF_8).contains("QA's test rule"));
+        DriverSet back = AsCodeReader.read(dir);
+
+        EnvironmentCompare again = EnvironmentCompare.of(VaultMappingTest.model(), "PROD", qaSide.get(), "QA", back);
+        assertTrue(again.drift.text(), again.drift.isEmpty());
+        assertEquals(1, again.accepted.size());
+
+        DriverSet qaChanged = qaSide.get();
+        ((Policy) qaChanged.resolve("drivers/AD/subscriber/sub-ctp")).content = ValidatorTest.xml("<policy><rule><description>changed again</description><conditions/><actions/></rule></policy>");
+        EnvironmentCompare later = EnvironmentCompare.of(VaultMappingTest.model(), "PROD", qaChanged, "QA", back);
+        assertEquals(1, later.drift.changes().size());
+        assertTrue(later.changedSinceAccepted.contains(ch.path));
+
+        new com.pointblue.dirxml.dev.edit.KnownOps.Forget("QA", "PROD", ch.path).apply(back, null);
+        AsCodeWriter.write(back, dir);
+        assertFalse("the emptied file goes", Files.exists(dir.resolve("overrides/QA.known.json")));
+    }
+
+    /** A policy the tree keeps for production only is never deleted from QA's vault by a deploy to QA, nor drift there. */
+    @Test
+    public void anEnvironmentsOwnCopyOfAnExcludedObjectIsLeftAlone() {
+        DriverSet qaVault = VaultMappingTest.model();
+        com.pointblue.dirxml.dev.model.EntitlementPolicy theirs = new com.pointblue.dirxml.dev.model.EntitlementPolicy("Prod Policy");
+        qaVault.rbePolicies.add(theirs);
+        DriverSet to = VaultMappingTest.model();
+        com.pointblue.dirxml.dev.model.EntitlementPolicy mine = new com.pointblue.dirxml.dev.model.EntitlementPolicy("Prod Policy");
+        mine.environments.add("PROD");
+        to.rbePolicies.add(mine);
+        Overrides.Applied a = Overrides.apply(to, "QA");
+        ModelDiff raw = ModelDiff.of(qaVault, to);
+        assertTrue("without the rule a deploy would delete it", raw.changes().stream().anyMatch(ch -> ch.kind == ModelDiff.Kind.RBE_REMOVED));
+        assertTrue(a.leaveAlone(raw).text(), a.leaveAlone(raw).isEmpty());
+        assertTrue("nor drift, the other way round", a.ignoreNotDeployed(ModelDiff.of(to, qaVault)).isEmpty());
+    }
+
+    @Test
+    public void aSecretAnswersToEitherName() throws Exception {
+        Path f = tmp.newFile("qa.secrets").toPath();
+        Files.writeString(f, "AD." + Secrets.SHIM_AUTH + " = s3cret\n", StandardCharsets.UTF_8);
+        Secrets s = Secrets.load(f).withNames(Map.of("AD", "AD-QA"));
+        assertTrue(s.has(Secrets.shimAuth("AD-QA")));
+        assertTrue(s.has(Secrets.shimAuth("AD")));
+        assertFalse(Secrets.load(f).has(Secrets.shimAuth("AD-QA")));
+    }
+}

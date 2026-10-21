@@ -234,4 +234,5 @@ check:
 | `appconfig-category-unknown` | W | a role's `nrfRoleCategoryKey` or a resource's `nrfCategoryKey` is not a key of `DirectoryModel/ChoiceDefs/roles-category`/`resources-category` (only when the tree has the list) |
 | `override-malformed` | E | a line of `overrides/<env>.properties` is not `key = value` |
 | `override-unknown` | E | an override key names a driver, GCV or shim parameter the tree does not define |
-| `override-missing-env` | W | a key set in one environment's file is absent from another's, which then gets the base value |
+| `override-missing-env` | W | a key set in one environment's file is absent from another's, which then gets the base value (a server map and a driver's `.name` are exempt: they belong to the environments that need them) |
+| `server-unmapped` | W | an environment's file maps some of the tree's servers but not this one; no two environments share a server, so each needs mapping (docs/existing-environments.md) |

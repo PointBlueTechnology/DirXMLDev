@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.TreeSet;
 
@@ -85,6 +86,31 @@ public final class Secrets {
             p.setProperty(line.substring(0, eq).strip(), line.substring(eq + 1).strip());
         }
         return p;
+    }
+
+    /**
+     * These secrets, where a driver's keys also answer to the name the environment's vault gives it
+     * ({@code renamed}: the tree's name to the vault's, {@link Overrides.Applied#renamed}): a secrets file
+     * may use either name, and the vault's wins where both are set.
+     */
+    public Secrets withNames(Map<String, String> renamed) {
+        if (renamed == null || renamed.isEmpty()) {
+            return this;
+        }
+        Properties p = new Properties();
+        p.putAll(props);
+        for (String k : props.stringPropertyNames()) {
+            for (Map.Entry<String, String> r : renamed.entrySet()) {
+                String prefix = r.getKey() + ".";
+                if (k.startsWith(prefix)) {
+                    String alias = r.getValue() + "." + k.substring(prefix.length());
+                    if (!props.containsKey(alias)) {
+                        p.setProperty(alias, props.getProperty(k));
+                    }
+                }
+            }
+        }
+        return new Secrets(p);
     }
 
     /** True if a value (literal, Env, Command or Keychain) is configured for the key. */

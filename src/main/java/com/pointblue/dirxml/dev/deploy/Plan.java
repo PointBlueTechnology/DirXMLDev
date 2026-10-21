@@ -479,7 +479,23 @@ public final class Plan {
                             ea, edn + "  " + VaultMapping.OC_ENTITLEMENT + " (" + size(ea) + ")", c.path, c.driver));
                     }
                     driversNeedingLinkage.add(c.driver);
-                    driverAttrs.add(new Step(Op.START_OPTION, dn, null, null, null, dn + "  start option = manual", c.path, c.driver));
+                    if (d.runsOn == null || d.runsOn.equalsIgnoreCase(p.primaryServer)) {
+                        driverAttrs.add(new Step(Op.START_OPTION, dn, null, null, null, dn + "  start option = manual", c.path, c.driver));
+                    } else {
+                        // a new driver that runs on another server of the set: manual there, disabled everywhere else
+                        driverAttrs.add(new Step(Op.START_OPTION, dn, "manual", null, null, dn + "  start option = manual (runs on " + d.runsOn + ")", c.path, c.driver, null, d.runsOn));
+                        java.util.Set<String> others = new java.util.LinkedHashSet<>();
+                        if (p.primaryServer != null) {
+                            others.add(p.primaryServer);
+                        }
+                        others.addAll(to.servers);
+                        for (String server : others) {
+                            if (!server.equalsIgnoreCase(d.runsOn)) {
+                                driverAttrs.add(new Step(Op.START_OPTION, dn, "disabled", null, null, dn + "  start option = disabled", c.path, c.driver, null,
+                                    server.equalsIgnoreCase(p.primaryServer) ? null : server));
+                            }
+                        }
+                    }
                     // secrets a new driver needs
                     for (SecretInventory.Need need : SecretInventory.forDriver(to, d)) {
                         if (secrets.has(need.key)) {

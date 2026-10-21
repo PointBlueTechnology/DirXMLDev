@@ -68,6 +68,8 @@ public final class Deployer {
         public boolean captureOnly;
         public boolean json;
         public List<String> deleteDrivers = List.of();
+        /** A driver new to the environment (the tree's name) to the server it runs on, when not the one the deploy connects through. */
+        public Map<String, String> driverServers = Map.of();
         /** {@code --delete-all} kinds ({@code entitlements}, {@code forms}, {@code prds}), repeatable. */
         public List<String> deleteAllKinds = List.of();
         public int restartWaitSeconds = 180;
@@ -277,8 +279,21 @@ public final class Deployer {
         DriverSet to = AsCodeReader.read(o.tree);
         Overrides.Applied overrides = Overrides.apply(to, env.name);
         String overrideNote = overrides.summary() == null ? "" : overrides.summary() + "\n";
+        String notDeployedHere = overrides.refusalFor(o.drivers);
+        if (notDeployedHere != null) {
+            r.refusal = notDeployedHere;
+            return r;
+        }
+        // the drivers asked for, as this environment's vault names them (the request uses the tree's names)
+        List<String> scope = overrides.vaultNames(o.drivers);
+        for (Map.Entry<String, String> ds : o.driverServers.entrySet()) {
+            com.pointblue.dirxml.dev.model.Driver d = to.driver(overrides.renamed.getOrDefault(ds.getKey(), ds.getKey()));
+            if (d != null && ds.getValue() != null && !ds.getValue().isBlank()) {
+                d.runsOn = ds.getValue().trim();
+            }
+        }
         String treeCommit = DeployLog.treeCommit(o.tree);
-        Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
+        Secrets secrets = (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).withNames(overrides.renamed);
         Overrides.applySecretShimAuthIds(to, secrets);   // ids the secrets file supplies win over the tree's (never shown)
 
         o.progress.accept("reading the vault");
@@ -286,7 +301,10 @@ public final class Deployer {
             // 2. diff and plan — the other servers' own driver settings included, read through their connections
             DriverSet from = VaultDiff.fromVault(vault, dsDn);
             Servers.readOverrides(from, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
-            String unknown = VaultDiff.unknownDrivers(from, to, o.drivers);
+            if (!overrides.serverMap.isEmpty()) {
+                Servers.foldPrimary(to, Servers.primary(vault));   // a mapped server that is this environment's primary holds the base values
+            }
+            String unknown = VaultDiff.unknownDrivers(from, to, scope);
             if (unknown != null) {
                 r.refusal = unknown;
                 closeServerConnections();
@@ -297,12 +315,12 @@ public final class Deployer {
                 closeServerConnections();
                 return r;
             }
-            ModelDiff diff = VaultDiff.of(from, to, o.drivers);
+            ModelDiff diff = overrides.leaveAlone(VaultDiff.of(from, to, scope));
             r.diffText = diff.text();
             Map<String, List<String>> liveNamed = new LinkedHashMap<>();
             if ("missing".equals(o.secretsMode)) {
                 for (var d : to.drivers) {
-                    if (o.drivers.isEmpty() || o.drivers.contains(d.name)) {
+                    if (scope.isEmpty() || scope.contains(d.name)) {
                         liveNamed.put(d.name, vault.namedPasswords(VaultMapping.driverDn(dsDn, d.name)));
                     }
                 }
@@ -459,7 +477,7 @@ public final class Deployer {
             o.progress.accept("verifying: reading the vault again");
             DriverSet after = VaultDiff.fromVault(vault, dsDn);
             Servers.readOverrides(after, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
-            ModelDiff verify = VaultDiff.of(after, to, o.drivers.isEmpty() ? diff.affectedDrivers() : o.drivers);
+            ModelDiff verify = overrides.leaveAlone(VaultDiff.of(after, to, scope.isEmpty() ? diff.affectedDrivers() : scope));
             r.verified = verify.isEmpty();
             r.verifyText = verify.isEmpty() ? "" : verify.text();
             // affectedDrivers() never includes a deleted driver (never restarted), so its removal
@@ -500,11 +518,20 @@ public final class Deployer {
     }
 
     /** A tree read for comparison with an environment's vault: the base with that environment's overrides and secret shim auth ids applied. */
-    private static DriverSet readWithOverrides(Path tree, Environments.Environment env) throws IOException {
+    private record ReadApplied(DriverSet ds, Overrides.Applied applied) {
+    }
+
+    private static ReadApplied readApplied(Path tree, Environments.Environment env) throws IOException {
         DriverSet ds = AsCodeReader.read(tree);
-        Overrides.apply(ds, env.name);
-        Overrides.applySecretShimAuthIds(ds, env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile));
-        return ds;
+        Overrides.Applied applied = Overrides.apply(ds, env.name);
+        Overrides.applySecretShimAuthIds(ds, (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).withNames(applied.renamed));
+        return new ReadApplied(ds, applied);
+    }
+
+    /** The tree (as {@code env} gets it) against the live vault, what the tree doesn't deploy there set aside either way. */
+    private static ModelDiff driftOf(Path tree, Environments.Environment env, DriverSet live) throws IOException {
+        ReadApplied r = readApplied(tree, env);
+        return r.applied().ignoreNotDeployed(ModelDiff.of(r.ds(), live));
     }
 
     /** Execute one step; records it in the result; throws on failure. */
@@ -555,7 +582,19 @@ public final class Deployer {
                 }
                 break;
             case START_OPTION:
-                vault.setDriverStartOption(s.dn, Vault.START_MANUAL);
+                if (s.server != null) {
+                    // created through the primary: wait for the replica on this server before setting its start option there
+                    long until = System.currentTimeMillis() + 120_000;
+                    while (!vault.exists(s.dn) && System.currentTimeMillis() < until) {
+                        try {
+                            Thread.sleep(2000);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+                vault.setDriverStartOption(s.dn, "disabled".equals(s.attr) ? Vault.START_DISABLED : Vault.START_MANUAL);
                 break;
             case NOTIFY_JOB:
                 vault.notifyJobUpdate(s.dn);
@@ -768,7 +807,7 @@ public final class Deployer {
         try {
             // an icon set in Designer since the last deploy is not drift worth refusing over: the
             // deploy neither restarts for it nor clobbers policy because of it
-            ModelDiff drift = ModelDiff.of(readWithOverrides(known, env), live);
+            ModelDiff drift = driftOf(known, env, live);
             if (!drift.isEmptyButForIcons()) {
                 lastDrift = drift;
                 return "the vault differs from the last deploy on record (" + last.treeCommit.substring(0, 12) + ")";
@@ -831,7 +870,7 @@ public final class Deployer {
             // model, never through git's view (which may normalize line endings)
             boolean differs;
             try {
-                differs = !ModelDiff.of(readWithOverrides(wtTree, env), live).isEmptyButForIcons();
+                differs = !driftOf(wtTree, env, live).isEmptyButForIcons();
             } catch (RuntimeException | IOException e) {
                 differs = true;
             }

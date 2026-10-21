@@ -200,7 +200,7 @@ public final class Simulate {
         DriverSet other = against == null ? null : AsCodeReader.read(against);
         if (env != null) {
             for (DriverSet target : other == null ? List.of(ds) : List.of(ds, other)) {
-                com.pointblue.dirxml.dev.deploy.Overrides.Applied applied = com.pointblue.dirxml.dev.deploy.Overrides.apply(target, env);
+                com.pointblue.dirxml.dev.deploy.Overrides.Applied applied = com.pointblue.dirxml.dev.deploy.Overrides.applyValues(target, env);
                 if (notes != null) {
                     notes.accept(applied.summary() == null
                         ? "overrides for '" + env + "': none (" + (target == ds ? tree : against) + " has no " + com.pointblue.dirxml.dev.deploy.Overrides.DIR + "/" + env + com.pointblue.dirxml.dev.deploy.Overrides.EXT + "; base values used)"

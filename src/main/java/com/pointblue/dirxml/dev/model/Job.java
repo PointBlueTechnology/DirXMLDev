@@ -30,6 +30,10 @@ public final class Job {
     public final List<String> scopes = new ArrayList<>();
     /** Trace settings ({@code trace-level}, {@code trace-file}, {@code trace-size-limit}), DN, Designer id, package stamps, and other source-specific extras. */
     public final Map<String, String> meta = new LinkedHashMap<>();
+    /** The environments this is deployed to; empty = every environment ({@link EnvironmentList}). */
+    public final java.util.List<String> environments = new java.util.ArrayList<>();
+    /** Environments it is meant to reach but isn't promoted to yet; empty = none, its list is for good. */
+    public final java.util.List<String> planned = new java.util.ArrayList<>();
 
     public Job(String name, Element definition) {
         this.name = name;

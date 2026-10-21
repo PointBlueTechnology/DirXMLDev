@@ -416,6 +416,40 @@ the tool saw one server's copy. Now:
 
 On a single-server set none of this shows: no overrides, no server steps.
 
+## Environments that differ in more than values (2026-10-20)
+
+Taking on an existing system means environments that hold different drivers,
+name some differently, run on different servers and have drifted apart. The
+design and its decisions are in [existing-environments.md](existing-environments.md);
+what the deploy does with it:
+
+- **Which environments get what.** `driver.xml`'s `environments` (and the same
+  attribute on jobs, role-based entitlement policies and templates) is applied
+  with the environment's overrides: compare and plan leave out what the
+  environment doesn't get, so a deploy never creates it there. A scoped request
+  naming such a driver is refused with its list. `planned` marks what is meant
+  to reach an environment later; the plan's summary names what it leaves out.
+- **Names.** `drivers/<d>.name` in the environment's file renames the driver in
+  the model the plan is made from: its DN, its artifacts' owner and every link
+  into `drivers/<d>/`. Text inside a policy that names the driver is not
+  rewritten. Secrets answer to either name.
+- **Servers.** The environment's server map renames the servers the tree names
+  (the set's list, per-server settings, jobs' servers); a mapped server that is
+  the environment's primary has its settings folded into the base the deploy
+  writes through the primary.
+- **A new driver's server** (`--driver-server "D=<server DN>"`): the chosen
+  server gets the start option (manual), every other server of the set
+  disabled, after the driver has replicated there.
+- **Import.** `import-live --env X` maps names and servers back, keeps the
+  tree's drivers X doesn't get, carries every list over, and with
+  `--mark-new-drivers` marks drivers new to the tree as X's only.
+- **Two environments side by side.** `vault.compare-envs [<tree>] --env A --with B`
+  reads both vaults: what only one holds, values that differ (each marked
+  expected when an override or a list accounts for it), likely renames
+  (feeds between environments flagged, never matched automatically), and the
+  rest, each with a likely cause; case-only differences of DNs and accepted
+  known differences are kept apart. Nothing is written.
+
 ## Rollback
 
 `vault.rollback --env <name> --snapshot <file> [--yes]`: for each object in the
