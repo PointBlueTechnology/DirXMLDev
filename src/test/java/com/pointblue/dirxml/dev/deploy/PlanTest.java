@@ -24,6 +24,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /** The plan builder: steps, order, grouping, linkage, secrets, restarts — pure, no vault. */
@@ -222,6 +223,37 @@ public class PlanTest {
         assertTrue(ops.indexOf(Plan.Op.SET_SECRET) > ops.lastIndexOf(Plan.Op.MODIFY));   // secrets after writes
         assertFalse(p.restart.contains("New"));                                  // never restarted: created stopped
         assertTrue(p.text("stg", DS).contains("created stopped"));
+    }
+
+    /** A new driver deployed to run on another server of the set: manual there, disabled on the others. */
+    @Test
+    public void aNewDriverRunsOnTheServerChosen() throws IOException {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        String p1 = "cn=VAULT01,ou=servers,o=acme";
+        String p2 = "cn=VAULT02,ou=servers,o=acme";
+        String p3 = "cn=VAULT03,ou=servers,o=acme";
+        to.servers.addAll(List.of(p1, p2, p3));
+        to.meta.put(Servers.PRIMARY_META, p1);
+        Driver n = new Driver("New");
+        n.shimClass = "com.example.Shim";
+        n.config.put(Driver.DRIVER_FILTER, ValidatorTest.xml("<filter/>"));
+        n.runsOn = p2;
+        to.drivers.add(n);
+
+        Plan p = plan(from, to, Secrets.none(), "none");
+        List<Plan.Step> starts = p.steps.stream().filter(st -> st.op == Plan.Op.START_OPTION).toList();
+        assertEquals(starts.toString(), 3, starts.size());
+        Plan.Step on = starts.stream().filter(st -> "manual".equals(st.attr)).findFirst().orElseThrow();
+        assertEquals(p2, on.server);
+        assertTrue(starts.stream().anyMatch(st -> "disabled".equals(st.attr) && st.server == null));   // the primary, through the deploy's own connection
+        assertTrue(starts.stream().anyMatch(st -> "disabled".equals(st.attr) && p3.equals(st.server)));
+
+        n.runsOn = null;   // no choice: manual on the primary, as before
+        Plan q = plan(from, to, Secrets.none(), "none");
+        List<Plan.Step> one = q.steps.stream().filter(st -> st.op == Plan.Op.START_OPTION).toList();
+        assertEquals(1, one.size());
+        assertNull(one.get(0).server);
     }
 
     @Test

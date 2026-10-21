@@ -60,6 +60,17 @@ public final class DeployCli {
         List<String> drivers = opts.getOrDefault("driver", List.of());
 
         switch (cmd) {
+            case "vault.compare-envs": {
+                String with = first(opts, "with");
+                if (with == null || with.isEmpty()) {
+                    System.err.println("usage: vault.compare-envs [<tree>] --env A --with B [--json]");
+                    return 2;
+                }
+                EnvironmentCompare c = VaultDiff.compareEnvironments(env, Environments.load().get(with),
+                    pos.isEmpty() ? null : Paths.get(pos.get(0)), n -> System.err.println("note: " + n));
+                System.out.print(json ? c.json() + "\n" : c.text());
+                return c.isEmpty() ? 0 : 1;
+            }
             case "vault.diff":
             case "vault.verify": {
                 if (pos.isEmpty()) {
@@ -90,6 +101,15 @@ public final class DeployCli {
                 o.step = opts.containsKey("step");
                 o.confirm = first(opts, "confirm");
                 o.restart = !opts.containsKey("no-restart");
+                // --driver-server "D=cn=vault02,ou=servers,o=acme": the server a driver new to this environment runs on
+                Map<String, String> runsOn = new java.util.LinkedHashMap<>();
+                for (String v : opts.getOrDefault("driver-server", List.of())) {
+                    int eq = v.indexOf('=');
+                    if (eq > 0) {
+                        runsOn.put(v.substring(0, eq).trim(), v.substring(eq + 1).trim());
+                    }
+                }
+                o.driverServers = runsOn;
                 o.secretsMode = opts.containsKey("secrets") ? first(opts, "secrets") : "none";
                 o.allowMissingSecrets = opts.containsKey("allow-missing-secrets");
                 o.captureDrift = opts.containsKey("capture-drift");

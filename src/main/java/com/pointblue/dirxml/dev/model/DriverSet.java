@@ -48,6 +48,8 @@ public final class DriverSet {
     /** Per environment, the values that differ from the tree's base ({@code overrides/<env>.properties}; see {@code deploy.Overrides}). */
     public final java.util.Map<String, java.util.Map<String, String>> overrides = new java.util.TreeMap<>();
     public final Map<String, String> meta = new LinkedHashMap<>();
+    /** Differences accepted as they are, per environment ({@code overrides/<env>.known.json}). */
+    public final Map<String, List<KnownDifference>> known = new java.util.TreeMap<>();
 
     public DriverSet(String name) {
         this.name = Objects.requireNonNull(name, "name");
@@ -63,6 +65,67 @@ public final class DriverSet {
     }
 
     /** All artifacts in the set, by path (insertion order: library, then each driver). */
+    /**
+     * Gives driver {@code from} the name {@code to}, in place, with everything that names it by path: its
+     * artifacts' owner, its DN's first RDN, and every link (any driver's) into {@code drivers/<from>/}. For a
+     * throwaway model only, such as the tree as an environment that names the driver differently gets it
+     * ({@code overrides/<env>.properties}: {@code drivers/<from>.name = <to>}). Text that names the driver
+     * inside a policy or a GCV is not rewritten. False when there is no driver {@code from}, or one named
+     * {@code to} already.
+     */
+    public boolean renameDriver(String from, String to) {
+        Driver d = driver(from);
+        if (d == null || from.equals(to) || driver(to) != null) {
+            return false;
+        }
+        d.name = to;
+        if (d.dn != null && d.dn.regionMatches(true, 0, "cn=", 0, 3)) {
+            int comma = firstUnescapedComma(d.dn);
+            d.dn = "cn=" + escapeRdnValue(to) + (comma < 0 ? "" : d.dn.substring(comma));
+        }
+        List<Artifact> owned = new ArrayList<>(d.policies);
+        owned.addAll(d.resources);
+        owned.addAll(d.subscriber.policies);
+        owned.addAll(d.publisher.policies);
+        for (Artifact a : owned) {
+            a.driver = to;
+        }
+        String oldPrefix = "drivers/" + from + "/";
+        String newPrefix = "drivers/" + to + "/";
+        for (Driver any : drivers) {
+            for (PolicyLink l : any.links) {
+                if (l.ref.startsWith(oldPrefix)) {
+                    l.ref = newPrefix + l.ref.substring(oldPrefix.length());
+                }
+            }
+        }
+        return true;
+    }
+
+    private static int firstUnescapedComma(String dn) {
+        for (int i = 0; i < dn.length(); i++) {
+            char c = dn.charAt(i);
+            if (c == '\\') {
+                i++;
+            } else if (c == ',') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static String escapeRdnValue(String v) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < v.length(); i++) {
+            char c = v.charAt(i);
+            if (",+\"\\<>;=".indexOf(c) >= 0 || (c == '#' && i == 0) || (c == ' ' && (i == 0 || i == v.length() - 1))) {
+                b.append('\\');
+            }
+            b.append(c);
+        }
+        return b.toString();
+    }
+
     public Map<String, Artifact> index() {
         Map<String, Artifact> idx = new LinkedHashMap<>();
         for (Artifact a : library.artifacts()) {

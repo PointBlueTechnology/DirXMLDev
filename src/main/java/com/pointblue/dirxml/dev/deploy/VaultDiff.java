@@ -171,6 +171,21 @@ public final class VaultDiff {
         return new com.pointblue.dirxml.sim.LdifDriverSource.Entry(e.dn, attrs);
     }
 
+    /**
+     * Two environments' vaults side by side ({@link EnvironmentCompare}): both read live, each with the other
+     * servers' own settings, a shim auth id either's secrets file supplies kept out (a credential is never
+     * shown), drivers given the tree's names. {@code tree} may be null.
+     */
+    public static EnvironmentCompare compareEnvironments(Environments.Environment a, Environments.Environment b, Path tree,
+                                                         java.util.function.Consumer<String> notes) throws IOException {
+        DriverSet base = tree == null ? null : AsCodeReader.read(tree);
+        DriverSet liveA = readLive(a, n -> notes.accept(a.name + ": " + n));
+        DriverSet liveB = readLive(b, n -> notes.accept(b.name + ": " + n));
+        Overrides.stripSecretShimAuthIds(liveA, a.secretsFile == null ? Secrets.none() : Secrets.load(a.secretsFile));
+        Overrides.stripSecretShimAuthIds(liveB, b.secretsFile == null ? Secrets.none() : Secrets.load(b.secretsFile));
+        return EnvironmentCompare.of(liveA, a.name, liveB, b.name, base);
+    }
+
     /** The diff of the live vault against the tree. */
     public static ModelDiff of(Path tree, Environments.Environment env, Collection<String> onlyDrivers) throws IOException {
         DriverSet to = AsCodeReader.read(tree);
@@ -178,10 +193,17 @@ public final class VaultDiff {
         if (applied.summary() != null) {
             System.err.println(applied.summary());
         }
-        Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
+        String refusal = applied.refusalFor(onlyDrivers);
+        if (refusal != null) {
+            throw new IllegalArgumentException(refusal);
+        }
+        Secrets secrets = (env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile)).withNames(applied.renamed);
         Overrides.applySecretShimAuthIds(to, secrets);
         DriverSet from = readLive(env);
-        return of(from, to, onlyDrivers);
+        if (!applied.serverMap.isEmpty()) {
+            Servers.foldPrimary(to, from.meta.get(Servers.PRIMARY_META));
+        }
+        return applied.leaveAlone(of(from, to, applied.vaultNames(onlyDrivers)));
     }
 
     /** {@link ModelDiff#of} with both models narrowed to {@code onlyDrivers} (empty = all). */

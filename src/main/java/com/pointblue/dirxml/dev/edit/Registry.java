@@ -551,8 +551,21 @@ public final class Registry {
         register("override.set", "set a value for one environment (overrides/<env>.properties); the tree keeps its base value",
             a -> new OverrideOps.Set(a.get("env"), a.get("key"), a.get("value")),
             req("env", "environment name"),
-            req("key", "drivers/<driver>.gcv.<name> | .shim.<name> | .ecv.<name> | .shim-auth-server | .shim-auth-id | driverset.gcv.<name>"),
+            req("key", "drivers/<driver>.gcv.<name> | .shim.<name> | .ecv.<name> | .shim-auth-server | .shim-auth-id | .name (the driver's name in that vault) | driverset.gcv.<name>"),
             req("value", "the environment's value"));
+        register("environments.set", "which environments get objects and which they are planned for (driver.xml / driverset.xml environments, planned); several objects at once, one tree path per line",
+            a -> new EnvironmentOps.Set(a.get("paths"), a.containsKey("every") ? "" : a.get("environments"), a.containsKey("no-plan") ? "" : a.get("planned")),
+            req("paths", "tree paths, one per line: drivers/<d>, drivers/<d>/jobs/<n>, jobs/<n>, rbe-policies/<n>, templates/<n>"),
+            opt("environments", "the environments that get them, comma-separated"), opt("every", "flag: every environment gets them"),
+            opt("planned", "environments they are planned for, not promoted to yet"), opt("no-plan", "flag: nothing planned"));
+        register("known.accept", "accept a difference between two environments as it is (overrides/<env>.known.json): comparisons leave it out while it is unchanged",
+            a -> new KnownOps.Accept(a.get("env"), a.get("with"), a.get("path"), a.get("fingerprint"), a.get("decision"), a.get("summary"), a.get("note"), a.get("by")),
+            req("env", "the environment whose file records it"), req("with", "the other environment of the pair"), req("path", "the changed object's tree path"),
+            req("fingerprint", "the change's fingerprint, from vault.compare-envs"), opt("decision", "intended (default: different on purpose) or later (to decide)"),
+            opt("summary", "what differs, in a few words"), opt("note", "why"), opt("by", "who accepted it"));
+        register("known.forget", "stop accepting a known difference: comparisons show it again",
+            a -> new KnownOps.Forget(a.get("env"), a.get("with"), a.get("path")),
+            req("env", "environment name"), opt("with", "the other environment"), req("path", "the object's tree path"));
         register("override.remove", "remove an environment's override, so it takes the tree's base value",
             a -> new OverrideOps.Remove(a.get("env"), a.get("key")),
             req("env", "environment name"), req("key", "the override key"));
@@ -562,9 +575,9 @@ public final class Registry {
             req("to", "the server to copy to: its DN, its name, or primary"),
             opt("driver", "one driver (default: every driver)"),
             opt("only", "some of gcv,shim,ecv,auth-server,auth-id (default: all)"));
-        register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, param:<shim parameter>, engine:<engine control value>",
+        register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, environments (the environments it is deployed to, comma-separated; --clear = every environment), planned (environments it is meant to reach but isn't promoted to yet), param:<shim parameter>, engine:<engine control value>",
             a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.containsKey("clear") ? "" : a.get("value")),
-            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>"), opt("value", "the value"),
+            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|environments|planned|param:<name>|engine:<name>"), opt("value", "the value"),
             opt("clear", "flag: make the setting empty (an empty --value reads as missing on the command line)"));
         register("driver.setting.add", "add a shim parameter (param:<name>, into a section of the shim config) or an engine control value (engine:<name>): its definition with display name, type and value",
             a -> new ConfigOps.DriverSettingAdd(a.get("driver"), a.get("key"), a.get("type"), a.get("display"), a.get("value"), a.get("section"), a.get("description")),

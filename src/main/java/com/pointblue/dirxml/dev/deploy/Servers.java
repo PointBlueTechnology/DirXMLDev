@@ -216,6 +216,42 @@ public final class Servers {
         }
     }
 
+    /**
+     * The settings a tree records for {@code primary} (the server a deploy connects through) made the drivers'
+     * own, in place: the tree keeps per-server settings only as they differ from the primary's, so a mapped
+     * server that turns out to be this environment's primary ({@link ServerMap}) holds the base values.
+     */
+    public static void foldPrimary(DriverSet ds, String primary) {
+        if (primary == null) {
+            return;
+        }
+        for (Driver d : ds.drivers) {
+            for (String s : new ArrayList<>(d.serverConfig.keySet())) {
+                if (s.equalsIgnoreCase(primary)) {
+                    for (Map.Entry<String, Element> e : d.serverConfig.remove(s).entrySet()) {
+                        if (e.getValue() == null) {
+                            d.config.remove(e.getKey());
+                        } else {
+                            d.config.put(e.getKey(), e.getValue());
+                        }
+                    }
+                }
+            }
+            for (String s : new ArrayList<>(d.serverSettings.keySet())) {
+                if (s.equalsIgnoreCase(primary)) {
+                    for (Map.Entry<String, String> e : d.serverSettings.remove(s).entrySet()) {
+                        String v = e.getValue() == null || e.getValue().isEmpty() ? null : e.getValue();
+                        if (Driver.SHIM_AUTH_SERVER.equals(e.getKey())) {
+                            d.shimAuthServer = v;
+                        } else if (Driver.SHIM_AUTH_ID.equals(e.getKey())) {
+                            d.shimAuthId = v;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /** Servers of the set other than the primary, by the tree's record ({@code driverset.xml}). */
     public static List<String> others(DriverSet ds, String primary) {
         List<String> out = new ArrayList<>();

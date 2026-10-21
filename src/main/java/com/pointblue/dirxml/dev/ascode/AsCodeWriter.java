@@ -101,6 +101,7 @@ public final class AsCodeWriter {
         }
         writeText(root.resolve(DRIVERSET_MANIFEST), m.toXml());
         com.pointblue.dirxml.dev.deploy.Overrides.write(root, ds.overrides);
+        com.pointblue.dirxml.dev.deploy.KnownDifferences.write(root, ds.known);
 
         // library
         Path lib = root.resolve("library");
@@ -119,7 +120,9 @@ public final class AsCodeWriter {
         Files.createDirectories(dir);
         Manifest m = new Manifest("driver");
         m.attr("name", d.name).attr("dn", d.dn).attr("shim-class", d.shimClass)
-         .attr("shim-auth-server", d.shimAuthServer).attr("shim-auth-id", d.shimAuthId);
+         .attr("shim-auth-server", d.shimAuthServer).attr("shim-auth-id", d.shimAuthId)
+         .attr("environments", com.pointblue.dirxml.dev.model.EnvironmentList.format(d.environments))
+                .attr("planned", com.pointblue.dirxml.dev.model.EnvironmentList.format(d.planned));
         m.meta(d.meta);
 
         List<String> kinds = new ArrayList<>(d.config.keySet());
@@ -416,7 +419,9 @@ public final class AsCodeWriter {
             if (j.definition != null) {
                 writeXml(jobDir.resolve(file), j.definition);
             }
-            Manifest jm = m.child("job").attr("name", j.name).attr("file", "jobs/" + file);
+            Manifest jm = m.child("job").attr("name", j.name).attr("file", "jobs/" + file)
+                .attr("environments", com.pointblue.dirxml.dev.model.EnvironmentList.format(j.environments))
+                .attr("planned", com.pointblue.dirxml.dev.model.EnvironmentList.format(j.planned));
             for (String s : j.servers) {
                 jm.child("server").attr("dn", s);
             }
@@ -445,7 +450,9 @@ public final class AsCodeWriter {
         for (com.pointblue.dirxml.dev.model.EntitlementPolicy p : sorted) {
             String file = uniqueFile(fileSafe(p.name) + ".xml", used);
             writeText(dir.resolve(file), rbePolicyXml(p));
-            Manifest pm = m.child("rbe-policy").attr("name", p.name).attr("file", "rbe-policies/" + file);
+            Manifest pm = m.child("rbe-policy").attr("name", p.name).attr("file", "rbe-policies/" + file)
+                .attr("environments", com.pointblue.dirxml.dev.model.EnvironmentList.format(p.environments))
+                .attr("planned", com.pointblue.dirxml.dev.model.EnvironmentList.format(p.planned));
             pm.meta(p.meta);
         }
     }
@@ -468,7 +475,9 @@ public final class AsCodeWriter {
             if (t.data != null) {
                 writeXml(dir.resolve(file), t.data);
             }
-            Manifest tm = m.child("template").attr("name", t.name).attr("file", "templates/" + file);
+            Manifest tm = m.child("template").attr("name", t.name).attr("file", "templates/" + file)
+                .attr("environments", com.pointblue.dirxml.dev.model.EnvironmentList.format(t.environments))
+                .attr("planned", com.pointblue.dirxml.dev.model.EnvironmentList.format(t.planned));
             if (t.subject != null) {
                 tm.attr("subject", t.subject);
             }

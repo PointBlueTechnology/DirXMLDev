@@ -15,8 +15,8 @@ public abstract class Artifact {
 
     public final String name;
     public final Scope scope;
-    /** Owning driver name; null for library scope. */
-    public final String driver;
+    /** Owning driver name; null for library scope. Changed only by {@link DriverSet#renameDriver}. */
+    public String driver;
     /** Source-specific extras preserved losslessly (package ids, Designer ids, DN…). */
     public final Map<String, String> meta = new LinkedHashMap<>();
 

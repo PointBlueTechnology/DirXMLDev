@@ -62,9 +62,12 @@ public final class Cli {
                 // import-live <driverSetDN> <outDir>                    (connection from -Dldap.url/-Dldap.bindDn/-Dldap.password)
                 java.util.List<String> positional = new java.util.ArrayList<>();
                 String envName = null;
+                boolean markNewDrivers = false;
                 for (int i = 1; i < args.length; i++) {
                     if (args[i].equals("--env") && i + 1 < args.length) {
                         envName = args[++i];
+                    } else if (args[i].equals("--mark-new-drivers")) {
+                        markNewDrivers = true;
                     } else {
                         positional.add(args[i]);
                     }
@@ -78,7 +81,7 @@ public final class Cli {
                     driverSetDn = positional.size() >= 2 ? positional.get(0) : env.driverSetDn;
                 } else {
                     if (positional.size() < 2) {
-                        System.err.println("usage: import-live [<driverSetDN>] <outDir> --env NAME   |   import-live <driverSetDN> <outDir> (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
+                        System.err.println("usage: import-live [<driverSetDN>] <outDir> --env NAME [--mark-new-drivers]   |   import-live <driverSetDN> <outDir> (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
                         System.exit(2);
                     }
                     c = new com.pointblue.dirxml.dev.deploy.Vault.Config();
@@ -89,7 +92,7 @@ public final class Cli {
                     driverSetDn = positional.get(0);
                 }
                 if (positional.isEmpty()) {
-                    System.err.println("usage: import-live [<driverSetDN>] <outDir> --env NAME   |   import-live <driverSetDN> <outDir> (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
+                    System.err.println("usage: import-live [<driverSetDN>] <outDir> --env NAME [--mark-new-drivers]   |   import-live <driverSetDN> <outDir> (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
                     System.exit(2);
                 }
                 Path outDir = Paths.get(positional.get(positional.size() - 1));
@@ -110,9 +113,22 @@ public final class Cli {
                         }
                     }
                 }
+                // drivers named differently in this vault take the tree's names; the tree's drivers this environment
+                // doesn't get stay; a driver new to the tree is marked as this environment's only with --mark-new-drivers
+                com.pointblue.dirxml.dev.model.DriverSet base = envName != null && java.nio.file.Files.isRegularFile(outDir.resolve(com.pointblue.dirxml.dev.ascode.AsCodeWriter.DRIVERSET_MANIFEST))
+                    ? com.pointblue.dirxml.dev.ascode.AsCodeReader.read(outDir) : null;
+                if (base != null) {
+                    for (String n : com.pointblue.dirxml.dev.deploy.Overrides.toTreeNames(live, base.overrides.get(envName))) {
+                        System.err.println("note: " + n);
+                    }
+                    for (String n : com.pointblue.dirxml.dev.deploy.ServerMap.toTree(live, base.overrides.get(envName), base)) {
+                        System.err.println("note: " + n);
+                    }
+                    for (String n : com.pointblue.dirxml.dev.deploy.DriverEnvironments.keepOnImport(live, envName, base, markNewDrivers, null)) {
+                        System.err.println("note: " + n);
+                    }
+                }
                 if (envName != null && java.nio.file.Files.isDirectory(outDir.resolve(com.pointblue.dirxml.dev.deploy.Overrides.DIR))) {
-                    com.pointblue.dirxml.dev.model.DriverSet base = java.nio.file.Files.isRegularFile(outDir.resolve(com.pointblue.dirxml.dev.ascode.AsCodeWriter.DRIVERSET_MANIFEST))
-                        ? com.pointblue.dirxml.dev.ascode.AsCodeReader.read(outDir) : null;
                     live.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(outDir));
                     for (String n : com.pointblue.dirxml.dev.deploy.Overrides.foldBack(live, envName, base)) {
                         System.err.println("override: " + n);
@@ -465,6 +481,7 @@ public final class Cli {
         System.err.println("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
         System.err.println("  vault.diff <tree> --env E [--driver D…] [--json]     the tree vs the live vault (exit 1 if they differ; docs/vault-deploy.md)");
         System.err.println("  vault.verify <tree> --env E [--driver D…] [--json]   same diff, read after a deploy");
+        System.err.println("  vault.compare-envs [<tree>] --env A --with B [--json]  two environments' vaults: drivers in one only, values, other drift");
         System.err.println("  vault.deploy <tree> --env E [--driver D…] --dry-run|--yes|--step [--confirm E] [--no-restart] [--secrets none|missing|all]");
         System.err.println("               [--allow-missing-secrets] [--capture-drift] [--capture-only] [--base-branch B] [--delete-driver D…] [--delete-all entitlements|jobs|rbe-policies|templates|forms|prds|roles|entities|<object kind>s…] [--json]");
         System.err.println("                                        plan → snapshot → write → restart → verify → audit line; never deletes a driver without --delete-driver");

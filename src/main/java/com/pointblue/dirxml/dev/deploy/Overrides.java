@@ -46,6 +46,8 @@ import java.util.stream.Stream;
 public final class Overrides {
 
     public static final String DIR = "overrides";
+    /** {@code drivers/<driver>.name = <name>}: the name this environment's vault gives the driver, when it differs from the tree's. */
+    public static final String NAME = "name";
     public static final String EXT = ".properties";
 
     private Overrides() {
@@ -106,7 +108,8 @@ public final class Overrides {
 
     public static String format(String env, Map<String, String> values) {
         StringBuilder sb = new StringBuilder("# Values for environment '" + env + "' that differ from the tree's base values.\n"
-            + "# key = value; keys: drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, .shim-auth-server, .shim-auth-id; driverset.gcv.<name>\n");
+            + "# key = value; keys: drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, .shim-auth-server, .shim-auth-id, .name; driverset.gcv.<name>;\n"
+            + "# servers.<tree server's name> = <this environment's server's DN> (and servers.<its server's name>.prefer = <tree server's name>)\n");
         for (Map.Entry<String, String> e : new TreeMap<>(values).entrySet()) {
             if (!e.getKey().startsWith("?")) {
                 sb.append(e.getKey()).append(" = ").append(e.getValue()).append('\n');
@@ -127,6 +130,11 @@ public final class Overrides {
         public final Driver driver;
         public final String setting;
         public final String problem;
+        /** A job's {@code <job-definition>} and the attribute an override sets on it ({@code schedule}, {@code disabled}). */
+        public Element jobDefinition;
+        public String jobAttribute;
+        /** A job's trace setting an override sets, kept in its manifest ({@code trace-level}, {@code trace-file}, {@code trace-size-limit}). */
+        public com.pointblue.dirxml.dev.model.Job job;
 
         Target(Element definition, String problem) {
             this(definition, null, null, problem);
@@ -147,21 +155,61 @@ public final class Overrides {
             return problem == null;
         }
 
+        static Target ofJobTrace(com.pointblue.dirxml.dev.model.Job job, String key) {
+            Target t = new Target(null, null, "job:" + key, null);
+            t.job = job;
+            t.jobAttribute = key;
+            return t;
+        }
+
+        static Target ofJob(Element jobDefinition, String attribute) {
+            Target t = new Target(null, null, "job:" + attribute, null);
+            t.jobDefinition = jobDefinition;
+            t.jobAttribute = attribute;
+            return t;
+        }
+
         /** The value the model holds for the key, or null when it holds none. */
         public String value() {
+            if (job != null) {
+                return job.meta.get(jobAttribute);
+            }
+            if (jobDefinition != null) {
+                return jobDefinition.hasAttribute(jobAttribute) ? jobDefinition.getAttribute(jobAttribute) : null;
+            }
             if (definition != null) {
                 return valueOf(definition);
             }
             if (driver == null) {
                 return null;
             }
+            if (NAME.equals(setting)) {
+                return driver.name;
+            }
             return Driver.SHIM_AUTH_SERVER.equals(setting) ? driver.shimAuthServer : driver.shimAuthId;
         }
 
         public void set(String value) {
+            if (job != null) {
+                if (value == null || value.isEmpty()) {
+                    job.meta.remove(jobAttribute);
+                } else {
+                    job.meta.put(jobAttribute, value);
+                }
+                return;
+            }
+            if (jobDefinition != null) {
+                // an empty schedule removes it: the job runs only when started
+                if (value == null || value.isEmpty()) {
+                    jobDefinition.removeAttribute(jobAttribute);
+                } else {
+                    jobDefinition.setAttribute(jobAttribute, value);
+                }
+                return;
+            }
             if (definition != null) {
                 setValue(definition, value);
-            } else if (driver != null) {
+            } else if (driver != null && !NAME.equals(setting)) {   // a name is applied by renaming, never set
                 if (Driver.SHIM_AUTH_SERVER.equals(setting)) {
                     driver.shimAuthServer = value;
                 } else {
@@ -175,6 +223,26 @@ public final class Overrides {
         if (key.startsWith("?")) {
             return new Target(null, "not a 'key = value' line");
         }
+        if (ServerMap.isKey(key)) {
+            boolean prefer = key.endsWith(ServerMap.PREFER);
+            String server = key.substring(ServerMap.PREFIX.length(), key.length() - (prefer ? ServerMap.PREFER.length() : 0));
+            if (prefer) {
+                return new Target(null, null, ServerMap.PREFIX, null);   // names this environment's server; checked against the map by the setup
+            }
+            return ServerMap.server(ds.servers, server) != null ? new Target(null, null, ServerMap.PREFIX, null)
+                : new Target(null, "the tree names no server '" + server + "' (driverset.xml; a key names a server by its name, e.g. "
+                    + (ds.servers.isEmpty() ? "vault01" : Servers.dirName(ds.servers.get(0))) + ")");
+        }
+        if (key.startsWith("driverset.job.")) {
+            return jobTarget(ds.jobs, key.substring("driverset.job.".length()), "the driver set");
+        }
+        if (key.startsWith("drivers/") && key.indexOf(".job.") > "drivers/".length()) {
+            int at = key.indexOf(".job.");
+            Driver d = ds.driver(key.substring("drivers/".length(), at));
+            if (d != null) {
+                return jobTarget(d.jobs, key.substring(at + ".job.".length()), "driver '" + d.name + "'");
+            }
+        }
         if (key.startsWith("driverset.gcv.")) {
             String name = key.substring("driverset.gcv.".length());
             GcvOps.Home home = GcvOps.find(ds, null, name, ds.index());
@@ -185,6 +253,12 @@ public final class Overrides {
                 + "drivers/<driver>." + Driver.SHIM_AUTH_SERVER + ", drivers/<driver>." + Driver.SHIM_AUTH_ID + " or driverset.gcv.");
         }
         String rest = key.substring("drivers/".length());
+        // the name this environment's vault gives the driver: applied by renames(), after the values
+        if (isName(key)) {
+            String driverName = rest.substring(0, rest.length() - NAME.length() - 1);
+            Driver d = ds.driver(driverName);
+            return d == null ? new Target(null, "no driver '" + driverName + "' in the tree") : Target.ofSetting(d, NAME);
+        }
         // the driver's own settings: drivers/<driver>.shim-auth-server, drivers/<driver>.shim-auth-id
         for (String setting : List.of(Driver.SHIM_AUTH_SERVER, Driver.SHIM_AUTH_ID)) {
             if (rest.endsWith("." + setting)) {
@@ -229,6 +303,42 @@ public final class Overrides {
         }
     }
 
+    /** Job attributes an override can set: when it runs, whether it is switched off ({@code <job-definition>}), and its trace. */
+    public static final List<String> JOB_ATTRIBUTES = List.of("schedule", "disabled", "trace-level", "trace-file", "trace-size-limit");
+    private static final List<String> JOB_TRACE = List.of("trace-level", "trace-file", "trace-size-limit");
+
+    /** {@code <job>.schedule} / {@code <job>.disabled} among {@code jobs}. */
+    private static Target jobTarget(List<com.pointblue.dirxml.dev.model.Job> jobs, String rest, String owner) {
+        int dot = rest.lastIndexOf('.');
+        String attribute = dot < 0 ? "" : rest.substring(dot + 1);
+        String name = dot < 0 ? rest : rest.substring(0, dot);
+        if (!JOB_ATTRIBUTES.contains(attribute)) {
+            return new Target(null, "a job key ends in ." + String.join(" or .", JOB_ATTRIBUTES));
+        }
+        for (com.pointblue.dirxml.dev.model.Job j : jobs) {
+            if (j.name.equals(name) && JOB_TRACE.contains(attribute)) {
+                return Target.ofJobTrace(j, attribute);
+            }
+            if (j.name.equals(name)) {
+                Element def = jobDefinition(j);
+                return def == null ? new Target(null, "job '" + name + "' has no definition") : Target.ofJob(def, attribute);
+            }
+        }
+        return new Target(null, owner + " has no job '" + name + "'");
+    }
+
+    /** A job's {@code <job-definition>}: the document itself (Designer's) or the first inside its {@code <job-aggregation>}. */
+    public static Element jobDefinition(com.pointblue.dirxml.dev.model.Job j) {
+        if (j.definition == null) {
+            return null;
+        }
+        if ("job-definition".equals(j.definition.getLocalName() == null ? j.definition.getNodeName() : j.definition.getLocalName())) {
+            return j.definition;
+        }
+        List<Element> defs = Dom.childrenByName(j.definition, "job-definition");
+        return defs.isEmpty() ? null : defs.get(0);
+    }
+
     /** The scalar value a definition holds ({@code <value>} text), or null when it has none. */
     public static String valueOf(Element definition) {
         List<Element> values = Dom.childrenByName(definition, "value");
@@ -270,41 +380,184 @@ public final class Overrides {
         public final String env;
         public final List<String> applied = new ArrayList<>();
         public final List<String> problems = new ArrayList<>();
+        /** Drivers the tree doesn't deploy to this environment ({@link DriverEnvironments}), left out of the model. */
+        public final List<String> notDeployed = new ArrayList<>();
+        /** Entitlement policies, templates and jobs the tree doesn't deploy to this environment, by tree path. */
+        public final List<String> notDeployedObjects = new ArrayList<>();
+        /** Of those (drivers by name, objects by path), the ones planned for this environment: waiting for promotion. */
+        public final List<String> plannedHere = new ArrayList<>();
+        /** The tree's name to this environment's, for drivers its vault names differently. */
+        public final Map<String, String> renamed = new java.util.LinkedHashMap<>();
+        /** The tree's servers to this environment's ({@link ServerMap}); empty for the base environment. */
+        public final Map<String, String> serverMap = new java.util.LinkedHashMap<>();
+
+        /** Names a scoped request gave (the tree's) as this environment's model now has them. */
+        public List<String> vaultNames(java.util.Collection<String> treeNames) {
+            if (treeNames == null) {
+                return null;
+            }
+            List<String> out = new ArrayList<>();
+            for (String n : treeNames) {
+                out.add(renamed.getOrDefault(n, n));
+            }
+            return out;
+        }
+
+        /**
+         * {@code diff} without removals of objects the tree doesn't deploy here: "this environment doesn't get it" means
+         * a deploy leaves that environment's own copy alone, never that it deletes one, as with drivers only in the vault.
+         */
+        public ModelDiff leaveAlone(ModelDiff diff) {
+            if (notDeployedObjects.isEmpty()) {
+                return diff;
+            }
+            return diff.only(ch -> !(ch.kind.name().endsWith("_REMOVED") && notDeployedObjects.contains(ch.path)));
+        }
+
+        /**
+         * {@code diff} without anything about what the tree doesn't deploy here, in either direction: a driver or object
+         * this environment doesn't get is not drift, whether or not the environment holds a copy of its own.
+         */
+        public ModelDiff ignoreNotDeployed(ModelDiff diff) {
+            if (notDeployed.isEmpty() && notDeployedObjects.isEmpty()) {
+                return diff;
+            }
+            return diff.only(ch -> !notDeployedObjects.contains(ch.path) && (ch.driver == null || !notDeployed.contains(ch.driver)));
+        }
+
+        /** The refusal for a scoped request naming drivers this environment doesn't get, or null. */
+        public String refusalFor(java.util.Collection<String> treeNames) {
+            if (treeNames == null) {
+                return null;
+            }
+            List<String> named = new ArrayList<>();
+            for (String n : treeNames) {
+                if (notDeployed.contains(n)) {
+                    named.add("'" + n + "'");
+                }
+            }
+            return named.isEmpty() ? null : String.join(", ", named) + (named.size() == 1 ? " is" : " are") + " not deployed to '" + env
+                + "' (driver.xml environments). Add " + env + " to " + (named.size() == 1 ? "its" : "their") + " environments to deploy " + (named.size() == 1 ? "it" : "them") + " there.";
+        }
 
         Applied(String env) {
             this.env = env;
         }
 
         public String summary() {
-            if (applied.isEmpty() && problems.isEmpty()) {
-                return null;
+            List<String> parts = new ArrayList<>();
+            if (!applied.isEmpty() || !problems.isEmpty()) {
+                parts.add("overrides for '" + env + "': " + applied.size() + " value(s) applied from " + DIR + "/" + env + EXT
+                    + (problems.isEmpty() ? "" : "; not applied: " + String.join("; ", problems)));
             }
-            return "overrides for '" + env + "': " + applied.size() + " value(s) applied from " + DIR + "/" + env + EXT
-                + (problems.isEmpty() ? "" : "; not applied: " + String.join("; ", problems));
+            if (!notDeployed.isEmpty()) {
+                parts.add("not deployed to '" + env + "' (driver.xml environments): " + String.join(", ", notDeployed));
+            }
+            if (!notDeployedObjects.isEmpty()) {
+                parts.add(notDeployedObjects.size() + " other object(s) not deployed to '" + env + "' (environments)");
+            }
+            if (!plannedHere.isEmpty()) {
+                parts.add("planned for '" + env + "', not promoted yet: " + String.join(", ", plannedHere));
+            }
+            return parts.isEmpty() ? null : String.join("; ", parts);
         }
     }
 
     /**
-     * Put environment {@code env}'s values into the model, in place: the model is a throwaway read
-     * of the tree that a diff or a deploy compares and writes, never written back as the tree.
-     * An environment without a file applies nothing.
+     * Put environment {@code env}'s values into the model, in place, and take out the drivers {@code env}
+     * doesn't get ({@link DriverEnvironments}): the model is a throwaway read of the tree that a diff or a
+     * deploy compares and writes, never written back as the tree. An environment without a file applies
+     * no values.
      */
     public static Applied apply(DriverSet ds, String env) {
-        Applied a = new Applied(env);
+        Applied a = applyValues(ds, env);
+        List<String> planned = DriverEnvironments.plannedFor(ds, env);
         Map<String, String> values = ds.overrides.get(env);
-        if (values == null) {
-            return a;
-        }
-        for (Map.Entry<String, String> e : values.entrySet()) {
-            Target t = resolve(ds, e.getKey());
-            if (!t.resolved()) {
-                a.problems.add(e.getKey() + " (" + t.problem + ")");
+        // the drivers this environment doesn't get leave the model after the values, so a value set for one is still placed
+        a.notDeployed.addAll(DriverEnvironments.filter(ds, env));
+        a.plannedHere.addAll(planned);
+        a.notDeployedObjects.addAll(DriverEnvironments.filterObjects(ds, env));
+        // and the names this environment's vault uses come last: every key above names the tree's driver
+        for (Map.Entry<String, String> r : renames(values).entrySet()) {
+            if (a.notDeployed.contains(r.getKey())) {
                 continue;
             }
-            t.set(e.getValue());
-            a.applied.add(e.getKey());
+            if (ds.renameDriver(r.getKey(), r.getValue())) {
+                a.renamed.put(r.getKey(), r.getValue());
+                a.applied.add("drivers/" + r.getKey() + "." + NAME);
+            } else if (!r.getKey().equals(r.getValue())) {
+                a.problems.add("drivers/" + r.getKey() + "." + NAME + " (" + (ds.driver(r.getKey()) == null
+                    ? "no driver '" + r.getKey() + "' in the tree" : "the tree already has a driver '" + r.getValue() + "'") + ")");
+            }
+        }
+        // the tree's servers as this environment's (several onto one where it has fewer)
+        a.serverMap.putAll(ServerMap.of(values, ds.servers));
+        a.problems.addAll(ServerMap.apply(ds, values));
+        return a;
+    }
+
+    /**
+     * Environment {@code env}'s values alone, every driver kept under the tree's name: for the simulator,
+     * whose cases name the tree's drivers.
+     */
+    public static Applied applyValues(DriverSet ds, String env) {
+        Applied a = new Applied(env);
+        Map<String, String> values = ds.overrides.get(env);
+        if (values != null) {
+            for (Map.Entry<String, String> e : values.entrySet()) {
+                if (isName(e.getKey()) || ServerMap.isKey(e.getKey())) {
+                    continue;
+                }
+                Target t = resolve(ds, e.getKey());
+                if (!t.resolved()) {
+                    a.problems.add(e.getKey() + " (" + t.problem + ")");
+                    continue;
+                }
+                t.set(e.getValue());
+                a.applied.add(e.getKey());
+            }
         }
         return a;
+    }
+
+    /** True for {@code drivers/<driver>.name}. */
+    public static boolean isName(String key) {
+        if (!key.startsWith("drivers/") || !key.endsWith("." + NAME) || key.length() <= "drivers/".length() + NAME.length() + 1) {
+            return false;
+        }
+        // drivers/AD.gcv.drv.domain.dns.name is a GCV called drv.domain.dns.name, not a name
+        String driver = key.substring("drivers/".length(), key.length() - NAME.length() - 1);
+        return !driver.contains(".gcv.") && !driver.contains(".shim.") && !driver.contains(".ecv.") && !driver.contains(".job.");
+    }
+
+    /** An environment file's {@code drivers/<driver>.name} lines: the tree's name to the name in that vault, in file order. */
+    public static Map<String, String> renames(Map<String, String> values) {
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        if (values != null) {
+            for (Map.Entry<String, String> e : values.entrySet()) {
+                if (isName(e.getKey()) && !e.getValue().isBlank()) {
+                    out.put(e.getKey().substring("drivers/".length(), e.getKey().length() - NAME.length() - 1), e.getValue().trim());
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A model read from {@code env}'s vault, its drivers given the tree's names ({@code drivers/<tree>.name =
+     * <vault>} read backwards), in place, so it compares with or folds into the tree. Returns notes.
+     */
+    public static List<String> toTreeNames(DriverSet live, Map<String, String> values) {
+        List<String> notes = new ArrayList<>();
+        for (Map.Entry<String, String> r : renames(values).entrySet()) {
+            if (live.driver(r.getValue()) == null) {
+                continue;
+            }
+            if (!live.renameDriver(r.getValue(), r.getKey())) {
+                notes.add("'" + r.getValue() + "' was not given the tree's name '" + r.getKey() + "': the vault has a driver of that name too");
+            }
+        }
+        return notes;
     }
 
     /**
@@ -321,6 +574,9 @@ public final class Overrides {
             return notes;
         }
         for (Map.Entry<String, String> e : new ArrayList<>(values.entrySet())) {
+            if (isName(e.getKey()) || ServerMap.isKey(e.getKey())) {
+                continue;   // a name or a server stays as the file has it: the import already used it
+            }
             Target t = resolve(live, e.getKey());
             if (!t.resolved()) {
                 notes.add(e.getKey() + ": " + t.problem + " (left as recorded)");
