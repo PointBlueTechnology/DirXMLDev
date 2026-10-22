@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-10-22
+
 ### Changed
 
 - **`bin/apps` reads the environments the way `bin/idm` does.** Without `--props` it reads
