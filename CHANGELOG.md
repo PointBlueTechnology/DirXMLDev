@@ -7,6 +7,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- **`bin/apps` reads the environments the way `bin/idm` does.** Without `--props` it reads
+  `IDM_ENVIRONMENTS` (or `./environments.properties`), then the person's own `IDM_CREDENTIALS` when
+  set, whose lines win: the split a team server and the DirXMLDevWeb container keep.
+
 ## [0.49.0] - 2026-10-20
 
 ### Added

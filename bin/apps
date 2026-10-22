@@ -3,6 +3,7 @@
 request history — without a browser. Python 3 standard library only.
 
     bin/apps --env <name> [--props environments.properties] <command> [args]
+    (without --props: IDM_ENVIRONMENTS or ./environments.properties, then IDM_CREDENTIALS, as bin/idm reads them)
 
 The environment's keys (same file as vault.deploy; never committed):
     <env>.formsUrl      https://<identity applications host>
@@ -41,17 +42,31 @@ import argparse, base64, json, os, ssl, sys, time, urllib.error, urllib.parse, u
 PRD_SUFFIX = ",cn=RequestDefs,cn=AppConfig,cn=User Application Driver,cn=driverset1,o=system"
 
 
-def read_props(path, env):
+def default_props():
+    """What bin/idm reads when no file is named: IDM_ENVIRONMENTS (or ./environments.properties), then the
+    person's own IDM_CREDENTIALS when set, whose lines win (the split a team server and the container keep)."""
+    paths = [os.environ.get("IDM_ENVIRONMENTS") or "environments.properties"]
+    mine = os.environ.get("IDM_CREDENTIALS")
+    if mine and os.path.isfile(mine):
+        paths.append(mine)
+    return paths
+
+
+def read_props(paths, env):
+    if isinstance(paths, str):
+        paths = [paths]
     props = {}
-    warn_if_shared(path)
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            if k.startswith(env + "."):
-                props[k[len(env) + 1:]] = v.strip()
+    for path in paths:
+        warn_if_shared(path)
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                if k.startswith(env + "."):
+                    props[k[len(env) + 1:]] = v.strip()
+    path = " and ".join(paths)
     missing = [k for k in ("formsUrl", "appsUser") if k not in props]
     if missing:
         sys.exit("environment '%s' lacks %s in %s" % (env, ", ".join(env + "." + m for m in missing), path))
@@ -185,13 +200,13 @@ def fault(r):
 def main(argv):
     ap = argparse.ArgumentParser(prog="bin/apps", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--env", required=True)
-    ap.add_argument("--props", default="environments.properties")
+    ap.add_argument("--props", default=None, help="the environments file (default: IDM_ENVIRONMENTS or ./environments.properties, plus IDM_CREDENTIALS)")
     ap.add_argument("--json", action="store_true", help="print the raw response")
     ap.add_argument("--insecure", action="store_true", help="skip TLS verification (labs with private CAs)")
     ap.add_argument("command")
     ap.add_argument("args", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
-    apps = Apps(read_props(a.props, a.env), a.insecure)
+    apps = Apps(read_props(a.props if a.props else default_props(), a.env), a.insecure)
     cmd, rest = a.command, a.args
 
     def sub(extra):
