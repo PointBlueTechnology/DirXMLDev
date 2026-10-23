@@ -1,7 +1,9 @@
 # Event store: design note
 
 Status: **built 2026-10-07** against Event Logger 2.0.0's contract (`docs/store.md`). Sections 1–7 describe what is built; section 10 is the CLI as it is. The
-overall plan is DirXMLDevWeb's `docs/event-logger.md`; this note is the core's half (C1 there).
+workbench's half is DirXMLDevWeb's Events view (its `docs/features.md`); the two steps left from
+the overall plan, the logger as a catalog package and a Library resource for capturing samples at
+a stage, are DirXMLDevWeb issues #164 and #165.
 
 The store is the PostgreSQL table the
 [DirXMLEventLogger](https://github.com/jcombs-pointblue/DIrXMLEventLogger) driver writes:
