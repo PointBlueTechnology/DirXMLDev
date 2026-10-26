@@ -421,13 +421,13 @@ public final class Promote {
     /** The manifest that lists a tree file. */
     static String manifestOf(String path) {
         String[] parts = path.split("/");
-        if (parts.length >= 3 && parts[0].equals("drivers")) {
+        if (parts.length >= 3 && parts[0].equals("drivers") && !(parts.length == 3 && parts[2].equals(AsCodeWriter.DRIVER_MANIFEST))) {
             return "drivers/" + parts[1] + "/" + AsCodeWriter.DRIVER_MANIFEST;
         }
-        if (parts.length >= 2 && parts[0].equals("library")) {
+        if (parts.length >= 2 && parts[0].equals("library") && !path.equals("library/" + AsCodeWriter.LIBRARY_MANIFEST)) {
             return "library/" + AsCodeWriter.LIBRARY_MANIFEST;
         }
-        return AsCodeWriter.DRIVERSET_MANIFEST;
+        return AsCodeWriter.DRIVERSET_MANIFEST;   // the drivers, the Library and the set's own objects
     }
 
     private static List<Finding> newErrors(Report before, Report after) {
