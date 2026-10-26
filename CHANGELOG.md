@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-10-26
+
 ### Added
 
 - **Cases move with their driver** (docs/promotion.md): when both projects have simulator cases,
