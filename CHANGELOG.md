@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-10-26
+
 ### Added
 
 - **A project per environment: compare and promote** ([docs/promotion.md](docs/promotion.md)).
