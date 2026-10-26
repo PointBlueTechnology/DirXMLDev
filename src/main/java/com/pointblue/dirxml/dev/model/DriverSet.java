@@ -15,7 +15,8 @@ import java.util.Objects;
  */
 public final class DriverSet {
 
-    public final String name;
+    /** Not final: a promotion gives a source project's model the target's identity ({@code promote}). */
+    public String name;
     public String dn;
     /** Raw driver-set {@code <configuration-values>} (GCVs), or null. */
     public Element configValues;
