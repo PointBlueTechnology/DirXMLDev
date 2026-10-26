@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
@@ -248,17 +249,7 @@ public final class Promote {
                 r.refusal = "the promoted tree can't be read: " + e.getMessage();
                 return r;
             }
-            // values: the target's, but for the ones chosen
-            for (Map.Entry<String, String> e : s.targetValues.entrySet()) {
-                Overrides.Target t = Overrides.resolve(after, e.getKey());
-                if (!t.resolved()) {
-                    continue;
-                }
-                String want = values.contains(e.getKey()) ? s.sourceValues.get(e.getKey()) : e.getValue();
-                if (!Objects.equals(t.value(), want)) {
-                    t.set(want == null && t.definition != null ? "" : want);
-                }
-            }
+            restoreValues(after, s, values);
 
             AsCodeWriter.write(after, out);
             Map<String, byte[]> produced = Sides.read(out);
@@ -355,6 +346,75 @@ public final class Promote {
             Sides.delete(sourceWritten);
             Sides.delete(work);
             Sides.delete(out);
+        }
+    }
+
+    /** The target's values back in a promoted model, but for the ones chosen, which take the source's. */
+    private static void restoreValues(DriverSet after, Sides s, Set<String> chosen) {
+        for (Map.Entry<String, String> e : s.targetValues.entrySet()) {
+            Overrides.Target t = Overrides.resolve(after, e.getKey());
+            if (!t.resolved()) {
+                continue;
+            }
+            String want = chosen.contains(e.getKey()) ? s.sourceValues.get(e.getKey()) : e.getValue();
+            if (!Objects.equals(t.value(), want)) {
+                t.set(want == null && t.definition != null ? "" : want);
+            }
+        }
+    }
+
+    /** A comparison with, for each differing file, its bytes in the target now and once promoted (null: that side has none). */
+    public static final class Preview {
+        public final ProjectCompare compare;
+        public final Map<String, byte[]> before = new TreeMap<>();
+        public final Map<String, byte[]> after = new TreeMap<>();
+
+        Preview(ProjectCompare compare) {
+            this.compare = compare;
+        }
+    }
+
+    /**
+     * What a review shows: every differing file as the target has it and as a promotion of it writes it, the source's
+     * logic with the target's values (no value chosen). A file whose promotion depends on its manifest is shown as the
+     * whole of the source's files promoted together write it.
+     */
+    public static Preview preview(Path target, Path source, String pairName) throws IOException {
+        Pair pair = Pair.read(target, pairName);
+        Sides s = Sides.read(target, source, pair.map);
+        Preview pv = new Preview(ProjectCompare.of(s, pair));
+        Path sourceWritten = Files.createTempDirectory("idm-promote-src");
+        Path work = Files.createTempDirectory("idm-promote-work");
+        try {
+            AsCodeWriter.write(s.source, sourceWritten);
+            copyTree(target, work);
+            for (ProjectCompare.Item i : pv.compare.items) {
+                if (i.value) {
+                    continue;
+                }
+                Path t = target.resolve(i.path);
+                pv.before.put(i.path, Files.isRegularFile(t) ? Files.readAllBytes(t) : null);
+                Path from = sourceWritten.resolve(i.path);
+                Path w = work.resolve(i.path);
+                if (Files.isRegularFile(from)) {
+                    Files.createDirectories(w.getParent());
+                    Files.copy(from, w, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                } else {
+                    Files.deleteIfExists(w);
+                }
+            }
+            DriverSet after = AsCodeReader.read(work);
+            restoreValues(after, s, Set.of());
+            Map<String, byte[]> produced = Sides.written(after);
+            for (ProjectCompare.Item i : pv.compare.items) {
+                if (!i.value) {
+                    pv.after.put(i.path, produced.get(i.path));
+                }
+            }
+            return pv;
+        } finally {
+            Sides.delete(sourceWritten);
+            Sides.delete(work);
         }
     }
 
