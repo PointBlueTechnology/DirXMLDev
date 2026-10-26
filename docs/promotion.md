@@ -68,6 +68,12 @@ written as files again. Then:
 - **Values** are compared on their own, key by key, as an overrides file keys
   them (`drivers/AD.gcv.drv.users`). Only values both sides hold are listed. A
   value only one side has comes with its file.
+- **Cases** are compared too, when both projects have them: each file of a
+  simulator case compares as `cases/<its path>`, and a case's `driver=` is read
+  as the target names the driver. A case belongs to its driver: choosing a
+  driver's directory (`--object drivers/AD`) brings its cases with it. By
+  default the cases are `<tree>/cases`, or `cases/` beside a `tree/` directory;
+  `--cases` and `--source-cases` name others.
 - Not compared: `overrides/`, `promotions/` and anything starting with `.`
   (`.package-baseline/`, `.gitattributes`). A promoted file's package
   baseline goes with it.
@@ -136,19 +142,41 @@ target's name, or null), `bucket`, `state` (`differs`, `only in the source`,
 and either `detail` (the changed lines, target `-` to source `+`, with two lines
 of context) or `source` and `target` (the two values).
 
+### `promote.map`
+
+```
+idm promote.map <target> --from <source> [--name <pair>]
+```
+
+Prints a map to start from, in the map file's form, and writes nothing. It
+starts from the pair's own lines, if any. Then:
+
+- a `drivers/<source's name>.name = <target's name>` line for each source
+  driver that looks like one only the target has (the same shim, a similar name,
+  policies in common);
+- when the map names no server and the two sides' servers differ, each source
+  server onto the target server with the nearest name.
+
+Review it before you use it.
+
 ### `promote.pair`
 
 ```
-idm promote.pair <target> --from <source> [--name <pair>] [--dry-run] [--force] [--by <who>] [--json]
+idm promote.pair <target> --from <source> [--name <pair>] [--propose-map] [--pending <path or key>]… [--accept <path or key>]… [--dry-run] [--force] [--by <who>] [--json]
 ```
 
 Takes the first record: every file and value of both sides as they are now,
-including the ones that differ. From then on only new changes show. Write the
-map first. Refused if the pair already has a record, unless `--force`, which
-starts the record over.
+including the ones that differ. From then on only new changes show. Refused if
+the pair already has a record, unless `--force`, which starts the record over.
+
+| Option | Accepted values |
+|---|---|
+| `--propose-map` | writes `promote.map`'s proposal as the map and pairs with it |
+| `--pending` | a difference to leave pending: recorded as the target has it, so the source's side shows as changed. Repeatable |
+| `--accept` | a difference to accept as known (`intended`). Repeatable |
 
 ```bash
-bin/idm promote.pair acme-prod/tree --from acme-qa/tree --by jdoe
+bin/idm promote.pair acme-prod/tree --from acme-qa/tree --propose-map --pending "drivers/AD/subscriber/sub-ctp.policy.xml" --by jdoe
 ```
 
 ### `promote.plan` and `promote.apply`
@@ -223,7 +251,6 @@ bin/idm promote.accept acme-prod/tree --from acme-qa/tree --object "drivers/AD/s
 
 ## Limits
 
-- **Cases:** `cases/` are not promoted yet.
 - **Environment lists:** a driver's or object's `environments` and `planned`
   lists move with its manifest as they are.
 - **Renaming a driver in the map:** the record names objects by the target's
