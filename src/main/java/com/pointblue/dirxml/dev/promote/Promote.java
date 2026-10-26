@@ -532,6 +532,8 @@ public final class Promote {
     public static final class Pairing {
         /** Written as {@code promotions/<source>.properties} when not null (else the pair's file, as it is, is used). */
         public Map<String, String> map;
+        /** The map as a person wrote it, comments and all: written as it is, and read for {@link #map}. */
+        public String mapText;
         /** Differences (files or values) left to promote: recorded as the target has them, the source's side unknown. */
         public final Set<String> pending = new TreeSet<>();
         /** Differences accepted as they are: path to {@code {decision, note}}. */
@@ -547,6 +549,9 @@ public final class Promote {
         Path target = projects.target();
         Result r = new Result("promote.pair");
         r.dryRun = dryRun;
+        if (choices.mapText != null) {
+            choices.map = Overrides.parse(choices.mapText);
+        }
         Projects p = choices.map == null ? projects : projects.withMap(choices.map);
         Pair pair = p.readPair();
         if (!pair.record.isEmpty() && !force) {
@@ -602,7 +607,8 @@ public final class Promote {
         if (!dryRun) {
             if (choices.map != null) {
                 Files.createDirectories(target.resolve(Pair.DIR));
-                Files.writeString(target.resolve(Pair.DIR).resolve(pair.name + Overrides.EXT), Pair.formatMap(choices.map), StandardCharsets.UTF_8);
+                Files.writeString(target.resolve(Pair.DIR).resolve(pair.name + Overrides.EXT),
+                    choices.mapText != null ? choices.mapText : Pair.formatMap(choices.map), StandardCharsets.UTF_8);
             }
             pair.write(target);
         }
