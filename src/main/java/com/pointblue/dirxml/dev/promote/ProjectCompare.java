@@ -113,8 +113,12 @@ public final class ProjectCompare {
     }
 
     public static ProjectCompare of(Path target, Path source, String pairName) throws IOException {
-        Pair pair = Pair.read(target, pairName);
-        return of(Sides.read(target, source, pair.map), pair);
+        return of(Projects.of(target, source, pairName));
+    }
+
+    public static ProjectCompare of(Projects projects) throws IOException {
+        Pair pair = projects.readPair();
+        return of(projects.sides(pair), pair);
     }
 
     static ProjectCompare of(Sides s, Pair pair) {
@@ -147,6 +151,57 @@ public final class ProjectCompare {
         }
         c.matches.addAll(EnvironmentCompare.matches(s.source, s.target, pair.name, Pair.nameOf(s.targetTree)));
         return c;
+    }
+
+    /**
+     * A map to start a pair from: the pair's own lines, then for each source driver that looks like one only the target
+     * has ({@link EnvironmentCompare#matches}) a {@code drivers/<source's>.name = <target's>} line, and, when the map
+     * names no server and the two sides' servers differ, each source server onto the target server whose name is
+     * nearest. Proposed, never written: a person reviews it.
+     */
+    public static Map<String, String> proposedMap(Projects projects) throws IOException {
+        Pair pair = projects.readPair();
+        Sides s = projects.sides(pair);
+        Map<String, String> out = new LinkedHashMap<>(pair.map);
+        for (EnvironmentCompare.Match m : EnvironmentCompare.matches(s.source, s.target, pair.name, Pair.nameOf(s.targetTree))) {
+            out.putIfAbsent("drivers/" + m.a + "." + com.pointblue.dirxml.dev.deploy.Overrides.NAME, m.b);
+        }
+        boolean serversMapped = out.keySet().stream().anyMatch(com.pointblue.dirxml.dev.deploy.ServerMap::isKey);
+        if (!serversMapped && !s.target.servers.isEmpty()) {
+            for (String server : s.source.servers) {
+                if (s.target.servers.stream().anyMatch(server::equalsIgnoreCase)) {
+                    continue;
+                }
+                String name = com.pointblue.dirxml.dev.deploy.Servers.dirName(server);
+                String best = null;
+                int bestDistance = Integer.MAX_VALUE;
+                for (String t : s.target.servers) {
+                    int d = distance(name, com.pointblue.dirxml.dev.deploy.Servers.dirName(t));
+                    if (d < bestDistance) {
+                        best = t;
+                        bestDistance = d;
+                    }
+                }
+                out.put(com.pointblue.dirxml.dev.deploy.ServerMap.PREFIX + name, best);
+            }
+        }
+        return out;
+    }
+
+    private static int distance(String a, String b) {
+        int[] prev = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) {
+            prev[j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            int[] cur = new int[b.length() + 1];
+            cur[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                cur[j] = Math.min(Math.min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + (a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1));
+            }
+            prev = cur;
+        }
+        return prev[b.length()];
     }
 
     /** A value's fingerprint: a value the model holds as none is a value too. */

@@ -144,15 +144,20 @@ public final class Promote {
     /** {@code promote.apply}, or with {@code dryRun} {@code promote.plan}: everything but the writing. */
     public static Result run(Path target, Path source, String pairName, Selection sel, boolean dryRun, boolean force, String by)
             throws IOException {
-        return run(target, source, pairName, sel, dryRun, force, by, Validator.standard());
+        return run(Projects.of(target, source, pairName), sel, dryRun, force, by);
     }
 
-    static Result run(Path target, Path source, String pairName, Selection sel, boolean dryRun, boolean force, String by, Validator validator)
-            throws IOException {
+    public static Result run(Projects projects, Selection sel, boolean dryRun, boolean force, String by) throws IOException {
+        return run(projects, sel, dryRun, force, by, Validator.standard());
+    }
+
+    static Result run(Projects projects, Selection sel, boolean dryRun, boolean force, String by, Validator validator) throws IOException {
+        Path target = projects.target();
+        Path source = projects.source();
         Result r = new Result(dryRun ? "promote.plan" : "promote.apply");
         r.dryRun = dryRun;
-        Pair pair = Pair.read(target, pairName);
-        Sides s = Sides.read(target, source, pair.map);
+        Pair pair = projects.readPair();
+        Sides s = projects.sides(pair);
         ProjectCompare cmp = ProjectCompare.of(s, pair);
         r.notes.addAll(s.notes);
 
@@ -160,9 +165,12 @@ public final class Promote {
         Set<String> chosen = new TreeSet<>();
         for (String o : sel.objects) {
             String p = o.endsWith("/") ? o.substring(0, o.length() - 1) : o;
+            // a driver's directory brings the driver's cases too
+            String driver = p.matches("drivers/[^/]+") ? s.driverOf(p + "/") : null;
             List<String> hit = new ArrayList<>();
             for (ProjectCompare.Item i : cmp.items) {
-                if (!i.value && (i.path.equals(p) || i.path.startsWith(p + "/"))) {
+                if (!i.value && (i.path.equals(p) || i.path.startsWith(p + "/")
+                    || (driver != null && i.path.startsWith(Sides.CASES) && driver.equals(i.driver)))) {
                     hit.add(i.path);
                 }
             }
@@ -218,6 +226,9 @@ public final class Promote {
             copyTree(target, work);
             Set<String> present = new HashSet<>();
             for (String p : chosen) {
+                if (p.startsWith(Sides.CASES)) {
+                    continue;   // cases live beside the tree: written below
+                }
                 Path w = work.resolve(p);
                 Path from = sourceWritten.resolve(p);
                 if (sel.contents.containsKey(p)) {
@@ -254,6 +265,9 @@ public final class Promote {
             AsCodeWriter.write(after, out);
             Map<String, byte[]> produced = Sides.read(out);
             for (String p : chosen) {
+                if (p.startsWith(Sides.CASES)) {
+                    continue;
+                }
                 boolean wanted = present.contains(p);
                 if (wanted && !produced.containsKey(p)) {
                     r.refusal = p + " isn't part of the target's model once promoted: " + manifestOf(p) + " doesn't list it. Promote "
@@ -294,7 +308,34 @@ public final class Promote {
                     }
                 }
             }
+            // a case's files, into the target's cases: the source's (its driver= as the target names it), or none
+            Map<String, byte[]> caseFiles = new TreeMap<>();
             for (String p : chosen) {
+                if (!p.startsWith(Sides.CASES)) {
+                    continue;
+                }
+                byte[] bytes = sel.contents.containsKey(p) ? sel.contents.get(p).getBytes(StandardCharsets.UTF_8) : s.sourceFiles.get(p);
+                caseFiles.put(p, bytes);
+                Path t = s.targetCases.resolve(p.substring(Sides.CASES.length()));
+                if (bytes != null) {
+                    if (!Files.isRegularFile(t) || !Arrays.equals(Files.readAllBytes(t), bytes)) {
+                        r.changedFiles.add(p);
+                        if (!dryRun) {
+                            Files.createDirectories(t.getParent());
+                            Files.write(t, bytes);
+                        }
+                    }
+                } else if (Files.isRegularFile(t)) {
+                    r.deletedFiles.add(p);
+                    if (!dryRun) {
+                        Files.delete(t);
+                    }
+                }
+            }
+            for (String p : chosen) {
+                if (p.startsWith(Sides.CASES)) {
+                    continue;
+                }
                 String rel = AsCodeWriter.BASELINE_DIR + "/" + p;
                 Path w = work.resolve(rel);
                 Path t = target.resolve(rel);
@@ -321,8 +362,9 @@ public final class Promote {
             Map<String, String> afterValues = com.pointblue.dirxml.dev.deploy.EnvironmentCompare.values(after);
             String at = now();
             for (String p : chosen) {
+                byte[] now = p.startsWith(Sides.CASES) ? caseFiles.get(p) : afterFiles.get(p);
                 pair.record.objects.put(p, new PromotionRecord.Entry(PromotionRecord.fingerprint(s.sourceFiles.get(p)),
-                    PromotionRecord.fingerprint(afterFiles.get(p)), r.sourceCommit, at, by));
+                    PromotionRecord.fingerprint(now), r.sourceCommit, at, by));
             }
             for (String k : values) {
                 pair.record.values.put(k, new PromotionRecord.Entry(ProjectCompare.valuePrint(s.sourceValues.get(k)),
@@ -380,8 +422,13 @@ public final class Promote {
      * whole of the source's files promoted together write it.
      */
     public static Preview preview(Path target, Path source, String pairName) throws IOException {
-        Pair pair = Pair.read(target, pairName);
-        Sides s = Sides.read(target, source, pair.map);
+        return preview(Projects.of(target, source, pairName));
+    }
+
+    public static Preview preview(Projects projects) throws IOException {
+        Path target = projects.target();
+        Pair pair = projects.readPair();
+        Sides s = projects.sides(pair);
         Preview pv = new Preview(ProjectCompare.of(s, pair));
         Path sourceWritten = Files.createTempDirectory("idm-promote-src");
         Path work = Files.createTempDirectory("idm-promote-work");
@@ -390,6 +437,11 @@ public final class Promote {
             copyTree(target, work);
             for (ProjectCompare.Item i : pv.compare.items) {
                 if (i.value) {
+                    continue;
+                }
+                if (i.path.startsWith(Sides.CASES)) {
+                    pv.before.put(i.path, s.targetFiles.get(i.path));   // a case's files are its own: no values to set aside
+                    pv.after.put(i.path, s.sourceFiles.get(i.path));
                     continue;
                 }
                 Path t = target.resolve(i.path);
@@ -407,7 +459,7 @@ public final class Promote {
             restoreValues(after, s, Set.of());
             Map<String, byte[]> produced = Sides.written(after);
             for (ProjectCompare.Item i : pv.compare.items) {
-                if (!i.value) {
+                if (!i.value && !i.path.startsWith(Sides.CASES)) {
                     pv.after.put(i.path, produced.get(i.path));
                 }
             }
@@ -473,70 +525,137 @@ public final class Promote {
      * only new changes show. Refused when the pair has a record already, unless {@code force} (which starts it over).
      */
     public static Result pair(Path target, Path source, String pairName, boolean dryRun, boolean force, String by) throws IOException {
+        return pair(Projects.of(target, source, pairName), new Pairing(), dryRun, force, by);
+    }
+
+    /** What a person settled when pairing: the map to write, the differences left pending, those accepted as known. */
+    public static final class Pairing {
+        /** Written as {@code promotions/<source>.properties} when not null (else the pair's file, as it is, is used). */
+        public Map<String, String> map;
+        /** Differences (files or values) left to promote: recorded as the target has them, the source's side unknown. */
+        public final Set<String> pending = new TreeSet<>();
+        /** Differences accepted as they are: path to {@code {decision, note}}. */
+        public final Map<String, String[]> known = new LinkedHashMap<>();
+    }
+
+    /**
+     * {@code promote.pair}: the first record. Every file and value of both sides is recorded as it is now, so only new
+     * changes show from here on, but for the differences {@code choices} leaves pending, which show as pending, and the
+     * ones it accepts as known. With a map in {@code choices}, the map is written too and the comparison uses it.
+     */
+    public static Result pair(Projects projects, Pairing choices, boolean dryRun, boolean force, String by) throws IOException {
+        Path target = projects.target();
         Result r = new Result("promote.pair");
         r.dryRun = dryRun;
-        Pair pair = Pair.read(target, pairName);
+        Projects p = choices.map == null ? projects : projects.withMap(choices.map);
+        Pair pair = p.readPair();
         if (!pair.record.isEmpty() && !force) {
             r.refusal = "'" + pair.name + "' is paired already (" + Pair.DIR + "/" + pair.name + ".json); --force starts its record over";
             return r;
         }
-        Sides s = Sides.read(target, source, pair.map);
+        Sides s = p.sides(pair);
+        ProjectCompare cmp = ProjectCompare.of(s, pair);
+        for (String path : choices.pending) {
+            if (cmp.item(path) == null) {
+                r.refusal = "nothing differs at '" + path + "' to leave pending";
+                return r;
+            }
+        }
         r.notes.addAll(s.notes);
-        r.sourceCommit = DeployLog.treeCommit(source);
+        r.sourceCommit = DeployLog.treeCommit(projects.source());
         pair.record.objects.clear();
         pair.record.values.clear();
         String at = now();
         TreeSet<String> paths = new TreeSet<>(s.targetFiles.keySet());
         paths.addAll(s.sourceFiles.keySet());
         int differ = 0;
-        for (String p : paths) {
-            byte[] src = s.sourceFiles.get(p);
-            byte[] tgt = s.targetFiles.get(p);
-            pair.record.objects.put(p, new PromotionRecord.Entry(PromotionRecord.fingerprint(src), PromotionRecord.fingerprint(tgt), r.sourceCommit, at, by));
+        for (String path : paths) {
+            byte[] src = s.sourceFiles.get(path);
+            byte[] tgt = s.targetFiles.get(path);
+            // left pending: the source's side as before pairing (no fingerprint matches it), so its change shows
+            String sourcePrint = choices.pending.contains(path) ? BEFORE_PAIRING : PromotionRecord.fingerprint(src);
+            pair.record.objects.put(path, new PromotionRecord.Entry(sourcePrint, PromotionRecord.fingerprint(tgt), r.sourceCommit, at, by));
             if (src == null || tgt == null || !Arrays.equals(src, tgt)) {
                 differ++;
             }
         }
         for (Map.Entry<String, String> e : s.targetValues.entrySet()) {
             if (s.sourceValues.containsKey(e.getKey())) {
-                pair.record.values.put(e.getKey(), new PromotionRecord.Entry(ProjectCompare.valuePrint(s.sourceValues.get(e.getKey())),
-                    ProjectCompare.valuePrint(e.getValue()), r.sourceCommit, at, by));
+                String sourcePrint = choices.pending.contains(e.getKey()) ? BEFORE_PAIRING : ProjectCompare.valuePrint(s.sourceValues.get(e.getKey()));
+                pair.record.values.put(e.getKey(), new PromotionRecord.Entry(sourcePrint, ProjectCompare.valuePrint(e.getValue()), r.sourceCommit, at, by));
             }
         }
-        r.notes.add(paths.size() + " file(s) and " + pair.record.values.size() + " value(s) recorded; " + differ
-            + " file(s) differ and are taken as they are");
+        String refusal = acceptInto(pair, cmp, choices.known, by, r);
+        if (refusal != null) {
+            r.refusal = refusal;
+            return r;
+        }
+        r.notes.add(paths.size() + " file(s) and " + pair.record.values.size() + " value(s) recorded; " + differ + " file(s) differ: "
+            + choices.pending.size() + " left pending, " + choices.known.size() + " accepted as known, the rest taken as they are");
+        if (choices.map != null) {
+            r.changedFiles.add(Pair.DIR + "/" + pair.name + Overrides.EXT);
+        }
         r.changedFiles.add(Pair.DIR + "/" + pair.name + ".json");
+        if (!choices.known.isEmpty()) {
+            r.changedFiles.add(Pair.DIR + "/" + pair.name + ".known.json");
+        }
         if (!dryRun) {
+            if (choices.map != null) {
+                Files.createDirectories(target.resolve(Pair.DIR));
+                Files.writeString(target.resolve(Pair.DIR).resolve(pair.name + Overrides.EXT), Pair.formatMap(choices.map), StandardCharsets.UTF_8);
+            }
             pair.write(target);
         }
         r.written = !dryRun;
         return r;
     }
 
+    /** A source fingerprint no content has: a difference left pending at pairing. */
+    static final String BEFORE_PAIRING = "before-pairing";
+
+    /** Each decision into the pair's known differences; the refusal, or null. */
+    private static String acceptInto(Pair pair, ProjectCompare cmp, Map<String, String[]> decisions, String by, Result r) {
+        for (Map.Entry<String, String[]> e : decisions.entrySet()) {
+            String path = e.getKey();
+            String d = e.getValue().length > 0 && e.getValue()[0] != null ? e.getValue()[0] : "intended";
+            String note = e.getValue().length > 1 ? e.getValue()[1] : null;
+            if (!d.equals("intended") && !d.equals("later")) {
+                return "a decision is intended (different on purpose) or later (to decide), not '" + d + "'";
+            }
+            ProjectCompare.Item i = cmp.item(path);
+            if (i == null) {
+                return "nothing differs at '" + path + "'";
+            }
+            pair.known.removeIf(k -> k.path.equals(path));
+            pair.known.add(new KnownDifference(pair.name, path, i.fingerprint, d, (i.value ? "value " : "") + path + ": " + i.state(), note,
+                by == null ? "" : by, now()));
+            r.promoted.add(path);
+        }
+        return null;
+    }
+
     /** {@code promote.accept}: a difference accepted as it is, until either side changes it. */
     public static Result accept(Path target, Path source, String pairName, String path, String decision, String note, String by, boolean dryRun)
             throws IOException {
+        Map<String, String[]> one = new LinkedHashMap<>();
+        one.put(path, new String[] {decision, note});
+        return accept(Projects.of(target, source, pairName), one, by, dryRun);
+    }
+
+    /** {@code promote.accept} for several differences at once: path to {@code {decision, note}}. */
+    public static Result accept(Projects projects, Map<String, String[]> decisions, String by, boolean dryRun) throws IOException {
         Result r = new Result("promote.accept");
         r.dryRun = dryRun;
-        String d = decision == null ? "intended" : decision;
-        if (!d.equals("intended") && !d.equals("later")) {
-            r.refusal = "--decision is intended (different on purpose) or later (to decide)";
+        Pair pair = projects.readPair();
+        ProjectCompare cmp = ProjectCompare.of(projects.sides(pair), pair);
+        String refusal = acceptInto(pair, cmp, decisions, by, r);
+        if (refusal != null) {
+            r.refusal = refusal;
             return r;
         }
-        Pair pair = Pair.read(target, pairName);
-        ProjectCompare cmp = ProjectCompare.of(Sides.read(target, source, pair.map), pair);
-        ProjectCompare.Item i = cmp.item(path);
-        if (i == null) {
-            r.refusal = "nothing differs at '" + path + "'";
-            return r;
-        }
-        pair.known.removeIf(k -> k.path.equals(path));
-        pair.known.add(new KnownDifference(pair.name, path, i.fingerprint, d, (i.value ? "value " : "") + path + ": " + i.state(), note,
-            by == null ? "" : by, now()));
-        r.promoted.add(path);
         r.changedFiles.add(Pair.DIR + "/" + pair.name + ".known.json");
         if (!dryRun) {
-            pair.write(target);
+            pair.write(projects.target());
         }
         r.written = !dryRun;
         return r;

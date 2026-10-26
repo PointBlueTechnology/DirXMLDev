@@ -7,6 +7,20 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Cases move with their driver** (docs/promotion.md): when both projects have simulator cases,
+  each case's files compare as `cases/<path>`, its `driver=` read as the target names the driver.
+  Choosing a driver's directory brings its cases. `--cases` and `--source-cases`; by default
+  `<tree>/cases`, or `cases/` beside a `tree/` directory.
+- **`promote.map`:** a proposed map, printed. It covers the look-alike drivers, and each source
+  server onto the target server with the nearest name when the map names none.
+- **`promote.pair` choices:** `--propose-map` writes the proposal and pairs with it, `--pending`
+  leaves a difference pending, `--accept` accepts one as known.
+- **API:** `Projects` (both trees, the pair, each side's cases, and a map not written yet) for
+  `ProjectCompare.of`, `Promote.run`, `preview`, `pair` (with `Pairing`) and `accept` (several
+  at once).
+
 ## [0.54.0] - 2026-10-26
 
 ### Added
