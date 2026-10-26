@@ -1547,7 +1547,8 @@ public final class ModelDiff {
         return Arrays.asList(s.split("\n", -1));
     }
 
-    private static String textDiff(String oldText, String newText) {
+    /** Every line of two texts, prefixed {@code "  "} (both), {@code "- "} (only the old) or {@code "+ "} (only the new); null when both are empty. */
+    public static String textDiff(String oldText, String newText) {
         List<String> out = lcsDiff(lines(oldText), lines(newText));
         return out.isEmpty() ? null : String.join("\n", out);
     }

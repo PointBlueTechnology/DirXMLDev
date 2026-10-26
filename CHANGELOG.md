@@ -7,6 +7,28 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **A project per environment: compare and promote** ([docs/promotion.md](docs/promotion.md)).
+  For teams that keep a tree per environment, each in its own repository:
+  - **`tree.compare <target> --with <source>`:** what differs, file by file and value by value,
+    in the target's terms. The source's driver names and servers go through the pair's map
+    (`promotions/<source>.properties`, in the overrides file's form). The driver set's name and
+    DN and the drivers' DNs stay the target's. Files are compared with their values set aside,
+    so a value that differs never makes its file look changed.
+  - **The promotion record** (`promotions/<source>.json`): per file and per value, a fingerprint
+    of each side at its last promotion. With it each difference is *pending* (the source changed
+    it), *the target's own*, *both changed*, *known* or *unchanged since the record*. It goes
+    object by object, so a partial promotion leaves the rest pending.
+  - **`promote.plan` / `promote.apply`:** copy chosen files (`--object`, a file or a directory;
+    `--pending`; `--contents` for a file merged line by line) into the target. The target's
+    values stay unless named with `--value`. A promoted file's package baseline goes with it.
+    The result is read back and validated: a file whose manifest wasn't promoted with it, or a
+    new validation error, is refused and nothing is written. Gives the commit trailer
+    `Promoted-from: <source>@<commit>`.
+  - **`promote.pair`** takes the first record. **`promote.accept`** and **`promote.forget`** handle
+    known differences (`promotions/<source>.known.json`).
+
 ## [0.52.0] - 2026-10-26
 
 ### Added
