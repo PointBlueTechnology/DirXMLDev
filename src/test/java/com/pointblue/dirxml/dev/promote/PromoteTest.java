@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
@@ -284,6 +285,90 @@ public class PromoteTest {
         assertTrue(r.text(), r.ok());
         assertTrue(Files.readString(prodTree.resolve(POLICY)).contains("merged by hand"));
         assertEquals("still differs, but as the promotion left it", ProjectCompare.Bucket.UNCHANGED, compare().item(POLICY).bucket);
+    }
+
+    private Path prodCases;
+    private Path qaCases;
+
+    /** Each project's cases beside its tree: one case for the AD driver, as each project names it. */
+    private void cases() throws IOException {
+        prodCases = prodTree.getParent().resolve("cases");
+        qaCases = qaTree.getParent().resolve("cases");
+        for (Path c : List.of(prodCases.resolve("ad-add"), qaCases.resolve("ad-add"), qaCases.resolve("ad-modify"))) {
+            Files.createDirectories(c);
+        }
+        Files.writeString(prodCases.resolve("ad-add/case.properties"), "driver=AD\nchannel=subscriber\n", StandardCharsets.UTF_8);
+        Files.writeString(prodCases.resolve("ad-add/input.xml"), "<nds><input><add/></input></nds>\n", StandardCharsets.UTF_8);
+        Files.writeString(qaCases.resolve("ad-add/case.properties"), "driver=AD QA\nchannel=subscriber\n", StandardCharsets.UTF_8);
+        Files.writeString(qaCases.resolve("ad-add/input.xml"), "<nds><input><add/></input></nds>\n", StandardCharsets.UTF_8);
+        Files.writeString(qaCases.resolve("ad-modify/case.properties"), "driver = AD QA\nchannel=subscriber\n", StandardCharsets.UTF_8);
+        Files.writeString(qaCases.resolve("ad-modify/input.xml"), "<nds><input><modify/></input></nds>\n", StandardCharsets.UTF_8);
+    }
+
+    private Projects projects() {
+        return Projects.of(prodTree, qaTree, "acme-qa").withCases(prodCases, qaCases);
+    }
+
+    @Test
+    public void casesCompareAndMoveWithTheirDriver() throws Exception {
+        setUp();
+        cases();
+        assertEquals("the layout found beside tree/", prodCases.toAbsolutePath().normalize(), Projects.casesOf(prodTree));
+        ProjectCompare c = ProjectCompare.of(projects());
+        assertNull("the same case once QA's driver name is the target's", c.item("cases/ad-add/case.properties"));
+        ProjectCompare.Item modify = c.item("cases/ad-modify/case.properties");
+        assertNotNull(c.text(), modify);
+        assertEquals("AD", modify.driver);
+        assertEquals("only in the source", modify.state());
+
+        // a driver's directory brings its cases
+        edit(qaTree, ds -> setPolicy(ds, "AD QA", "sub-ctp", "qa changed it"));
+        Promote.Result r = Promote.run(projects(), objects("drivers/AD"), false, false, "tester");
+        assertTrue(r.text(), r.ok());
+        assertTrue(r.promoted.toString(), r.promoted.containsAll(List.of(POLICY, "cases/ad-modify/case.properties", "cases/ad-modify/input.xml")));
+        assertEquals("driver = AD\nchannel=subscriber\n", Files.readString(prodCases.resolve("ad-modify/case.properties")));
+        assertTrue(Files.readString(prodCases.resolve("ad-modify/input.xml")).contains("<modify/>"));
+        assertFalse(ProjectCompare.of(projects()).text(), ProjectCompare.of(projects()).hasOpen());
+        Promote.Preview pv = Promote.preview(projects());
+        assertTrue(pv.after.isEmpty());
+    }
+
+    @Test
+    public void pairingWritesTheMapLeavesSomePendingAndAcceptsOthers() throws Exception {
+        setUp();
+        Files.delete(prodTree.resolve(Pair.DIR).resolve("acme-qa.properties"));
+        Projects p = Projects.of(prodTree, qaTree, "acme-qa");
+        Map<String, String> proposed = ProjectCompare.proposedMap(p);
+        assertEquals(proposed.toString(), "AD", proposed.get("drivers/AD QA.name"));
+        assertEquals(PROD_SERVER, proposed.get("servers.vault01qa"));
+
+        edit(qaTree, ds -> setPolicy(ds, "AD QA", "sub-ctp", "qa changed it"));
+        edit(prodTree, ds -> setInput(ds, "AD", "prod's own input"));
+        Promote.Pairing choices = new Promote.Pairing();
+        choices.map = proposed;
+        choices.pending.add(POLICY);
+        choices.known.put("drivers/AD.gcv.drv.users", new String[] {"intended", "each project's own container"});
+        Promote.Result r = Promote.pair(p, choices, false, false, "tester");
+        assertTrue(r.text(), r.ok());
+        assertTrue(r.changedFiles.toString(), r.changedFiles.containsAll(List.of("promotions/acme-qa.properties", "promotions/acme-qa.json", "promotions/acme-qa.known.json")));
+        assertTrue(Files.readString(prodTree.resolve("promotions/acme-qa.properties")).contains("drivers/AD QA.name = AD"));
+
+        ProjectCompare c = compare();
+        assertEquals("left pending", ProjectCompare.Bucket.PENDING, c.item(POLICY).bucket);
+        assertEquals("taken as it is", ProjectCompare.Bucket.UNCHANGED, c.item("drivers/AD/itp.policy.xml").bucket);
+        assertEquals(ProjectCompare.Bucket.KNOWN, c.item("drivers/AD.gcv.drv.users").bucket);
+
+        Promote.Pairing wrong = new Promote.Pairing();
+        wrong.pending.add("drivers/AD/nope.policy.xml");
+        assertFalse(Promote.pair(p, wrong, true, true, "tester").ok());
+
+        // several accepted at once
+        Map<String, String[]> decisions = new java.util.LinkedHashMap<>();
+        decisions.put(POLICY, new String[] {"later", null});
+        decisions.put("drivers/AD/itp.policy.xml", new String[] {"intended", "prod's input"});
+        assertTrue(Promote.accept(p, decisions, "tester", false).ok());
+        assertEquals(ProjectCompare.Bucket.KNOWN, compare().item(POLICY).bucket);
+        assertFalse(Promote.accept(p, Map.of(POLICY, new String[] {"maybe"}), "tester", true).ok());
     }
 
     @Test

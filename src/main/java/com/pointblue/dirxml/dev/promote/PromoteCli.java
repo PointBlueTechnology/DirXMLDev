@@ -28,9 +28,11 @@ public final class PromoteCli {
         "usage: tree.compare <target tree> --with <source tree> [--name <pair>] [--json]\n"
         + "       promote.plan  <target tree> --from <source tree> [--name <pair>] [--object <path>]… [--value <key>]… [--pending] [--contents <file.json>] [--json]\n"
         + "       promote.apply <target tree> --from <source tree> [--name <pair>] [--object <path>]… [--value <key>]… [--pending] [--contents <file.json>] [--force] [--by <who>] [--json]\n"
-        + "       promote.pair  <target tree> --from <source tree> [--name <pair>] [--dry-run] [--force] [--by <who>] [--json]\n"
+        + "       promote.map   <target tree> --from <source tree> [--name <pair>]   (prints a proposed map; writes nothing)\n"
+        + "       promote.pair  <target tree> --from <source tree> [--name <pair>] [--propose-map] [--pending <path or key>]… [--accept <path or key>]… [--dry-run] [--force] [--by <who>] [--json]\n"
         + "       promote.accept <target tree> --from <source tree> [--name <pair>] --object <path or key> [--decision intended|later] [--note <text>] [--by <who>] [--dry-run] [--json]\n"
-        + "       promote.forget <target tree> (--from <source tree> | --name <pair>) --object <path or key> [--dry-run] [--json]\n";
+        + "       promote.forget <target tree> (--from <source tree> | --name <pair>) --object <path or key> [--dry-run] [--json]\n"
+        + "  each takes [--cases <target's cases>] [--source-cases <source's cases>]; by default <tree>/cases or cases/ beside a tree/ directory\n";
 
     public static int run(String[] argv) throws Exception {
         String cmd = argv[0];
@@ -44,13 +46,23 @@ public final class PromoteCli {
         String decision = null;
         String note = null;
         Promote.Selection sel = new Promote.Selection();
+        Promote.Pairing pairing = new Promote.Pairing();
+        boolean proposeMap = false;
+        Path cases = null;
+        Path sourceCases = null;
         for (int i = 1; i < argv.length; i++) {
             String a = argv[i];
             switch (a) {
                 case "--json": json = true; continue;
                 case "--dry-run": dryRun = true; continue;
                 case "--force": force = true; continue;
-                case "--pending": sel.pending = true; continue;
+                case "--pending":
+                    if (cmd.equals("promote.pair")) {
+                        break;   // promote.pair's --pending names a difference
+                    }
+                    sel.pending = true;
+                    continue;
+                case "--propose-map": proposeMap = true; continue;
                 default:
             }
             if (!a.startsWith("--")) {
@@ -72,6 +84,10 @@ public final class PromoteCli {
                 case "--by" -> by = v;
                 case "--decision" -> decision = v;
                 case "--note" -> note = v;
+                case "--pending" -> pairing.pending.add(v);
+                case "--accept" -> pairing.known.put(v, new String[] {"intended", null});
+                case "--cases" -> cases = Paths.get(v);
+                case "--source-cases" -> sourceCases = Paths.get(v);
                 case "--contents" -> {
                     for (Map.Entry<String, Object> e : Json.asMap(Json.parse(Files.readString(Paths.get(v), StandardCharsets.UTF_8))).entrySet()) {
                         sel.contents.put(e.getKey(), Json.asString(e.getValue()));
@@ -97,27 +113,44 @@ public final class PromoteCli {
         if (!Pair.validName(name)) {
             return usage("a pair's name is letters, digits, '.', '_' and '-' (got '" + name + "'): give one with --name");
         }
+        Projects projects = Projects.of(target, source, name);
+        if (source != null) {
+            Path tc = cases != null ? cases : Projects.casesOf(target);
+            Path sc = sourceCases != null ? sourceCases : Projects.casesOf(source);
+            if (tc != null && sc != null) {
+                projects = projects.withCases(tc, sc);
+            }
+        }
         switch (cmd) {
+            case "promote.map": {
+                System.out.print(Pair.formatMap(ProjectCompare.proposedMap(projects)));
+                return 0;
+            }
             case "tree.compare": {
-                ProjectCompare c = ProjectCompare.of(target, source, name);
+                ProjectCompare c = ProjectCompare.of(projects);
                 System.out.print(json ? c.json() + "\n" : c.text());
                 return c.hasOpen() ? 1 : 0;
             }
             case "promote.plan":
             case "promote.apply": {
-                Promote.Result r = Promote.run(target, source, name, sel, cmd.equals("promote.plan") || dryRun, force, by);
+                Promote.Result r = Promote.run(projects, sel, cmd.equals("promote.plan") || dryRun, force, by);
                 return print(r, json);
             }
             case "promote.pair":
-                return print(Promote.pair(target, source, name, dryRun, force, by), json);
+                if (proposeMap) {
+                    pairing.map = ProjectCompare.proposedMap(projects);
+                }
+                return print(Promote.pair(projects, pairing, dryRun, force, by), json);
             case "promote.accept":
             case "promote.forget": {
                 List<String> objects = new ArrayList<>(sel.objects);
                 if (objects.size() != 1) {
                     return usage("--object <path or key> names the one difference");
                 }
+                Map<String, String[]> one = new java.util.LinkedHashMap<>();
+                one.put(objects.get(0), new String[] {decision, note});
                 Promote.Result r = cmd.equals("promote.accept")
-                    ? Promote.accept(target, source, name, objects.get(0), decision, note, by, dryRun)
+                    ? Promote.accept(projects, one, by, dryRun)
                     : Promote.forget(target, name, objects.get(0), dryRun);
                 return print(r, json);
             }
