@@ -31,6 +31,7 @@ the help.
 |---|---|
 | What `validate` checks | [validation.md](validation.md) |
 | Deploy, diff, snapshot, rollback, the production gate | [vault-deploy.md](vault-deploy.md) (design note; commands are current) |
+| A project per environment: compare two trees, promote differences | [promotion.md](promotion.md) |
 | Start, stop, cache, trace, submit | [operate.md](operate.md) (design note; the gate table matches the code) |
 | Attach a debugger: the simulator in process, a lab engine over JDWP, the Remote Loader | [operate.md §Attaching a debugger](operate.md#attaching-a-debugger) |
 | Packages | [packages.md](packages.md) |

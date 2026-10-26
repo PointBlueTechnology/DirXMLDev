@@ -108,6 +108,16 @@ decision (`intended` or `later`), a note, who and when. A comparison leaves an
 entry's difference out while the fingerprint matches, and shows it again once
 the object changes. Written by `known.accept` / `known.forget`.
 
+### `promotions/<source>.*`
+
+Only in a project kept per environment, as the target of another project
+([promotion.md](promotion.md)): `<source>.properties` maps the source's driver
+names and servers to this tree's, `<source>.known.json` holds differences
+accepted as they are, and `<source>.json` is the promotion record, which says
+which side changed each object since it was last promoted. Written by
+`promote.pair`, `promote.apply`, `promote.accept` and `promote.forget`; the map
+is yours.
+
 ### `library/`
 
 Policies, ECMAScript, mapping tables, and GCV objects shared by more than one

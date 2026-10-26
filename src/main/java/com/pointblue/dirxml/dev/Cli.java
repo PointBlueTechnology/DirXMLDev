@@ -350,6 +350,9 @@ public final class Cli {
             if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].startsWith("job.") || args[0].startsWith("rbe.") || args[0].startsWith("workorder.") || args[0].equals("object.inspect") || args[0].equals("vault.email-server") || args[0].equals("trace.view"))) {
                 System.exit(com.pointblue.dirxml.dev.operate.OperateCli.run(args));
             }
+            if (args.length >= 1 && com.pointblue.dirxml.dev.promote.PromoteCli.handles(args[0])) {
+                System.exit(com.pointblue.dirxml.dev.promote.PromoteCli.run(args));
+            }
             if (args.length >= 3 && args[0].equals("tree.diff")) {
                 boolean json = false;
                 List<String> pos = new ArrayList<>();
@@ -508,6 +511,9 @@ public final class Cli {
         System.err.println("  check  <asCodeDir>                    load an as-code tree and report it (exit 1 on broken links)");
         System.err.println("  validate <asCodeDir> [--json]         run every validation check (exit 1 on any error)");
         System.err.println("  tree.diff <fromDir> <toDir> [--json]  structured diff of two as-code trees (exit 1 if they differ)");
+        System.err.println("  tree.compare <target> --with <source> [--name <pair>] [--json]  two projects compared, each difference by the pair's promotion record (docs/promotion.md)");
+        System.err.println("  promote.plan|promote.apply <target> --from <source> --object <path>… [--value <key>…] [--pending]  move differences into the target");
+        System.err.println("  promote.pair|promote.accept|promote.forget <target> --from <source> …  the pair's first record, and known differences");
         System.err.println("  docs <asCodeDir> --out <dir> [--driver D…] [--since <commit>] [--format md|html]  generate documentation from the model");
         System.err.println("  simulate <asCodeDir> --cases <dir> [--against <asCodeDir>] [--env E] [--json]  run the regression corpus against the tree (with E's overrides applied); diff vs another tree");
         System.err.println("  refs <asCodeDir> <artifactPath>       everything that references an artifact (a mapping table: also the drivers that run a policy reading it)");
