@@ -38,6 +38,9 @@ final class Sides {
     final Map<String, byte[]> sourceFiles;
     final Map<String, String> targetValues;
     final Map<String, String> sourceValues;
+    /** Each side's simulator cases directory, or null: its files compare as {@code cases/<path>}, with the trees' files. */
+    Path targetCases;
+    Path sourceCases;
     /** The target's driver name to the source's, for the drivers the map renames. */
     final Map<String, String> sourceNames = new TreeMap<>();
     final List<String> notes = new ArrayList<>();
@@ -55,6 +58,14 @@ final class Sides {
     }
 
     static Sides read(Path targetTree, Path sourceTree, Map<String, String> map) throws IOException {
+        return read(targetTree, sourceTree, map, null, null);
+    }
+
+    /**
+     * With each side's cases: a case's files compare beside the tree's, as {@code cases/<path>}, its
+     * {@code case.properties} naming the driver as the target does. Either cases directory may be null (no cases).
+     */
+    static Sides read(Path targetTree, Path sourceTree, Map<String, String> map, Path targetCases, Path sourceCases) throws IOException {
         DriverSet target = AsCodeReader.read(targetTree);
         DriverSet source = AsCodeReader.read(sourceTree);
         List<String> notes = new ArrayList<>();
@@ -67,7 +78,78 @@ final class Sides {
         Sides s = new Sides(targetTree, sourceTree, target, source, files(targetNeutral), files(sourceNeutral));
         s.notes.addAll(notes);
         renamed.forEach((from, to) -> s.sourceNames.put(to, from));
+        if (targetCases != null && sourceCases != null) {
+            s.targetCases = targetCases;
+            s.sourceCases = sourceCases;
+            s.targetFiles.putAll(cases(targetCases, Map.of()));
+            s.sourceFiles.putAll(cases(sourceCases, renamed));
+        }
         return s;
+    }
+
+    /** A tree path's prefix for the files of the simulator's cases, which live beside the tree. */
+    static final String CASES = "cases/";
+
+    /** Every file under a cases directory, as {@code cases/<path>}; a case's {@code driver=} renamed through {@code renames}. */
+    static Map<String, byte[]> cases(Path dir, Map<String, String> renames) throws IOException {
+        Map<String, byte[]> out = new TreeMap<>();
+        if (!Files.isDirectory(dir)) {
+            return out;
+        }
+        for (Map.Entry<String, byte[]> e : read(dir).entrySet()) {
+            if (e.getKey().startsWith(".") || e.getKey().contains("/.")) {
+                continue;
+            }
+            byte[] b = e.getValue();
+            if (e.getKey().endsWith("/" + CASE_FILE) || e.getKey().equals(CASE_FILE)) {
+                b = renameDriver(new String(b, java.nio.charset.StandardCharsets.UTF_8), renames).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            }
+            out.put(CASES + e.getKey(), b);
+        }
+        return out;
+    }
+
+    static final String CASE_FILE = "case.properties";
+
+    /** A case's {@code driver=} line given the target's name; the rest of the file as it is. */
+    static String renameDriver(String caseProperties, Map<String, String> renames) {
+        if (renames.isEmpty()) {
+            return caseProperties;
+        }
+        String[] lines = caseProperties.split("\n", -1);
+        for (int i = 0; i < lines.length; i++) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(\\s*driver\\s*[=:]\\s*)(.*?)(\\s*\r?)$").matcher(lines[i]);
+            if (m.matches() && renames.containsKey(m.group(2))) {
+                lines[i] = m.group(1) + renames.get(m.group(2)) + m.group(3);
+            }
+        }
+        return String.join("\n", lines);
+    }
+
+    /** The driver a case's file belongs to: its case's {@code driver=}, as the target names it; null when none says. */
+    String caseDriver(String path) {
+        String dir = path.substring(0, path.lastIndexOf('/'));
+        while (dir.startsWith(CASES) || dir.equals("cases")) {
+            for (Map<String, byte[]> side : List.of(sourceFiles, targetFiles)) {
+                byte[] b = side.get(dir + "/" + CASE_FILE);
+                if (b != null) {
+                    java.util.Properties p = new java.util.Properties();
+                    try {
+                        p.load(new java.io.StringReader(new String(b, java.nio.charset.StandardCharsets.UTF_8)));
+                    } catch (IOException e) {
+                        return null;
+                    }
+                    String d = p.getProperty("driver");
+                    return d == null || d.isBlank() ? null : d.trim();
+                }
+            }
+            int slash = dir.lastIndexOf('/');
+            if (slash < 0) {
+                break;
+            }
+            dir = dir.substring(0, slash);
+        }
+        return null;
     }
 
     /**
@@ -185,6 +267,9 @@ final class Sides {
 
     /** The driver a tree path or value key belongs to, by the target's name; null for the set's own. */
     String driverOf(String pathOrKey) {
+        if (pathOrKey.startsWith(CASES)) {
+            return caseDriver(pathOrKey);
+        }
         if (!pathOrKey.startsWith("drivers/")) {
             return null;
         }

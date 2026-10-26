@@ -78,6 +78,20 @@ public final class Pair {
         return new Pair(name, map, known, record);
     }
 
+    /** The same pair with another map: one proposed and not written yet. */
+    public Pair withMap(Map<String, String> other) {
+        return new Pair(name, new LinkedHashMap<>(other), known, record);
+    }
+
+    /** The map as its file holds it, one {@code key = value} line each. */
+    public static String formatMap(Map<String, String> map) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> e : map.entrySet()) {
+            sb.append(e.getKey()).append(" = ").append(e.getValue()).append('\n');
+        }
+        return sb.toString();
+    }
+
     /** The files this pair keeps, tree-relative. */
     public static List<String> files(String name) {
         return List.of(DIR + "/" + name + Overrides.EXT, DIR + "/" + name + ".known.json", DIR + "/" + name + ".json");
