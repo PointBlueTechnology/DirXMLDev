@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-10-26
+
+### Changed
+
+- **The trace parser is DirXML Trace Viewer's `dirxml-trace-core` 1.10.0** (was 1.8.0), as
+  DirXMLDevWeb 0.76.0 uses. For `trace.view` over LDAP:
+  - **The vault's time:** each live line carries the time eDirectory reports for the event, not the
+    time it arrived, so it lines up with the engine's own trace files. A server that sends no time
+    falls back to the local clock.
+  - **Names with escapes:** server and driver names with an escaped comma, equals sign, plus sign
+    or UTF-8 escape (`cn=Smith\, John`) are read correctly, and so is the check for which server a
+    connection reaches.
+
 ## [0.50.0] - 2026-10-22
 
 ### Changed
