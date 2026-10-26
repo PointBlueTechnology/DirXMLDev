@@ -209,6 +209,31 @@ public final class Vault implements VaultAccess {
         return v;
     }
 
+    /**
+     * A vault over two connections the caller already holds: {@code ldap}, used as is and left open by
+     * {@link #close}, and {@code ops}, the extended-operation connection, already connected and bound by
+     * the caller and closed by {@link #close}. Whatever the caller set on {@code ops} applies to every
+     * engine request: for example default controls, such as RFC 4370 proxied authorization so a service
+     * account's connection acts for one person (Directory Console's single sign-on). Such a connection
+     * belongs to that one person: the engine keeps the last identity it was given on a connection.
+     */
+    public static Vault open(DirContext ldap, LDAPConnection ops) {
+        if (ldap == null || ops == null) {
+            throw new IllegalArgumentException("open needs the directory connection and the extended-operation connection");
+        }
+        if (!ops.isConnected()) {
+            throw new IllegalArgumentException("the extended-operation connection is not connected");
+        }
+        Config c = new Config();
+        String host = ops.getHost();
+        c.url = "ldaps://" + (host != null && host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host) + ":" + ops.getPort();
+        c.bindDn = ops.getAuthenticationDN();
+        Vault v = new Vault(c, ldap);
+        v.ownsLdap = false;
+        v.ops = ops;
+        return v;
+    }
+
     @Override
     public void close() {
         if (ownsLdap) {

@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-10-26
+
+### Added
+
+- **`Vault.open(DirContext, LDAPConnection)`:** a vault over an extended-operation connection the
+  caller has already connected and bound. Whatever the caller set on it applies to every engine
+  request, such as RFC 4370 proxied authorization, so a service account's connection acts for one
+  person; Directory Console uses it for Identity Manager under single sign-on. The engine keeps the
+  last identity it was given on a connection, so such a connection belongs to that one person.
+
 ## [0.51.0] - 2026-10-26
 
 ### Changed
