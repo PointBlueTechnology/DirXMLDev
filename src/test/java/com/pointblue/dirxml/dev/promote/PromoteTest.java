@@ -287,6 +287,37 @@ public class PromoteTest {
     }
 
     @Test
+    public void aNewDriversManifestIsListedByTheDriverSet() {
+        assertEquals("drivers/AD/driver.xml", Promote.manifestOf("drivers/AD/subscriber/sub-ctp.policy.xml"));
+        assertEquals("drivers/AD/driver.xml", Promote.manifestOf("drivers/AD/config-values.xml"));
+        assertEquals("driverset.xml", Promote.manifestOf("drivers/AD/driver.xml"));
+        assertEquals("library/library.xml", Promote.manifestOf("library/lib-shared.policy.xml"));
+        assertEquals("driverset.xml", Promote.manifestOf("library/library.xml"));
+        assertEquals("driverset.xml", Promote.manifestOf("jobs/StatisticsJob.xml"));
+    }
+
+    @Test
+    public void aPreviewShowsEachFileAsAPromotionWritesIt() throws Exception {
+        setUp();
+        edit(qaTree, ds -> {
+            setPolicy(ds, "AD QA", "sub-ctp", "qa changed it");
+            Driver d = ds.driver("AD QA");
+            d.subscriber.policies.add(new Policy("sub-new", Scope.SUBSCRIBER, "AD QA", ValidatorTest.xml(rule("new"))));
+            d.links.add(new PolicyLink(PolicySet.SUB_COMMAND, "drivers/AD QA/subscriber/sub-new", 1));
+        });
+        Promote.Preview pv = Promote.preview(prodTree, qaTree, "acme-qa");
+        String added = "drivers/AD/subscriber/sub-new.policy.xml";
+        assertNull("not in the target yet", pv.before.get(added));
+        assertTrue(new String(pv.after.get(added), StandardCharsets.UTF_8).contains("new"));
+        assertTrue(new String(pv.before.get(POLICY), StandardCharsets.UTF_8).contains("r1"));
+        assertTrue(new String(pv.after.get(POLICY), StandardCharsets.UTF_8).contains("qa changed it"));
+        String manifest = new String(pv.after.get(MANIFEST), StandardCharsets.UTF_8);
+        assertTrue(manifest, manifest.contains("sub-new") && manifest.contains("cn=AD,cn=dvs,o=system"));
+        assertFalse("the value stays the target's: config-values.xml doesn't differ", pv.after.containsKey("drivers/AD/config-values.xml"));
+        assertFalse("a preview writes nothing", Files.exists(prodTree.resolve(added)));
+    }
+
+    @Test
     public void aPromotionThatWouldNotValidateIsRefused() throws Exception {
         setUp();
         // QA's driver links a policy QA doesn't have: promoting its manifest alone breaks the target

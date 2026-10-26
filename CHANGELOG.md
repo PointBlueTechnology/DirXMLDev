@@ -7,6 +7,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`Promote.preview`:** every file that differs between two projects, as the target has it and as
+  a promotion writes it (the source's logic, the target's values), for a review that shows both
+  sides and lets a person merge line by line. DirXMLDevWeb's *Compare with project…* uses it.
+
 ## [0.53.0] - 2026-10-26
 
 ### Added
