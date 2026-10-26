@@ -323,7 +323,7 @@ public final class EnvironmentCompare {
     }
 
     /** One-to-one likely counterparts among the drivers only one side holds, best first. */
-    static List<Match> matches(DriverSet a, DriverSet b, String envA, String envB) {
+    public static List<Match> matches(DriverSet a, DriverSet b, String envA, String envB) {
         List<Match> all = new ArrayList<>();
         for (Driver x : a.drivers) {
             if (b.driver(x.name) != null) {
@@ -472,7 +472,7 @@ public final class EnvironmentCompare {
     }
 
     /** Every scalar value an override can carry, keyed as an overrides file keys it, for the drivers of {@code ds} and the set. */
-    static Map<String, String> values(DriverSet ds) {
+    public static Map<String, String> values(DriverSet ds) {
         Map<String, String> out = new LinkedHashMap<>();
         definitions(ds.configValues, "driverset.gcv.", out);
         jobs(ds.jobs, "driverset.job.", out);
