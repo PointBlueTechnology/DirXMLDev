@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-10-26
+
 ### Added
 
 - **`Vault.open(DirContext, LDAPConnection)`:** a vault over an extended-operation connection the
