@@ -20,17 +20,27 @@ write the tree or talk to a vault.
 
 ![Policy Flow for an Active Directory driver in Cursor](docs/media/fishbone-ad-driver.png)
 
-## In a browser
+## In a browser, and for agents over MCP
 
 [DirXMLDevWeb](https://github.com/PointBlueTechnology/DirXMLDevWeb) is a
-browser workbench over this core: Designer's views and editors on the same
-tree, compare and deploy, live trace, and on a server, a branch per person,
-pull requests, sign-in and audit. It runs the same operations as `bin/idm`,
-with the same checks and refusals. Use it when the people doing the work know
-Designer rather than a shell, or when a team shares one driver set. DirXMLDev
-on its own is enough for work at the shell, by an agent, or in a pipeline.
-What each adds, and what stays on the command line:
-[docs/web-workbench.md](docs/web-workbench.md).
+server over this core. One install, a container on your machine or on a
+server for a team, gives you:
+
+- a **browser workbench**: Designer's views and editors on the same tree,
+  compare and deploy, live trace, a branch per person, pull requests,
+  sign-in and audit;
+- an **MCP server** at `/mcp` for Claude Code, Cursor or a script. With a
+  personal token the agent does the whole loop: reads the tree, edits it with
+  any `bin/idm` operation (previewed first), validates, simulates, commits,
+  compares and deploys, as you and under your roles;
+- this core's `idm`, `sim` and `apps` CLIs.
+
+All three are backed by DirXMLDev: the same operations as `bin/idm`, with the
+same checks, refusals and production gate. Use it when the people doing the
+work know Designer rather than a shell, when a team shares one driver set, or
+when agents should work through a server with sign-in and audit rather than a
+shell on someone's machine. What each adds, how agents connect, and what
+stays on the command line: [docs/web-workbench.md](docs/web-workbench.md).
 
 ## Who it is for
 
