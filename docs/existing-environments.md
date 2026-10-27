@@ -1,6 +1,12 @@
 # Taking on existing environments
 
-*Status: decided 2026-10-20; being built on the `driver-environments` branches (core and web).*
+*Status: decided 2026-10-20; built (DirXMLDev 0.49.0).*
+
+This note is about one tree deployed to every environment, with what differs kept in overrides. The
+other way, a tree per environment with changes promoted between them, is
+[promotion.md](promotion.md); DirXMLDevWeb's
+[git-workflow.md](https://github.com/PointBlueTechnology/DirXMLDevWeb/blob/main/docs/git-workflow.md#two-ways-to-keep-environments)
+compares the two.
 
 The usual case is not a clean start. A customer has a production tree and one or more others (QA,
 test, dev), each changed by hand over the years: drivers added in one and not the other, the same
