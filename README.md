@@ -20,6 +20,18 @@ write the tree or talk to a vault.
 
 ![Policy Flow for an Active Directory driver in Cursor](docs/media/fishbone-ad-driver.png)
 
+## In a browser
+
+[DirXMLDevWeb](https://github.com/PointBlueTechnology/DirXMLDevWeb) is a
+browser workbench over this core: Designer's views and editors on the same
+tree, compare and deploy, live trace, and on a server, a branch per person,
+pull requests, sign-in and audit. It runs the same operations as `bin/idm`,
+with the same checks and refusals. Use it when the people doing the work know
+Designer rather than a shell, or when a team shares one driver set. DirXMLDev
+on its own is enough for work at the shell, by an agent, or in a pipeline.
+What each adds, and what stays on the command line:
+[docs/web-workbench.md](docs/web-workbench.md).
+
 ## Who it is for
 
 - An IDM engineer who wants policies, filters, GCVs, forms, and workflows in
