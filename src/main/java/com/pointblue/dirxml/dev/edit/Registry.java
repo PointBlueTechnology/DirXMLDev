@@ -507,10 +507,12 @@ public final class Registry {
         // GCVs
         register("gcv.set", "set a GCV's value where the driver's scope defines it (or create it with --define)",
             a -> new GcvOps.Set(a.get("driver"), a.get("name"), a.getOrDefault("value", ""),
-                a.get("define"), a.get("display-name")),
+                a.get("define"), a.get("display-name"), a.get("server")),
             req("name", "GCV name"), req("value", "the value"), driver,
             opt("define", "create the GCV when absent: its type (string|boolean|integer|dn|enum|…)"),
-            opt("display-name", "display name for --define (default: the name)"));
+            opt("display-name", "display name for --define (default: the name)"),
+            opt("server", "on a driver set served by several servers, the value one server holds for the driver (its DN, its name, or primary); "
+                + "without it, the primary's, which every server without its own value follows"));
         register("gcv.delete", "remove a GCV definition; refuses while any policy reads it",
             a -> new GcvOps.Delete(a.get("driver"), a.get("name")),
             req("name", "GCV name"), driver);
