@@ -8,7 +8,9 @@ DirXMLDevWeb's [project-per-environment.md](https://github.com/PointBlueTechnolo
 
 The other model, one tree deployed to every environment with
 `overrides/<env>.properties`, works as before
-([existing-environments.md](existing-environments.md)).
+([existing-environments.md](existing-environments.md)). DirXMLDevWeb's
+[git-workflow.md](https://github.com/PointBlueTechnology/DirXMLDevWeb/blob/main/docs/git-workflow.md#two-ways-to-keep-environments)
+compares the two and says when to choose which.
 
 The examples use two fictional projects: `acme-qa/tree` (the source) and
 `acme-prod/tree` (the target).
