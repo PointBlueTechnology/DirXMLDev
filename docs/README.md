@@ -21,7 +21,7 @@ the help.
 | [walkthrough.md](walkthrough.md) | Follow the same loop in one long narrative |
 | [agents.md](agents.md) | Point any agent at the tool (Cursor, Claude Code, Codex, others) |
 | [mcp.md](mcp.md) | Optional MCP server: reads, dry-runs, and gated writes over `bin/idm` |
-| [web-workbench.md](web-workbench.md) | Decide whether to add DirXMLDevWeb, the browser workbench over this core |
+| [web-workbench.md](web-workbench.md) | Decide whether to add DirXMLDevWeb: one install of a browser workbench, an MCP server for agents and the CLIs, all over this core |
 | [agent-guide.md](agent-guide.md) | The loop and the refusal rules that agent follows |
 | [agent-assisted-setup.md](agent-assisted-setup.md) | Have a coding agent install DirXMLDev; paste a prompt |
 | [install.md](install.md) | Build `bin/idm` from source, run `bin/idm doctor`, and see what CI runs |

@@ -1,21 +1,27 @@
-# DirXMLDevWeb: the browser workbench
+# DirXMLDevWeb: the browser workbench and MCP server
 
-[DirXMLDevWeb](https://github.com/PointBlueTechnology/DirXMLDevWeb) is a browser workbench over
-this core. It does Designer's job on the same IDM-as-code tree: the outline and the policy flow,
-structured editors, compare and deploy against a vault, live trace, the simulator, and, on a
-server, projects, branches, pull requests, sign-in and audit. It is MIT licensed, a separate
-repository, and in beta.
+[DirXMLDevWeb](https://github.com/PointBlueTechnology/DirXMLDevWeb) is a server over this core.
+One install gives you three things on the same IDM-as-code tree:
 
-It is a third client of the core, next to `bin/idm` and the [MCP server](mcp.md). The page calls
-the same typed operations the CLI runs, so it has the same validation, the same refusals and the
-same production gate. It is not a port of Designer and contains no OpenText code. The tree on disk,
+- **A browser workbench** that does Designer's job: the outline and the policy flow, structured
+  editors, compare and deploy against a vault, live trace, the simulator, and projects, branches,
+  pull requests, sign-in and audit.
+- **An MCP server for agents** at `/mcp`. Claude Code, Cursor or a script connects with a personal
+  token and does the agentic work: reads the tree, edits it with any of this core's operations,
+  validates, simulates, commits, compares and deploys.
+- **This core's CLIs**, `idm`, `sim` and `apps`, in the image.
+
+All three are backed by DirXMLDev. The page and the MCP tools call the server's API, and the API
+runs the same typed operations as `bin/idm`, so they have the same validation, the same refusals
+and the same production gate. It is MIT licensed, a separate repository, and in beta. It is not a port of Designer and contains no OpenText code. The tree on disk,
 in git, is the only state: change it in the page, with `bin/idm` or with an agent, and each one
 sees the others' changes.
 
 ## When to use it
 
-DirXMLDev on its own is enough when the people doing the work are comfortable at a shell, or the
-work is done by an agent or a pipeline. Add DirXMLDevWeb when one of these is true:
+DirXMLDev on its own is enough when the people doing the work are comfortable at a shell, an
+agent works at the shell beside them, or the work runs in a pipeline. Add DirXMLDevWeb when one
+of these is true:
 
 | You want | DirXMLDev alone | With DirXMLDevWeb |
 |---|---|---|
@@ -29,7 +35,37 @@ work is done by an agent or a pipeline. Add DirXMLDevWeb when one of these is tr
 | To compare and deploy | `vault.diff`, `vault.deploy --dry-run`, then `--yes` | *Compare*, *Plan* and *Deploy* as three steps with their state; the environment's name typed for production; rollback to any snapshot |
 | Live trace | `driver.trace tail --ldap`, or the desktop Trace Viewer | The trace streamed into the page from one server or all of them, with filters, find, a pop-out window and recording to a file |
 | A project per environment | `tree.compare`, `promote.plan`, `promote.apply` ([promotion.md](promotion.md)) | *Compare projects*: the differences grouped by driver, a tick and a line merge per item, a new branch and a pull request |
-| Agents | The MCP server here, over a checkout | `/mcp` on the server: personal tokens, and the agent acts as you, under your roles, with the same plan and confirmation as the page |
+| Agents | `bin/idm` at the shell, or [this repository's MCP server](mcp.md): reads, dry-runs and a few gated vault writes, no tree edits | `/mcp` on the server, the whole loop: edits through any core operation (previewed first), validate, simulate, commit, compare, deploy; the agent acts as you under your roles, with the same plan and typed confirmation as the page ([below](#agents)) |
+
+## Agents
+
+The MCP server is part of every local and server install; there is nothing else to run. On the
+page, your name → **agent tokens…** makes a token and shows the `claude mcp add` command that
+connects Claude Code. Then `/mcp__dirxmldev__setup` installs the skills and docs of that server's
+version and reports who the agent acts as, the branch, the drivers and what `validate` says.
+Cursor, Codex or a script connects to the same address with the same header.
+
+The agent works the loop a person works at the shell, through tools instead of commands:
+
+| Step | Tools |
+|---|---|
+| Look around | `session`, `outline`, `read_artifact`, `read_file`, `validate`, `fishbone`, `git_status`, `git_diff` |
+| Change the tree | `list_operations`, then `run_operations`: any operation `bin/idm` has (`policy.add`, `gcv.set`, `form.field.add`, …), a dry run by default, applied when asked |
+| Prove it | `validate`, `simulate` |
+| Keep it | `open_branch`, `list_branches`, `commit` (and push); pull requests are the person's |
+| Against a vault | `environments`, `compare`, `compare_environments`, `plan_deploy`, `deploy`, `rollback`, `driver_status`, `driver_lifecycle`, `trace`, `snapshots` |
+| A project per environment | `compare_projects`, `promote_changes` |
+
+What decides what an agent may do is the server, not the agent. It acts as the person whose token
+it holds: their roles, their vault sign-ins, their workspaces, every call in the audit log as
+theirs. A deploy, rollback or driver start or stop needs the environment's name typed by the
+person, and production the deployer role. Every tool and its arguments:
+DirXMLDevWeb's [docs/agents.md](https://github.com/PointBlueTechnology/DirXMLDevWeb/blob/main/docs/agents.md).
+
+Compared with [this repository's MCP server](mcp.md): that one is stdio, runs `bin/idm` on your
+machine with your secrets files, and offers reads, dry-runs and a few gated writes; tree edits stay
+at the shell. DirXMLDevWeb's is HTTP, shared by a team, with sign-in, roles and audit, and covers
+edits too.
 
 ## What stays on the command line
 
@@ -51,8 +87,8 @@ The full list is DirXMLDevWeb's
 
 | | Who | What you get |
 |---|---|---|
-| Local | One person, Docker on their own machine | `http://localhost:8080`, one folder on disk (`~/idmweb/`) with a git repository, projects and branches |
-| Server | A team, behind a proxy with TLS | Sign-in through OpenID Connect (Keycloak, Entra, Okta and others), the team's repository on GitHub or GitLab, a branch per person, audit |
+| Local | One person, Docker on their own machine | `http://localhost:8080` and its MCP server at `/mcp`, one folder on disk (`~/idmweb/`) with a git repository, projects and branches |
+| Server | A team, behind a proxy with TLS | The page and `/mcp` for everyone, sign-in through OpenID Connect (Keycloak, Entra, Okta and others), the team's repository on GitHub or GitLab, a branch per person, audit |
 | Workstation | A developer, from a checkout | `bin/idmweb serve <tree>` on loopback, one tree edited in place, no sign-in and no audit |
 
 Local and server are the same image. The engine jars are optional for both: without them the page

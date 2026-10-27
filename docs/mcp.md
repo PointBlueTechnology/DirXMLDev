@@ -4,6 +4,8 @@ A thin stdio MCP server in [`mcp/dirxmldev-mcp`](../mcp/dirxmldev-mcp) that shel
 
 `bin/idm` with no arguments is the command list these tools were checked against. The server does not invent flags.
 
+For tree edits, commits and a server shared by a team, use DirXMLDevWeb's MCP server instead: HTTP at `/mcp`, backed by this core, part of the same install as its browser workbench, with personal tokens, roles and audit ([web-workbench.md](web-workbench.md#agents)).
+
 ## Wire it into Cursor
 
 From the DirXMLDev checkout:
