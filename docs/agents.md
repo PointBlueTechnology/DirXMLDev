@@ -8,6 +8,11 @@ An optional MCP server wraps a subset of those commands for clients that call
 tools. It shells out to the CLI and does not add flags. See
 [MCP](#mcp-optional) and [mcp.md](mcp.md).
 
+For an MCP server that covers the whole loop, edits and commits included,
+[DirXMLDevWeb](web-workbench.md#agents) serves one at `/mcp`, backed by this
+core, in the same install as its browser workbench and the CLIs. Agents
+connect with a personal token and act as that person, under their roles.
+
 The instructions are ordinary markdown. A vendor skill directory is only a
 loader for products that auto-read one. If your agent does not, point it at
 this page and at [agent-guide.md](agent-guide.md).
