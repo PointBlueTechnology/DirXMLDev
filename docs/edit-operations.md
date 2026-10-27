@@ -92,7 +92,7 @@ having because agents do them constantly and get the XML wrong:
 
 | operation | |
 |---|---|
-| `gcv.set` `driver? name value` | sets a GCV's value in the driver's (or driver set's) config-values; `--define type=… display-name=…` creates the definition when absent (the engine rejects a definition with no `display-name`) |
+| `gcv.set` `driver? name value server?` | sets a GCV's value in the driver's (or driver set's) config-values; `--define type=… display-name=…` creates the definition when absent (the engine rejects a definition with no `display-name`); on a set served by several servers, `--server S` sets the value one server holds for the driver ([vault-deploy.md](vault-deploy.md#several-servers-in-a-driver-set-2026-09-25)) |
 | `gcv.delete` `driver? name` | refuses if any policy references it (token or `~name~`) |
 | `filter.set-class` `driver class publisher subscriber …` / `filter.set-attr` `driver class attr publisher subscriber merge-authority …` / `filter.remove-class` / `filter.remove-attr` | edits the driver filter with the enumerations the validator checks |
 | `schema-map.set` `driver ndsClass appClass? ndsAttr? appAttr?` / `schema-map.remove` | edits the driver's `<attr-name-map>` |

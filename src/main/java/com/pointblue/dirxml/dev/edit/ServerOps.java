@@ -165,7 +165,7 @@ public final class ServerOps {
     // ---- config documents (null: the server holds none) ----
 
     /** What {@code server} holds of a config kind: the primary's own, or the server's override (null = none). */
-    private static Element configOn(Driver d, String kind, String server, String primary) {
+    static Element configOn(Driver d, String kind, String server, String primary) {
         if (server.equalsIgnoreCase(primary)) {
             return d.config.get(kind);
         }
@@ -238,7 +238,7 @@ public final class ServerOps {
     }
 
     /** Overrides keep only what differs from the primary: an override equal to it goes, and so does an empty server. */
-    private static void normalize(Driver d) {
+    static void normalize(Driver d) {
         for (Map<String, Element> o : d.serverConfig.values()) {
             o.entrySet().removeIf(e -> Servers.sameXml(e.getValue(), d.config.get(e.getKey())));
         }

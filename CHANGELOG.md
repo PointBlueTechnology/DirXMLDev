@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`gcv.set --server S`** sets a driver's GCV on one server of a set served by several (#134). The
+  value goes into that server's own copy of the driver's config-values, made from the primary's when it
+  has none, and no other server changes. A copy that comes to equal the primary's is dropped. Without
+  `--server`, the primary's value is set, as before; every server without its own copy follows it.
+- **`query gcvs <driver>`** prints, under a GCV, each server whose value differs from the primary's, a
+  GCV only another server defines, and which server is the primary.
+- **`GcvOps.onServers`, `GcvOps.onlyOnServers`, `GcvOps.valueIn`:** where a driver's GCV differs per
+  server, for the web workbench.
+
 ## [0.55.0] - 2026-10-26
 
 ### Added

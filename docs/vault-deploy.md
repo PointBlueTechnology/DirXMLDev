@@ -413,6 +413,14 @@ the tool saw one server's copy. Now:
   that held the primary's old value keeps it as its own. The tree keeps only
   what differs from the primary. A deploy then writes the copy to the target
   server.
+- **`gcv.set --server S`** sets a driver's GCV on one server: the value goes
+  into that server's own copy of the driver's config-values (made from the
+  primary's when the server has none yet), and nothing else changes. Without
+  `--server`, `gcv.set` writes the primary's value, which every server without
+  its own copy follows. A copy that comes to equal the primary's is dropped.
+  `query gcvs <driver>` prints each server's value under the primary's where it
+  differs, names the primary, and lists a GCV that only another server defines.
+  GCVs from a resource or the driver set's own are the same on every server.
 
 On a single-server set none of this shows: no overrides, no server steps.
 
