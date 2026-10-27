@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-10-27
+
 ### Added
 
 - **`gcv.set --server S`** sets a driver's GCV on one server of a set served by several (#134). The
