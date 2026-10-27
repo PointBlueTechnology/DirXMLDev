@@ -257,8 +257,31 @@ public final class ReadCli {
         }
         for (Map.Entry<String, String[]> e : seen.entrySet()) {
             System.out.printf("%-45s = %-30s (%s)%n", e.getKey(), abbreviate(e.getValue()[0]), e.getValue()[1]);
+            // a server holding its own copy of the driver's values, where it differs (#134)
+            if (d != null && e.getValue()[1].startsWith("drivers/")) {
+                for (Map.Entry<String, String> on : GcvOps.onServers(ds, d, e.getKey()).entrySet()) {
+                    System.out.printf("  %-43s = %-30s (on %s)%n", "", on.getValue() == null ? "(not defined)" : abbreviate(on.getValue()),
+                        com.pointblue.dirxml.dev.deploy.Servers.dirName(on.getKey()));
+                }
+            }
+        }
+        if (d != null) {
+            for (String name : GcvOps.onlyOnServers(d)) {
+                if (seen.containsKey(name)) {
+                    continue;
+                }
+                for (Map.Entry<String, String> on : GcvOps.onServers(ds, d, name).entrySet()) {
+                    System.out.printf("%-45s = %-30s (on %s only)%n", name, on.getValue() == null ? "(not defined)" : abbreviate(on.getValue()),
+                        com.pointblue.dirxml.dev.deploy.Servers.dirName(on.getKey()));
+                }
+            }
         }
         System.out.println(seen.size() + " GCV(s)" + (d == null ? " at driver-set scope" : " in scope for " + d.name));
+        String primary = ds.meta.get(com.pointblue.dirxml.dev.deploy.Servers.PRIMARY_META);
+        if (d != null && ds.servers.size() > 1 && primary != null) {
+            System.out.println("values are the primary server's (" + com.pointblue.dirxml.dev.deploy.Servers.dirName(primary)
+                + "); a server without its own copy of the driver's values follows them");
+        }
         return 0;
     }
 

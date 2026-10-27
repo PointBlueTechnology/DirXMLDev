@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.edit;
 
+import com.pointblue.dirxml.dev.deploy.Servers;
 import com.pointblue.dirxml.dev.model.Artifact;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
@@ -15,6 +16,7 @@ import org.w3c.dom.Node;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -30,6 +32,12 @@ import java.util.regex.Pattern;
  * engine rejects a definition without a {@code display-name}). {@code gcv.delete}
  * refuses while any policy in the driver's reach references the name (as a
  * token or as {@code ~name~}) — the engine wouldn't start the driver.
+ *
+ * <p>On a driver set served by several servers, each server holds its own copy of a driver's
+ * config-values (never-sync; {@link Servers}). The tree keeps the primary's in the driver's files and,
+ * per other server, a copy where it differs ({@link Driver#serverConfig}). {@code gcv.set} writes the
+ * primary's, which every server without its own copy follows; {@code --server} writes one server's
+ * copy (#134). {@link #onServers} says where a value differs.
  */
 public final class GcvOps {
 
@@ -98,6 +106,78 @@ public final class GcvOps {
         return null;
     }
 
+    // ---- per server ---------------------------------------------------------------
+
+    /** The value {@code configValues} gives {@code name}: its first {@code <value>}'s text, "" when it has none, null when it doesn't define it. */
+    public static String valueIn(Element configValues, String name) {
+        Element def = definition(configValues, name);
+        if (def == null) {
+            return null;
+        }
+        List<Element> values = Xds.childrenByName(def, "value");
+        return values.isEmpty() ? "" : Xds.text(values.get(0));
+    }
+
+    /**
+     * Where a driver's own GCV {@code name} differs on another server of the driver set: server DN → the
+     * value that server holds (null when its own values don't define it), in the set's server order. Only
+     * servers with their own copy of the driver's config-values appear, and only where it differs from the
+     * primary's. Empty on a single-server set, and for a GCV from a resource or the driver set, which every
+     * server shares.
+     */
+    public static Map<String, String> onServers(DriverSet ds, Driver d, String name) {
+        Map<String, String> out = new LinkedHashMap<>();
+        String primary = ds.meta.get(Servers.PRIMARY_META);
+        if (d == null || ds.servers.size() < 2 || primary == null) {
+            return out;
+        }
+        String base = valueIn(d.config.get(Driver.CONFIG_VALUES), name);
+        for (String s : Servers.others(ds, primary)) {
+            Map<String, Element> own = d.serverConfig.get(s);
+            if (own == null || !own.containsKey(Driver.CONFIG_VALUES)) {
+                continue;
+            }
+            String v = valueIn(own.get(Driver.CONFIG_VALUES), name);
+            if (v == null ? base != null : !v.equals(base)) {
+                out.put(s, v);
+            }
+        }
+        return out;
+    }
+
+    /** GCV names another server's copy of the driver's config-values defines and the primary's doesn't, in first-seen order. */
+    public static List<String> onlyOnServers(Driver d) {
+        List<String> out = new ArrayList<>();
+        Element base = d.config.get(Driver.CONFIG_VALUES);
+        for (Map<String, Element> own : d.serverConfig.values()) {
+            Element cv = own.get(Driver.CONFIG_VALUES);
+            if (cv == null) {
+                continue;
+            }
+            for (Element def : Xds.descendantsByName(cv, "definition")) {
+                String n = def.getAttribute("name");
+                if (!n.isBlank() && definition(base, n) == null && !out.contains(n)) {
+                    out.add(n);
+                }
+            }
+        }
+        return out;
+    }
+
+    private static void setValue(Element def, String value) {
+        List<Element> values = Xds.childrenByName(def, "value");
+        if (values.isEmpty()) {
+            Element v = def.getOwnerDocument().createElementNS(null, "value");
+            v.setTextContent(value);
+            def.appendChild(v);
+        } else {
+            values.get(0).setTextContent(value);
+            for (int i = 1; i < values.size(); i++) {
+                def.removeChild(values.get(i));   // a scalar has one value
+            }
+        }
+    }
+
     // ---- set ------------------------------------------------------------------
 
     public static final class Set implements Operation {
@@ -106,13 +186,19 @@ public final class GcvOps {
         private final String value;
         private final String defineType;        // non-null: create when absent
         private final String defineDisplayName;
+        private final String server;            // null or the primary: the driver's own values
 
         public Set(String driver, String name, String value, String defineType, String defineDisplayName) {
+            this(driver, name, value, defineType, defineDisplayName, null);
+        }
+
+        public Set(String driver, String name, String value, String defineType, String defineDisplayName, String server) {
             this.driver = driver;
             this.name = name;
             this.value = value;
             this.defineType = defineType;
             this.defineDisplayName = defineDisplayName;
+            this.server = server;
         }
 
         @Override
@@ -129,6 +215,9 @@ public final class GcvOps {
                 throw new Refusal("a value is required");
             }
             Driver d = driver == null || driver.isBlank() ? null : ArtifactOps.driverOrRefuse(ds, driver);
+            if (server != null && !server.isBlank() && setOnServer(ds, d)) {
+                return;
+            }
             Home home = find(ds, d, name, ds.index());
             if (home == null) {
                 if (defineType == null) {
@@ -159,18 +248,52 @@ public final class GcvOps {
             if (home.resource != null) {
                 tx.touch(home.resource);
             }
-            Element def = home.definition;
-            List<Element> values = Xds.childrenByName(def, "value");
-            if (values.isEmpty()) {
-                Element v = def.getOwnerDocument().createElementNS(null, "value");
-                v.setTextContent(value);
-                def.appendChild(v);
-            } else {
-                values.get(0).setTextContent(value);
-                for (int i = 1; i < values.size(); i++) {
-                    def.removeChild(values.get(i));   // a scalar has one value
-                }
+            setValue(home.definition, value);
+        }
+
+        /**
+         * {@code --server}: the value in that server's copy of the driver's config-values. False when the
+         * server named is the primary, whose values are the driver's own (the usual path then). A copy that
+         * comes to equal the primary's is dropped: the tree keeps only what differs.
+         */
+        private boolean setOnServer(DriverSet ds, Driver d) throws Refusal {
+            if (d == null) {
+                throw new Refusal("--server needs --driver: each server holds its own copy of a driver's GCVs; the driver set's are the same on every server");
             }
+            if (ds.servers.size() < 2) {
+                throw new Refusal("the driver set has " + (ds.servers.isEmpty() ? "no servers on record" : "one server")
+                    + ": a server holds its own GCV values only where several servers serve it");
+            }
+            String primary = ds.meta.get(Servers.PRIMARY_META);
+            if (primary == null) {
+                throw new Refusal("the tree doesn't record which server it was read through (" + Servers.PRIMARY_META
+                    + "): read it from the vault again");
+            }
+            String s = ServerOps.server(ds, server, primary, "--server");
+            if (s.equalsIgnoreCase(primary)) {
+                return false;
+            }
+            String label = Servers.dirName(s);
+            if (defineType != null) {
+                throw new Refusal("--define makes a GCV on the primary, which every server follows; to give " + label
+                    + " a value of its own, define it first, then gcv.set --server " + label);
+            }
+            Element own = ServerOps.configOn(d, Driver.CONFIG_VALUES, s, primary);
+            if (own == null) {
+                throw new Refusal(label + " holds none of " + d.name + "'s GCVs; copy the primary's first: driver.server.copy --from primary --to "
+                    + label + " --driver \"" + d.name + "\" --only gcv");
+            }
+            Element copy = CanonicalXml.parse(CanonicalXml.serialize(own)).getDocumentElement();
+            Element def = definition(copy, name);
+            if (def == null) {
+                throw new Refusal("GCV '" + name + "' isn't among " + label + "'s own values for " + d.name
+                    + (find(ds, d, name, ds.index()) == null ? "" : " (it comes from the primary, a resource or the driver set there)")
+                    + "; copy the primary's first: driver.server.copy --from primary --to " + label + " --driver \"" + d.name + "\" --only gcv");
+            }
+            setValue(def, value);
+            d.serverConfig.computeIfAbsent(s, k -> new LinkedHashMap<>()).put(Driver.CONFIG_VALUES, copy);
+            ServerOps.normalize(d);
+            return true;
         }
     }
 
