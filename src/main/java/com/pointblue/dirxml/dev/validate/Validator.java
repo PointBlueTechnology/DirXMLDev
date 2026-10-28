@@ -29,6 +29,7 @@ public final class Validator {
     /** The standard check set, in the order the findings are most useful. */
     public static Validator standard() {
         return new Validator(Arrays.asList(
+            new DuplicateArtifactCheck(),
             new LinkCheck(),
             new CompileCheck(),
             new ScriptCheck(),

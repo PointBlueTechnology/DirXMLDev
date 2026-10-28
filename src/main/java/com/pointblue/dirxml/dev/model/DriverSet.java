@@ -49,6 +49,8 @@ public final class DriverSet {
     /** Per environment, the values that differ from the tree's base ({@code overrides/<env>.properties}; see {@code deploy.Overrides}). */
     public final java.util.Map<String, java.util.Map<String, String>> overrides = new java.util.TreeMap<>();
     public final Map<String, String> meta = new LinkedHashMap<>();
+    /** What a read left out because another artifact had its path ({@link DuplicateArtifacts}); never written. */
+    public final List<DuplicateArtifacts.Dropped> duplicates = new ArrayList<>();
     /** Differences accepted as they are, per environment ({@code overrides/<env>.known.json}). */
     public final Map<String, List<KnownDifference>> known = new java.util.TreeMap<>();
 
