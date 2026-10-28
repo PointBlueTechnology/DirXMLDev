@@ -7,6 +7,34 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Every command reads its command line against what it takes (`Args`; #104, #105):
+  - **Flags without a value:** they never take the next word, so `vault.diff --json tree …` keeps
+    the tree.
+  - **`--name=value`** is accepted.
+  - **Usage errors (exit 2), each naming the problem:** an option the command doesn't take, a
+    value given to a flag, an option without its value, an unknown verb, extra positional
+    arguments, and a number that isn't one. Before, these were ignored, picked a default, took the
+    wrong word, or ended with `ERROR:` and exit 3 (the rest of #107).
+  - **`--json`** is accepted by every command.
+- What a user will notice:
+  - `validate` takes exactly one tree. An unknown flag used to become the tree path.
+  - `vault.email-server set` clears a setting with an empty value (`--host=` or `--host ""`); a
+    bare `--host` is now a usage error.
+  - `driver.migrate --direction app --dry-run` is refused. `--dry-run` was ignored there, and the
+    migrate ran for real.
+  - `promote.plan` refuses `--force`, `--by` and `--dry-run`, which only `promote.apply` uses.
+  - `--gcvs`, `--customized` (`package.build`) and `--stage`, `--type`, `--since`, `--until`
+    (`query … events`) refuse unlisted values.
+  - `package.diff --catalog=DIR` goes to the catalog form.
+- The agent write gate (#108):
+  - `driver.migrate --direction vault --dry-run` is no longer a write for it.
+  - `driver.query`, which asks the connected system through the driver, now needs `--confirm
+    <env>` or `IDM_AGENT_ALLOW_WRITE=1` on every tier.
+
+  The usage text now lists every operate command the gate covers.
+
 ### Fixed
 
 - Values outside the listed ones are refused with a usage error (exit 2) instead of picking a
