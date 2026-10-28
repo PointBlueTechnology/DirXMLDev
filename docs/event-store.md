@@ -83,7 +83,7 @@ as `attr: removed → added`, which is what the web's diff view renders.
 ## 4. `events.case`
 
 ```
-idm events.case --env edir3 --id 4711 --name "ad-user-add-sample" [--driver "Active Directory Driver"] [--channel subscriber] [--run]
+idm events.case --env edir3 --id 4711 --name "ad-user-add-sample" [--driver "Active Directory Driver"] [--channel subscriber]
 ```
 
 - The row's XDS becomes `cases/<name>/input.xds`. From `xmlevent` when present; else rebuilt
@@ -97,8 +97,8 @@ idm events.case --env edir3 --id 4711 --name "ad-user-add-sample" [--driver "Act
 - The directory is the tree's `cases/` (decided in the web note); `--dir` writes elsewhere for a
   sample that must not be committed.
 - A case that exists is refused unless `--replace`.
-- `--run` runs it through the simulator at once and records the golden
-  (`expected-output.xds`), the same as the web's "run and record".
+- `--run` (run it through the simulator at once and record the golden) is not built; run the
+  case with `simulate`, or the web's simulator view.
 
 It is an edit operation so it goes through the review like every tree write: the web shows the
 case files as the diff before applying, and the MCP server exposes it with the others.
@@ -146,7 +146,7 @@ which version it reads.
   against a synthetic tree (files written, properties, refusals, the pseudonymised variant).
 - Live: `bin/smoke-events.sh` starts the logger's `docker/compose.yml` database when Docker is
   present, loads the contract's example rows, and runs `doctor`, every `query events`
-  selector and `events.case --run`; skipped with a notice otherwise. CI runs the unit tests;
+  selector and `events.case`; skipped with a notice otherwise. CI runs the unit tests;
   the live script is for the lab.
 
 ## 9. Decisions (taken 2026-10-07)

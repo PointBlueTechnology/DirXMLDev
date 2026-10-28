@@ -5,15 +5,17 @@ Use the tool first. The design notes and the phase history are below them.
 On a new machine, [agent-assisted-setup.md](agent-assisted-setup.md) hands the
 install to a coding agent. The manual version is [install.md](install.md).
 
-`bin/idm` with no arguments is the command reference. `bin/apps --help` is the
-Identity Applications reference. When a page and the live help disagree, follow
-the help.
+[commands.md](commands.md) is the command reference: every `bin/idm` command
+with its arguments, accepted values and an example. `bin/idm` with no arguments
+prints the same in short. `bin/apps --help` is the Identity Applications
+reference. When a page and the live help disagree, follow the help.
 
 ## Using the tool
 
 | Guide | Read it when you want to |
 |---|---|
 | [../README.md](../README.md) | See what DirXMLDev is and copy the first commands |
+| [commands.md](commands.md) | Look up a command: its arguments, the values they take, an example |
 | [getting-started.md](getting-started.md) | Point an already-built `bin/idm` at a client tree and a vault |
 | [tree-layout.md](tree-layout.md) | Understand `driverset.xml`, `drivers/`, `cases/`, and the secrets files |
 | [day-to-day.md](day-to-day.md) | Change a policy, deploy, install a package, edit a form, operate a driver |
@@ -41,7 +43,7 @@ the help.
 | Entitlements | [entitlements.md](entitlements.md) |
 | Roles, resources, entities, the rest of AppConfig | [appconfig.md](appconfig.md) |
 | Identity Applications REST (`bin/apps`) | [idapps-rest.md](idapps-rest.md) |
-| Edit operations in detail | [edit-operations.md](edit-operations.md) |
+| Edit operations: every one, its arguments, an example | [commands.md](commands.md#edit-operations-what-every-one-shares); the design: [edit-operations.md](edit-operations.md) |
 
 ## Designer, clones, and the fishbone
 
