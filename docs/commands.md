@@ -15,9 +15,10 @@ own `bin/sim` is the DirXMLSimulator repository's.
 - **`--env <name>`** names an environment in `environments.properties`: its vault, its bind and
   where its password comes from ([secrets.md](secrets.md)). A command that reads or writes a vault
   takes one.
-- **Flags** are written `--name value`. A flag that takes no value is marked *a flag* or says so.
-  Put the tree and other positional arguments first: in most commands a flag without a value
-  takes the next word as its value when that word doesn't start with `--`.
+- **Flags** are written `--name value` or `--name=value`. A flag that takes no value is marked *a
+  flag* or says so, and never takes the word after it, so the tree can come before or after the
+  flags. An option the command doesn't take, a value given to a flag, an option without its value
+  and a number that isn't one exit 2 and say which. `--json` is accepted by every command.
 - **`--json`** prints the result as JSON instead of text, where the command offers it.
 - **Exit codes**: 0 when the command did what was asked, 1 when it refused or found a difference
   (a diff, a validation error), 2 on a usage error, 3 on an unexpected error (`ERROR: …`). An
@@ -63,7 +64,7 @@ bin/idm version [--check]
 
 | Argument | Required | Values |
 |---|---|---|
-| `--check` | no | ask GitHub for the latest release; only recognised as the first argument after `version`. Runs even when `IDM_NO_UPDATE_CHECK` is set; sends `GITHUB_TOKEN` when set |
+| `--check` | no | ask GitHub for the latest release; anywhere after `version` (any other argument exits 2). Runs even when `IDM_NO_UPDATE_CHECK` is set; sends `GITHUB_TOKEN` when set |
 
 ```bash
 bin/idm version --check
@@ -305,7 +306,7 @@ bin/idm query <asCodeDir> drivers [--json]
 | `fishbone` | `<driver>` required; `--json` optional | the policy-flow fishbone the VS Code viewer draws |
 | `drivers` | `--json` optional | each driver's name and directory |
 
-`<driver>` is a driver's name; an unknown name lists the tree's drivers and exits 1. An unknown verb exits 2. `--json` applies to `fishbone` and `drivers` only.
+`<driver>` is a driver's name; an unknown name lists the tree's drivers and exits 1. Arguments beyond a verb's own exit 2. An unknown verb exits 2. `--json` applies to `fishbone` and `drivers` only.
 
 ```bash
 bin/idm query tree chain "Active Directory" sub
@@ -502,6 +503,7 @@ bin/idm promote.map <target> --from <source> [--name <pair>]
 | `<target>` | yes | the target tree directory |
 | `--from` | yes | the source tree directory; `--with` is accepted too |
 | `--name` | no | the pair's name; default as for `tree.compare` |
+| `--cases`, `--source-cases` | no | the two sides' simulator cases; defaults as for `tree.compare` |
 
 ```bash
 bin/idm promote.map prod/tree --from qa/tree
@@ -551,6 +553,7 @@ bin/idm promote.forget <target> (--from <source> | --name <pair>) --object <path
 | `<target>` | yes | the target tree directory |
 | `--from` | yes for `promote.accept`; for `promote.forget`, this or `--name` | the source tree directory; `--with` is accepted too |
 | `--name` | no; for `promote.forget`, this or `--from` | the pair's name; default as for `tree.compare` |
+| `--cases`, `--source-cases` | no | the two sides' simulator cases; defaults as for `tree.compare` |
 | `--object` | yes, exactly once | one file path or value key; for `promote.accept` it must differ now |
 | `--decision` | no; `promote.accept` only | `intended` (different on purpose; the default) or `later` (to decide) |
 | `--note` | no; `promote.accept` only | free text |
@@ -568,9 +571,7 @@ More: [promotion.md](promotion.md#promoteaccept-and-promoteforget).
 
 ### Vault writes
 
-Most commands in this group only read. The ones that write to a vault are `vault.deploy` with `--yes` or `--step` (and without `--dry-run`), `vault.rollback --yes`, `vault.import-clone --yes` and `vault.deploy-schema --yes`. Without those flags each of them prints its plan and stops. The CLI checks all four before it resolves a secret or opens LDAP: the write goes ahead only when `IDM_AGENT_ALLOW_WRITE=1` is set or `--confirm <env>` names the target environment. Otherwise it prints `refusing vault write to '<env>'` and exits 1. Tier rules come on top. A `prd`-tier deploy always needs `--confirm <env>`, even with `IDM_AGENT_ALLOW_WRITE=1`. It also needs the tree committed in git with nothing uncommitted, the `--base-branch` branch checked out when one is given, a green deploy to `<env>.requires` when that is set, and a vault that matches the last deploy on record. `vault.deploy-schema` to a `prd` tier needs `--confirm <env>`. `vault.import-clone` never targets a `prd` tier. `vault.rollback` to a `prd` tier needs only `--yes` and the agent gate. `vault.schema`, `vault.app-schema`, `vault.export-clone` and `events.case` write files in the tree or on disk, never to the vault.
-
-All of these commands take their flags as `--name value`, not `--name=value`. A flag followed by a word that does not start with `--` takes that word as its value. So put positional arguments (`<tree>`) before flags that take no value, such as `--json` or `--yes`.
+Most commands in this group only read. The ones that write to a vault are `vault.deploy` with `--yes` or `--step` (and without `--dry-run`), `vault.rollback --yes`, `vault.import-clone --yes` and `vault.deploy-schema --yes`. Without those flags each of them prints its plan and stops. The CLI checks all four before it resolves a secret or opens LDAP: the write goes ahead only when `IDM_AGENT_ALLOW_WRITE=1` is set or `--confirm <env>` names the target environment. Otherwise it prints `refusing vault write to '<env>'` and exits 1. Tier rules come on top. A `prd`-tier deploy always needs `--confirm <env>`, even with `IDM_AGENT_ALLOW_WRITE=1`. It also needs the tree committed in git with nothing uncommitted, the `--base-branch` branch checked out when one is given, a green deploy to `<env>.requires` when that is set, and a vault that matches the last deploy on record. `vault.deploy-schema` to a `prd` tier needs `--confirm <env>`. `vault.import-clone` never targets a `prd` tier. The operate commands that change a driver, and `driver.query`, are gated the same way ([Operate a running driver set](#operate-a-running-driver-set)); `driver.migrate --dry-run` is not a write. `vault.rollback` to a `prd` tier needs only `--yes` and the agent gate. `vault.schema`, `vault.app-schema`, `vault.export-clone` and `events.case` write files in the tree or on disk, never to the vault.
 
 ### `vault.diff`, `vault.verify`
 
@@ -807,12 +808,12 @@ bin/idm query <tree> event <id> --env <name> [--json] [--xml]
 | `--name` | `events` | no | the end of a source DN (an RDN or tail) |
 | `--driver` | `events` | no | a driver's name, matched case-insensitively against the store's driver DNs; or a slash DN starting with `\` |
 | `--policy` | `events` | no | rows a PolicyLogger wrote at that policy |
-| `--stage` | `events` | no | `input` or `output` |
+| `--stage` | `events` | no | `input` or `output`; anything else exits 2 |
 | `--own` | `events` | no | only the driver's own rows (no policy) |
 | `--logged` | `events` | no | only rows its policies logged; `--own` wins if both are given |
-| `--type` | `events` | no | comma-separated: `add`, `modify`, `delete`, `sync`, `rename`, `move` |
+| `--type` | `events` | no | comma-separated: `add`, `modify`, `delete`, `sync`, `rename`, `move`; anything else exits 2 |
 | `--class` | `events` | no | an object class, such as `User` |
-| `--since`, `--until` | `events` | no | `30s`, `30m`, `24h` or `7d` ago; an ISO instant (`2026-10-28T09:00:00Z`); or a date (`2026-10-28`, local midnight). `--until` is exclusive |
+| `--since`, `--until` | `events` | no | `30s`, `30m`, `24h` or `7d` ago; an ISO instant (`2026-10-28T09:00:00Z`); or a date (`2026-10-28`, local midnight). `--until` is exclusive; anything else exits 2 |
 | `--event-id` | `events` | no | an engine event id: every row of that event |
 | `--text` | `events` | no | free text over the row's JSON. On a store over 100,000 rows it is refused unless `--dn`, `--under`, `--name`, `--driver`, `--event-id`, `--since` or `--until` is given too |
 | `--attr` | `events` | no | modify events that touched this attribute |
@@ -1206,7 +1207,7 @@ bin/idm package.import --catalog <dir> <jar|dir> [--json]
 |---|---|---|
 | `--catalog` | yes | the catalog directory (created when missing); missing exits 2 |
 | `<jar|dir>` | yes | a package jar, or a directory of jars (not searched recursively) |
-| `--json` | no | one result per jar (short, version, added, refusal); give it after `<jar|dir>`, or the path is read as its value |
+| `--json` | no | one result per jar (short, version, added, refusal) |
 
 ```bash
 bin/idm package.import --catalog catalog ~/designer/packages/eclipse/plugins
@@ -1226,7 +1227,7 @@ bin/idm package.list --catalog <dir> [--driver-type <id>] [--type 2|3|4] [--base
 |---|---|---|
 | `--catalog` | yes | the catalog directory; missing exits 2 |
 | `--driver-type` | no | only packages whose supported drivers include this id (the supported driver's `id` or `driverId`) |
-| `--type` | no | `2` driver, `3` driver set, `4` identity vault; a non-number fails with exit 3 |
+| `--type` | no | `2` driver, `3` driver set, `4` identity vault; a non-number exits 2 |
 | `--base` | no | only base packages |
 | `--json` | no | short, id, type, base and versions per package as JSON |
 
@@ -1248,7 +1249,7 @@ bin/idm package.show --catalog <dir> <SHORT[_ver]> [--json]
 |---|---|---|
 | `--catalog` | yes | the catalog directory; missing exits 2 |
 | `<SHORT[_ver]>` | yes | a package's short name, optionally `_<version>`; default: the newest version in the catalog |
-| `--json` | no | the same as JSON; give it after `<SHORT[_ver]>`, or the name is read as its value |
+| `--json` | no | the same as JSON |
 
 ```bash
 bin/idm package.show --catalog catalog NOVLADENTB_2.6.0
@@ -1269,7 +1270,7 @@ bin/idm package.diff --catalog <dir> <SHORT_v1> <SHORT_v2> [--json]
 | `--catalog` | yes | the catalog directory; its presence selects this form |
 | `<SHORT_v1>` | yes | the first package, `SHORT_<version>`; without a version, the newest |
 | `<SHORT_v2>` | yes | the second package, the same form |
-| `--json` | no | the difference as JSON; give it after the two packages, or the next one is read as its value |
+| `--json` | no | the difference as JSON |
 
 ```bash
 bin/idm package.diff --catalog catalog NOVLADENTB_2.5.0 NOVLADENTB_2.6.0
@@ -1311,7 +1312,7 @@ bin/idm package.build --catalog <dir> <tree> --short <SHORT> --name <display nam
 | Argument | Required | Values |
 |---|---|---|
 | `--catalog` | yes | the catalog directory; missing exits 2 |
-| `<tree>` | yes | an IDM-as-code tree directory; give it straight after `--catalog <dir>` |
+| `<tree>` | yes | an IDM-as-code tree directory |
 | `--short` | yes | 4–12 uppercase letters or digits (for example `PBTCUSTAD`); missing exits 2, other forms are refused |
 | `--name` | yes | the package's display name; missing exits 2 |
 | `--driver` | no | the driver whose artifacts to package; default: the Library (a driver-set package). An unknown name is refused |
@@ -1496,7 +1497,7 @@ More: [operate.md](operate.md#safeguards).
 
 ### `driver.migrate`
 
-Migrates objects through a running driver. `--direction app` (the default when `--xds` is given) sends an XDS query document to the engine's Migrate from Application. `--direction vault` searches the vault and sends each object found down the driver's subscriber channel as a `<sync>`, so the engine sends its add or modify to the application; `--dry-run` lists the objects instead. Writes to the vault: needs `--yes` on every tier, `--confirm <env>` on a `prd` tier, and `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1` on any tier (that last one also for `--dry-run`, which needs no `--yes`). The driver must be running. Audited.
+Migrates objects through a running driver. `--direction app` (the default when `--xds` is given) sends an XDS query document to the engine's Migrate from Application. `--direction vault` searches the vault and sends each object found down the driver's subscriber channel as a `<sync>`, so the engine sends its add or modify to the application; `--dry-run` lists the objects instead. Writes to the vault: needs `--yes` on every tier, `--confirm <env>` on a `prd` tier, and `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1` on any tier ; `--dry-run` (only with `--direction vault`) needs neither `--yes` nor the agent gate, and with `--direction app` it is refused. The driver must be running. Audited.
 
 ```
 bin/idm driver.migrate --env <name> --driver <name> [--direction app] --xds <file> --yes [--confirm <env>] [--tree <dir>] [--json]
@@ -1702,7 +1703,7 @@ More: [operate.md](operate.md#operations-and-what-backs-them).
 
 ### `driver.query`
 
-Asks the connected system a question through the running driver: the engine's query verb as a command into the subscriber channel; prints the `<instance>`s the shim answers. An LDAP `--dn` is converted to the slash form the verb takes. It occupies the driver's channel, so it is gated as a light operation: `--yes` on a `stg` or `prd` tier, `--confirm <env>` on a `prd` tier (the agent write gate does not apply). Audited. Refused when the driver is not running.
+Asks the connected system a question through the running driver: the engine's query verb as a command into the subscriber channel; prints the `<instance>`s the shim answers. An LDAP `--dn` is converted to the slash form the verb takes. It occupies the driver's channel, so it is gated as a light operation: `--yes` on a `stg` or `prd` tier, `--confirm <env>` on a `prd` tier, and, on every tier, `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1` (the agent write gate). Audited. Refused when the driver is not running.
 
 ```
 bin/idm driver.query --env <name> --driver <name> [--class <class>] [--scope subtree|subordinates|entry] [--dn <dn>] [--association <value>] [--search <attr>=<value>]… [--read-attr <attr>]…|[--read-attr none] [--yes] [--confirm <env>] [--tree <dir>] [--json]
@@ -2025,7 +2026,7 @@ More: [console-gaps.md](console-gaps.md#13-as-built-l1-the-low-set).
 
 ### `vault.email-server`
 
-The notification collection's SMTP settings; the password is reported as set or not, never shown. `set` writes the settings given (a flag with an empty value clears that setting) and the password from the environment's secrets file (`--password-key`) or one line on stdin (`--stdin`). Show is read-only. `set` writes to the vault: needs `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1`, `--yes` on a `stg` or `prd` tier, and `--confirm <env>` on a `prd` tier. Audited.
+The notification collection's SMTP settings; the password is reported as set or not, never shown. `set` writes the settings given (an empty value, `--host=` or `--host ""`, clears that setting) and the password from the environment's secrets file (`--password-key`) or one line on stdin (`--stdin`). Show is read-only. `set` writes to the vault: needs `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1`, `--yes` on a `stg` or `prd` tier, and `--confirm <env>` on a `prd` tier. Audited.
 
 ```
 bin/idm vault.email-server --env <name> [--json]

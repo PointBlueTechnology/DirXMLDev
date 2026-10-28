@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.forms;
 
+import com.pointblue.dirxml.dev.Args;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.ascode.AsCodeWriter;
 import com.pointblue.dirxml.dev.deploy.Environments;
@@ -33,24 +34,31 @@ public final class FormEditCli {
     private FormEditCli() {
     }
 
+    /** What {@code form.edit} takes (#104, #105). */
+    static final Args.Spec SPEC = Args.Spec.of("no-wait check dry-run force", "driver env locale");
+
+    static final String USAGE = "usage: form.edit <tree> <form> [--driver D] [--env E] [--locale L] [--no-wait] [--check] [--dry-run] [--force] [--json]";
+
     public static int run(String[] args) {
-        if (args.length < 3 && !(args.length >= 2 && hasFlag(args, "--check"))) {
-            System.err.println("usage: form.edit <tree> <form> [--driver D] [--env E] [--locale L] [--no-wait] [--check] [--dry-run] [--force] [--json]");
+        Args parsed;
+        try {
+            parsed = Args.parse("form.edit", args, 1, SPEC);
+            if (parsed.positional.isEmpty() || (parsed.positional.size() < 2 && !parsed.has("check"))) {
+                throw new Args.UsageError(USAGE);
+            }
+            if (parsed.positional.size() > 2) {
+                throw new Args.UsageError("form.edit: unexpected argument '" + parsed.positional.get(2) + "'; " + USAGE);
+            }
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
             return 2;
         }
-        Path tree = Paths.get(args[1]);
-        String ref = args.length >= 3 && !args[2].startsWith("--") ? args[2] : null;
+        Path tree = Paths.get(parsed.positional.get(0));
+        String ref = parsed.positional.size() >= 2 ? parsed.positional.get(1) : null;
+        // a flag is read by presence, an option by its (first) value
         Map<String, String> opts = new HashMap<>();
-        for (int i = 2; i < args.length; i++) {
-            if (args[i].startsWith("--")) {
-                String k = args[i].substring(2);
-                if (i + 1 < args.length && !args[i + 1].startsWith("--") && !k.equals("no-wait") && !k.equals("check")
-                    && !k.equals("dry-run") && !k.equals("force") && !k.equals("json")) {
-                    opts.put(k, args[++i]);
-                } else {
-                    opts.put(k, "true");
-                }
-            }
+        for (String k : parsed.opts.keySet()) {
+            opts.put(k, parsed.first(k));
         }
         boolean json = opts.containsKey("json");
 
@@ -130,15 +138,6 @@ public final class FormEditCli {
             System.err.println("form.edit: " + e.getMessage());
             return 1;
         }
-    }
-
-    private static boolean hasFlag(String[] args, String flag) {
-        for (String a : args) {
-            if (a.equals(flag)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** The builder expects Designer's {@code ll_CC} form; {@code en_US} maps to "en" inside the builder. */
