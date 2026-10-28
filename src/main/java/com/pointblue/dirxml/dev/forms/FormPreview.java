@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.forms;
 
+import com.pointblue.dirxml.dev.Args;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.edit.FormOps;
 import com.pointblue.dirxml.dev.json.Json;
@@ -31,18 +32,30 @@ public final class FormPreview {
     private FormPreview() {
     }
 
+    /** What {@code form.preview} takes (#104, #105). */
+    static final Args.Spec SPEC = Args.Spec.of("", "driver out lang");
+
+    static final String USAGE = "usage: form.preview <tree> <form> [--driver D] [--out page.html] [--lang en]";
+
     public static int run(String[] args) {
-        if (args.length < 3) {
-            System.err.println("usage: form.preview <tree> <form> [--driver D] [--out page.html] [--lang en]");
+        Args parsed;
+        try {
+            parsed = Args.parse("form.preview", args, 1, SPEC);
+            if (parsed.positional.size() < 2) {
+                throw new Args.UsageError(USAGE);
+            }
+            if (parsed.positional.size() > 2) {
+                throw new Args.UsageError("form.preview: unexpected argument '" + parsed.positional.get(2) + "'; " + USAGE);
+            }
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
             return 2;
         }
-        Path tree = Paths.get(args[1]);
-        String ref = args[2];
+        Path tree = Paths.get(parsed.positional.get(0));
+        String ref = parsed.positional.get(1);
         Map<String, String> opts = new HashMap<>();
-        for (int i = 3; i + 1 < args.length; i += 2) {
-            if (args[i].startsWith("--")) {
-                opts.put(args[i].substring(2), args[i + 1]);
-            }
+        for (String k : parsed.opts.keySet()) {
+            opts.put(k, parsed.first(k));
         }
         try {
             DriverSet ds = AsCodeReader.read(tree);
