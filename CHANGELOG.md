@@ -7,6 +7,22 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- A Designer project with two objects of one name in the tree's Library (or a driver or channel)
+  no longer gives a tree that won't load (DirXMLDevWeb #174: `duplicate artifact path`, every check
+  failing). This happens when a driver set uses Libraries in two containers that both hold the
+  object, or when a package upgrade leaves an old copy behind. `import-project` keeps one and says
+  which in a `NOTE:` line (`DuplicateArtifacts`):
+  - from different Libraries, the one in the driver set's own `cn=Library`, where a deploy writes;
+  - the same copies, the first;
+  - otherwise the newest package version, or the first.
+
+  With more than one Library, each Library artifact records its Library's DN (`library.dn`). An
+  object a Designer relation names twice is read once. A tree already written with two loads with
+  one of them, and `validate` reports a `duplicate-artifact` error that says which, instead of
+  every check failing.
+
 ### Added
 
 - `docs/commands.md`: every `bin/idm` command with each argument (required or not, the values
