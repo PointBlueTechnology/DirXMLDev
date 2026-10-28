@@ -473,4 +473,57 @@ public class ProjectReaderTest {
         Set<String> fromSimulator = new HashSet<>(DesignerProject.load(project).driverNames());
         assertEquals(fromSimulator, fromReader);
     }
+
+    // ---- two objects of one name (DirXMLDevWeb #174) ---------------------------------
+
+    @Test
+    public void anObjectTwoLibrariesHoldIsTheDriverSetsOwn() throws IOException {
+        Path root = buildProject();
+        Path orphan = root.resolve("Model/EdirOrphan");
+        // the set's own Library sits in the driver set; a second, elsewhere in the vault, holds an es-misc too
+        write(orphan.resolve("LIB1ID.Library_"), cobject("Library", "Library", cstring("LibraryContext", "cn=DS1,o=system"),
+            rel("Idm:Policies", "Child", "LIBPOLID.ScriptPolicy_")
+            + rel("Idm:Resources", "Child", "LIBMAPID.MappingTableResource_")
+            + rel("Idm:Resources", "Child", "LIBJSID.ECMAScriptResource_")));
+        write(orphan.resolve("LIB2ID.Library_"), cobject("Library", "Library", cstring("LibraryContext", "ou=shared,o=system"),
+            rel("Idm:Resources", "Child", "LIB2JSID.ECMAScriptResource_")));
+        Path lib2 = orphan.resolve("LIB2ID");
+        write(lib2.resolve("LIB2JSID.ECMAScriptResource_"), cobject("es-misc", "ECMAScriptResource",
+            cstring("DirXML-ContentType", "text/ecmascript;charset=UTF-8"), ""));
+        write(lib2.resolve("LIB2JSID_contents.xml"), "function shared(){}");
+        write(orphan.resolve("DS1ID.DriverSet_"), cobject("DS1", "DriverSet",
+            cstring("DSetContext", "o=system"),
+            rel("Idm:Libraries", "Child", "LIB2ID.Library_")
+            + rel("Idm:Libraries", "Child", "LIB1ID.Library_")
+            + rel("Idm:Drivers", "Child", "DRV1ID.Driver_")));
+
+        DriverSet ds = ProjectReader.read(root);
+
+        List<Resource> js = ds.library.resources.stream().filter(r -> r.name.equals("es-misc")).collect(Collectors.toList());
+        assertEquals(1, js.size());
+        assertEquals("function f(){}", js.get(0).text);
+        assertEquals("cn=Library,cn=DS1,o=system", js.get(0).meta.get("library.dn"));
+        assertNotNull("the tree's index loads", ds.index().get("library/es-misc"));
+        assertEquals(1, ds.duplicates.size());
+        String note = ds.duplicates.get(0).note;
+        assertTrue(note, note.contains("kept the resource (in cn=Library,cn=DS1,o=system"));
+        assertTrue(note, note.contains("left out the resource (in cn=Library,ou=shared,o=system"));
+        assertTrue(ds.duplicates.get(0).advice, ds.duplicates.get(0).advice.contains("one Library"));
+    }
+
+    @Test
+    public void anObjectARelationNamesTwiceIsReadOnce() throws IOException {
+        Path root = buildProject();
+        write(root.resolve("Model/EdirOrphan/LIB1ID.Library_"), cobject("Library", "Library", "",
+            rel("Idm:Policies", "Child", "LIBPOLID.ScriptPolicy_")
+            + rel("Idm:Resources", "Child", "LIBMAPID.MappingTableResource_")
+            + rel("Idm:Resources", "Child", "LIBJSID.ECMAScriptResource_")
+            + rel("Idm:Resources", "Reference", "LIBJSID.ECMAScriptResource_")));
+
+        DriverSet ds = ProjectReader.read(root);
+
+        assertEquals(1, ds.library.resources.stream().filter(r -> r.name.equals("es-misc")).count());
+        assertTrue(ds.duplicates.isEmpty());
+        assertFalse("one Library: no Library DN recorded", ds.library.resources.get(0).meta.containsKey("library.dn"));
+    }
 }

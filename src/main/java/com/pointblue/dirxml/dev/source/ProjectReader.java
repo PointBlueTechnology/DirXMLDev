@@ -5,6 +5,7 @@ import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.PackageStamps;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.DuplicateArtifacts;
 import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
 import com.pointblue.dirxml.dev.model.Policy;
@@ -173,6 +174,9 @@ public final class ProjectReader {
             }
             ds.meta.put("project.other-driversets", String.join(",", others));
         }
+        // a project can hold two objects of one name in a container (a package upgrade's leftover);
+        // the tree, like the vault, holds one: keep one and say which
+        ds.duplicates.addAll(com.pointblue.dirxml.dev.model.DuplicateArtifacts.drop(ds));
         return ds;
     }
 
@@ -221,8 +225,9 @@ public final class ProjectReader {
             readTemplates(idx, idOf(vaultKey), ds);
         }
 
-        for (String libKey : relationKeys(m, "Idm:Libraries")) {
-            readLibrary(idx, idOf(libKey), ds);
+        List<String> libraries = relationKeys(m, "Idm:Libraries");
+        for (String libKey : libraries) {
+            readLibrary(idx, idOf(libKey), ds, libraries.size() > 1);
         }
         // Driver-set GCV objects: library-scope resources, linked from the driver set
         // itself (DirXML-Policies on the driver set, set 14) — recorded the way the
@@ -694,25 +699,43 @@ public final class ProjectReader {
         }
     }
 
-    private static void readLibrary(Index idx, String libId, DriverSet ds) {
+    /**
+     * A Library's policies and resources into the tree's one {@code library/}. A driver set can use
+     * Libraries in other containers too (each records its {@code LibraryContext}); with more than
+     * one, each artifact records its Library's DN ({@link DuplicateArtifacts#LIBRARY_DN}), so an
+     * object two Libraries both hold can be told apart.
+     */
+    private static void readLibrary(Index idx, String libId, DriverSet ds, boolean several) {
         Element m = idx.parseMeta(libId);
         if (m == null) {
             return;
         }
+        String context = attrValue(m, "LibraryContext");
+        String libDn = several && context != null && !context.isEmpty() ? "cn=" + attr(m, "name", "Library") + "," + context : null;
+        List<Artifact> read = new ArrayList<>();
         for (String key : relationKeys(m, "Idm:Policies")) {
             Policy p = readPolicy(idx, idOf(key), Scope.LIBRARY, null);
             if (p != null) {
                 ds.library.policies.add(p);
+                read.add(p);
             }
         }
         for (String key : relationKeys(m, "Idm:Resources")) {
             Resource r = readResource(idx, idOf(key), Scope.LIBRARY, null);
             if (r != null) {
                 ds.library.resources.add(r);
+                read.add(r);
             }
         }
         for (String key : relationKeys(m, "Idm:GlobalConfigs")) {
-            ds.library.resources.add(gcvDefResource(idx, idOf(key), Scope.LIBRARY, null));
+            Resource r = gcvDefResource(idx, idOf(key), Scope.LIBRARY, null);
+            ds.library.resources.add(r);
+            read.add(r);
+        }
+        if (libDn != null) {
+            for (Artifact a : read) {
+                a.meta.put(DuplicateArtifacts.LIBRARY_DN, libDn);
+            }
         }
     }
 
@@ -1473,8 +1496,8 @@ public final class ProjectReader {
         for (Element rel : Xds.childrenByName(meta, "relations")) {
             if (relationName.equals(rel.getAttribute("name")) && !"BackReference".equals(rel.getAttribute("type"))) {
                 String key = rel.getAttribute("key");
-                if (key != null && !key.isEmpty()) {
-                    keys.add(key);
+                if (key != null && !key.isEmpty() && !keys.contains(key)) {
+                    keys.add(key);   // an object named twice in one relation is read once
                 }
             }
         }
@@ -1491,8 +1514,8 @@ public final class ProjectReader {
         for (Element rel : Xds.childrenByName(meta, "relations")) {
             if (relationName.equals(rel.getAttribute("name"))) {
                 String key = rel.getAttribute("key");
-                if (key != null && !key.isEmpty()) {
-                    keys.add(key);
+                if (key != null && !key.isEmpty() && !keys.contains(key)) {
+                    keys.add(key);   // an object named twice in one relation is read once
                 }
             }
         }

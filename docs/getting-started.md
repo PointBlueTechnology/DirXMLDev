@@ -8,7 +8,8 @@ You run commands from the **client directory**. The DirXMLDev checkout is only
 where `bin/idm` lives. Call it by path (`~/IdeaProjects/DirXMLDev/bin/idm`) or
 put it on `PATH`. Client content never goes in the DirXMLDev repository.
 
-`bin/idm` with no arguments lists every command. `bin/apps --help` lists the
+`bin/idm` with no arguments lists every command; [commands.md](commands.md) has
+each one's arguments, accepted values and an example. `bin/apps --help` lists the
 Identity Applications helper.
 
 ## 1. One directory per client
@@ -264,9 +265,10 @@ not `….policy.xml`). `chain` takes `sub` or `pub`.
 `bin/idm check tree/` loads the tree and exits 1 when a link points at nothing.
 
 Before the first deploy, `bin/idm doctor` checks JDK 21, the simulator jar, and
-`lib/*.jar`. `--json` is the same report. `--env <name>` also lists environments
-(name, tier, and whether a URL, bind DN, password, and driver set are set) and
-probes that environment's LDAPS. Passwords and bind DNs are not printed.
+`lib/*.jar`, and lists the environments it finds (name, tier, and whether a URL,
+bind DN, password, and driver set are set). `--json` is the same report.
+`--env <name>` also probes that environment's LDAPS with one bind. Passwords and
+bind DNs are not printed.
 
 A command that changes the vault refuses unless `IDM_AGENT_ALLOW_WRITE=1` or
 `--confirm <env>` for that environment: `vault.deploy --yes` or `--step`,

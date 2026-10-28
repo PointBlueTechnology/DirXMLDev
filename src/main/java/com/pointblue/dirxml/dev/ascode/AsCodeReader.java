@@ -75,6 +75,9 @@ public final class AsCodeReader {
             Path dir = root.resolve(attr(d, "dir"));
             ds.drivers.add(readDriver(dir));
         }
+        // a manifest listing two artifacts of one name (a tree imported before the reader kept one):
+        // load one, and validation reports the other (DuplicateArtifactCheck)
+        ds.duplicates.addAll(com.pointblue.dirxml.dev.model.DuplicateArtifacts.drop(ds));
         return ds;
     }
 
