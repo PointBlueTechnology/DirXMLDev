@@ -298,14 +298,14 @@ bin/idm query <asCodeDir> drivers [--json]
 | Verb | Arguments | What it prints |
 |---|---|---|
 | `artifacts` | `<driver>` optional; default: every artifact | each artifact's kind and path, marked `[packaged]` or `[packaged, customized]` |
-| `chain` | `<driver>` and the channel, both required: a value starting with `sub` is the subscriber, anything else the publisher | the channel's policies in execution order, then the driver's ECMAScript, GCV, startup and shutdown resources |
+| `chain` | `<driver>` and the channel, both required: `sub` (or `subscriber`) or `pub` (or `publisher`); anything else exits 2 | the channel's policies in execution order, then the driver's ECMAScript, GCV, startup and shutdown resources |
 | `gcvs` | `<driver>` optional; default: driver-set scope | every GCV in scope with its value and where it is defined, first definition winning; a server's own differing value beneath it. Password values show as `(password)` |
 | `tables` | `<driver>` optional; default: the library's tables only | each mapping table in reach with its row count and columns |
 | `schema` | `<driver>` optional | without a driver, the vault schema in `schema/vault.xml` (classes, custom ones marked `*`); with one, the driver's application schema. Exits 1 when the tree has none |
 | `fishbone` | `<driver>` required; `--json` optional | the policy-flow fishbone the VS Code viewer draws |
 | `drivers` | `--json` optional | each driver's name and directory |
 
-`<driver>` is a driver's name; an unknown name lists the tree's drivers and exits 1 (2 for `schema`). An unknown verb exits 2. `--json` applies to `fishbone` and `drivers` only.
+`<driver>` is a driver's name; an unknown name lists the tree's drivers and exits 1. An unknown verb exits 2. `--json` applies to `fishbone` and `drivers` only.
 
 ```bash
 bin/idm query tree chain "Active Directory" sub
@@ -384,7 +384,7 @@ bin/idm docs <asCodeDir> --out <dir> [--driver <name>…] [--since <commit>] [--
 | `--out` | yes | the output directory; created if needed |
 | `--driver` | no, repeatable | a driver's name; default: every driver gets a page |
 | `--since` | no | a git revision of the tree's repository (`HEAD~5`); `changes.md` lists the changes since it |
-| `--format` | no | `md` (default) or `html` (case-insensitive); any other value gives `md` |
+| `--format` | no | `md` (default) or `html` (case-insensitive); anything else exits 2 |
 
 ```bash
 bin/idm docs tree --out docs --since HEAD~5 --format html
@@ -636,7 +636,7 @@ bin/idm vault.deploy <tree> --env <name> [--driver <name>…] --dry-run|--yes|--
 | `--step` | one of these to write | interactive: per change, show it, ask `apply? [y/n/q]`, write it and verify it. Cannot be combined with `--json` |
 | `--confirm` | for a `prd` tier, or for the agent gate | the environment's name, typed out |
 | `--no-restart` | no | do not restart the drivers the plan changes; default: restart running drivers and wait up to 180 s for Running |
-| `--secrets` | no | `none` (default: secrets set only on new drivers), `missing` (also named passwords the live driver lacks), `all` (every secret the secrets file has). Any other value acts as `none` |
+| `--secrets` | no | `none` (default: secrets set only on new drivers), `missing` (also named passwords the live driver lacks), `all` (every secret the secrets file has). Anything else exits 2 |
 | `--allow-missing-secrets` | no | create a driver even when a required secret is missing from the secrets file; default: refuse |
 | `--capture-drift` | no | when a `prd` vault differs from the last deploy on record, record its state as a commit on an `as-found/<env>/<time>` branch. The deploy is still refused: deploy again on top of it |
 | `--capture-only` | no | read the vault and capture its state only (`captured`, `verified` or `known`); no plan, no write, no `--yes` or `--confirm` needed. The tree must be in git |
@@ -1012,7 +1012,7 @@ bin/idm prd.list <tree> [--driver <name>]
 | Argument | Required | Values |
 |---|---|---|
 | `<tree>` | yes | an IDM-as-code tree directory |
-| `--driver` | no | a driver's name; default: every driver. An unknown name lists nothing and exits 0 |
+| `--driver` | no | a driver's name; default: every driver. An unknown name exits 1 |
 
 ```bash
 bin/idm prd.list tree
@@ -1677,7 +1677,7 @@ More: [install.md](install.md#52-the-dirxml-trace-viewer).
 
 ### `driver.submit`
 
-Sends an XDS document into a driver. `command` (the default) is `SubmitCommand` into the running driver's subscriber channel and prints the shim's result; with `--tree` the same command runs through the simulator too, and when the environment names an `sshHost` and the driver traces at level 3 or more, the document the live shim received is compared with the simulator's (the canary). `event` is `SubmitEvent` (publisher channel); `queue` is `QueueEvent`, into the subscriber cache, even of a stopped driver. Writes to the vault: needs `--yes` on every tier, `--confirm <env>` on a `prd` tier, and `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1` on any tier. Audited. Exits 1 on a canary mismatch or a failed event/queue; `command` on a stopped driver ends with an error (exit 3). The simulator run needs the engine jars.
+Sends an XDS document into a driver. `command` (the default) is `SubmitCommand` into the running driver's subscriber channel and prints the shim's result; with `--tree` the same command runs through the simulator too, and when the environment names an `sshHost` and the driver traces at level 3 or more, the document the live shim received is compared with the simulator's (the canary). `event` is `SubmitEvent` (publisher channel); `queue` is `QueueEvent`, into the subscriber cache, even of a stopped driver. Writes to the vault: needs `--yes` on every tier, `--confirm <env>` on a `prd` tier, and `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1` on any tier. Audited. Exits 1 on a canary mismatch or a failed event/queue; `command` on a stopped driver is refused (exit 1). The simulator run needs the engine jars.
 
 ```
 bin/idm driver.submit --env <name> --driver <name> --xds <file> [--mode command|event|queue] --yes [--confirm <env>] [--tree <dir>] [--json]

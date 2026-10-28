@@ -68,13 +68,20 @@ public final class Submit {
     private Submit() {
     }
 
+    /** The driver isn't running: a refusal (exit 1), not an unexpected error. */
+    public static final class NotRunning extends IOException {
+        NotRunning(String message) {
+            super(message);
+        }
+    }
+
     /** Submit to the live driver; with {@code tree} also run the simulator; with SSH also read what the shim received. */
     public static Outcome run(Vault vault, Environments.Environment env, String driverName, String driverDn,
                               String xds, Path tree) throws IOException {
         Outcome o = new Outcome();
         int state = vault.driverState(driverDn);
         if (state != Vault.STATE_RUNNING) {
-            throw new IOException("driver '" + driverName + "' is " + Vault.stateName(state) + "; SubmitCommand needs a running driver");
+            throw new NotRunning("driver '" + driverName + "' is " + Vault.stateName(state) + "; SubmitCommand needs a running driver");
         }
         String traceFile = null;
         TraceTail tail = null;

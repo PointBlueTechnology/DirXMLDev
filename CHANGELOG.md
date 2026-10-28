@@ -9,6 +9,17 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- Values outside the listed ones are refused with a usage error (exit 2) instead of picking a
+  default (#106). Before:
+  - `vault.deploy --secrets al` deployed as `none`, so the secrets that were asked for were left out;
+  - `query <tree> chain <driver> sideways` read the publisher;
+  - `docs --format htlm` wrote markdown.
+- The same failure gives the same exit code (#107):
+  - `prd.list --driver <unknown>` exits 1, as the other list commands do (it was 0);
+  - `query <tree> schema <unknown>` exits 1, as the other verbs do (it was 2);
+  - `driver.submit` against a stopped driver is a refusal, exit 1 (it was `ERROR:`, exit 3).
+- `docs/event-store.md` describes `query events --driver` and `--policy` as the code does (#109).
+
 - `vault.deploy-schema --yes` is behind the agent write gate like every other vault write: it
   needs `IDM_AGENT_ALLOW_WRITE=1` or `--confirm <env>` on any tier. Before, `--yes` alone wrote
   `cn=schema` on a non-production tier. The refusal for a custom definition without an OID names
