@@ -47,6 +47,11 @@ public final class DeployCli {
             System.err.println("--env <name> is required (environments.properties; see docs/vault-deploy.md)");
             return 2;
         }
+        if (opts.containsKey("secrets") && !List.of("none", "missing", "all").contains(first(opts, "secrets"))) {
+            // an unlisted value used to act as none: a deploy without the secrets asked for (#106)
+            System.err.println("--secrets is none, missing or all, not '" + first(opts, "secrets") + "'");
+            return 2;
+        }
         if (writesVault(cmd, opts)) {
             String why = AgentWriteGate.refusal(envName, true, first(opts, "confirm"), System.getenv(AgentWriteGate.ENV));
             if (why != null) {

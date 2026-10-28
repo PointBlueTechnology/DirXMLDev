@@ -488,8 +488,14 @@ public final class OperateCli {
                         return error == null ? 0 : 1;
                     }
                     Path simTree = opts.containsKey("tree") ? tree : null;
-                    Submit.Outcome o = Submit.run(vault, env, driver,
-                        com.pointblue.dirxml.dev.deploy.VaultMapping.driverDn(env.driverSetDn, driver), xds, simTree);
+                    Submit.Outcome o;
+                    try {
+                        o = Submit.run(vault, env, driver,
+                            com.pointblue.dirxml.dev.deploy.VaultMapping.driverDn(env.driverSetDn, driver), xds, simTree);
+                    } catch (Submit.NotRunning e) {
+                        System.err.println("REFUSED — " + e.getMessage());
+                        return 1;
+                    }
                     com.pointblue.dirxml.dev.deploy.DeployLog.Record rec = com.pointblue.dirxml.dev.deploy.DeployLog.record(env.name, "operate");
                     rec.outcome = "ok";
                     rec.detail = "driver.submit '" + driver + "': SubmitCommand from " + xdsFile
