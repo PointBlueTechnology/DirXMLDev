@@ -30,6 +30,7 @@ javac --release 21 -encoding UTF-8 -cp "$CP" -d "$OUT" \
   src/main/java/com/pointblue/dirxml/dev/operate/TraceViewer.java \
   src/main/java/com/pointblue/dirxml/dev/deploy/IdmOps.java \
   src/main/java/com/pointblue/dirxml/dev/LegacyTls.java \
+  src/main/java/com/pointblue/dirxml/dev/Args.java \
   src/main/java/com/pointblue/dirxml/dev/Doctor.java \
   src/main/java/com/pointblue/dirxml/dev/dn/*.java \
   src/test/java/com/pointblue/dirxml/dev/DoctorTest.java \
