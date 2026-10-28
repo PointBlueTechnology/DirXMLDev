@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.edit;
 
+import com.pointblue.dirxml.dev.Args;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.json.Json;
 import com.pointblue.dirxml.dev.model.Artifact;
@@ -52,6 +53,52 @@ public final class ReadCli {
     private ReadCli() {
     }
 
+    /** What each read command takes (docs/commands.md); query's events/event verbs are read by EventsCli (#104, #105). */
+    static final Map<String, Args.Spec> SPECS = Map.ofEntries(
+        Map.entry("show", Args.Spec.of("", "")),
+        Map.entry("query", Args.Spec.of("", "")),
+        Map.entry("package.diff", Args.Spec.of("", "")),
+        Map.entry("form.list", Args.Spec.of("", "driver")),
+        Map.entry("form.show", Args.Spec.of("", "driver")),
+        Map.entry("prd.list", Args.Spec.of("", "driver")),
+        Map.entry("prd.show", Args.Spec.of("", "driver")),
+        Map.entry("appconfig.list", Args.Spec.of("containers", "driver kind")),
+        Map.entry("appconfig.show", Args.Spec.of("", "driver attr")),
+        Map.entry("category.list", Args.Spec.of("", "driver for")),
+        Map.entry("entitlement.list", Args.Spec.of("", "driver")),
+        Map.entry("entitlement.show", Args.Spec.of("", "driver name")));
+
+    /** The query verbs, as an unknown one names them. */
+    static final List<String> QUERY_VERBS = List.of("artifacts", "chain", "gcvs", "tables", "schema", "fishbone", "drivers", "events", "event");
+
+    /** A command's body, which may refuse its command line. */
+    private interface Body {
+        int run() throws Exception;
+    }
+
+    /** Runs {@code body}; a usage error prints its message and is exit 2. */
+    private static int usageErrors(Body body) throws Exception {
+        try {
+            return body.run();
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
+            return 2;
+        }
+    }
+
+    /** {@code argv} read against its command's spec, with between {@code min} and {@code max} positionals ({@code usage} otherwise). */
+    private static Args parse(String[] argv, int min, int max, String usage)
+        throws Args.UsageError {
+        Args a = Args.parse(argv[0], argv, 1, SPECS.get(argv[0]));
+        if (a.positional.size() < min) {
+            throw new Args.UsageError(usage);
+        }
+        if (a.positional.size() > max) {
+            throw new Args.UsageError(argv[0] + ": unexpected argument '" + a.positional.get(max) + "'; " + usage);
+        }
+        return a;
+    }
+
     /** The engine's stage order per channel, as the simulator assembles it. */
     static final List<PolicySet> SUB_CHAIN = Arrays.asList(PolicySet.SUB_EVENT, PolicySet.SUB_MATCH,
         PolicySet.SUB_CREATE, PolicySet.SUB_PLACEMENT, PolicySet.SUB_COMMAND, PolicySet.SCHEMA_MAPPING, PolicySet.OUTPUT);
@@ -59,42 +106,70 @@ public final class ReadCli {
         PolicySet.PUB_EVENT, PolicySet.PUB_MATCH, PolicySet.PUB_CREATE, PolicySet.PUB_PLACEMENT, PolicySet.PUB_COMMAND);
 
     public static int show(String[] argv) throws Exception {
-        if (argv.length < 3) {
-            System.err.println("usage: show <tree> <artifactPath>");
-            return 2;
-        }
-        DriverSet ds = AsCodeReader.read(Paths.get(argv[1]));
-        Artifact a = ds.resolve(argv[2]);
-        if (a == null) {
-            System.err.println("no artifact at '" + argv[2] + "'");
-            return 1;
-        }
-        String content = Packages.currentContent(a);
-        System.out.print(content == null ? "(no content)\n" : content.endsWith("\n") ? content : content + "\n");
-        return 0;
+        return usageErrors(() -> {
+            List<String> pos = parse(argv, 2, 2, "usage: show <tree> <artifactPath>").positional;
+            DriverSet ds = AsCodeReader.read(Paths.get(pos.get(0)));
+            Artifact a = ds.resolve(pos.get(1));
+            if (a == null) {
+                System.err.println("no artifact at '" + pos.get(1) + "'");
+                return 1;
+            }
+            String content = Packages.currentContent(a);
+            System.out.print(content == null ? "(no content)\n" : content.endsWith("\n") ? content : content + "\n");
+            return 0;
+        });
     }
+
+    static final String QUERY_USAGE = "usage: query <tree> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver] | schema [driver] | fishbone <driver> [--json] | drivers [--json]";
 
     public static int query(String[] argv) throws Exception {
         if (argv.length < 3) {
-            System.err.println("usage: query <tree> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver] | schema [driver] | fishbone <driver> [--json] | drivers [--json]");
+            System.err.println(QUERY_USAGE);
             return 2;
         }
-        DriverSet ds = AsCodeReader.read(Paths.get(argv[1]));
-        String what = argv[2];
-        boolean json = hasFlag(argv, "--json");
-        String driver = argv.length > 3 && !argv[3].startsWith("--") ? argv[3] : null;
+        if (argv[2].equals("events") || argv[2].equals("event")) {
+            // the Event Logger's store: EventsCli reads its own options (docs/event-store.md)
+            AsCodeReader.read(Paths.get(argv[1]));
+            return com.pointblue.dirxml.dev.events.EventsCli.query(argv);
+        }
+        return usageErrors(() -> query(parse(argv, 2, 4, QUERY_USAGE)));
+    }
+
+    private static int query(Args args) throws Exception {
+        List<String> pos = args.positional;
+        String what = pos.get(1);
+        if (!QUERY_VERBS.contains(what)) {
+            throw new Args.UsageError("unknown query '" + what + "'; the verbs are " + String.join(", ", QUERY_VERBS));
+        }
+        if (what.equals("events") || what.equals("event")) {
+            throw new Args.UsageError("usage: query <tree> " + what + " --env <name> …   (the tree and the verb come first; see docs/event-store.md)");
+        }
+        int most = what.equals("chain") ? 2 : what.equals("drivers") ? 0 : 1;
+        if (pos.size() - 2 > most) {
+            throw new Args.UsageError("query " + what + ": unexpected argument '" + pos.get(2 + most) + "'; " + QUERY_USAGE);
+        }
+        if (what.equals("chain") && pos.size() < 4) {
+            throw new Args.UsageError("usage: query <tree> chain <driver> sub|pub");
+        }
+        if (what.equals("chain") && !List.of("sub", "subscriber", "pub", "publisher").contains(pos.get(3))) {
+            throw new Args.UsageError("the channel is sub or pub, not '" + pos.get(3) + "'");
+        }
+        Path tree = Paths.get(pos.get(0));
+        DriverSet ds = AsCodeReader.read(tree);
+        boolean json = args.has("json");
+        String driver = pos.size() > 2 ? pos.get(2) : null;
         switch (what) {
             case "fishbone": {
                 Driver d = driver(ds, driver);
                 if (d == null) {
                     return 1;
                 }
-                Map<String, Object> model = Fishbone.model(ds, Paths.get(argv[1]), d);
+                Map<String, Object> model = Fishbone.model(ds, tree, d);
                 System.out.print(json ? Json.pretty(model) + "\n" : Fishbone.text(model));
                 return 0;
             }
             case "drivers": {
-                Map<String, Object> list = Fishbone.drivers(ds, Paths.get(argv[1]));
+                Map<String, Object> list = Fishbone.drivers(ds, tree);
                 if (json) {
                     System.out.println(Json.pretty(list));
                 } else {
@@ -108,27 +183,15 @@ public final class ReadCli {
             case "artifacts":
                 return artifacts(ds, driver);
             case "chain":
-                if (driver == null || argv.length < 5) {
-                    System.err.println("usage: query <tree> chain <driver> sub|pub");
-                    return 2;
-                }
-                if (!List.of("sub", "subscriber", "pub", "publisher").contains(argv[4])) {
-                    System.err.println("the channel is sub or pub, not '" + argv[4] + "'");
-                    return 2;
-                }
-                return chain(ds, driver, argv[4]);
+                return chain(ds, driver, pos.get(3));
             case "gcvs":
                 return gcvs(ds, driver);
             case "tables":
                 return tables(ds, driver);
             case "schema":
                 return schema(ds, driver);
-            case "events":
-            case "event":
-                return com.pointblue.dirxml.dev.events.EventsCli.query(argv);
             default:
-                System.err.println("unknown query '" + what + "'");
-                return 2;
+                throw new IllegalStateException(what);
         }
     }
 
@@ -342,15 +405,17 @@ public final class ReadCli {
     }
 
     public static int packageDiff(String[] argv) throws Exception {
-        if (argv.length < 3) {
-            System.err.println("usage: package.diff <tree> <artifactPath>");
-            return 2;
-        }
-        Path tree = Paths.get(argv[1]);
+        return usageErrors(() -> {
+            List<String> pos = parse(argv, 2, 2, "usage: package.diff <tree> <artifactPath>").positional;
+            return packageDiff(Paths.get(pos.get(0)), pos.get(1));
+        });
+    }
+
+    private static int packageDiff(Path tree, String path) throws Exception {
         DriverSet ds = AsCodeReader.read(tree);
-        Artifact a = ds.resolve(argv[2]);
+        Artifact a = ds.resolve(path);
         if (a == null) {
-            System.err.println("no artifact at '" + argv[2] + "'");
+            System.err.println("no artifact at '" + path + "'");
             return 1;
         }
         if (!Packages.isPackaged(a)) {
@@ -417,12 +482,12 @@ public final class ReadCli {
     // ---- provisioning: forms and PRDs ------------------------------------------------
 
     public static int formList(String[] argv) throws Exception {
-        if (argv.length < 2) {
-            System.err.println("usage: form.list <tree> [--driver D]");
-            return 2;
-        }
-        Path tree = Paths.get(argv[1]);
-        String driverName = flag(argv, "--driver");
+        return usageErrors(() -> formList(parse(argv, 1, 1, "usage: form.list <tree> [--driver D]")));
+    }
+
+    private static int formList(Args args) throws Exception {
+        Path tree = Paths.get(args.positional.get(0));
+        String driverName = args.first("driver");
         DriverSet ds = AsCodeReader.read(tree);
         List<Driver> drivers = driversOf(ds, driverName);
         if (driverName != null && drivers.isEmpty()) {
@@ -448,14 +513,14 @@ public final class ReadCli {
     }
 
     public static int formShow(String[] argv) throws Exception {
-        if (argv.length < 3) {
-            System.err.println("usage: form.show <tree> <name-or-path> [--driver D] [--json]");
-            return 2;
-        }
-        Path tree = Paths.get(argv[1]);
-        String ref = argv[2];
-        String driverName = flag(argv, "--driver");
-        boolean json = hasFlag(argv, "--json");
+        return usageErrors(() -> formShow(parse(argv, 2, 2, "usage: form.show <tree> <name-or-path> [--driver D] [--json]")));
+    }
+
+    private static int formShow(Args args) throws Exception {
+        Path tree = Paths.get(args.positional.get(0));
+        String ref = args.positional.get(1);
+        String driverName = args.first("driver");
+        boolean json = args.has("json");
         DriverSet ds = AsCodeReader.read(tree);
 
         Found found = findForm(ds, ref, driverName);
@@ -535,12 +600,12 @@ public final class ReadCli {
     }
 
     public static int prdList(String[] argv) throws Exception {
-        if (argv.length < 2) {
-            System.err.println("usage: prd.list <tree> [--driver D]");
-            return 2;
-        }
-        Path tree = Paths.get(argv[1]);
-        String driverName = flag(argv, "--driver");
+        return usageErrors(() -> prdList(parse(argv, 1, 1, "usage: prd.list <tree> [--driver D]")));
+    }
+
+    private static int prdList(Args args) throws Exception {
+        Path tree = Paths.get(args.positional.get(0));
+        String driverName = args.first("driver");
         DriverSet ds = AsCodeReader.read(tree);
         List<Driver> drivers = driversOf(ds, driverName);
         if (driverName != null && drivers.isEmpty()) {
@@ -568,14 +633,14 @@ public final class ReadCli {
     }
 
     public static int prdShow(String[] argv) throws Exception {
-        if (argv.length < 3) {
-            System.err.println("usage: prd.show <tree> <name> [--driver D] [--json]");
-            return 2;
-        }
-        Path tree = Paths.get(argv[1]);
-        String name = argv[2];
-        String driverName = flag(argv, "--driver");
-        boolean json = hasFlag(argv, "--json");
+        return usageErrors(() -> prdShow(parse(argv, 2, 2, "usage: prd.show <tree> <name> [--driver D] [--json]")));
+    }
+
+    private static int prdShow(Args args) throws Exception {
+        Path tree = Paths.get(args.positional.get(0));
+        String name = args.positional.get(1);
+        String driverName = args.first("driver");
+        boolean json = args.has("json");
         DriverSet ds = AsCodeReader.read(tree);
 
         Driver owner = null;
@@ -639,19 +704,18 @@ public final class ReadCli {
     // ---- appconfig.list / appconfig.show (docs/appconfig.md) ----------------------------
 
     public static int appConfigList(String[] argv) throws Exception {
-        if (argv.length < 2) {
-            System.err.println("usage: appconfig.list <tree> [--driver D] [--kind K] [--containers] [--json]");
-            return 2;
-        }
-        Path tree = Paths.get(argv[1]);
-        String driverName = flag(argv, "--driver");
-        String kindKey = flag(argv, "--kind");
-        boolean containers = hasFlag(argv, "--containers");
-        boolean json = hasFlag(argv, "--json");
+        return usageErrors(() -> appConfigList(parse(argv, 1, 1, "usage: appconfig.list <tree> [--driver D] [--kind K] [--containers] [--json]")));
+    }
+
+    private static int appConfigList(Args args) throws Exception {
+        Path tree = Paths.get(args.positional.get(0));
+        String driverName = args.first("driver");
+        String kindKey = args.first("kind");
+        boolean containers = args.has("containers");
+        boolean json = args.has("json");
         AppObject.Kind kind = kindKey == null ? null : AppObject.Kind.byKey(kindKey);
         if (kindKey != null && kind == null) {
-            System.err.println("unknown kind '" + kindKey + "'; one of " + kindKeys());
-            return 2;
+            throw new Args.UsageError("unknown kind '" + kindKey + "'; one of " + kindKeys());
         }
         DriverSet ds = AsCodeReader.read(tree);
         List<Driver> drivers = driversOf(ds, driverName);
@@ -698,14 +762,21 @@ public final class ReadCli {
 
     /** {@code category.list}: the role or resource category keys (issue #70), with labels and use counts. */
     public static int categoryList(String[] argv) throws Exception {
-        com.pointblue.dirxml.dev.model.AppCategories.For f = com.pointblue.dirxml.dev.model.AppCategories.For.of(flag(argv, "--for"));
-        if (argv.length < 2 || f == null) {
-            System.err.println("usage: category.list <tree> --for role|resource [--driver D] [--json]");
-            return 2;
-        }
-        String driverName = flag(argv, "--driver");
-        boolean json = hasFlag(argv, "--json");
-        DriverSet ds = AsCodeReader.read(Paths.get(argv[1]));
+        return usageErrors(() -> {
+            String usage = "usage: category.list <tree> --for role|resource [--driver D] [--json]";
+            Args args = parse(argv, 1, 1, usage);
+            com.pointblue.dirxml.dev.model.AppCategories.For f = com.pointblue.dirxml.dev.model.AppCategories.For.of(args.first("for"));
+            if (f == null) {
+                throw new Args.UsageError(usage);
+            }
+            return categoryList(args, f);
+        });
+    }
+
+    private static int categoryList(Args args, com.pointblue.dirxml.dev.model.AppCategories.For f) throws Exception {
+        String driverName = args.first("driver");
+        boolean json = args.has("json");
+        DriverSet ds = AsCodeReader.read(Paths.get(args.positional.get(0)));
         List<Object> rows = new ArrayList<>();
         boolean any = false;
         for (Driver d : driversOf(ds, driverName)) {
@@ -745,15 +816,15 @@ public final class ReadCli {
     }
 
     public static int appConfigShow(String[] argv) throws Exception {
-        if (argv.length < 3) {
-            System.err.println("usage: appconfig.show <tree> <path-or-name> [--driver D] [--attr A] [--json]");
-            return 2;
-        }
-        Path tree = Paths.get(argv[1]);
-        String ref = argv[2];
-        String driverName = flag(argv, "--driver");
-        String onlyAttr = flag(argv, "--attr");
-        boolean json = hasFlag(argv, "--json");
+        return usageErrors(() -> appConfigShow(parse(argv, 2, 2, "usage: appconfig.show <tree> <path-or-name> [--driver D] [--attr A] [--json]")));
+    }
+
+    private static int appConfigShow(Args args) throws Exception {
+        Path tree = Paths.get(args.positional.get(0));
+        String ref = args.positional.get(1);
+        String driverName = args.first("driver");
+        String onlyAttr = args.first("attr");
+        boolean json = args.has("json");
         DriverSet ds = AsCodeReader.read(tree);
         Driver owner = null;
         AppObject found = null;
@@ -859,12 +930,12 @@ public final class ReadCli {
     }
 
     public static int entitlementList(String[] argv) throws Exception {
-        if (argv.length < 2) {
-            System.err.println("usage: entitlement.list <tree> [--driver D]");
-            return 2;
-        }
-        Path tree = Paths.get(argv[1]);
-        String driverName = flag(argv, "--driver");
+        return usageErrors(() -> entitlementList(parse(argv, 1, 1, "usage: entitlement.list <tree> [--driver D]")));
+    }
+
+    private static int entitlementList(Args args) throws Exception {
+        Path tree = Paths.get(args.positional.get(0));
+        String driverName = args.first("driver");
         DriverSet ds = AsCodeReader.read(tree);
         List<Driver> drivers = driversOf(ds, driverName);
         if (driverName != null && drivers.isEmpty()) {
@@ -885,18 +956,21 @@ public final class ReadCli {
     }
 
     public static int entitlementShow(String[] argv) throws Exception {
-        if (argv.length < 3) {
-            System.err.println("usage: entitlement.show <tree> --driver D --name N [--json]");
-            return 2;
-        }
-        Path tree = Paths.get(argv[1]);
-        String driverName = flag(argv, "--driver");
-        String name = flag(argv, "--name");
-        boolean json = hasFlag(argv, "--json");
-        if (name == null || name.isBlank()) {
-            System.err.println("usage: entitlement.show <tree> --driver D --name N [--json]");
-            return 2;
-        }
+        return usageErrors(() -> {
+            String usage = "usage: entitlement.show <tree> --driver D --name N [--json]";
+            Args args = parse(argv, 1, 1, usage);
+            if (args.first("name") == null || args.first("name").isBlank()) {
+                throw new Args.UsageError(usage);
+            }
+            return entitlementShow(args);
+        });
+    }
+
+    private static int entitlementShow(Args args) throws Exception {
+        Path tree = Paths.get(args.positional.get(0));
+        String driverName = args.first("driver");
+        String name = args.first("name");
+        boolean json = args.has("json");
         DriverSet ds = AsCodeReader.read(tree);
         com.pointblue.dirxml.dev.edit.EntitlementOps.Found found = com.pointblue.dirxml.dev.edit.EntitlementOps.find(ds, name, driverName);
         if (found == null) {
@@ -1064,24 +1138,6 @@ public final class ReadCli {
         }
         Driver d = ds.driver(driverName);
         return d == null ? List.of() : List.of(d);
-    }
-
-    private static String flag(String[] argv, String name) {
-        for (int i = 0; i < argv.length - 1; i++) {
-            if (argv[i].equals(name)) {
-                return argv[i + 1];
-            }
-        }
-        return null;
-    }
-
-    private static boolean hasFlag(String[] argv, String name) {
-        for (String a : argv) {
-            if (a.equals(name)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static String str(String s) {

@@ -174,20 +174,22 @@ public final class Doctor {
     private Doctor() {
     }
 
+    /** What {@code doctor} takes (#104, #105). */
+    static final Args.Spec SPEC = Args.Spec.of("", "env");
+
     public static int run(String[] args) throws Exception {
-        boolean json = false;
-        String env = null;
-        for (int i = 1; i < args.length; i++) {
-            if (args[i].equals("--json")) {
-                json = true;
-            } else if (args[i].equals("--env") && i + 1 < args.length) {
-                env = args[++i];
-            } else {
-                System.err.println("usage: doctor [--json] [--env NAME]");
-                return 2;
+        Args a;
+        try {
+            a = Args.parse("doctor", args, 1, SPEC);
+            if (!a.positional.isEmpty()) {
+                throw new Args.UsageError("doctor: unexpected argument '" + a.positional.get(0) + "'; usage: doctor [--json] [--env NAME]");
             }
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
+            return 2;
         }
-        Report r = check(fromSystem(env));
+        boolean json = a.has("json");
+        Report r = check(fromSystem(a.first("env")));
         System.out.print(json ? r.json() + "\n" : r.text());
         return r.ok ? 0 : 1;
     }
