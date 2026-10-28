@@ -270,8 +270,8 @@ probes that environment's LDAPS. Passwords and bind DNs are not printed.
 
 A command that changes the vault refuses unless `IDM_AGENT_ALLOW_WRITE=1` or
 `--confirm <env>` for that environment: `vault.deploy --yes` or `--step`,
-`vault.rollback --yes`, `vault.import-clone --yes`, and the operate commands
-that change a driver (`driver.start|stop|restart|migrate|resync|submit`,
+`vault.rollback --yes`, `vault.import-clone --yes`, `vault.deploy-schema --yes`,
+and the operate commands that change a driver (`driver.start|stop|restart|migrate|resync|submit`,
 `driver.cache clear`, `driver.secrets set|remove`, `driver.trace set|reset`).
 `--dry-run` and read-only commands are not writes. The check runs before a
 secret is resolved and before LDAP opens. `--confirm prd` satisfies both this

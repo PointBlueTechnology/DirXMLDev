@@ -146,7 +146,7 @@ public final class SchemaEditOps {
         return def.name;
     }
 
-    /** {@code schema.set-attribute} / {@code schema.set-class}: change a custom definition. */
+    /** {@code schema.set}: change a custom attribute or class. */
     public static final class Set implements Operation {
         private final String name;
         private final String ldap;

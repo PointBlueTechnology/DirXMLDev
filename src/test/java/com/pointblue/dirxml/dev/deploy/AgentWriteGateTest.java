@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -44,6 +45,20 @@ public class AgentWriteGateTest {
         assertTrue(AgentWriteGate.writesVault("vault.rollback", Map.of("yes", List.of(""))));
         assertFalse(AgentWriteGate.writesVault("vault.import-clone", Map.of()));
         assertTrue(AgentWriteGate.writesVault("vault.import-clone", Map.of("yes", List.of(""))));
+    }
+
+    @Test
+    public void schemaWrites() {
+        assertFalse(AgentWriteGate.writesVault("vault.schema", Map.of("yes", List.of(""))));
+        assertFalse(AgentWriteGate.writesVault("vault.app-schema", Map.of("yes", List.of(""))));
+        assertFalse(AgentWriteGate.writesVault("vault.deploy-schema", Map.of()));
+        assertTrue(AgentWriteGate.writesVault("vault.deploy-schema", Map.of("yes", List.of(""))));
+        // gated on every tier, not only where SchemaOps itself asks for --confirm (prd)
+        String refused = AgentWriteGate.refusal("dev", AgentWriteGate.writesVault("vault.deploy-schema",
+            Map.of("yes", List.of(""))), null, null);
+        assertNotNull(refused);
+        assertTrue(refused.contains("--confirm dev"));
+        assertNull(AgentWriteGate.refusal("dev", true, "dev", null));
     }
 
     @Test
