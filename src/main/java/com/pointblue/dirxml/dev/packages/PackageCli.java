@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.packages;
 
+import com.pointblue.dirxml.dev.Args;
 import com.pointblue.dirxml.dev.model.AppObject;
 
 import org.w3c.dom.Element;
@@ -10,7 +11,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 /**
  * {@code idm package.<cmd> …} — the catalog commands (docs/packages.md §3.1):
  * <pre>
- *   package.fetch   --catalog DIR [--site NAME|URL] [--short SHORT[_ver]…] [--latest|--all-versions] [--dry-run] [--json]
+ *   package.fetch   --catalog DIR [--site NAME|URL] [--short SHORT[_ver]…] [--all-versions] [--dry-run] [--json]
  *   package.import  --catalog DIR &lt;jar|dir&gt; [--json]
  *   package.list    --catalog DIR [--driver-type ID] [--type 2|3|4] [--base] [--json]
  *   package.show    --catalog DIR SHORT[_ver] [--json]
@@ -34,58 +34,117 @@ public final class PackageCli {
     private PackageCli() {
     }
 
+    /** What each catalog command takes (docs/commands.md): its flags, its options, and how many positionals. */
+    static final Map<String, Args.Spec> SPECS = Map.ofEntries(
+        Map.entry("package.fetch", Args.Spec.of("all-versions dry-run", "catalog site short")),
+        Map.entry("package.import", Args.Spec.of("", "catalog")),
+        Map.entry("package.list", Args.Spec.of("base", "catalog driver-type type")),
+        Map.entry("package.show", Args.Spec.of("", "catalog")),
+        Map.entry("package.diff", Args.Spec.of("", "catalog")),
+        Map.entry("package.resolve", Args.Spec.of("", "catalog base feature driver-set-has vault-has")),
+        Map.entry("package.build", Args.Spec.of("base",
+            "catalog short name driver vendor version description readme include new-version-of depends customized gcvs supported-driver")),
+        Map.entry("package.site", Args.Spec.of("", "catalog out description")));
+
+    /** The positionals each command takes, and the usage line that names them. */
+    private static final Map<String, Integer> POSITIONALS = Map.of(
+        "package.import", 1, "package.show", 1, "package.diff", 2, "package.build", 1);
+    private static final Map<String, String> USAGE = Map.ofEntries(
+        Map.entry("package.fetch", "usage: package.fetch --catalog DIR --short SHORT[_ver]… [--site NAME|URL] [--all-versions] [--dry-run] [--json]"),
+        Map.entry("package.import", "usage: package.import --catalog DIR <jar|dir>"),
+        Map.entry("package.list", "usage: package.list --catalog DIR [--driver-type ID] [--type 2|3|4] [--base] [--json]"),
+        Map.entry("package.show", "usage: package.show --catalog DIR SHORT[_ver]"),
+        Map.entry("package.diff", "usage: package.diff --catalog DIR SHORT_v1 SHORT_v2"),
+        Map.entry("package.resolve", "usage: package.resolve --catalog DIR --base SHORT[_ver] [--feature SHORT…] [--driver-set-has SHORT_ver…] [--vault-has SHORT_ver…]"),
+        Map.entry("package.build", "usage: package.build --catalog DIR <tree> --short SHORT --name \"Display Name\" [--driver D] [--vendor V] [--version M.m.r]"
+            + " [--description …] [--readme FILE] [--include path]… [--new-version-of SHORT_ver|jar] [--depends SHORT[_ver]]… [--base] [--customized keep] [--gcvs referenced|all|none] [--supported-driver ID]… [--json]"),
+        Map.entry("package.site", "usage: package.site --catalog DIR --out DIR [--description …] [--json]"));
+
+    static final List<String> GCVS = List.of("referenced", "all", "none");
+    static final List<String> CUSTOMIZED = List.of("refuse", "keep");
+
     public static int run(String[] argv) throws IOException, InterruptedException {
         String cmd = argv[0];
-        Map<String, List<String>> opts = new LinkedHashMap<>();
-        List<String> pos = new ArrayList<>();
-        for (int i = 1; i < argv.length; i++) {
-            String a = argv[i];
-            if (a.startsWith("--")) {
-                String key = a.substring(2);
-                String value = "";
-                if (i + 1 < argv.length && !argv[i + 1].startsWith("--")) {
-                    value = argv[++i];
-                }
-                opts.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
-            } else {
-                pos.add(a);
-            }
+        if (cmd.equals("package.status")) {
+            return PackageStatus.cli(argv);
         }
-        boolean json = opts.containsKey("json");
-        String catalogDir = first(opts, "catalog");
-        if (catalogDir == null) {
-            System.err.println("--catalog <dir> is required");
+        Args.Spec spec = SPECS.get(cmd);
+        if (spec == null) {
+            System.err.println("unknown command " + cmd);
             return 2;
         }
-        Catalog catalog = Catalog.open(Paths.get(catalogDir));
+        Args a;
+        try {
+            a = Args.parse(cmd, argv, 1, spec);
+            // Everything the command line alone decides is checked here, before the catalog
+            // directory is opened (opening creates it).
+            if (a.first("catalog") == null) {
+                throw new Args.UsageError("--catalog <dir> is required");
+            }
+            int want = POSITIONALS.getOrDefault(cmd, 0);
+            if (a.positional.size() != want) {
+                throw new Args.UsageError((a.positional.size() > want ? "unexpected argument '" + a.positional.get(want) + "'\n" : "") + USAGE.get(cmd));
+            }
+            switch (cmd) {
+                case "package.list" -> a.intOpt("type", 0);
+                case "package.resolve" -> require(a, "base", cmd);
+                case "package.site" -> require(a, "out", cmd);
+                case "package.build" -> {
+                    require(a, "short", cmd);
+                    require(a, "name", cmd);
+                    a.oneOf("gcvs", "referenced", GCVS);
+                    a.oneOf("customized", "refuse", CUSTOMIZED);
+                }
+                default -> {
+                }
+            }
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
+            return 2;
+        }
+        boolean json = a.has("json");
+        List<String> pos = a.positional;
+        Catalog catalog = Catalog.open(Paths.get(a.first("catalog")));
 
-        switch (cmd) {
-            case "package.fetch":
-                return fetch(catalog, opts, json);
-            case "package.import":
-                return doImport(catalog, pos, json);
-            case "package.list":
-                return list(catalog, opts, json);
-            case "package.show":
-                return show(catalog, pos, json);
-            case "package.diff":
-                return diff(catalog, pos, json);
-            case "package.resolve":
-                return resolve(catalog, opts, json);
-            case "package.build":
-                return build(catalog, pos, opts, json);
-            case "package.site":
-                return site(catalog, opts, json);
-            default:
-                System.err.println("unknown command " + cmd);
-                return 2;
+        try {
+            switch (cmd) {
+                case "package.fetch":
+                    return fetch(catalog, a, json);
+                case "package.import":
+                    return doImport(catalog, pos, json);
+                case "package.list":
+                    return list(catalog, a, json);
+                case "package.show":
+                    return show(catalog, pos, json);
+                case "package.diff":
+                    return diff(catalog, pos, json);
+                case "package.resolve":
+                    return resolve(catalog, a, json);
+                case "package.build":
+                    return build(catalog, pos, a, json);
+                case "package.site":
+                    return site(catalog, a, json);
+                default:
+                    System.err.println("unknown command " + cmd);
+                    return 2;
+            }
+        } catch (Args.UsageError e) {
+            // checked above; here only for the methods' signatures
+            System.err.println(e.getMessage());
+            return 2;
+        }
+    }
+
+    private static void require(Args a, String option, String cmd) throws Args.UsageError {
+        if (a.first(option) == null) {
+            throw new Args.UsageError("--" + option + " is required\n" + USAGE.get(cmd));
         }
     }
 
     // ---- package.fetch ----
 
-    private static int fetch(Catalog catalog, Map<String, List<String>> opts, boolean json) throws IOException, InterruptedException {
-        String siteSpec = first(opts, "site");
+    private static int fetch(Catalog catalog, Args opts, boolean json) throws IOException, InterruptedException {
+        String siteSpec = opts.first("site");
         String siteUrl = siteSpec;
         if (siteSpec == null) {
             siteUrl = Catalog.DEFAULT_SITE_2;
@@ -97,9 +156,9 @@ public final class PackageCli {
                 return 2;
             }
         }
-        List<String> shorts = opts.getOrDefault("short", List.of());
-        boolean allVersions = opts.containsKey("all-versions");
-        boolean dryRun = opts.containsKey("dry-run");
+        List<String> shorts = opts.all("short");
+        boolean allVersions = opts.has("all-versions");
+        boolean dryRun = opts.has("dry-run");
         if (shorts.isEmpty()) {
             System.err.println("refused: --short SHORT[_ver] is required (fetching the whole site is not supported)");
             return 1;
@@ -133,10 +192,6 @@ public final class PackageCli {
     // ---- package.import ----
 
     private static int doImport(Catalog catalog, List<String> pos, boolean json) throws IOException {
-        if (pos.isEmpty()) {
-            System.err.println("usage: package.import --catalog DIR <jar|dir>");
-            return 2;
-        }
         Path src = Paths.get(pos.get(0));
         List<Path> jars = new ArrayList<>();
         if (Files.isDirectory(src)) {
@@ -178,10 +233,10 @@ public final class PackageCli {
 
     // ---- package.list ----
 
-    private static int list(Catalog catalog, Map<String, List<String>> opts, boolean json) {
-        Integer typeFilter = first(opts, "type") == null ? null : Integer.parseInt(first(opts, "type"));
-        boolean baseOnly = opts.containsKey("base");
-        String driverType = first(opts, "driver-type");
+    private static int list(Catalog catalog, Args opts, boolean json) throws Args.UsageError {
+        Integer typeFilter = opts.first("type") == null ? null : opts.intOpt("type", 0);
+        boolean baseOnly = opts.has("base");
+        String driverType = opts.first("driver-type");
         List<Catalog.PackageEntry> matched = new ArrayList<>();
         for (Catalog.PackageEntry e : catalog.packages().values()) {
             if (typeFilter != null && e.type != typeFilter) {
@@ -227,10 +282,6 @@ public final class PackageCli {
     // ---- package.show ----
 
     private static int show(Catalog catalog, List<String> pos, boolean json) throws IOException {
-        if (pos.isEmpty()) {
-            System.err.println("usage: package.show --catalog DIR SHORT[_ver]");
-            return 2;
-        }
         String[] sv = Resolver.splitSpec(pos.get(0));
         Catalog.PackageEntry e = catalog.get(sv[0]);
         if (e == null) {
@@ -384,10 +435,6 @@ public final class PackageCli {
     // ---- package.diff ----
 
     private static int diff(Catalog catalog, List<String> pos, boolean json) throws IOException {
-        if (pos.size() < 2) {
-            System.err.println("usage: package.diff --catalog DIR SHORT_v1 SHORT_v2");
-            return 2;
-        }
         PackageJar p1 = readCataloged(catalog, pos.get(0));
         PackageJar p2 = readCataloged(catalog, pos.get(1));
         if (p1 == null || p2 == null) {
@@ -418,15 +465,11 @@ public final class PackageCli {
 
     // ---- package.resolve ----
 
-    private static int resolve(Catalog catalog, Map<String, List<String>> opts, boolean json) {
-        String base = first(opts, "base");
-        if (base == null) {
-            System.err.println("usage: package.resolve --catalog DIR --base SHORT[_ver] [--feature SHORT…] [--driver-set-has SHORT_ver…] [--vault-has SHORT_ver…]");
-            return 2;
-        }
-        List<String> features = opts.getOrDefault("feature", List.of());
-        Set<String> driverSetHas = new LinkedHashSet<>(opts.getOrDefault("driver-set-has", List.of()));
-        Set<String> vaultHas = new LinkedHashSet<>(opts.getOrDefault("vault-has", List.of()));
+    private static int resolve(Catalog catalog, Args opts, boolean json) {
+        String base = opts.first("base");
+        List<String> features = opts.all("feature");
+        Set<String> driverSetHas = new LinkedHashSet<>(opts.all("driver-set-has"));
+        Set<String> vaultHas = new LinkedHashSet<>(opts.all("vault-has"));
         Resolver.Result r = Resolver.resolve(catalog, base, features, driverSetHas, vaultHas);
         if (json) {
             System.out.println(resolveJson(r));
@@ -469,42 +512,33 @@ public final class PackageCli {
 
     // ---- package.build ----
 
-    private static int build(Catalog catalog, List<String> pos, Map<String, List<String>> opts, boolean json) throws IOException {
-        if (pos.isEmpty() || first(opts, "short") == null || first(opts, "name") == null) {
-            System.err.println("usage: package.build --catalog DIR <tree> --short SHORT --name \"Display Name\" [--driver D] [--vendor V] [--version M.m.r]"
-                + " [--description …] [--readme FILE] [--include path]… [--new-version-of SHORT_ver|jar] [--depends SHORT[_ver]]… [--base] [--customized keep] [--gcvs referenced|all|none] [--supported-driver ID]… [--json]");
-            return 2;
-        }
+    private static int build(Catalog catalog, List<String> pos, Args opts, boolean json) throws IOException, Args.UsageError {
         PackageBuilder.Options o = new PackageBuilder.Options();
         o.tree = Paths.get(pos.get(0));
-        o.driver = first(opts, "driver");
-        o.shortName = first(opts, "short");
-        o.name = first(opts, "name");
-        if (first(opts, "vendor") != null) {
-            o.vendor = first(opts, "vendor");
+        o.driver = opts.first("driver");
+        o.shortName = opts.first("short");
+        o.name = opts.first("name");
+        if (opts.first("vendor") != null) {
+            o.vendor = opts.first("vendor");
         }
-        if (first(opts, "version") != null) {
-            o.version = first(opts, "version");
+        if (opts.first("version") != null) {
+            o.version = opts.first("version");
         }
-        if (first(opts, "description") != null) {
-            o.description = first(opts, "description");
+        if (opts.first("description") != null) {
+            o.description = opts.first("description");
         }
-        if (first(opts, "readme") != null) {
-            o.readme = java.nio.file.Files.readString(Paths.get(first(opts, "readme")));
+        if (opts.first("readme") != null) {
+            o.readme = java.nio.file.Files.readString(Paths.get(opts.first("readme")));
         }
-        o.include.addAll(opts.getOrDefault("include", List.of()));
-        o.depends.addAll(opts.getOrDefault("depends", List.of()));
-        o.base = opts.containsKey("base");
-        if (first(opts, "customized") != null) {
-            o.customized = first(opts, "customized");
-        }
-        if (first(opts, "gcvs") != null) {
-            o.gcvs = first(opts, "gcvs");
-        }
-        o.supportedDrivers.addAll(opts.getOrDefault("supported-driver", List.of()));
+        o.include.addAll(opts.all("include"));
+        o.depends.addAll(opts.all("depends"));
+        o.base = opts.has("base");
+        o.customized = opts.oneOf("customized", o.customized, CUSTOMIZED);
+        o.gcvs = opts.oneOf("gcvs", o.gcvs, GCVS);
+        o.supportedDrivers.addAll(opts.all("supported-driver"));
         o.catalog = catalog;
-        if (first(opts, "new-version-of") != null) {
-            String spec = first(opts, "new-version-of");
+        if (opts.first("new-version-of") != null) {
+            String spec = opts.first("new-version-of");
             o.newVersionOf = spec.endsWith(".jar") ? Paths.get(spec) : PackageInstall.jarOf(null, catalog.dir.toString(), spec);
         }
         java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("pkgbuild");
@@ -525,13 +559,9 @@ public final class PackageCli {
 
     // ---- package.site ----
 
-    private static int site(Catalog catalog, Map<String, List<String>> opts, boolean json) throws IOException {
-        String out = first(opts, "out");
-        if (out == null) {
-            System.err.println("usage: package.site --catalog DIR --out DIR [--description …] [--json]");
-            return 2;
-        }
-        String description = first(opts, "description") == null ? "Packages built with DirXMLDev" : first(opts, "description");
+    private static int site(Catalog catalog, Args opts, boolean json) throws IOException {
+        String out = opts.first("out");
+        String description = opts.first("description") == null ? "Packages built with DirXMLDev" : opts.first("description");
         List<String> written = SiteWriter.write(catalog, Paths.get(out), description);
         if (json) {
             System.out.println("{\"out\":" + q(out) + ",\"features\":" + jsonArr(written) + "}");
@@ -542,11 +572,6 @@ public final class PackageCli {
             }
         }
         return 0;
-    }
-
-    private static String first(Map<String, List<String>> opts, String key) {
-        List<String> v = opts.get(key);
-        return v == null || v.isEmpty() ? null : v.get(0);
     }
 
     private static String jsonArr(List<String> items) {
