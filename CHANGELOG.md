@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-10-28
+
 ### Added
 
 - Libraries in other containers (#111). A driver set's objects from a Library other than its own
@@ -24,8 +26,6 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - `import-project` no longer records `library.dn` on the driver set's own Library objects, so
   they follow the driver set's DN in every environment. A tree imported by 0.57.0 that has them is
   read the same way.
-
-### Changed
 
 - Every command reads its command line against what it takes (`Args`; #104, #105):
   - **Flags without a value:** they never take the next word, so `vault.diff --json tree …` keeps
