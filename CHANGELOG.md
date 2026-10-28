@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-10-28
+
 ### Fixed
 
 - A Designer project with two objects of one name in the tree's Library (or a driver or channel)
