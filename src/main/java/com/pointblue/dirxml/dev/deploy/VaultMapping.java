@@ -283,10 +283,18 @@ public final class VaultMapping {
 
     /** A driver's {@code DirXML-Policies} values, in set then order. */
     public static List<String> policiesValues(String dsDn, Driver d) {
+        return policiesValues(dsDn, d, null);
+    }
+
+    /** With the driver set: a link to a Library artifact from another Library carries that artifact's real DN (#111). */
+    public static List<String> policiesValues(String dsDn, Driver d, DriverSet ds) {
+        Map<String, Artifact> index = ds == null ? Map.of() : ds.index();
         List<String> out = new ArrayList<>();
         for (PolicySet set : PolicySet.values()) {
             for (PolicyLink l : d.links(set)) {
-                out.add(pathDn(dsDn, l.ref) + "#" + l.order + "#" + set.id);
+                String other = ds == null ? null : com.pointblue.dirxml.dev.model.Libraries.outside(ds, index.get(l.ref));
+                out.add((other != null ? "cn=" + escapeRdn(index.get(l.ref).name) + "," + other : pathDn(dsDn, l.ref))
+                    + "#" + l.order + "#" + set.id);
             }
         }
         return out;

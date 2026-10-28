@@ -566,7 +566,7 @@ public final class Plan {
             String dn = VaultMapping.driverDn(dsDn, name);
             p.touchedDns.add(dn);
             List<byte[]> values = new ArrayList<>();
-            for (String v : VaultMapping.policiesValues(dsDn, d)) {
+            for (String v : VaultMapping.policiesValues(dsDn, d, to)) {
                 values.add(v.getBytes(StandardCharsets.UTF_8));
             }
             driverAttrs.add(new Step(Op.MODIFY, dn, VaultMapping.POLICIES, null, Map.of(VaultMapping.POLICIES, values),

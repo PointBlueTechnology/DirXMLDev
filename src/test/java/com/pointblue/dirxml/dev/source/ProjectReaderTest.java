@@ -502,7 +502,7 @@ public class ProjectReaderTest {
         List<Resource> js = ds.library.resources.stream().filter(r -> r.name.equals("es-misc")).collect(Collectors.toList());
         assertEquals(1, js.size());
         assertEquals("function f(){}", js.get(0).text);
-        assertEquals("cn=Library,cn=DS1,o=system", js.get(0).meta.get("library.dn"));
+        assertNull("the driver set's own Library: no DN recorded, so it follows the driver set's DN", js.get(0).meta.get("library.dn"));
         assertNotNull("the tree's index loads", ds.index().get("library/es-misc"));
         assertEquals(1, ds.duplicates.size());
         String note = ds.duplicates.get(0).note;
