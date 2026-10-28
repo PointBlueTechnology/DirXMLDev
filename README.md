@@ -83,8 +83,10 @@ viewer.install` fetches its latest release, checksum verified, and
 opens it, so a person reads the trace in the viewer while the agent works in
 the terminal ([docs/install.md §5.2](docs/install.md#52-the-dirxml-trace-viewer)).
 
-`bin/idm` with no arguments lists every command and flag. That text is the
-contract. Where an older design note disagrees with it, follow `bin/idm`.
+`bin/idm` with no arguments lists every command and flag.
+[docs/commands.md](docs/commands.md) has each command's arguments, the values they
+take and an example; a test keeps it in step with the code. Where an older design
+note disagrees with them, follow `bin/idm`.
 
 ## Quick start
 
