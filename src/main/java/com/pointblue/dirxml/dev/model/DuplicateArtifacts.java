@@ -73,11 +73,11 @@ public final class DuplicateArtifacts {
                 if (a != keep) {
                     policies.remove(a);
                     resources.remove(a);
-                    left.add(describe(a));
+                    left.add(describe(a, inLibraries(same) ? ownLibrary : null));
                 }
             }
             String how = identical(same) && !inLibraries(same) ? "they are the same, so kept one"
-                : "kept " + describe(keep) + ", left out " + String.join(" and ", left);
+                : "kept " + describe(keep, inLibraries(same) ? ownLibrary : null) + ", left out " + String.join(" and ", left);
             out.add(new Dropped(e.getKey(), same.size() + " objects are named " + e.getKey()
                 + " (an Identity Vault holds one per name in a container): " + how,
                 inLibraries(same)
@@ -87,9 +87,11 @@ public final class DuplicateArtifacts {
     }
 
     private static Artifact keeper(List<Artifact> same, String ownLibrary) {
-        if (ownLibrary != null) {
+        if (inLibraries(same)) {
+            // the driver set's own Library's copy: no Library DN recorded (or, in a tree from 0.57.0, its own)
             for (Artifact a : same) {
-                if (ownLibrary.equalsIgnoreCase(a.meta.get(LIBRARY_DN))) {
+                String dn = a.meta.get(LIBRARY_DN);
+                if (dn == null || ownLibrary != null && ownLibrary.equalsIgnoreCase(dn)) {
                     return a;
                 }
             }
@@ -150,9 +152,12 @@ public final class DuplicateArtifacts {
     }
 
     /** What the person needs to find it in Designer: its package and version, its Designer id. */
-    static String describe(Artifact a) {
+    static String describe(Artifact a, String ownLibrary) {
         List<String> parts = new ArrayList<>();
         String library = a.meta.get(LIBRARY_DN);
+        if (library == null) {
+            library = ownLibrary;   // copies from several Libraries: one without a recorded DN is the driver set's own
+        }
         if (library != null) {
             parts.add("in " + library);
         }
