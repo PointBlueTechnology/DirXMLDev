@@ -194,7 +194,7 @@ rationale; `commands.md` lists every `flow-*` code.
 ### Author a workflow (Track W steps W2/W3)
 
 Changing the flow itself — not just a form's fields — is the `flow.*` typed
-operations (`commands.md` has the full list): one op per concept
+operations ([commands.md](commands.md) has every one): one op per concept
 (`flow.activity.add/set/rename/remove`, `flow.branch.add/remove`,
 `flow.link.add/remove/retype`, `flow.data.set/remove`, `flow.set`), each a
 transaction like every other edit here (`--dry-run`, `--force`, `--json`,
@@ -291,7 +291,7 @@ it (`--force` never overrides that — repoint or remove the activity first).
 `entitlement.list`/`entitlement.show` orient; `EntitlementCheck` validates
 the document itself (root element, `conflict-resolution`, `multi-valued`);
 `FlowCheck` cross-checks a provision activity's DN against the tree's
-drivers. See `commands.md` for the full flag list.
+drivers. See [commands.md](commands.md#edit-entitlements) for every flag.
 
 ### The rest of AppConfig (roles, resources, entities, nav items …)
 

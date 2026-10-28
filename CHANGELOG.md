@@ -7,6 +7,56 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- `vault.deploy-schema --yes` is behind the agent write gate like every other vault write: it
+  needs `IDM_AGENT_ALLOW_WRITE=1` or `--confirm <env>` on any tier. Before, `--yes` alone wrote
+  `cn=schema` on a non-production tier. The refusal for a custom definition without an OID names
+  the operation that adds one, `schema.set` (it said `schema.set-attribute`/`schema.set-class`).
+
+## [0.57.0] - 2026-10-28
+
+### Fixed
+
+- A Designer project with two objects of one name in the tree's Library (or a driver or channel)
+  no longer gives a tree that won't load (DirXMLDevWeb #174: `duplicate artifact path`, every check
+  failing). This happens when a driver set uses Libraries in two containers that both hold the
+  object, or when a package upgrade leaves an old copy behind. `import-project` keeps one and says
+  which in a `NOTE:` line (`DuplicateArtifacts`):
+  - from different Libraries, the one in the driver set's own `cn=Library`, where a deploy writes;
+  - the same copies, the first;
+  - otherwise the newest package version, or the first.
+
+  With more than one Library, each Library artifact records its Library's DN (`library.dn`). An
+  object a Designer relation names twice is read once. A tree already written with two loads with
+  one of them, and `validate` reports a `duplicate-artifact` error that says which, instead of
+  every check failing.
+
+### Added
+
+- `docs/commands.md`: every `bin/idm` command with each argument (required or not, the values
+  it takes, the default) and an example. The edit operations' part is written from the registry
+  (`OperationsDoc`, examples in `edit/examples.properties`); `CommandsReferenceTest` fails when a
+  command the CLI runs has no entry, when the usage text leaves one out, when the generated part
+  is stale, or when an example names an argument the operation lacks or leaves out a required one.
+- `Registry.Arg.flag` marks an argument that takes no value; `bin/idm`'s usage shows it as
+  `[--name]`. `Registry.example(name)` returns an operation's example.
+
+### Changed
+
+- `bin/idm`'s usage text lists the commands it left out (`driver.log-level`, `driver.start-option`,
+  `driver.associations`, `driver.password-sync`, `object.inspect`, `promote.map`, `query … schema`)
+  and flags it left out (`vault.deploy --driver-server`, `vault.rollback [<tree>] --server`,
+  `vault.import-clone --replace --json`, `import-live --mark-new-drivers`, `form.edit --force`,
+  `package.build --description --readme --supported-driver`, `package.site --json`,
+  `driver.migrate --direction vault`, `driver.secrets --kind`, `driver.submit --mode`,
+  `trace.view --trace-driver`, `vault.email-server --auth`, `--env` on the console-gap commands),
+  and no longer shows optional flags as required (`entitlement.show --driver`; `package.build
+  --driver --vendor --version`; one of `vault.deploy --dry-run|--yes|--step`).
+- `docs/event-store.md` and `docs/vault-deploy.md` no longer describe `events.case --run` and
+  `vault.deploy --step --restart-each`, which were never built. `docs/getting-started.md` says
+  what `doctor --env` adds.
+
 ## [0.56.0] - 2026-10-27
 
 ### Added

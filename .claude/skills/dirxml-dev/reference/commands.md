@@ -1,7 +1,9 @@
 # Commands, by what they're for
 
-Run `bin/idm` for the full usage with every argument. All commands print
-`--json` when asked; write operations take `--dry-run`.
+A short list by purpose, not every command. Every command with each argument, the
+values it takes and an example is `docs/commands.md` in the DirXMLDev repository;
+`bin/idm` with no arguments prints them in short. All commands print `--json`
+when asked; write operations take `--dry-run`.
 
 ## Get a tree
 
