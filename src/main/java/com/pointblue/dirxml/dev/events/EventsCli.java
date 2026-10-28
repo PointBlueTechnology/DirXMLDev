@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.events;
 
+import com.pointblue.dirxml.dev.Args;
 import com.pointblue.dirxml.dev.deploy.Environments;
 import com.pointblue.dirxml.dev.json.Json;
 import java.io.IOException;
@@ -10,7 +11,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -31,29 +31,58 @@ public final class EventsCli {
     private EventsCli() {
     }
 
+    /** What {@code query <tree> events} and {@code query <tree> event} take (docs/commands.md). */
+    static final Map<String, Args.Spec> QUERY_SPECS = Map.of(
+        "events", Args.Spec.of("own logged xml",
+            "env dn under name driver policy stage type class since until event-id text attr limit"),
+        "event", Args.Spec.of("xml", "env"));
+
+    /** What {@code events.describe} and {@code events.case} take (docs/commands.md). */
+    static final Map<String, Args.Spec> SPECS = Map.of(
+        "events.describe", Args.Spec.of("", "env"),
+        "events.case", Args.Spec.of("replace dry-run", "env id name driver channel dir"));
+
     /** {@code query <tree> events|event …}: entered from ReadCli with the whole argv. */
     public static int query(String[] argv) throws Exception {
         String what = argv[2];
-        Map<String, List<String>> opts = opts(argv, 3);
-        List<String> pos = opts.getOrDefault("", List.of());
-        boolean json = opts.containsKey("json");
-        boolean xml = opts.containsKey("xml");
-        String envName = first(opts, "env");
-        if (envName == null) {
-            System.err.println("usage: query <tree> " + what + " --env <name> …   (see docs/event-store.md)");
+        Args opts;
+        EventQuery q = null;
+        long rowId = 0;
+        try {
+            Args.Spec spec = QUERY_SPECS.get(what);
+            if (spec == null) {
+                throw new Args.UsageError("query <tree> events|event, not '" + what + "'");
+            }
+            opts = Args.parse("query " + what, argv, 3, spec);
+            if (opts.first("env") == null) {
+                throw new Args.UsageError("usage: query <tree> " + what + " --env <name> …   (see docs/event-store.md)");
+            }
+            if (what.equals("event")) {
+                if (opts.positional.size() != 1) {
+                    throw new Args.UsageError((opts.positional.size() > 1 ? "unexpected argument '" + opts.positional.get(1) + "'\n" : "")
+                        + "usage: query <tree> event <id> --env <name> [--json] [--xml]");
+                }
+                rowId = number("<id>", opts.positional.get(0));
+            } else {
+                if (!opts.positional.isEmpty()) {
+                    throw new Args.UsageError("unexpected argument '" + opts.positional.get(0) + "'");
+                }
+                q = selectors(opts);
+            }
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
             return 2;
         }
+        boolean json = opts.has("json");
+        boolean xml = opts.has("xml");
+        String envName = opts.first("env");
         Environments.Environment env = Environments.load().get(envName);
         try (EventStore store = EventStore.open(env)) {
             EventMask mask = env.events.pseudonymise ? new EventMask() : null;
             if (what.equals("event")) {
-                if (pos.isEmpty()) {
-                    System.err.println("usage: query <tree> event <id> --env <name> [--json] [--xml]");
-                    return 2;
-                }
-                Event e = store.get(Long.parseLong(pos.get(0)));
+                Event e = store.get(rowId);
                 if (e == null) {
-                    System.err.println("no row " + pos.get(0));
+                    System.err.println("no row " + rowId);
                     return 1;
                 }
                 List<Event> family = e.eventId() == null ? List.of() : store.siblings(e.eventId());
@@ -80,7 +109,7 @@ public final class EventsCli {
                 }
                 return 0;
             }
-            EventQuery q = parse(opts, store);
+            resolveDns(q, opts, store);
             List<Event> rows = store.query(q);
             if (mask != null) {
                 List<Event> m = new ArrayList<>();
@@ -110,14 +139,34 @@ public final class EventsCli {
     /** {@code events.describe <tree> --env E [--json]} and {@code events.case <tree> --env E --id N --name NAME …}. */
     public static int command(String[] argv) throws Exception {
         String cmd = argv[0];
-        Map<String, List<String>> opts = opts(argv, 1);
-        List<String> pos = opts.getOrDefault("", List.of());
-        boolean json = opts.containsKey("json");
-        String envName = first(opts, "env");
-        if (envName == null || pos.isEmpty()) {
-            System.err.println("usage: " + cmd + " <tree> --env <name> " + (cmd.equals("events.case") ? "--id N --name NAME [--driver D] [--channel subscriber|publisher] [--dir DIR] [--replace] [--dry-run]" : "") + " [--json]");
+        String usage = "usage: " + cmd + " <tree> --env <name> " + (cmd.equals("events.case") ? "--id N --name NAME [--driver D] [--channel subscriber|publisher] [--dir DIR] [--replace] [--dry-run]" : "") + " [--json]";
+        Args opts;
+        long rowId = 0;
+        try {
+            Args.Spec spec = SPECS.get(cmd);
+            if (spec == null) {
+                throw new Args.UsageError("unknown command " + cmd);
+            }
+            opts = Args.parse(cmd, argv, 1, spec);
+            if (opts.positional.size() > 1) {
+                throw new Args.UsageError("unexpected argument '" + opts.positional.get(1) + "'\n" + usage);
+            }
+            if (opts.first("env") == null || opts.positional.isEmpty()) {
+                throw new Args.UsageError(usage);
+            }
+            if (cmd.equals("events.case")) {
+                if (opts.first("id") == null || opts.first("name") == null) {
+                    throw new Args.UsageError(usage);
+                }
+                rowId = opts.longOpt("id", 0);
+            }
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
             return 2;
         }
+        List<String> pos = opts.positional;
+        boolean json = opts.has("json");
+        String envName = opts.first("env");
         Path tree = Paths.get(pos.get(0));
         Environments.Environment env = Environments.load().get(envName);
         try (EventStore store = EventStore.open(env)) {
@@ -137,24 +186,19 @@ public final class EventsCli {
                 }
                 return 0;
             }
-            String id = first(opts, "id");
-            String name = first(opts, "name");
-            if (id == null || name == null) {
-                System.err.println("usage: events.case <tree> --env <name> --id N --name NAME [--driver D] [--channel subscriber|publisher] [--dir DIR] [--replace] [--dry-run] [--json]");
-                return 2;
-            }
-            Event e = store.get(Long.parseLong(id));
+            String name = opts.first("name");
+            Event e = store.get(rowId);
             if (e == null) {
-                System.err.println("no row " + id);
+                System.err.println("no row " + rowId);
                 return 1;
             }
             boolean masked = env.events.pseudonymise;
             if (masked) {
                 e = new EventMask().mask(e);
             }
-            String dir = first(opts, "dir");
-            EventsCase.Plan p = EventsCase.plan(tree, e, env.name, name, first(opts, "driver"), first(opts, "channel"), dir == null ? null : Paths.get(dir), opts.containsKey("replace"), masked);
-            boolean dry = opts.containsKey("dry-run");
+            String dir = opts.first("dir");
+            EventsCase.Plan p = EventsCase.plan(tree, e, env.name, name, opts.first("driver"), opts.first("channel"), dir == null ? null : Paths.get(dir), opts.has("replace"), masked);
+            boolean dry = opts.has("dry-run");
             if (p.refusal == null && !dry) {
                 EventsCase.write(p);
             }
@@ -174,40 +218,63 @@ public final class EventsCli {
         }
     }
 
-    static EventQuery parse(Map<String, List<String>> opts, EventStore store) throws IOException {
+    /** The selectors the command line alone decides; a bad value is a usage error, before any store is opened. */
+    static EventQuery selectors(Args opts) throws Args.UsageError {
         EventQuery q = new EventQuery();
+        q.name = opts.first("name");
+        q.policy = opts.first("policy");
+        q.stage = opts.oneOf("stage", null, List.of("input", "output"));
+        if (opts.has("own")) {
+            q.own = true;
+        } else if (opts.has("logged")) {
+            q.own = false;
+        }
+        if (opts.first("type") != null) {
+            try {
+                q.types = EventQuery.types(opts.first("type"));
+            } catch (IllegalArgumentException e) {
+                throw new Args.UsageError("--type: " + e.getMessage());
+            }
+        }
+        q.className = opts.first("class");
+        q.since = time(opts, "since");
+        q.until = time(opts, "until");
+        q.eventId = opts.first("event-id");
+        q.text = opts.first("text");
+        q.attr = opts.first("attr");
+        q.limit = opts.intOpt("limit", q.limit);
+        return q;
+    }
+
+    /** The DN selectors, which need the store (an LDAP DN needs its tree name, a driver its DN). */
+    static void resolveDns(EventQuery q, Args opts, EventStore store) throws IOException {
         String tree = store.config().tree;
-        q.dn = slash(first(opts, "dn"), tree, store);
-        q.under = slash(first(opts, "under"), tree, store);
-        q.name = first(opts, "name");
-        String driver = first(opts, "driver");
+        q.dn = slash(opts.first("dn"), tree, store);
+        q.under = slash(opts.first("under"), tree, store);
+        String driver = opts.first("driver");
         if (driver != null) {
             q.driverDn = driver.startsWith("\\") ? driver : driverDn(driver, store);
         }
-        q.policy = first(opts, "policy");
-        q.stage = first(opts, "stage");
-        if (opts.containsKey("own")) {
-            q.own = true;
-        } else if (opts.containsKey("logged")) {
-            q.own = false;
+    }
+
+    private static java.time.Instant time(Args opts, String option) throws Args.UsageError {
+        String v = opts.first(option);
+        if (v == null) {
+            return null;
         }
-        if (first(opts, "type") != null) {
-            q.types = EventQuery.types(first(opts, "type"));
+        try {
+            return EventQuery.parseTime(v);
+        } catch (java.time.DateTimeException | NumberFormatException e) {
+            throw new Args.UsageError("--" + option + " is 30s, 30m, 24h or 7d ago, an ISO instant or a date (2026-10-28), not '" + v + "'");
         }
-        q.className = first(opts, "class");
-        if (first(opts, "since") != null) {
-            q.since = EventQuery.parseTime(first(opts, "since"));
+    }
+
+    private static long number(String what, String v) throws Args.UsageError {
+        try {
+            return Long.parseLong(v.trim());
+        } catch (NumberFormatException e) {
+            throw new Args.UsageError(what + " needs a whole number, not '" + v + "'");
         }
-        if (first(opts, "until") != null) {
-            q.until = EventQuery.parseTime(first(opts, "until"));
-        }
-        q.eventId = first(opts, "event-id");
-        q.text = first(opts, "text");
-        q.attr = first(opts, "attr");
-        if (first(opts, "limit") != null) {
-            q.limit = Integer.parseInt(first(opts, "limit"));
-        }
-        return q;
     }
 
     /** The store's DN of a driver named as the tree names it: the distinct srcdriver whose leaf matches. */
@@ -296,29 +363,5 @@ public final class EventsCli {
             return "";
         }
         return s.length() <= n ? s : "…" + s.substring(s.length() - n + 1);
-    }
-
-    /** {@code --key value} pairs (repeatable), flags without a value, positionals under "". */
-    static Map<String, List<String>> opts(String[] argv, int from) {
-        Map<String, List<String>> out = new LinkedHashMap<>();
-        for (int i = from; i < argv.length; i++) {
-            String a = argv[i];
-            if (a.startsWith("--")) {
-                String k = a.substring(2).toLowerCase(Locale.ROOT);
-                if (i + 1 < argv.length && !argv[i + 1].startsWith("--") && !List.of("json", "xml", "own", "logged", "replace", "dry-run").contains(k)) {
-                    out.computeIfAbsent(k, x -> new ArrayList<>()).add(argv[++i]);
-                } else {
-                    out.computeIfAbsent(k, x -> new ArrayList<>());
-                }
-            } else {
-                out.computeIfAbsent("", x -> new ArrayList<>()).add(a);
-            }
-        }
-        return out;
-    }
-
-    static String first(Map<String, List<String>> opts, String k) {
-        List<String> v = opts.get(k);
-        return v == null || v.isEmpty() ? null : v.get(0);
     }
 }

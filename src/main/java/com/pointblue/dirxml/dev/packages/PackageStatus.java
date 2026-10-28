@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.packages;
 
+import com.pointblue.dirxml.dev.Args;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.deploy.DeployLog;
 import com.pointblue.dirxml.dev.edit.Packages;
@@ -252,29 +253,26 @@ public final class PackageStatus {
     }
 
     /** {@code package.status <tree> [--driver D] [--catalog DIR] [--strict] [--json]}; {@code --strict} exits 1 on any {@link #violations}. */
+    /** What {@code package.status} takes (docs/commands.md). */
+    static final Args.Spec SPEC = Args.Spec.of("strict", "driver catalog");
+
     public static int cli(String[] args) throws IOException {
-        Path tree = null;
-        String driver = null;
-        Catalog catalog = null;
-        boolean json = false;
-        boolean strict = false;
-        for (int i = 1; i < args.length; i++) {
-            if (args[i].equals("--driver") && i + 1 < args.length) {
-                driver = args[++i];
-            } else if (args[i].equals("--catalog") && i + 1 < args.length) {
-                catalog = Catalog.open(Paths.get(args[++i]));
-            } else if (args[i].equals("--json")) {
-                json = true;
-            } else if (args[i].equals("--strict")) {
-                strict = true;
-            } else if (tree == null) {
-                tree = Paths.get(args[i]);
+        Args a;
+        try {
+            a = Args.parse("package.status", args, 1, SPEC);
+            if (a.positional.size() != 1) {
+                throw new Args.UsageError((a.positional.size() > 1 ? "unexpected argument '" + a.positional.get(1) + "'\n" : "")
+                    + "usage: package.status <tree> [--driver D] [--catalog DIR] [--strict] [--json]");
             }
-        }
-        if (tree == null) {
-            System.err.println("usage: package.status <tree> [--driver D] [--catalog DIR] [--strict] [--json]");
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
             return 2;
         }
+        Path tree = Paths.get(a.positional.get(0));
+        String driver = a.first("driver");
+        Catalog catalog = a.first("catalog") == null ? null : Catalog.open(Paths.get(a.first("catalog")));
+        boolean json = a.has("json");
+        boolean strict = a.has("strict");
         PackageStatus st = of(tree, driver, catalog);
         List<String> violations = strict ? st.violations(catalog != null) : List.of();
         if (json) {
