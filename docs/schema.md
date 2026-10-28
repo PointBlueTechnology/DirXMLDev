@@ -32,6 +32,10 @@ idm vault.deploy-schema tree/ --env lab            # the plan: what the vault la
 idm vault.deploy-schema tree/ --env lab --yes      # written to cn=schema (--confirm <env> on production)
 ```
 
+`--yes` is a vault write: like every other, it refuses unless `IDM_AGENT_ALLOW_WRITE=1` or
+`--confirm <env>` names the environment, on any tier (the agent write gate, [install.md](install.md)
+§2.4). The plan without `--yes` is a read.
+
 Definitions you make are marked *custom*; a refresh keeps them (and drops the mark on any the
 vault now has). Only custom definitions change or go; the vault's own are read-only here, and
 **nothing is ever removed from a vault's schema** — eDirectory does not take schema back safely.

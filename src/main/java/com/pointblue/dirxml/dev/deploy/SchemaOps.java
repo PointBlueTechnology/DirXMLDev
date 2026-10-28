@@ -209,14 +209,14 @@ public final class SchemaOps {
         for (VaultSchema.AttrDef a : attrs) {
             if (a.oid == null || a.oid.isBlank()) {
                 r.ok = false;
-                r.refusal = "custom attribute '" + a.name + "' has no OID; eDirectory needs one over LDAP (schema.set-attribute --name … --oid …)";
+                r.refusal = "custom attribute '" + a.name + "' has no OID; eDirectory needs one over LDAP (schema.set --name … --oid …)";
                 return r;
             }
         }
         for (VaultSchema.ClassDef c : classes) {
             if (c.oid == null || c.oid.isBlank()) {
                 r.ok = false;
-                r.refusal = "custom class '" + c.name + "' has no OID; eDirectory needs one over LDAP (schema.set-class --name … --oid …)";
+                r.refusal = "custom class '" + c.name + "' has no OID; eDirectory needs one over LDAP (schema.set --name … --oid …)";
                 return r;
             }
         }

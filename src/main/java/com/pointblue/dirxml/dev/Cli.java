@@ -550,7 +550,7 @@ public final class Cli {
         System.err.println("                  [--depends SHORT…] [--gcvs referenced|all|none] [--customized keep] [--base] [--json]   build a package jar from a driver's artifacts");
         System.err.println("  package.site    --catalog DIR --out DIR [--description …]   render the catalog as an Eclipse update site Designer can read");
         System.err.println("  package.status  <tree> [--driver D] [--catalog DIR] [--strict] [--json]   installed packages per driver vs the catalog (upgrades available); --strict exits 1 on a customized packaged object or a version the catalog lacks");
-        System.err.println("vault writes (vault.deploy --yes|--step, vault.rollback --yes, vault.import-clone --yes,");
+        System.err.println("vault writes (vault.deploy --yes|--step, vault.rollback --yes, vault.import-clone --yes, vault.deploy-schema --yes,");
         System.err.println("  driver start|stop|restart, cache clear, migrate, resync, secrets set|remove, trace set|reset, submit)");
         System.err.println("  also need IDM_AGENT_ALLOW_WRITE=1 or --confirm <env>. A --dry-run stays read-only.");
         System.err.println("operate (docs/operate.md; environments.properties, tiers, deploy-log audit):");
