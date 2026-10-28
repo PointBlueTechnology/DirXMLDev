@@ -59,11 +59,23 @@ public final class AgentWriteGate {
 
     /** Operate commands that change the vault. Status, cache view, secrets list, and trace show/tail do not. */
     public static boolean mutatesVault(String cmd, String sub) {
+        return mutatesVault(cmd, sub, false);
+    }
+
+    /**
+     * Operate commands that change the vault, or ask a connected system through a running driver
+     * ({@code driver.query}, #108). {@code dryRun}: the command line's {@code --dry-run}; a dry run of
+     * {@code driver.migrate --direction vault} only lists what would go, so it is not a write (#108).
+     */
+    public static boolean mutatesVault(String cmd, String sub, boolean dryRun) {
         switch (cmd) {
+            case "driver.migrate":
+                return !dryRun;
+            case "driver.query":
+                return true;
             case "driver.start":
             case "driver.stop":
             case "driver.restart":
-            case "driver.migrate":
             case "driver.resync":
             case "driver.submit":
             case "driver.start-option":
