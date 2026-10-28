@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.operate;
 
+import com.pointblue.dirxml.dev.Args;
 import com.pointblue.dirxml.dev.deploy.Environments;
 
 import java.nio.file.Files;
@@ -23,15 +24,29 @@ public final class ViewerCli {
     private ViewerCli() {
     }
 
+    /** What each command takes (docs/commands.md). */
+    static final Map<String, Args.Spec> SPECS = Map.of(
+        "viewer.check", Args.Spec.of("", ""),
+        "viewer.install", Args.Spec.of("source", "version dir"));
+
+    static final String USAGE = "usage: viewer.check | viewer.install [--version TAG] [--source] [--dir DIR]";
+
     public static int run(String[] argv) throws Exception {
         String cmd = argv[0];
-        Map<String, String> opts = new java.util.LinkedHashMap<>();
-        for (int i = 1; i < argv.length; i++) {
-            if (argv[i].startsWith("--")) {
-                String key = argv[i].substring(2);
-                String value = i + 1 < argv.length && !argv[i + 1].startsWith("--") ? argv[++i] : "";
-                opts.put(key, value);
+        Args.Spec spec = SPECS.get(cmd);
+        if (spec == null) {
+            System.err.println(USAGE);
+            return 2;
+        }
+        Args opts;
+        try {
+            opts = Args.parse(cmd, argv, 1, spec);
+            if (!opts.positional.isEmpty()) {
+                throw new Args.UsageError(cmd + " takes no positional argument, not '" + opts.positional.get(0) + "'");
             }
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
+            return 2;
         }
         switch (cmd) {
             case "viewer.check": {
@@ -40,10 +55,10 @@ public final class ViewerCli {
                 return st.ready() ? 0 : 1;
             }
             case "viewer.install": {
-                Path dir = opts.containsKey("dir") ? Paths.get(opts.get("dir")) : TraceViewer.defaultDir();
-                String tag = opts.getOrDefault("version", null);
+                Path dir = opts.has("dir") ? Paths.get(opts.first("dir")) : TraceViewer.defaultDir();
+                String tag = opts.first("version");
                 List<String> notes = new ArrayList<>();
-                TraceViewer.Installed done = opts.containsKey("source")
+                TraceViewer.Installed done = opts.has("source")
                     ? TraceViewer.installFromSource(dir, tag, TraceViewer.REPO_URL + ".git", notes::add)
                     : TraceViewer.installRelease(dir, tag, "https://api.github.com/repos/" + TraceViewer.REPO, notes::add);
                 for (String n : notes) {
@@ -56,7 +71,7 @@ public final class ViewerCli {
                 return 0;
             }
             default:
-                System.err.println("usage: viewer.check | viewer.install [--version TAG] [--source] [--dir DIR]");
+                System.err.println(USAGE);
                 return 2;
         }
     }
