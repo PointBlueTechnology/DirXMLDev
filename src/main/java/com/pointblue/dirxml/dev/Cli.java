@@ -451,6 +451,9 @@ public final class Cli {
 
     private static void report(DriverSet ds) {
         System.out.println(ds);
+        for (com.pointblue.dirxml.dev.model.DuplicateArtifacts.Dropped d : ds.duplicates) {
+            System.out.println("NOTE: " + d.note + ". " + d.advice + ".");
+        }
         System.out.println("  library: " + ds.library.policies.size() + " policies, "
             + ds.library.resources.size() + " resources");
         for (Driver d : ds.drivers) {
