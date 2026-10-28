@@ -297,9 +297,7 @@ anything else, just never by accident.
   deployer shows its diff, asks, writes it, immediately re-reads and verifies
   that object, and only then moves to the next; a `no` skips the change,
   `quit` stops with everything so far written and verified, and the audit line
-  records exactly which changes went in. Restarts come at the end (or after each
-  change with `--restart-each`, for changes you want to watch land one at a
-  time). The snapshot is still taken up front, so rollback covers a partial
+  records exactly which changes went in. Restarts come at the end. The snapshot is still taken up front, so rollback covers a partial
   step-by-step deploy too.
 
 Both modes go through the same plan, snapshot, verify and audit; `--step` is

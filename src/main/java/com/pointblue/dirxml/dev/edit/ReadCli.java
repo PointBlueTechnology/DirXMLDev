@@ -76,7 +76,7 @@ public final class ReadCli {
 
     public static int query(String[] argv) throws Exception {
         if (argv.length < 3) {
-            System.err.println("usage: query <tree> artifacts [driver] | chain <driver> sub|pub | gcvs <driver> | tables <driver> | fishbone <driver> [--json] | drivers [--json]");
+            System.err.println("usage: query <tree> artifacts [driver] | chain <driver> sub|pub | gcvs [driver] | tables [driver] | schema [driver] | fishbone <driver> [--json] | drivers [--json]");
             return 2;
         }
         DriverSet ds = AsCodeReader.read(Paths.get(argv[1]));
