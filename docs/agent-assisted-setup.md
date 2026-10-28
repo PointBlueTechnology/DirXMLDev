@@ -74,7 +74,7 @@ Rules for the whole job:
 - Copy jars as regular files. Do not commit them. Do not symlink lib/ or the
   individual jars.
 - Do not set IDM_AGENT_ALLOW_WRITE. Do not run vault.deploy, vault.rollback,
-  vault.import-clone, or driver start, stop, restart, migrate, resync,
+  vault.import-clone, vault.deploy-schema --yes, or driver start, stop, restart, migrate, resync,
   submit, cache clear, secrets set/remove, or trace set/reset. Stop and ask
   before any vault write.
 - Stop after each phase, show the checkpoint, and wait for me to say continue.

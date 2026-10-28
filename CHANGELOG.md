@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- `vault.deploy-schema --yes` is behind the agent write gate like every other vault write: it
+  needs `IDM_AGENT_ALLOW_WRITE=1` or `--confirm <env>` on any tier. Before, `--yes` alone wrote
+  `cn=schema` on a non-production tier. The refusal for a custom definition without an OID names
+  the operation that adds one, `schema.set` (it said `schema.set-attribute`/`schema.set-class`).
+
 ## [0.57.0] - 2026-10-28
 
 ### Fixed

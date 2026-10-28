@@ -568,7 +568,7 @@ More: [promotion.md](promotion.md#promoteaccept-and-promoteforget).
 
 ### Vault writes
 
-Most commands in this group only read. The ones that write to a vault are `vault.deploy` with `--yes` or `--step` (and without `--dry-run`), `vault.rollback --yes`, `vault.import-clone --yes` and `vault.deploy-schema --yes`. Without those flags each of them prints its plan and stops. The CLI checks the first three before it resolves a secret or opens LDAP: the write goes ahead only when `IDM_AGENT_ALLOW_WRITE=1` is set or `--confirm <env>` names the target environment. Otherwise it prints `refusing vault write to '<env>'` and exits 1. Tier rules come on top. A `prd`-tier deploy always needs `--confirm <env>`, even with `IDM_AGENT_ALLOW_WRITE=1`. It also needs the tree committed in git with nothing uncommitted, the `--base-branch` branch checked out when one is given, a green deploy to `<env>.requires` when that is set, and a vault that matches the last deploy on record. `vault.deploy-schema` to a `prd` tier needs `--confirm <env>`. `vault.import-clone` never targets a `prd` tier. `vault.rollback` to a `prd` tier needs only `--yes` and the agent gate. `vault.deploy-schema` is not behind the agent gate, so on a `dev` or `stg` tier `--yes` alone writes. `vault.schema`, `vault.app-schema`, `vault.export-clone` and `events.case` write files in the tree or on disk, never to the vault.
+Most commands in this group only read. The ones that write to a vault are `vault.deploy` with `--yes` or `--step` (and without `--dry-run`), `vault.rollback --yes`, `vault.import-clone --yes` and `vault.deploy-schema --yes`. Without those flags each of them prints its plan and stops. The CLI checks all four before it resolves a secret or opens LDAP: the write goes ahead only when `IDM_AGENT_ALLOW_WRITE=1` is set or `--confirm <env>` names the target environment. Otherwise it prints `refusing vault write to '<env>'` and exits 1. Tier rules come on top. A `prd`-tier deploy always needs `--confirm <env>`, even with `IDM_AGENT_ALLOW_WRITE=1`. It also needs the tree committed in git with nothing uncommitted, the `--base-branch` branch checked out when one is given, a green deploy to `<env>.requires` when that is set, and a vault that matches the last deploy on record. `vault.deploy-schema` to a `prd` tier needs `--confirm <env>`. `vault.import-clone` never targets a `prd` tier. `vault.rollback` to a `prd` tier needs only `--yes` and the agent gate. `vault.schema`, `vault.app-schema`, `vault.export-clone` and `events.case` write files in the tree or on disk, never to the vault.
 
 All of these commands take their flags as `--name value`, not `--name=value`. A flag followed by a word that does not start with `--` takes that word as its value. So put positional arguments (`<tree>`) before flags that take no value, such as `--json` or `--yes`.
 
@@ -722,7 +722,7 @@ More: [schema.md](schema.md#the-applications-schema--driversdriverapp-schemaxml)
 
 ### `vault.deploy-schema`
 
-Writes the tree's custom attribute and class definitions that the vault lacks into `cn=schema`. Attributes go first, then classes in superclass order. Every custom definition needs an OID. Without `--yes` it prints the plan. Writes to the vault with `--yes`. A `prd` tier needs `--confirm <env>`. This command is not behind the `IDM_AGENT_ALLOW_WRITE` gate. Exits 0 on success, 1 on a refusal or a failed write.
+Writes the tree's custom attribute and class definitions that the vault lacks into `cn=schema`. Attributes go first, then classes in superclass order. Every custom definition needs an OID. Without `--yes` it prints the plan. Writes to the vault with `--yes`, which needs `IDM_AGENT_ALLOW_WRITE=1` or `--confirm <env>` on any tier ([Vault writes](#vault-writes)); a `prd` tier needs `--confirm <env>` in any case. Exits 0 on success, 1 on a refusal or a failed write.
 
 ```
 bin/idm vault.deploy-schema <tree> --env <name> [--yes] [--confirm <name>] [--json]
@@ -733,12 +733,12 @@ bin/idm vault.deploy-schema <tree> --env <name> [--yes] [--confirm <name>] [--js
 | `<tree>` | yes | an IDM-as-code tree directory with `schema/vault.xml` |
 | `--env` | yes | an environment in `environments.properties` |
 | `--yes` | to write | add the planned definitions; default: plan only |
-| `--confirm` | for a `prd` tier | the environment's name |
+| `--confirm` | with `--yes`, unless `IDM_AGENT_ALLOW_WRITE=1`; always on a `prd` tier | the environment's name |
 | `--json` | no | the result as JSON (environment, toAdd, done, skipped, failures) |
 
 ```bash
 bin/idm vault.deploy-schema tree --env test
-bin/idm vault.deploy-schema tree --env test --yes
+bin/idm vault.deploy-schema tree --env test --yes --confirm test
 ```
 
 More: [schema.md](schema.md#schema-you-define--and-push).

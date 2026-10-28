@@ -5,8 +5,9 @@ import java.util.Map;
 
 /**
  * CLI gate for vault mutations ({@code vault.deploy --yes}/{@code --step},
- * {@code vault.rollback --yes}, {@code vault.import-clone --yes}, and the
- * operate commands that change a driver).
+ * {@code vault.rollback --yes}, {@code vault.import-clone --yes},
+ * {@code vault.deploy-schema --yes}, and the operate commands that change a
+ * driver).
  *
  * <p>Allowed when {@code IDM_AGENT_ALLOW_WRITE=1} or when {@code --confirm}
  * equals the environment name (the confirmation a production deploy already
@@ -49,6 +50,7 @@ public final class AgentWriteGate {
                 return (yes || opts.containsKey("step")) && !dryRun;
             case "vault.rollback":
             case "vault.import-clone":
+            case "vault.deploy-schema":
                 return yes;
             default:
                 return false;

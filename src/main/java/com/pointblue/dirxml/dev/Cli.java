@@ -560,7 +560,7 @@ public final class Cli {
         sb.append("                  [--depends SHORT…] [--supported-driver ID…] [--gcvs referenced|all|none] [--customized keep] [--base] [--json]   build a package jar from a driver's artifacts\n");
         sb.append("  package.site    --catalog DIR --out DIR [--description …] [--json]   render the catalog as an Eclipse update site Designer can read\n");
         sb.append("  package.status  <tree> [--driver D] [--catalog DIR] [--strict] [--json]   installed packages per driver vs the catalog (upgrades available); --strict exits 1 on a customized packaged object or a version the catalog lacks\n");
-        sb.append("vault writes (vault.deploy --yes|--step, vault.rollback --yes, vault.import-clone --yes,\n");
+        sb.append("vault writes (vault.deploy --yes|--step, vault.rollback --yes, vault.import-clone --yes, vault.deploy-schema --yes,\n");
         sb.append("    driver start|stop|restart, cache clear, migrate, resync, secrets set|remove, trace set|reset, submit)\n");
         sb.append("    also need IDM_AGENT_ALLOW_WRITE=1 or --confirm <env>. A --dry-run stays read-only.\n");
         sb.append("operate (docs/operate.md; environments.properties, tiers, deploy-log audit):\n");
