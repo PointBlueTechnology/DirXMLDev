@@ -112,6 +112,10 @@ public final class ReadCli {
                     System.err.println("usage: query <tree> chain <driver> sub|pub");
                     return 2;
                 }
+                if (!List.of("sub", "subscriber", "pub", "publisher").contains(argv[4])) {
+                    System.err.println("the channel is sub or pub, not '" + argv[4] + "'");
+                    return 2;
+                }
                 return chain(ds, driver, argv[4]);
             case "gcvs":
                 return gcvs(ds, driver);
@@ -133,7 +137,7 @@ public final class ReadCli {
         if (driverName != null) {
             Driver d = driver(ds, driverName);
             if (d == null) {
-                return 2;
+                return 1;
             }
             org.w3c.dom.Element app = d.config.get(Driver.APP_SCHEMA);
             if (app == null) {
@@ -539,6 +543,10 @@ public final class ReadCli {
         String driverName = flag(argv, "--driver");
         DriverSet ds = AsCodeReader.read(tree);
         List<Driver> drivers = driversOf(ds, driverName);
+        if (driverName != null && drivers.isEmpty()) {
+            System.err.println("no driver '" + driverName + "'");
+            return 1;
+        }
         int n = 0;
         for (Driver d : drivers) {
             if (d.provisioning == null) {
