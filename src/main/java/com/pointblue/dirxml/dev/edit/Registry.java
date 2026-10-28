@@ -26,11 +26,18 @@ public final class Registry {
         public final String name;
         public final boolean required;
         public final String help;
+        /** A flag takes no value: present or absent. */
+        public final boolean flag;
 
         Arg(String name, boolean required, String help) {
+            this(name, required, help, false);
+        }
+
+        Arg(String name, boolean required, String help, boolean flag) {
             this.name = name;
             this.required = required;
             this.help = help;
+            this.flag = flag;
         }
     }
 
@@ -75,6 +82,25 @@ public final class Registry {
         return new ArrayList<>(SPECS.values());
     }
 
+    private static final java.util.Properties EXAMPLES = examples();
+
+    /** An example of the operation: its arguments after {@code <tree>} (examples.properties), or null. */
+    public static String example(String name) {
+        return EXAMPLES.getProperty(name);
+    }
+
+    private static java.util.Properties examples() {
+        java.util.Properties p = new java.util.Properties();
+        try (java.io.InputStream in = Registry.class.getResourceAsStream("examples.properties")) {
+            if (in != null) {
+                p.load(new java.io.InputStreamReader(in, StandardCharsets.UTF_8));
+            }
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        return p;
+    }
+
     private static void register(String name, String help, Factory f, Arg... args) {
         // a name registered twice would silently replace the first (it once hid the artifact creator
         // behind the role catalog's resource.add): refuse at start-up instead
@@ -111,6 +137,10 @@ public final class Registry {
         return new Arg(name, false, help);
     }
 
+    private static Arg flag(String name, String help) {
+        return new Arg(name, false, help, true);
+    }
+
     static {
         Arg driver = opt("driver", "driver name (omit for the Library)");
         Arg scope = opt("scope", "driver|subscriber|publisher|library (default: driver, or library when no --driver)");
@@ -144,7 +174,7 @@ public final class Registry {
 
         register("artifact.delete", "delete an artifact; refuses while anything references it",
             a -> new ArtifactOps.Delete(a.get("path"), a.containsKey("unlink")),
-            req("path", "artifact path"), opt("unlink", "remove its policy-set links first (flag)"));
+            req("path", "artifact path"), flag("unlink", "remove its policy-set links first (flag)"));
 
         register("form.set-content", "replace a JSON form's document (pretty-printed in the tree) and re-sync every PRD binding that references it",
             a -> new FormOps.SetContent(a.get("driver"), a.get("form"), contentOf(a)),
@@ -171,9 +201,9 @@ public final class Registry {
                 a.containsKey("required"), a.containsKey("hidden"), a.containsKey("multiple"), a.containsKey("minimal"),
                 a.get("after"), a.get("before"), a.containsKey("first"), a.get("in"), a.get("props")),
             formRef, req("key", "the new component's key"), req("type", "component type (a captured template name, or any Form.io type)"),
-            opt("label", "label text"), opt("required", "flag: validate.required = true"), opt("hidden", "flag: hidden = true"),
-            opt("multiple", "flag: multiple = true"), opt("minimal", "flag: force the minimal {label,key,type,input} shape"),
-            opt("after", "place after this key"), opt("before", "place before this key"), opt("first", "flag: place first"),
+            opt("label", "label text"), flag("required", "flag: validate.required = true"), flag("hidden", "flag: hidden = true"),
+            flag("multiple", "flag: multiple = true"), flag("minimal", "flag: force the minimal {label,key,type,input} shape"),
+            opt("after", "place after this key"), opt("before", "place before this key"), flag("first", "flag: place first"),
             opt("in", "place inside this container/panel/columns component (its first column, if columns)"),
             opt("props", "extra properties as a JSON object, deep-merged in last (--json is the output flag)"), formDriver);
 
@@ -193,7 +223,7 @@ public final class Registry {
             a -> new FormOps.FieldMove(a.get("driver"), a.get("form"), a.get("key"), a.get("after"), a.get("before"),
                 a.containsKey("first"), a.containsKey("last"), a.get("in")),
             formRef, req("key", "the component's key"), opt("after", "place after this key"), opt("before", "place before this key"),
-            opt("first", "flag: place first"), opt("last", "flag: place last"),
+            flag("first", "flag: place first"), flag("last", "flag: place last"),
             opt("in", "reparent inside this container/panel/columns component"), formDriver);
 
         register("form.set", "change a form's title, display mode, inline script (from a file) or an external script",
@@ -202,13 +232,13 @@ public final class Registry {
             formRef, opt("title", "new title"), opt("display", "form|workflowWizard"),
             opt("inline-script", "a file holding the new inlinescripts text"),
             opt("external-script", "a script URL to add (or remove, with --remove)"),
-            opt("remove", "flag: with --external-script, remove it instead of adding it"), formDriver);
+            flag("remove", "flag: with --external-script, remove it instead of adding it"), formDriver);
 
         register("form.localize", "set explicit localized strings, or top up every declared language with missing entries",
             a -> new FormOps.Localize(a.get("driver"), a.get("form"), a.get("lang"), repeatable(a.get("set")), a.containsKey("sync")),
             formRef, req("lang", "language code, e.g. fr"),
             opt("set", "Label=Localized (repeat --set for each)"),
-            opt("sync", "flag: add, to every declared language, an entry for every label/placeholder/tooltip/option/button text missing one"),
+            flag("sync", "flag: add, to every declared language, an entry for every label/placeholder/tooltip/option/button text missing one"),
             formDriver);
 
         register("form.rename", "rename a form and rewrite every PRD reference to it (form-id attributes and flowdata prefixes)",
@@ -226,7 +256,7 @@ public final class Registry {
             opt("activity", "map an approval activity's data item instead of the request form's"),
             opt("target", "override the default flowdata target (request form only)"),
             opt("source", "override the default flowdata.get(...) source (activity only; required if the request form has no same-named field)"),
-            opt("unmap", "flag: remove the mapping instead"), driver);
+            flag("unmap", "flag: remove the mapping instead"), driver);
 
         register("prd.add", "copy a template PRD (status Template) into a new Active PRD bound to the given forms",
             a -> new FormOps.PrdAdd(a.get("driver"), a.get("name"), a.get("from-template"), a.get("request-form"),
@@ -234,7 +264,7 @@ public final class Registry {
             req("name", "the new PRD's name"), req("from-template", "the template PRD's name (status Template, e.g. NoApproval)"),
             req("request-form", "the request form to bind"), opt("approval-form", "the approval form to bind to the first user-activity, if any"),
             opt("category", "prov-category (default: the template's)"), opt("display-name", "lang~Text override for one language (default: the new PRD's name, every language)"),
-            opt("map-all", "flag: map every bindable field of the bound form(s) to flowdata with the default targets/sources, as prd.map would"),
+            flag("map-all", "flag: map every bindable field of the bound form(s) to flowdata with the default targets/sources, as prd.map would"),
             driver);
 
         register("prd.delete", "delete a PRD; refuses while another PRD's start-correlated-flow-activity references it (never overridden by --force); a packaged PRD needs --force",
@@ -399,7 +429,7 @@ public final class Registry {
         Arg entDriver = opt("driver", "driver name (required for entitlement.add; needed for entitlement.set/remove when several drivers have one of that name)");
         Arg entDisplayName = opt("display-name", "display-name attribute");
         Arg entDescription = opt("description", "description attribute");
-        Arg entMultiValued = opt("multi-valued", "flag: values/@multi-valued = true");
+        Arg entMultiValued = flag("multi-valued", "flag: values/@multi-valued = true");
         Arg entConflict = opt("conflict", "union|priority (default: priority on entitlement.add)");
         Arg entValues = opt("values", "comma-separated static values -> <values><value>v</value>...</values>");
         Arg entDefFile = opt("definition-file", "a file holding a whole <entitlement> document, used verbatim instead of the other content flags");
@@ -425,7 +455,7 @@ public final class Registry {
             a -> new AppConfigOps.Set(a.get("driver"), a.get("path"), a.get("attr"), a.get("value"), a.get("file"), a.containsKey("remove")),
             req("path", "object path under AppConfig (DirectoryModel/EntityDefs/user) or a unique name"),
             req("attr", "attribute name"), opt("value", "a value (repeatable for a multi-valued attribute; a bare localized text merges as English)"),
-            opt("file", "read the value from this file (an XML attribute such as XmlData)"), opt("remove", "flag: remove the attribute"), acDriver);
+            opt("file", "read the value from this file (an XML attribute such as XmlData)"), flag("remove", "flag: remove the attribute"), acDriver);
         register("appconfig.add", "create any AppConfig object under an existing container",
             a -> new AppConfigOps.Add(a.get("driver"), a.get("path"), a.get("class"), a.get("aux"), a.get("attr")),
             req("path", "the new object's path under AppConfig"), req("class", "structural class (nrfNavItem, nrfRoleDefs, srvprvChoice …)"),
@@ -455,7 +485,7 @@ public final class Registry {
             req("category", "category keys, comma-separated: keys of DirectoryModel/ChoiceDefs/resources-category (category.list --for resource)"),
             container,
             display, descr, opt("entitlement", "DirXML-Entitlement DN the resource grants"), opt("param", "the entitlement parameter value"),
-            opt("multi", "flag: allow multiple assignment"), owners, approvers, acDriver);
+            flag("multi", "flag: allow multiple assignment"), owners, approvers, acDriver);
         register("resource.set", "change a resource's names, descriptions, categories, entitlement binding, flags, owners or approvers",
             a -> new AppConfigOps.ResourceSet(a.get("driver"), a.get("name"), a.get("display"), a.get("descr"), a.get("category"),
                 a.get("entitlement"), a.get("param"), boolOrNull(a.get("multi")), boolOrNull(a.get("active")), a.get("owner"), a.get("approver")),
@@ -558,8 +588,8 @@ public final class Registry {
         register("environments.set", "which environments get objects and which they are planned for (driver.xml / driverset.xml environments, planned); several objects at once, one tree path per line",
             a -> new EnvironmentOps.Set(a.get("paths"), a.containsKey("every") ? "" : a.get("environments"), a.containsKey("no-plan") ? "" : a.get("planned")),
             req("paths", "tree paths, one per line: drivers/<d>, drivers/<d>/jobs/<n>, jobs/<n>, rbe-policies/<n>, templates/<n>"),
-            opt("environments", "the environments that get them, comma-separated"), opt("every", "flag: every environment gets them"),
-            opt("planned", "environments they are planned for, not promoted to yet"), opt("no-plan", "flag: nothing planned"));
+            opt("environments", "the environments that get them, comma-separated"), flag("every", "flag: every environment gets them"),
+            opt("planned", "environments they are planned for, not promoted to yet"), flag("no-plan", "flag: nothing planned"));
         register("known.accept", "accept a difference between two environments as it is (overrides/<env>.known.json): comparisons leave it out while it is unchanged",
             a -> new KnownOps.Accept(a.get("env"), a.get("with"), a.get("path"), a.get("fingerprint"), a.get("decision"), a.get("summary"), a.get("note"), a.get("by")),
             req("env", "the environment whose file records it"), req("with", "the other environment of the pair"), req("path", "the changed object's tree path"),
@@ -580,7 +610,7 @@ public final class Registry {
         register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, environments (the environments it is deployed to, comma-separated; --clear = every environment), planned (environments it is meant to reach but isn't promoted to yet), param:<shim parameter>, engine:<engine control value>",
             a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.containsKey("clear") ? "" : a.get("value")),
             drv, req("key", "shim-class|shim-auth-server|shim-auth-id|environments|planned|param:<name>|engine:<name>"), opt("value", "the value"),
-            opt("clear", "flag: make the setting empty (an empty --value reads as missing on the command line)"));
+            flag("clear", "flag: make the setting empty (an empty --value reads as missing on the command line)"));
         register("driver.setting.add", "add a shim parameter (param:<name>, into a section of the shim config) or an engine control value (engine:<name>): its definition with display name, type and value",
             a -> new ConfigOps.DriverSettingAdd(a.get("driver"), a.get("key"), a.get("type"), a.get("display"), a.get("value"), a.get("section"), a.get("description")),
             drv, req("key", "param:<name>|engine:<name>"), opt("type", "string|integer|boolean|dn|enum|password-ref… (default string)"),
@@ -594,7 +624,7 @@ public final class Registry {
         register("schema.add-attribute", "define a custom attribute in the tree's vault schema (vault.deploy-schema pushes it)",
             a -> new SchemaEditOps.AddAttribute(a.get("name"), a.get("ldap"), a.get("syntax"), a.get("oid"), a.containsKey("single")),
             req("name", "NDS name"), opt("ldap", "LDAP name (default: the name)"), opt("syntax", "LDAP syntax OID (default Directory String)"),
-            opt("oid", "the attribute's OID (needed to push it)"), opt("single", "flag: single-valued"));
+            opt("oid", "the attribute's OID (needed to push it)"), flag("single", "flag: single-valued"));
         register("schema.add-class", "define a custom class in the tree's vault schema",
             a -> new SchemaEditOps.AddClass(a.get("name"), a.get("ldap"), a.get("kind"), a.get("oid"), a.get("superclasses"), a.get("mandatory"), a.get("optional"), a.get("containment"), a.get("naming")),
             req("name", "NDS name"), opt("ldap", "LDAP name"), opt("kind", "structural (default) | auxiliary | abstract"), opt("oid", "the class's OID (needed to push it)"),
@@ -625,7 +655,7 @@ public final class Registry {
         register("package.strip", "make a driver fully custom: remove every package stamp (driver, artifacts, entitlements, forms, PRDs, AppConfig objects), the customized marks and the baselines; the next deploy removes the vault's stamps and package aux classes too",
             a -> new PackageStrip(a.get("driver"), a.containsKey("library")),
             opt("driver", "the driver to strip"),
-            opt("library", "also strip the Library's items and the driver set's own records (flag; shared by every driver, so never implied)"));
+            flag("library", "also strip the Library's items and the driver set's own records (flag; shared by every driver, so never implied)"));
         register("package.adopt", "write the installed-package records from the objects' package stamps (trees imported from a vault or a project)",
             a -> new com.pointblue.dirxml.dev.packages.PackageAdopt(a.get("driver"), catalogOf(a.get("catalog"))),
             opt("driver", "one driver (default: every driver and the Library)"),
@@ -635,8 +665,8 @@ public final class Registry {
                 a.containsKey("yes"), a.containsKey("all"), pathOrNull(a.get("catalog"))),
             opt("driver", "the driver the package is installed on (omit for a driver-set package in the Library)"),
             req("package", "the installed package's SHORT name"),
-            opt("yes", "remove customized objects too (flag; without it they're refused, named)"),
-            opt("all", "also remove packages that depend on this one, or (for a base package) its remaining features"),
+            flag("yes", "remove customized objects too (flag; without it they're refused, named)"),
+            flag("all", "also remove packages that depend on this one, or (for a base package) its remaining features"),
             opt("catalog", "a package catalog, to read other installed packages' declared dependencies"));
         register("package.upgrade", "replace an installed package with another version (--downgrade for an older one; same mechanics)",
             a -> new com.pointblue.dirxml.dev.packages.PackageUpgrade(a.get("driver"),
@@ -647,8 +677,8 @@ public final class Registry {
             opt("catalog", "a package catalog directory (jars/<SHORT>/<SHORT>_<ver>.jar)"),
             opt("package", "SHORT_version in the catalog, the version to move to"),
             opt("answers", "name=value file answering the package's prompts (existing driver values pre-fill them)"),
-            opt("yes", "remove customized objects the new version dropped (flag; without it they're refused, named)"),
-            opt("downgrade", "moving to an older version (flag; informational — the mechanics are identical)"));
+            flag("yes", "remove customized objects the new version dropped (flag; without it they're refused, named)"),
+            flag("downgrade", "moving to an older version (flag; informational — the mechanics are identical)"));
         register("driver.add", "add a driver: from a driver export, as a copy of another driver, or blank",
             a -> new DriverOps.Add(a.get("name"),
                 a.get("from-export") == null || a.get("from-export").isBlank() ? null : Paths.get(a.get("from-export")),
@@ -784,7 +814,7 @@ public final class Registry {
         StringBuilder sb = new StringBuilder();
         sb.append("  ").append(spec.name).append(" <tree>");
         for (Arg a : spec.args) {
-            sb.append(a.required ? " --" + a.name + " <v>" : " [--" + a.name + " <v>]");
+            sb.append(a.flag ? " [--" + a.name + "]" : a.required ? " --" + a.name + " <v>" : " [--" + a.name + " <v>]");
         }
         sb.append(" [--dry-run] [--force] [--json]\n      ").append(spec.help).append('\n');
         for (Arg a : spec.args) {

@@ -7,6 +7,31 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `docs/commands.md`: every `bin/idm` command with each argument (required or not, the values
+  it takes, the default) and an example. The edit operations' part is written from the registry
+  (`OperationsDoc`, examples in `edit/examples.properties`); `CommandsReferenceTest` fails when a
+  command the CLI runs has no entry, when the usage text leaves one out, when the generated part
+  is stale, or when an example names an argument the operation lacks or leaves out a required one.
+- `Registry.Arg.flag` marks an argument that takes no value; `bin/idm`'s usage shows it as
+  `[--name]`. `Registry.example(name)` returns an operation's example.
+
+### Changed
+
+- `bin/idm`'s usage text lists the commands it left out (`driver.log-level`, `driver.start-option`,
+  `driver.associations`, `driver.password-sync`, `object.inspect`, `promote.map`, `query … schema`)
+  and flags it left out (`vault.deploy --driver-server`, `vault.rollback [<tree>] --server`,
+  `vault.import-clone --replace --json`, `import-live --mark-new-drivers`, `form.edit --force`,
+  `package.build --description --readme --supported-driver`, `package.site --json`,
+  `driver.migrate --direction vault`, `driver.secrets --kind`, `driver.submit --mode`,
+  `trace.view --trace-driver`, `vault.email-server --auth`, `--env` on the console-gap commands),
+  and no longer shows optional flags as required (`entitlement.show --driver`; `package.build
+  --driver --vendor --version`; one of `vault.deploy --dry-run|--yes|--step`).
+- `docs/event-store.md` and `docs/vault-deploy.md` no longer describe `events.case --run` and
+  `vault.deploy --step --restart-each`, which were never built. `docs/getting-started.md` says
+  what `doctor --env` adds.
+
 ## [0.56.0] - 2026-10-27
 
 ### Added
