@@ -7,6 +7,24 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Libraries in other containers (#111). A driver set's objects from a Library other than its own
+  `cn=Library` are read-only references in the tree:
+  - `import-project` keeps them in `library/` with the Library's DN (`library.dn`).
+  - Links to them resolve, and a deploy writes their real DN into `DirXML-Policies`. Before, it
+    wrote `cn=<name>,cn=Library,<driver set>`.
+  - Compare and deploy skip them, so a deploy no longer creates a copy under the driver set's
+    Library.
+  - An edit that would change one is refused (`Libraries`, `Transaction`).
+  - `validate` names them (`library-other`, information).
+
+### Changed
+
+- `import-project` no longer records `library.dn` on the driver set's own Library objects, so
+  they follow the driver set's DN in every environment. A tree imported by 0.57.0 that has them is
+  read the same way.
+
 ### Changed
 
 - Every command reads its command line against what it takes (`Args`; #104, #105):

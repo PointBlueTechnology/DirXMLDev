@@ -587,6 +587,10 @@ public final class ModelDiff {
             Artifact a = fromIdx.get(path);
             Artifact b = toIdx.get(path);
             String owner = a != null ? a.driver : b.driver;
+            // a Library artifact from another Library is a read-only reference: never compared, never deployed (#111)
+            if (com.pointblue.dirxml.dev.model.Libraries.outside(from, a) != null || com.pointblue.dirxml.dev.model.Libraries.outside(to, b) != null) {
+                continue;
+            }
             // an artifact of a wholly new/removed driver is covered by that DRIVER_ADDED/REMOVED change
             if (owner != null && (onlyFromDrivers.contains(owner) || onlyToDrivers.contains(owner))) {
                 continue;

@@ -701,9 +701,9 @@ public final class ProjectReader {
 
     /**
      * A Library's policies and resources into the tree's one {@code library/}. A driver set can use
-     * Libraries in other containers too (each records its {@code LibraryContext}); with more than
-     * one, each artifact records its Library's DN ({@link DuplicateArtifacts#LIBRARY_DN}), so an
-     * object two Libraries both hold can be told apart.
+     * Libraries in other containers too (each records its {@code LibraryContext}); an artifact from
+     * one other than the driver set's own records that Library's DN ({@link DuplicateArtifacts#LIBRARY_DN})
+     * and is a read-only reference in the tree ({@link com.pointblue.dirxml.dev.model.Libraries}).
      */
     private static void readLibrary(Index idx, String libId, DriverSet ds, boolean several) {
         Element m = idx.parseMeta(libId);
@@ -712,6 +712,9 @@ public final class ProjectReader {
         }
         String context = attrValue(m, "LibraryContext");
         String libDn = several && context != null && !context.isEmpty() ? "cn=" + attr(m, "name", "Library") + "," + context : null;
+        if (libDn != null && ds.dn != null && libDn.equalsIgnoreCase("cn=Library," + ds.dn)) {
+            libDn = null;   // the driver set's own: its objects follow the driver set's DN in every environment
+        }
         List<Artifact> read = new ArrayList<>();
         for (String key : relationKeys(m, "Idm:Policies")) {
             Policy p = readPolicy(idx, idOf(key), Scope.LIBRARY, null);
