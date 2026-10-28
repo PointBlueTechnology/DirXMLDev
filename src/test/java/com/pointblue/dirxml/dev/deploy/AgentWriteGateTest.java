@@ -85,4 +85,19 @@ public class AgentWriteGateTest {
         assertFalse(AgentWriteGate.mutatesVault("engine.version", null));
         assertFalse(AgentWriteGate.mutatesVault("engine.stats", null));
     }
+
+    /** #108: a migrate dry run only lists what would go; driver.query asks the connected system through the driver. */
+    @Test
+    public void migrateDryRunAndDriverQuery() {
+        assertFalse(AgentWriteGate.mutatesVault("driver.migrate", null, true));
+        assertTrue(AgentWriteGate.mutatesVault("driver.migrate", null, false));
+        assertTrue(AgentWriteGate.mutatesVault("driver.query", null));
+        assertTrue(AgentWriteGate.mutatesVault("driver.query", null, false));
+        // --dry-run means nothing to the other operate commands
+        assertTrue(AgentWriteGate.mutatesVault("driver.start", null, true));
+        assertTrue(AgentWriteGate.mutatesVault("driver.cache", "clear", true));
+        assertFalse(AgentWriteGate.mutatesVault("driver.status", null, true));
+        // the 2-arg form is the 3-arg form without a dry run
+        assertTrue(AgentWriteGate.mutatesVault("driver.migrate", null));
+    }
 }

@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.promote;
 
+import com.pointblue.dirxml.dev.Args;
 import com.pointblue.dirxml.dev.json.Json;
 
 import java.nio.charset.StandardCharsets;
@@ -27,77 +28,67 @@ public final class PromoteCli {
     static final String USAGE =
         "usage: tree.compare <target tree> --with <source tree> [--name <pair>] [--json]\n"
         + "       promote.plan  <target tree> --from <source tree> [--name <pair>] [--object <path>]… [--value <key>]… [--pending] [--contents <file.json>] [--json]\n"
-        + "       promote.apply <target tree> --from <source tree> [--name <pair>] [--object <path>]… [--value <key>]… [--pending] [--contents <file.json>] [--force] [--by <who>] [--json]\n"
+        + "       promote.apply <target tree> --from <source tree> [--name <pair>] [--object <path>]… [--value <key>]… [--pending] [--contents <file.json>] [--force] [--by <who>] [--dry-run] [--json]\n"
         + "       promote.map   <target tree> --from <source tree> [--name <pair>]   (prints a proposed map; writes nothing)\n"
         + "       promote.pair  <target tree> --from <source tree> [--name <pair>] [--propose-map] [--pending <path or key>]… [--accept <path or key>]… [--dry-run] [--force] [--by <who>] [--json]\n"
         + "       promote.accept <target tree> --from <source tree> [--name <pair>] --object <path or key> [--decision intended|later] [--note <text>] [--by <who>] [--dry-run] [--json]\n"
         + "       promote.forget <target tree> (--from <source tree> | --name <pair>) --object <path or key> [--dry-run] [--json]\n"
         + "  each takes [--cases <target's cases>] [--source-cases <source's cases>]; by default <tree>/cases or cases/ beside a tree/ directory\n";
 
+    /**
+     * What each command takes (docs/commands.md); {@code --with} and {@code --from} are one option, and every
+     * command takes the two sides' cases. {@code --pending} is a flag of promote.plan/apply and an option
+     * (a difference to leave pending) of promote.pair.
+     */
+    static final Map<String, Args.Spec> SPECS = Map.ofEntries(
+        Map.entry("tree.compare", Args.Spec.of("", "with from name cases source-cases")),
+        Map.entry("promote.plan", Args.Spec.of("pending", "with from name object value contents cases source-cases")),
+        Map.entry("promote.apply", Args.Spec.of("pending force dry-run", "with from name object value contents by cases source-cases")),
+        Map.entry("promote.map", Args.Spec.of("", "with from name cases source-cases")),
+        Map.entry("promote.pair", Args.Spec.of("propose-map dry-run force", "with from name pending accept by cases source-cases")),
+        Map.entry("promote.accept", Args.Spec.of("dry-run", "with from name object decision note by cases source-cases")),
+        Map.entry("promote.forget", Args.Spec.of("dry-run", "with from name object cases source-cases")));
+
     public static int run(String[] argv) throws Exception {
         String cmd = argv[0];
-        Path target = null;
-        Path source = null;
-        String name = null;
-        boolean json = false;
-        boolean dryRun = false;
-        boolean force = false;
-        String by = null;
-        String decision = null;
-        String note = null;
+        Args.Spec spec = SPECS.get(cmd);
+        if (spec == null) {
+            return usage("unknown command " + cmd);
+        }
+        Args a;
+        try {
+            a = Args.parse(cmd, argv, 1, spec);
+        } catch (Args.UsageError e) {
+            return usage(e.getMessage());
+        }
+        if (a.positional.size() > 1) {
+            return usage("unexpected argument '" + a.positional.get(1) + "'");
+        }
+        Path target = a.positional.isEmpty() ? null : Paths.get(a.positional.get(0));
+        String src = a.first("from") != null ? a.first("from") : a.first("with");
+        Path source = src == null ? null : Paths.get(src);
+        String name = a.first("name");
+        boolean json = a.has("json");
+        boolean dryRun = a.has("dry-run");
+        boolean force = a.has("force");
+        String by = a.first("by");
+        String decision = a.first("decision");
+        String note = a.first("note");
         Promote.Selection sel = new Promote.Selection();
         Promote.Pairing pairing = new Promote.Pairing();
-        boolean proposeMap = false;
-        Path cases = null;
-        Path sourceCases = null;
-        for (int i = 1; i < argv.length; i++) {
-            String a = argv[i];
-            switch (a) {
-                case "--json": json = true; continue;
-                case "--dry-run": dryRun = true; continue;
-                case "--force": force = true; continue;
-                case "--pending":
-                    if (cmd.equals("promote.pair")) {
-                        break;   // promote.pair's --pending names a difference
-                    }
-                    sel.pending = true;
-                    continue;
-                case "--propose-map": proposeMap = true; continue;
-                default:
-            }
-            if (!a.startsWith("--")) {
-                if (target != null) {
-                    return usage("unexpected argument '" + a + "'");
-                }
-                target = Paths.get(a);
-                continue;
-            }
-            if (i + 1 >= argv.length) {
-                return usage(a + " needs a value");
-            }
-            String v = argv[++i];
-            switch (a) {
-                case "--with", "--from" -> source = Paths.get(v);
-                case "--name" -> name = v;
-                case "--object" -> sel.objects.add(v);
-                case "--value" -> sel.values.add(v);
-                case "--by" -> by = v;
-                case "--decision" -> decision = v;
-                case "--note" -> note = v;
-                case "--pending" -> pairing.pending.add(v);
-                case "--accept" -> pairing.known.put(v, new String[] {"intended", null});
-                case "--cases" -> cases = Paths.get(v);
-                case "--source-cases" -> sourceCases = Paths.get(v);
-                case "--contents" -> {
-                    for (Map.Entry<String, Object> e : Json.asMap(Json.parse(Files.readString(Paths.get(v), StandardCharsets.UTF_8))).entrySet()) {
-                        sel.contents.put(e.getKey(), Json.asString(e.getValue()));
-                    }
-                }
-                default -> {
-                    return usage("unknown option " + a);
-                }
-            }
+        sel.objects.addAll(a.all("object"));
+        sel.values.addAll(a.all("value"));
+        if (cmd.equals("promote.pair")) {
+            pairing.pending.addAll(a.all("pending"));
+        } else {
+            sel.pending = a.has("pending");
         }
+        for (String v : a.all("accept")) {
+            pairing.known.put(v, new String[] {"intended", null});
+        }
+        boolean proposeMap = a.has("propose-map");
+        Path cases = a.first("cases") == null ? null : Paths.get(a.first("cases"));
+        Path sourceCases = a.first("source-cases") == null ? null : Paths.get(a.first("source-cases"));
         if (target == null) {
             return usage("the target tree is required");
         }
@@ -112,6 +103,11 @@ public final class PromoteCli {
         }
         if (!Pair.validName(name)) {
             return usage("a pair's name is letters, digits, '.', '_' and '-' (got '" + name + "'): give one with --name");
+        }
+        for (String v : a.all("contents")) {
+            for (Map.Entry<String, Object> e : Json.asMap(Json.parse(Files.readString(Paths.get(v), StandardCharsets.UTF_8))).entrySet()) {
+                sel.contents.put(e.getKey(), Json.asString(e.getValue()));
+            }
         }
         Projects projects = Projects.of(target, source, name);
         if (source != null) {

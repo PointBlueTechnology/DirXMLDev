@@ -1,5 +1,7 @@
 package com.pointblue.dirxml.dev.deploy;
 
+import com.pointblue.dirxml.dev.Args;
+
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -24,23 +26,38 @@ public final class DeployCli {
     private DeployCli() {
     }
 
+    /** What each command takes (docs/commands.md); the clone commands' are read by CloneCli. */
+    static final Map<String, Args.Spec> SPECS = Map.ofEntries(
+        Map.entry("vault.diff", Args.Spec.of("", "env driver")),
+        Map.entry("vault.verify", Args.Spec.of("", "env driver")),
+        Map.entry("vault.compare-envs", Args.Spec.of("", "env with")),
+        Map.entry("vault.deploy", Args.Spec.of("dry-run yes step no-restart allow-missing-secrets capture-drift capture-only",
+            "env driver confirm secrets base-branch driver-server delete-driver delete-all")),
+        Map.entry("vault.rollback", Args.Spec.of("yes", "env snapshot confirm server")),
+        Map.entry("vault.schema", Args.Spec.of("", "env")),
+        Map.entry("vault.app-schema", Args.Spec.of("", "env driver")),
+        Map.entry("vault.deploy-schema", Args.Spec.of("yes", "env confirm")),
+        Map.entry("schema.diff", Args.Spec.of("", "env other")),
+        Map.entry("vault.export-clone", Args.Spec.of("rbs keep-driver-state pseudonymise pseudonymize", "env out data")),
+        Map.entry("vault.import-clone", Args.Spec.of("yes replace replace-driverset",
+            "env from server map driver-server user-password confirm")));
+
     public static int run(String[] argv) throws Exception {
         String cmd = argv[0];
-        Map<String, List<String>> opts = new LinkedHashMap<>();
-        List<String> pos = new ArrayList<>();
-        for (int i = 1; i < argv.length; i++) {
-            String a = argv[i];
-            if (a.startsWith("--")) {
-                String key = a.substring(2);
-                String value = "";
-                if (i + 1 < argv.length && !argv[i + 1].startsWith("--")) {
-                    value = argv[++i];
-                }
-                opts.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
-            } else {
-                pos.add(a);
-            }
+        Args.Spec spec = SPECS.get(cmd);
+        if (spec == null) {
+            System.err.println("unknown command " + cmd);
+            return 2;
         }
+        Args parsed;
+        try {
+            parsed = Args.parse(cmd, argv, 1, spec);
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
+            return 2;
+        }
+        Map<String, List<String>> opts = parsed.opts;
+        List<String> pos = parsed.positional;
         boolean json = opts.containsKey("json");
         String envName = first(opts, "env");
         if (envName == null) {

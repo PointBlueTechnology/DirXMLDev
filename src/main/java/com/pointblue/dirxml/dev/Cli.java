@@ -25,20 +25,68 @@ import java.util.List;
  */
 public final class Cli {
 
-    /** {@code version [--check]}: the running version; with {@code --check}, the latest GitHub release beside it. */
-    static int version(String[] args) {
-        String current = Version.current();
-        System.out.println("DirXMLDev " + (current == null ? "(version unknown: built without resources)" : current));
-        if (args.length >= 2 && args[1].equals("--check")) {
-            ReleaseCheck.Latest latest = ReleaseCheck.latest(ReleaseCheck.LATEST_URL, System.getenv());
-            if (latest == null) {
-                System.out.println("latest release: unknown (GitHub not reachable within 2 s)");
-                return 1;
-            }
-            String n = ReleaseCheck.notice(current, latest.version, latest.url);
-            System.out.println(n == null ? "latest release: " + latest.version + (current == null ? "" : " — you are current") : n);
+    /** What each of Cli's own commands takes (docs/commands.md); the others are read by their CLIs (#104, #105). */
+    static final java.util.Map<String, Args.Spec> SPECS = java.util.Map.ofEntries(
+        java.util.Map.entry("version", Args.Spec.of("check", "")),
+        java.util.Map.entry("import", Args.Spec.of("", "")),
+        java.util.Map.entry("import-project", Args.Spec.of("", "")),
+        java.util.Map.entry("import-ldif", Args.Spec.of("", "")),
+        java.util.Map.entry("import-live", Args.Spec.of("mark-new-drivers", "env")),
+        java.util.Map.entry("check", Args.Spec.of("", "")),
+        java.util.Map.entry("simulate", Args.Spec.of("", "cases against env")),
+        java.util.Map.entry("export", Args.Spec.of("", "")),
+        java.util.Map.entry("export-project", Args.Spec.of("dry-run new",
+            "vault-name vault-host vault-user server server-context catalog designer")),
+        java.util.Map.entry("mapping-table.export-csv", Args.Spec.of("", "")),
+        java.util.Map.entry("refs", Args.Spec.of("", "")),
+        java.util.Map.entry("validate", Args.Spec.of("", "")),
+        java.util.Map.entry("tree.diff", Args.Spec.of("", "")),
+        java.util.Map.entry("docs", Args.Spec.of("", "out driver since format")));
+
+    /** A command's body, which may refuse its command line. */
+    interface Body {
+        int run() throws Exception;
+    }
+
+    /** Runs {@code body}; a usage error prints its message and is exit 2. */
+    static int usageErrors(Body body) throws Exception {
+        try {
+            return body.run();
+        } catch (Args.UsageError e) {
+            System.err.println(e.getMessage());
+            return 2;
         }
-        return 0;
+    }
+
+    /** {@code args} read against {@code cmd}'s spec, with between {@code min} and {@code max} positionals ({@code usage} otherwise). */
+    static Args parse(String[] args, int min, int max, String usage) throws Args.UsageError {
+        Args a = Args.parse(args[0], args, 1, SPECS.get(args[0]));
+        if (a.positional.size() < min) {
+            throw new Args.UsageError(usage);
+        }
+        if (a.positional.size() > max) {
+            throw new Args.UsageError(args[0] + ": unexpected argument '" + a.positional.get(max) + "'; " + usage);
+        }
+        return a;
+    }
+
+    /** {@code version [--check]}: the running version; with {@code --check}, the latest GitHub release beside it. */
+    static int version(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 0, 0, "usage: version [--check]");
+            String current = Version.current();
+            System.out.println("DirXMLDev " + (current == null ? "(version unknown: built without resources)" : current));
+            if (a.has("check")) {
+                ReleaseCheck.Latest latest = ReleaseCheck.latest(ReleaseCheck.LATEST_URL, System.getenv());
+                if (latest == null) {
+                    System.out.println("latest release: unknown (GitHub not reachable within 2 s)");
+                    return 1;
+                }
+                String n = ReleaseCheck.notice(current, latest.version, latest.url);
+                System.out.println(n == null ? "latest release: " + latest.version + (current == null ? "" : " — you are current") : n);
+            }
+            return 0;
+        });
     }
 
     public static void main(String[] args) {
@@ -49,195 +97,31 @@ public final class Cli {
                 System.exit(version(args));
             }
             if (args.length >= 3 && args[0].equals("import")) {
-                System.exit(doImport(Paths.get(args[1]), Paths.get(args[2])));
+                System.exit(importExport(args));
             }
             if (args.length >= 3 && args[0].equals("import-project")) {
-                System.exit(write(com.pointblue.dirxml.dev.source.ProjectReader.read(Paths.get(args[1])), Paths.get(args[2])));
+                System.exit(importProject(args));
             }
             if (args.length >= 3 && args[0].equals("import-ldif")) {
-                System.exit(write(com.pointblue.dirxml.dev.source.LdifReader.read(Paths.get(args[1])), Paths.get(args[2])));
+                System.exit(importLdif(args));
             }
             if (args.length >= 2 && args[0].equals("import-live")) {
-                // import-live [<driverSetDN>] <outDir> --env NAME      (environments.properties: url, bindDn, password in any form, driverSet)
-                // import-live <driverSetDN> <outDir>                    (connection from -Dldap.url/-Dldap.bindDn/-Dldap.password)
-                java.util.List<String> positional = new java.util.ArrayList<>();
-                String envName = null;
-                boolean markNewDrivers = false;
-                for (int i = 1; i < args.length; i++) {
-                    if (args[i].equals("--env") && i + 1 < args.length) {
-                        envName = args[++i];
-                    } else if (args[i].equals("--mark-new-drivers")) {
-                        markNewDrivers = true;
-                    } else {
-                        positional.add(args[i]);
-                    }
-                }
-                com.pointblue.dirxml.dev.deploy.Vault.Config c;
-                String driverSetDn;
-                if (envName != null) {
-                    com.pointblue.dirxml.dev.deploy.Environments.Environment env =
-                        com.pointblue.dirxml.dev.deploy.Environments.load().get(envName);
-                    c = env.vaultConfig();
-                    driverSetDn = positional.size() >= 2 ? positional.get(0) : env.driverSetDn;
-                } else {
-                    if (positional.size() < 2) {
-                        System.err.println("usage: import-live [<driverSetDN>] <outDir> --env NAME [--mark-new-drivers]   |   import-live <driverSetDN> <outDir> (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
-                        System.exit(2);
-                    }
-                    c = new com.pointblue.dirxml.dev.deploy.Vault.Config();
-                    c.url = need("ldap.url");
-                    c.bindDn = need("ldap.bindDn");
-                    c.password = need("ldap.password");
-                    c.trustAll = "true".equals(System.getProperty("ldap.trustAll"));
-                    driverSetDn = positional.get(0);
-                }
-                if (positional.isEmpty()) {
-                    System.err.println("usage: import-live [<driverSetDN>] <outDir> --env NAME [--mark-new-drivers]   |   import-live <driverSetDN> <outDir> (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)");
-                    System.exit(2);
-                }
-                Path outDir = Paths.get(positional.get(positional.size() - 1));
-                // every attribute (package stamps included) — the same reader vault.diff / deploy use;
-                // with --env, the other servers' own driver settings too (docs/vault-deploy.md, "Several servers")
-                com.pointblue.dirxml.dev.model.DriverSet live = envName != null && driverSetDn.equals(
-                    com.pointblue.dirxml.dev.deploy.Environments.load().get(envName).driverSetDn)
-                    ? com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(com.pointblue.dirxml.dev.deploy.Environments.load().get(envName), n -> System.err.println("note: " + n))
-                    : com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, driverSetDn);
-                // values that differ per stage (docs/vault-deploy.md): the environment's file takes the vault's
-                // value, the tree's files keep the base value the existing tree holds
-                // a shim auth id the environment's secrets file supplies never lands in the tree
-                if (envName != null) {
-                    java.nio.file.Path secretsFile = com.pointblue.dirxml.dev.deploy.Environments.load().get(envName).secretsFile;
-                    if (secretsFile != null) {
-                        for (String d : com.pointblue.dirxml.dev.deploy.Overrides.stripSecretShimAuthIds(live, com.pointblue.dirxml.dev.deploy.Secrets.load(secretsFile))) {
-                            System.err.println("secret: '" + d + "'.shim-auth-id kept out of the tree (the secrets file supplies it)");
-                        }
-                    }
-                }
-                // drivers named differently in this vault take the tree's names; the tree's drivers this environment
-                // doesn't get stay; a driver new to the tree is marked as this environment's only with --mark-new-drivers
-                com.pointblue.dirxml.dev.model.DriverSet base = envName != null && java.nio.file.Files.isRegularFile(outDir.resolve(com.pointblue.dirxml.dev.ascode.AsCodeWriter.DRIVERSET_MANIFEST))
-                    ? com.pointblue.dirxml.dev.ascode.AsCodeReader.read(outDir) : null;
-                if (base != null) {
-                    for (String n : com.pointblue.dirxml.dev.deploy.Overrides.toTreeNames(live, base.overrides.get(envName))) {
-                        System.err.println("note: " + n);
-                    }
-                    for (String n : com.pointblue.dirxml.dev.deploy.ServerMap.toTree(live, base.overrides.get(envName), base)) {
-                        System.err.println("note: " + n);
-                    }
-                    for (String n : com.pointblue.dirxml.dev.deploy.DriverEnvironments.keepOnImport(live, envName, base, markNewDrivers, null)) {
-                        System.err.println("note: " + n);
-                    }
-                }
-                if (envName != null && java.nio.file.Files.isDirectory(outDir.resolve(com.pointblue.dirxml.dev.deploy.Overrides.DIR))) {
-                    live.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(outDir));
-                    for (String n : com.pointblue.dirxml.dev.deploy.Overrides.foldBack(live, envName, base)) {
-                        System.err.println("override: " + n);
-                    }
-                }
-                System.exit(write(live, outDir));
+                System.exit(importLive(args));
             }
             if (args.length >= 2 && args[0].equals("check")) {
-                System.exit(doCheck(Paths.get(args[1])));
+                System.exit(check(args));
             }
             if (args.length >= 1 && com.pointblue.dirxml.dev.edit.EditCli.isOperation(args[0])) {
                 System.exit(com.pointblue.dirxml.dev.edit.EditCli.run(args));
             }
             if (args.length >= 2 && args[0].equals("simulate")) {
-                Path tree = Paths.get(args[1]);
-                Path cases = null;
-                Path against = null;
-                boolean json = false;
-                String simEnv = null;
-                for (int i = 2; i < args.length; i++) {
-                    if (args[i].equals("--cases") && i + 1 < args.length) {
-                        cases = Paths.get(args[++i]);
-                    } else if (args[i].equals("--against") && i + 1 < args.length) {
-                        against = Paths.get(args[++i]);
-                    } else if (args[i].equals("--env") && i + 1 < args.length) {
-                        simEnv = args[++i];
-                    } else if (args[i].equals("--json")) {
-                        json = true;
-                    }
-                }
-                if (cases == null) {
-                    System.err.println("usage: simulate <asCodeDir> --cases <casesDir> [--against <asCodeDir>] [--env E] [--json]");
-                    System.exit(2);
-                }
-                com.pointblue.dirxml.dev.simulate.Simulate.Outcome o = new com.pointblue.dirxml.dev.simulate.Simulate(
-                    com.pointblue.dirxml.dev.source.ExportWriter::writeDriver).run(tree, cases, against, simEnv, n -> System.err.println(n));
-                System.out.print(json ? o.json() + "\n" : o.text());
-                System.exit(o.ok() ? 0 : 1);
+                System.exit(simulate(args));
             }
             if (args.length >= 3 && args[0].equals("export")) {
-                // export <tree> <out.xml>: a Designer driver-set export Designer can import
-                DriverSet ds = AsCodeReader.read(Paths.get(args[1]));
-                com.pointblue.dirxml.dev.source.ExportWriter.write(ds, Paths.get(args[2]));
-                report(ds);
-                System.out.println("wrote " + args[2]);
-                System.exit(0);
+                System.exit(export(args));
             }
             if (args.length >= 3 && args[0].equals("export-project")) {
-                // export-project <tree> <projectDir> [--new …] [--dry-run] [--json]: update a Designer
-                // project to match a tree, or (--new) write a whole new project for it
-                boolean dryRun = false;
-                boolean json = false;
-                boolean fresh = false;
-                String vaultName = null;
-                String vaultHost = null;
-                String vaultUser = null;
-                String serverName = null;
-                String serverContext = null;
-                String catalogDir = null;
-                String designerRoot = null;
-                List<String> pos = new ArrayList<>();
-                for (int i = 1; i < args.length; i++) {
-                    if (args[i].equals("--dry-run")) {
-                        dryRun = true;
-                    } else if (args[i].equals("--json")) {
-                        json = true;
-                    } else if (args[i].equals("--new")) {
-                        fresh = true;
-                    } else if (args[i].equals("--vault-name") && i + 1 < args.length) {
-                        vaultName = args[++i];
-                    } else if (args[i].equals("--vault-host") && i + 1 < args.length) {
-                        vaultHost = args[++i];
-                    } else if (args[i].equals("--vault-user") && i + 1 < args.length) {
-                        vaultUser = args[++i];
-                    } else if (args[i].equals("--server") && i + 1 < args.length) {
-                        serverName = args[++i];
-                    } else if (args[i].equals("--server-context") && i + 1 < args.length) {
-                        serverContext = args[++i];
-                    } else if (args[i].equals("--catalog") && i + 1 < args.length) {
-                        catalogDir = args[++i];
-                    } else if (args[i].equals("--designer") && i + 1 < args.length) {
-                        designerRoot = args[++i];
-                    } else {
-                        pos.add(args[i]);
-                    }
-                }
-                if (pos.size() < 2) {
-                    System.err.println("usage: export-project <tree> <projectDir> [--new [--vault-name NAME] "
-                        + "[--vault-host HOST] [--vault-user DN] [--server NAME --server-context DN] "
-                        + "[--catalog DIR] [--designer DIR]] [--dry-run] [--json]");
-                    System.exit(2);
-                }
-                if (!fresh && (vaultName != null || vaultHost != null || vaultUser != null
-                    || serverName != null || serverContext != null || catalogDir != null || designerRoot != null)) {
-                    System.err.println("export-project: --vault-* / --server* / --catalog / --designer only apply "
-                        + "with --new (they describe a new project's IdentityVault_, Server_ and package catalog); "
-                        + "an existing project keeps its own");
-                    System.exit(2);
-                }
-                com.pointblue.dirxml.dev.source.ProjectWriter.Result r = fresh
-                    ? com.pointblue.dirxml.dev.source.ProjectWriter.create(Paths.get(pos.get(0)), Paths.get(pos.get(1)),
-                        new com.pointblue.dirxml.dev.source.NewProject(
-                            vaultName, vaultHost, vaultUser, serverName, serverContext,
-                            catalogDir == null ? null : Paths.get(catalogDir),
-                            designerRoot == null ? null : Paths.get(designerRoot)), dryRun)
-                    : com.pointblue.dirxml.dev.source.ProjectWriter.update(
-                        Paths.get(pos.get(0)), Paths.get(pos.get(1)), dryRun);
-                System.out.print(json ? r.json() + "\n" : r.text());
-                System.exit(r.ok ? 0 : 1);
+                System.exit(exportProject(args));
             }
             if (args.length >= 1 && args[0].equals("show")) {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.show(args));
@@ -289,49 +173,16 @@ public final class Cli {
                 System.exit(com.pointblue.dirxml.dev.edit.ReadCli.packageDiff(args));
             }
             if (args.length >= 3 && args[0].equals("mapping-table.export-csv")) {
-                // mapping-table.export-csv <tree> <path>: the table as CSV on stdout (mapping-table.import-csv reads it back)
-                DriverSet ds = AsCodeReader.read(Paths.get(args[1]));
-                com.pointblue.dirxml.dev.model.Artifact a = ds.resolve(args[2]);
-                if (!(a instanceof com.pointblue.dirxml.dev.model.Resource r) || !r.isMappingTable() || r.content == null) {
-                    System.err.println("'" + args[2] + "' is not a mapping table");
-                    System.exit(2);
-                }
-                System.out.print(com.pointblue.dirxml.dev.edit.MappingTableCsv.write(((com.pointblue.dirxml.dev.model.Resource) a).content));
-                System.exit(0);
+                System.exit(mappingTableExportCsv(args));
             }
             if (args.length >= 3 && args[0].equals("refs")) {
-                DriverSet ds = AsCodeReader.read(Paths.get(args[1]));
-                List<com.pointblue.dirxml.dev.edit.Refs.Ref> refs = com.pointblue.dirxml.dev.edit.Refs.withDrivers(ds, args[2]);
-                if (ds.resolve(args[2]) == null) {
-                    System.out.println("(no artifact at '" + args[2] + "')");
-                }
-                for (com.pointblue.dirxml.dev.edit.Refs.Ref ref : refs) {
-                    System.out.println(ref);
-                }
-                System.out.println(refs.size() + " reference(s)");
-                System.exit(0);
+                System.exit(refs(args));
             }
             if (args.length >= 1 && args[0].equals("doctor")) {
                 System.exit(Doctor.run(args));
             }
             if (args.length >= 2 && args[0].equals("validate")) {
-                boolean json = false;
-                Path dir = null;
-                for (int i = 1; i < args.length; i++) {
-                    if (args[i].equals("--json")) {
-                        json = true;
-                    } else {
-                        dir = Paths.get(args[i]);
-                    }
-                }
-                if (dir == null) {
-                    usage();
-                    System.exit(2);
-                }
-                com.pointblue.dirxml.dev.validate.Report rep =
-                    com.pointblue.dirxml.dev.validate.Validator.standard().validate(dir);
-                System.out.print(json ? rep.json() + "\n" : rep.text());
-                System.exit(rep.ok() ? 0 : 1);
+                System.exit(validate(args));
             }
             if (args.length >= 2 && !args[0].equals("vault.email-server") && (args[0].startsWith("vault.") || args[0].equals("schema.diff"))) {
                 System.exit(com.pointblue.dirxml.dev.deploy.DeployCli.run(args));
@@ -354,60 +205,10 @@ public final class Cli {
                 System.exit(com.pointblue.dirxml.dev.promote.PromoteCli.run(args));
             }
             if (args.length >= 3 && args[0].equals("tree.diff")) {
-                boolean json = false;
-                List<String> pos = new ArrayList<>();
-                for (int i = 1; i < args.length; i++) {
-                    if (args[i].equals("--json")) {
-                        json = true;
-                    } else {
-                        pos.add(args[i]);
-                    }
-                }
-                if (pos.size() < 2) {
-                    System.err.println("usage: tree.diff <fromDir> <toDir> [--json]");
-                    System.exit(2);
-                }
-                DriverSet from = AsCodeReader.read(Paths.get(pos.get(0)));
-                DriverSet to = AsCodeReader.read(Paths.get(pos.get(1)));
-                com.pointblue.dirxml.dev.deploy.ModelDiff diff = com.pointblue.dirxml.dev.deploy.ModelDiff.of(from, to);
-                System.out.print(json ? diff.json() + "\n" : diff.text());
-                System.exit(diff.isEmpty() ? 0 : 1);
+                System.exit(treeDiff(args));
             }
             if (args.length >= 2 && args[0].equals("docs")) {
-                Path tree = Paths.get(args[1]);
-                Path out = null;
-                List<String> drivers = new ArrayList<>();
-                String since = null;
-                String format = "md";
-                for (int i = 2; i < args.length; i++) {
-                    switch (args[i]) {
-                        case "--out":
-                            out = Paths.get(args[++i]);
-                            break;
-                        case "--driver":
-                            drivers.add(args[++i]);
-                            break;
-                        case "--since":
-                            since = args[++i];
-                            break;
-                        case "--format":
-                            format = args[++i];
-                            break;
-                        default:
-                            break;
-                    }
-                }
-                if (out == null) {
-                    System.err.println("usage: docs <asCodeDir> --out <dir> [--driver D…] [--since <commit>] [--format md|html]");
-                    System.exit(2);
-                }
-                if (!format.equalsIgnoreCase("md") && !format.equalsIgnoreCase("html")) {
-                    System.err.println("--format is md or html, not '" + format + "'");
-                    System.exit(2);
-                }
-                com.pointblue.dirxml.dev.docs.DocsGenerator.generate(tree, out, drivers, since, format);
-                System.out.println("wrote " + out);
-                System.exit(0);
+                System.exit(docs(args));
             }
             usage();
             System.exit(2);
@@ -415,6 +216,253 @@ public final class Cli {
             System.err.println("ERROR: " + e.getMessage());
             System.exit(3);
         }
+    }
+
+    /** {@code import <export.xml> <outDir>}. */
+    static int importExport(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 2, 2, "usage: import <export.xml> <outDir>");
+            return doImport(Paths.get(a.positional.get(0)), Paths.get(a.positional.get(1)));
+        });
+    }
+
+    /** {@code import-project <projectDir> <outDir>}. */
+    static int importProject(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 2, 2, "usage: import-project <projectDir> <outDir>");
+            return write(com.pointblue.dirxml.dev.source.ProjectReader.read(Paths.get(a.positional.get(0))), Paths.get(a.positional.get(1)));
+        });
+    }
+
+    /** {@code import-ldif <dump.ldif> <outDir>}. */
+    static int importLdif(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 2, 2, "usage: import-ldif <dump.ldif> <outDir>");
+            return write(com.pointblue.dirxml.dev.source.LdifReader.read(Paths.get(a.positional.get(0))), Paths.get(a.positional.get(1)));
+        });
+    }
+
+    private static final String IMPORT_LIVE_USAGE = "usage: import-live [<driverSetDN>] <outDir> --env NAME [--mark-new-drivers]   |   import-live <driverSetDN> <outDir> (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)";
+
+    /**
+     * {@code import-live [<driverSetDN>] <outDir> --env NAME} (environments.properties: url, bindDn, password in any
+     * form, driverSet), or {@code import-live <driverSetDN> <outDir>} (connection from -Dldap.url/-Dldap.bindDn/-Dldap.password).
+     */
+    static int importLive(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 1, 2, IMPORT_LIVE_USAGE);
+            List<String> positional = a.positional;
+            String envName = a.first("env");
+            boolean markNewDrivers = a.has("mark-new-drivers");
+            if (envName == null && positional.size() < 2) {
+                throw new Args.UsageError(IMPORT_LIVE_USAGE);
+            }
+            com.pointblue.dirxml.dev.deploy.Vault.Config c;
+            String driverSetDn;
+            if (envName != null) {
+                com.pointblue.dirxml.dev.deploy.Environments.Environment env =
+                    com.pointblue.dirxml.dev.deploy.Environments.load().get(envName);
+                c = env.vaultConfig();
+                driverSetDn = positional.size() >= 2 ? positional.get(0) : env.driverSetDn;
+            } else {
+                c = new com.pointblue.dirxml.dev.deploy.Vault.Config();
+                c.url = need("ldap.url");
+                c.bindDn = need("ldap.bindDn");
+                c.password = need("ldap.password");
+                c.trustAll = "true".equals(System.getProperty("ldap.trustAll"));
+                driverSetDn = positional.get(0);
+            }
+            Path outDir = Paths.get(positional.get(positional.size() - 1));
+            // every attribute (package stamps included) — the same reader vault.diff / deploy use;
+            // with --env, the other servers' own driver settings too (docs/vault-deploy.md, "Several servers")
+            com.pointblue.dirxml.dev.model.DriverSet live = envName != null && driverSetDn.equals(
+                com.pointblue.dirxml.dev.deploy.Environments.load().get(envName).driverSetDn)
+                ? com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(com.pointblue.dirxml.dev.deploy.Environments.load().get(envName), n -> System.err.println("note: " + n))
+                : com.pointblue.dirxml.dev.deploy.VaultDiff.readLive(c, driverSetDn);
+            // values that differ per stage (docs/vault-deploy.md): the environment's file takes the vault's
+            // value, the tree's files keep the base value the existing tree holds
+            // a shim auth id the environment's secrets file supplies never lands in the tree
+            if (envName != null) {
+                java.nio.file.Path secretsFile = com.pointblue.dirxml.dev.deploy.Environments.load().get(envName).secretsFile;
+                if (secretsFile != null) {
+                    for (String d : com.pointblue.dirxml.dev.deploy.Overrides.stripSecretShimAuthIds(live, com.pointblue.dirxml.dev.deploy.Secrets.load(secretsFile))) {
+                        System.err.println("secret: '" + d + "'.shim-auth-id kept out of the tree (the secrets file supplies it)");
+                    }
+                }
+            }
+            // drivers named differently in this vault take the tree's names; the tree's drivers this environment
+            // doesn't get stay; a driver new to the tree is marked as this environment's only with --mark-new-drivers
+            com.pointblue.dirxml.dev.model.DriverSet base = envName != null && java.nio.file.Files.isRegularFile(outDir.resolve(com.pointblue.dirxml.dev.ascode.AsCodeWriter.DRIVERSET_MANIFEST))
+                ? com.pointblue.dirxml.dev.ascode.AsCodeReader.read(outDir) : null;
+            if (base != null) {
+                for (String n : com.pointblue.dirxml.dev.deploy.Overrides.toTreeNames(live, base.overrides.get(envName))) {
+                    System.err.println("note: " + n);
+                }
+                for (String n : com.pointblue.dirxml.dev.deploy.ServerMap.toTree(live, base.overrides.get(envName), base)) {
+                    System.err.println("note: " + n);
+                }
+                for (String n : com.pointblue.dirxml.dev.deploy.DriverEnvironments.keepOnImport(live, envName, base, markNewDrivers, null)) {
+                    System.err.println("note: " + n);
+                }
+            }
+            if (envName != null && java.nio.file.Files.isDirectory(outDir.resolve(com.pointblue.dirxml.dev.deploy.Overrides.DIR))) {
+                live.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(outDir));
+                for (String n : com.pointblue.dirxml.dev.deploy.Overrides.foldBack(live, envName, base)) {
+                    System.err.println("override: " + n);
+                }
+            }
+            return write(live, outDir);
+        });
+    }
+
+    /** {@code check <asCodeDir>}. */
+    static int check(String[] args) throws Exception {
+        return usageErrors(() -> doCheck(Paths.get(parse(args, 1, 1, "usage: check <asCodeDir>").positional.get(0))));
+    }
+
+    /** {@code simulate <asCodeDir> --cases <casesDir> [--against <asCodeDir>] [--env E] [--json]}. */
+    static int simulate(String[] args) throws Exception {
+        return usageErrors(() -> {
+            String usage = "usage: simulate <asCodeDir> --cases <casesDir> [--against <asCodeDir>] [--env E] [--json]";
+            Args a = parse(args, 1, 1, usage);
+            if (a.first("cases") == null) {
+                throw new Args.UsageError(usage);
+            }
+            Path tree = Paths.get(a.positional.get(0));
+            Path cases = Paths.get(a.first("cases"));
+            Path against = a.first("against") == null ? null : Paths.get(a.first("against"));
+            com.pointblue.dirxml.dev.simulate.Simulate.Outcome o = new com.pointblue.dirxml.dev.simulate.Simulate(
+                com.pointblue.dirxml.dev.source.ExportWriter::writeDriver).run(tree, cases, against, a.first("env"), n -> System.err.println(n));
+            System.out.print(a.has("json") ? o.json() + "\n" : o.text());
+            return o.ok() ? 0 : 1;
+        });
+    }
+
+    /** {@code export <tree> <out.xml>}: a Designer driver-set export Designer can import. */
+    static int export(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 2, 2, "usage: export <asCodeDir> <out.xml>");
+            DriverSet ds = AsCodeReader.read(Paths.get(a.positional.get(0)));
+            com.pointblue.dirxml.dev.source.ExportWriter.write(ds, Paths.get(a.positional.get(1)));
+            report(ds);
+            System.out.println("wrote " + a.positional.get(1));
+            return 0;
+        });
+    }
+
+    /**
+     * {@code export-project <tree> <projectDir> [--new …] [--dry-run] [--json]}: update a Designer project to match a
+     * tree, or (--new) write a whole new project for it.
+     */
+    static int exportProject(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 2, 2, "usage: export-project <tree> <projectDir> [--new [--vault-name NAME] "
+                + "[--vault-host HOST] [--vault-user DN] [--server NAME --server-context DN] "
+                + "[--catalog DIR] [--designer DIR]] [--dry-run] [--json]");
+            boolean dryRun = a.has("dry-run");
+            boolean fresh = a.has("new");
+            String vaultName = a.first("vault-name");
+            String vaultHost = a.first("vault-host");
+            String vaultUser = a.first("vault-user");
+            String serverName = a.first("server");
+            String serverContext = a.first("server-context");
+            String catalogDir = a.first("catalog");
+            String designerRoot = a.first("designer");
+            List<String> pos = a.positional;
+            if (!fresh && (vaultName != null || vaultHost != null || vaultUser != null
+                || serverName != null || serverContext != null || catalogDir != null || designerRoot != null)) {
+                throw new Args.UsageError("export-project: --vault-* / --server* / --catalog / --designer only apply "
+                    + "with --new (they describe a new project's IdentityVault_, Server_ and package catalog); "
+                    + "an existing project keeps its own");
+            }
+            com.pointblue.dirxml.dev.source.ProjectWriter.Result r = fresh
+                ? com.pointblue.dirxml.dev.source.ProjectWriter.create(Paths.get(pos.get(0)), Paths.get(pos.get(1)),
+                    new com.pointblue.dirxml.dev.source.NewProject(
+                        vaultName, vaultHost, vaultUser, serverName, serverContext,
+                        catalogDir == null ? null : Paths.get(catalogDir),
+                        designerRoot == null ? null : Paths.get(designerRoot)), dryRun)
+                : com.pointblue.dirxml.dev.source.ProjectWriter.update(
+                    Paths.get(pos.get(0)), Paths.get(pos.get(1)), dryRun);
+            System.out.print(a.has("json") ? r.json() + "\n" : r.text());
+            return r.ok ? 0 : 1;
+        });
+    }
+
+    /** {@code mapping-table.export-csv <tree> <path>}: the table as CSV on stdout (mapping-table.import-csv reads it back). */
+    static int mappingTableExportCsv(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args p = parse(args, 2, 2, "usage: mapping-table.export-csv <asCodeDir> <path>");
+            DriverSet ds = AsCodeReader.read(Paths.get(p.positional.get(0)));
+            String path = p.positional.get(1);
+            com.pointblue.dirxml.dev.model.Artifact a = ds.resolve(path);
+            if (!(a instanceof com.pointblue.dirxml.dev.model.Resource r) || !r.isMappingTable() || r.content == null) {
+                System.err.println("'" + path + "' is not a mapping table");
+                return 2;
+            }
+            System.out.print(com.pointblue.dirxml.dev.edit.MappingTableCsv.write(((com.pointblue.dirxml.dev.model.Resource) a).content));
+            return 0;
+        });
+    }
+
+    /** {@code refs <tree> <artifactPath>}: everything that references an artifact. */
+    static int refs(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 2, 2, "usage: refs <asCodeDir> <artifactPath>");
+            DriverSet ds = AsCodeReader.read(Paths.get(a.positional.get(0)));
+            String path = a.positional.get(1);
+            List<com.pointblue.dirxml.dev.edit.Refs.Ref> refs = com.pointblue.dirxml.dev.edit.Refs.withDrivers(ds, path);
+            if (ds.resolve(path) == null) {
+                System.out.println("(no artifact at '" + path + "')");
+            }
+            for (com.pointblue.dirxml.dev.edit.Refs.Ref ref : refs) {
+                System.out.println(ref);
+            }
+            System.out.println(refs.size() + " reference(s)");
+            return 0;
+        });
+    }
+
+    /** {@code validate <asCodeDir> [--json]}: exactly one tree. */
+    static int validate(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 1, 1, "usage: validate <asCodeDir> [--json]");
+            com.pointblue.dirxml.dev.validate.Report rep =
+                com.pointblue.dirxml.dev.validate.Validator.standard().validate(Paths.get(a.positional.get(0)));
+            System.out.print(a.has("json") ? rep.json() + "\n" : rep.text());
+            return rep.ok() ? 0 : 1;
+        });
+    }
+
+    /** {@code tree.diff <fromDir> <toDir> [--json]}. */
+    static int treeDiff(String[] args) throws Exception {
+        return usageErrors(() -> {
+            Args a = parse(args, 2, 2, "usage: tree.diff <fromDir> <toDir> [--json]");
+            DriverSet from = AsCodeReader.read(Paths.get(a.positional.get(0)));
+            DriverSet to = AsCodeReader.read(Paths.get(a.positional.get(1)));
+            com.pointblue.dirxml.dev.deploy.ModelDiff diff = com.pointblue.dirxml.dev.deploy.ModelDiff.of(from, to);
+            System.out.print(a.has("json") ? diff.json() + "\n" : diff.text());
+            return diff.isEmpty() ? 0 : 1;
+        });
+    }
+
+    /** {@code docs <asCodeDir> --out <dir> [--driver D…] [--since <commit>] [--format md|html]}. */
+    static int docs(String[] args) throws Exception {
+        return usageErrors(() -> {
+            String usage = "usage: docs <asCodeDir> --out <dir> [--driver D…] [--since <commit>] [--format md|html]";
+            Args a = parse(args, 1, 1, usage);
+            if (a.first("out") == null) {
+                throw new Args.UsageError(usage);
+            }
+            String format = a.first("format") == null ? "md" : a.first("format");
+            if (!format.equalsIgnoreCase("md") && !format.equalsIgnoreCase("html")) {
+                throw new Args.UsageError("--format is md or html, not '" + format + "'");
+            }
+            Path out = Paths.get(a.first("out"));
+            com.pointblue.dirxml.dev.docs.DocsGenerator.generate(Paths.get(a.positional.get(0)), out,
+                new ArrayList<>(a.all("driver")), a.first("since"), format);
+            System.out.println("wrote " + out);
+            return 0;
+        });
     }
 
     private static int doImport(Path export, Path out) throws Exception {
@@ -432,7 +480,7 @@ public final class Cli {
 
     private static boolean hasCatalogFlag(String[] args) {
         for (String a : args) {
-            if (a.equals("--catalog")) {
+            if (a.equals("--catalog") || a.startsWith("--catalog=")) {
                 return true;
             }
         }
@@ -565,7 +613,8 @@ public final class Cli {
         sb.append("  package.site    --catalog DIR --out DIR [--description …] [--json]   render the catalog as an Eclipse update site Designer can read\n");
         sb.append("  package.status  <tree> [--driver D] [--catalog DIR] [--strict] [--json]   installed packages per driver vs the catalog (upgrades available); --strict exits 1 on a customized packaged object or a version the catalog lacks\n");
         sb.append("vault writes (vault.deploy --yes|--step, vault.rollback --yes, vault.import-clone --yes, vault.deploy-schema --yes,\n");
-        sb.append("    driver start|stop|restart, cache clear, migrate, resync, secrets set|remove, trace set|reset, submit)\n");
+        sb.append("    driver start|stop|restart|start-option, cache clear, migrate (not --dry-run), resync, secrets set|remove, trace set|reset, submit,\n");
+        sb.append("    query, health clear, log-level set, job start|abort, email-server set, activation apply, servers add|remove)\n");
         sb.append("    also need IDM_AGENT_ALLOW_WRITE=1 or --confirm <env>. A --dry-run stays read-only.\n");
         sb.append("operate (docs/operate.md; environments.properties, tiers, deploy-log audit):\n");
         sb.append("  driverset.status --env E [--json]\n");

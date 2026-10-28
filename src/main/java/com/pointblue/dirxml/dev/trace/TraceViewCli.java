@@ -1,5 +1,6 @@
 package com.pointblue.dirxml.dev.trace;
 
+import com.pointblue.dirxml.dev.Args;
 import com.pointblue.dirxml.dev.json.Json;
 
 import java.io.IOException;
@@ -35,6 +36,42 @@ public final class TraceViewCli {
         } catch (ClassNotFoundException | LinkageError e) {
             System.err.println("trace.view needs the trace parser, dirxml-trace-core, in ~/.m2 at the version pom.xml pins "
                 + "(tracecore.version): take it from a DirXMLTraceViewer release and install it as docs/install.md says");
+            return false;
+        }
+    }
+
+    /**
+     * The filters a {@code trace.view} command line can be refused for before any trace is read
+     * (the numbers are the operate CLI's): {@code --text}, and {@code --status} and {@code --channel}
+     * when the trace parser is present (without it, {@link #print} says how to get it).
+     */
+    public static void check(Args a) throws Args.UsageError {
+        String re = a.first("text");
+        if (re != null) {
+            try {
+                Pattern.compile(re);
+            } catch (PatternSyntaxException e) {
+                throw new Args.UsageError("--text is not a regular expression: " + e.getDescription());
+            }
+        }
+        if (!parserOnPath()) {
+            return;   // TraceView needs the parser; print says how to get it
+        }
+        String status = a.first("status");
+        if (status != null && !TraceView.LEVELS.contains(status.toLowerCase(java.util.Locale.ROOT))) {
+            throw new Args.UsageError("--status must be one of " + String.join(", ", TraceView.LEVELS));
+        }
+        String ch = a.first("channel");
+        if (ch != null && TraceView.channel(ch) == null) {
+            throw new Args.UsageError("--channel must be subscriber, publisher, service or other");
+        }
+    }
+
+    private static boolean parserOnPath() {
+        try {
+            Class.forName("com.pointbluetech.dirxml.trace.model.TraceParser");
+            return true;
+        } catch (ClassNotFoundException | LinkageError e) {
             return false;
         }
     }

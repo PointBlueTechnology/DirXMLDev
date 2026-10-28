@@ -36,23 +36,27 @@ public final class FlowView {
     private FlowView() {
     }
 
+    static final com.pointblue.dirxml.dev.Args.Spec SPEC = com.pointblue.dirxml.dev.Args.Spec.of("", "driver format lang out");
+
     public static int run(String[] args) {
-        if (args.length < 3) {
+        com.pointblue.dirxml.dev.Args a;
+        try {
+            a = com.pointblue.dirxml.dev.Args.parse("prd.flow", args, 1, SPEC);
+            if (a.positional.size() != 2) {
+                throw new com.pointblue.dirxml.dev.Args.UsageError("prd.flow takes <tree> <prd>");
+            }
+            a.oneOf("format", "text", List.of("text", "mermaid"));
+        } catch (com.pointblue.dirxml.dev.Args.UsageError e) {
+            System.err.println(e.getMessage());
             System.err.println("usage: prd.flow <tree> <prd> [--driver D] [--format text|mermaid] [--lang en] [--out FILE]");
             return 2;
         }
-        Path tree = Paths.get(args[1]);
-        String name = args[2];
-        String driverName = flag(args, "--driver");
-        String format = flag(args, "--format");
-        if (format == null) {
-            format = "text";
-        }
-        String lang = flag(args, "--lang");
-        if (lang == null) {
-            lang = "en";
-        }
-        String out = flag(args, "--out");
+        Path tree = Paths.get(a.positional.get(0));
+        String name = a.positional.get(1);
+        String driverName = a.first("driver");
+        String format = a.first("format") == null ? "text" : a.first("format");
+        String lang = a.first("lang") == null ? "en" : a.first("lang");
+        String out = a.first("out");
 
         try {
             DriverSet ds = AsCodeReader.read(tree);
@@ -384,14 +388,6 @@ public final class FlowView {
         return d == null ? List.of() : List.of(d);
     }
 
-    private static String flag(String[] argv, String name) {
-        for (int i = 0; i < argv.length - 1; i++) {
-            if (argv[i].equals(name)) {
-                return argv[i + 1];
-            }
-        }
-        return null;
-    }
 
     private static String str(String s) {
         return s == null ? "" : s;

@@ -144,9 +144,9 @@ the JDK, simulator, and `lib/` lines so a broken workstation is diagnosable befo
 **Agent write gate.** `vault.deploy` with `--yes` or `--step`, `vault.rollback --yes`,
 `vault.import-clone --yes`, `vault.deploy-schema --yes`, and the operate commands
 that change a driver (`driver.start|stop|restart|migrate|resync|submit`,
-`driver.cache clear`, `driver.secrets set|remove`, `driver.trace set|reset`) refuse
+`driver.cache clear`, `driver.secrets set|remove`, `driver.trace set|reset`, and `driver.query`, which asks the connected system) refuse
 to run unless `IDM_AGENT_ALLOW_WRITE=1` or the command includes `--confirm <env>` for that same
-environment. `--dry-run` and read-only commands are not writes. The tier rules in
+environment. `--dry-run` and read-only commands are not writes (`driver.migrate --direction vault --dry-run` included). The tier rules in
 §4 still apply on top of this gate; the gate is what stops an agent from mutating
 a vault when neither the environment variable nor an explicit confirm is present.
 It is checked before any secret is resolved and before LDAP is opened.
