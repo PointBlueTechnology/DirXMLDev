@@ -61,8 +61,8 @@ pattern orders otherwise. Selectors combine with AND:
 | `--dn <dn>` | `srcdn = ?` | the object's timeline, ordered ascending |
 | `--under <container dn>` | `srcdn LIKE ? ESCAPE ''` with `\` appended | subtree, prefix index |
 | `--name <rdn or tail>` | `reverse(srcdn) LIKE reverse('%' \|\| ?) ESCAPE ''` | an object by its name, reverse index |
-| `--driver <name or dn>` | `srcdriver = ?` | a tree driver name resolves to its DN through `VaultMapping.driverDn` |
-| `--policy <name>` | `policy = ?` (with `--driver`) | PolicyLogger rows at that policy; `--stage input\|output` |
+| `--driver <name or dn>` | `srcdriver = ?` | a driver's name matches the last part of a driver DN the store holds (`\TREE\system\ds\AD` for `AD`, any case); a slash-form DN (`\TREE\…`) is used as it is. An LDAP DN isn't converted: give the name or the slash form |
+| `--policy <name>` | `policy = ?` | PolicyLogger rows at that policy, from any driver unless `--driver` narrows it; `--stage input\|output` |
 | `--own` / `--logged` | `policy IS NULL` / `policy IS NOT NULL` | the driver's own rows, or what its policies logged |
 | `--type add,modify,…` | `eventtype IN (…)` | |
 | `--class User` | `classname = ?` | |

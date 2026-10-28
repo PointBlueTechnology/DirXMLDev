@@ -401,6 +401,10 @@ public final class Cli {
                     System.err.println("usage: docs <asCodeDir> --out <dir> [--driver D…] [--since <commit>] [--format md|html]");
                     System.exit(2);
                 }
+                if (!format.equalsIgnoreCase("md") && !format.equalsIgnoreCase("html")) {
+                    System.err.println("--format is md or html, not '" + format + "'");
+                    System.exit(2);
+                }
                 com.pointblue.dirxml.dev.docs.DocsGenerator.generate(tree, out, drivers, since, format);
                 System.out.println("wrote " + out);
                 System.exit(0);
