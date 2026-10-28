@@ -163,10 +163,16 @@ public final class Transaction {
         Result r = new Result(op.name());
         r.dryRun = dryRun;
         Report before = validator.validate(ds);
+        Map<Artifact, String> readOnly = readOnlyNow();
         try {
             op.apply(ds, this);
         } catch (Operation.Refusal e) {
             r.refusal = e.getMessage();
+            return r;
+        }
+        String changedReadOnly = changedReadOnly(readOnly);
+        if (changedReadOnly != null) {
+            r.refusal = changedReadOnly;   // not even with --force: the tree can't deploy it (#111)
             return r;
         }
         Packages.refreshChecksums(ds, touched);   // customized packaged objects: checksum follows the content
@@ -206,6 +212,45 @@ public final class Transaction {
         }
         r.written = !dryRun;
         return r;
+    }
+
+    /** Each Library artifact from another Library, with what it holds now. */
+    private Map<Artifact, String> readOnlyNow() {
+        Map<Artifact, String> m = new LinkedHashMap<>();
+        for (Artifact a : com.pointblue.dirxml.dev.model.Libraries.outside(ds)) {
+            m.put(a, fingerprint(a));
+        }
+        return m;
+    }
+
+    /** Why the operation may not stand: it removed, renamed or changed a Library artifact from another Library; or null. */
+    private String changedReadOnly(Map<Artifact, String> before) {
+        List<Artifact> now = ds.library.artifacts();
+        for (Map.Entry<Artifact, String> e : before.entrySet()) {
+            Artifact a = e.getKey();
+            boolean present = false;
+            for (Artifact x : now) {
+                present |= x == a;
+            }
+            if (!present || !e.getValue().equals(fingerprint(a))) {
+                return com.pointblue.dirxml.dev.model.Libraries.readOnly(ds, a) + " (and here the operation would "
+                    + (present ? "change" : "remove") + " it)";
+            }
+        }
+        return null;
+    }
+
+    private static String fingerprint(Artifact a) {
+        StringBuilder sb = new StringBuilder(a.name).append('\n').append(a.meta).append('\n');
+        if (a instanceof com.pointblue.dirxml.dev.model.Policy) {
+            org.w3c.dom.Element c = ((com.pointblue.dirxml.dev.model.Policy) a).content;
+            sb.append(c == null ? "" : com.pointblue.dirxml.dev.xml.CanonicalXml.serialize(c));
+        } else {
+            com.pointblue.dirxml.dev.model.Resource r = (com.pointblue.dirxml.dev.model.Resource) a;
+            sb.append(r.contentType).append('\n').append(r.text == null ? "" : r.text)
+                .append(r.content == null ? "" : com.pointblue.dirxml.dev.xml.CanonicalXml.serialize(r.content));
+        }
+        return sb.toString();
     }
 
     /** Errors in {@code after} that aren't in {@code before} (renamed artifacts' errors follow the rename). */
