@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-10-29
+
 ### Fixed
 
 - The warning that a credentials file "is readable by other users" (`hosted.properties`,

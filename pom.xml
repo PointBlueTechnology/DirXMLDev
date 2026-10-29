@@ -6,7 +6,7 @@
 
     <groupId>com.pointblue.dirxml</groupId>
     <artifactId>dirxml-dev</artifactId>
-    <version>0.58.0</version>
+    <version>0.59.0</version>
     <packaging>jar</packaging>
 
     <name>DirXML Dev</name>
