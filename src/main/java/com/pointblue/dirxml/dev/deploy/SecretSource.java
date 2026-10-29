@@ -203,14 +203,53 @@ public final class SecretSource {
         }
     }
 
-    /** Warn once per file (to stderr) when a credentials file is readable by group or others. */
+    /** Folders tried by {@link #keepsPermissions}, with the answer. */
+    private static final java.util.Map<Path, Boolean> KEEPS = new ConcurrentHashMap<>();
+
+    /**
+     * Warn once per file (to stderr) when a credentials file is readable by group or others, and
+     * its folder keeps a chmod: on one that doesn't, the advice can't be followed.
+     */
     public static void warnIfShared(Path file) {
         if (file == null || !isShared(file)) {
             return;
         }
         Path abs = file.toAbsolutePath().normalize();
+        if (abs.getParent() != null && !keepsPermissions(abs.getParent())) {
+            return;
+        }
         if (WARNED.add(abs)) {
             System.err.println("WARNING: " + abs + " is readable by other users — run: chmod 600 '" + abs + "'");
+        }
+    }
+
+    /**
+     * Whether files in {@code dir} keep a chmod. A Windows folder mounted into a container (Docker
+     * Desktop, WSL) shows every file as readable by all and ignores chmod 600 (DirXMLDevWeb #177).
+     * Tried once per folder on a scratch file; the folder's own files are left as they are. A
+     * folder that can't be tried (not writable, not POSIX) counts as keeping them, so the warning
+     * stays where it may matter.
+     */
+    static boolean keepsPermissions(Path dir) {
+        return KEEPS.computeIfAbsent(dir.toAbsolutePath().normalize(), SecretSource::tryPermissions);
+    }
+
+    private static boolean tryPermissions(Path dir) {
+        Path probe = null;
+        try {
+            probe = Files.createTempFile(dir, ".perm-check-", ".tmp");
+            Files.setPosixFilePermissions(probe, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            return !isShared(probe);
+        } catch (IOException | UnsupportedOperationException | SecurityException e) {
+            return true;
+        } finally {
+            if (probe != null) {
+                try {
+                    Files.deleteIfExists(probe);
+                } catch (IOException ignored) {
+                    // a scratch file left behind is harmless
+                }
+            }
         }
     }
 }
