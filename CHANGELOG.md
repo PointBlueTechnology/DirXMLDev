@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- The warning that a credentials file "is readable by other users" (`hosted.properties`,
+  `environments.properties`, a secrets file) no longer shows on a folder that ignores `chmod`,
+  such as a Windows folder mounted into a container, where its advice can't be followed
+  (DirXMLDevWeb #177). `SecretSource` tries `chmod 600` once per folder on a scratch file; a
+  folder it can't try keeps the warning.
+
 ## [0.58.0] - 2026-10-28
 
 ### Added
