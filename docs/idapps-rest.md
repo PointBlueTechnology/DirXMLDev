@@ -203,8 +203,24 @@ idm254: a completed approved request reads `requestState 2, processState 3`; a
 denied one `requestState 1, processState 3`; a request that failed in the
 engine (the NoApproval placeholder) `requestState 4, processState 2`.
 
-`POST /requests/history/item {"id": "<process id>"}` → the request with its
-comments (used in W4). `GET /requests/history?nextIndex=1&size=5` (the short
+`POST /requests/history/item` → one request with its comments **[live, 2026-10-30]**:
+
+```json
+{"id": "954d7ba428214842bedd0021d6671645", "entityType": "prd"}
+```
+
+| Field | Required | Accepted values |
+|---|---|---|
+| `id` | **yes** (else 489 `InvalidInput` "Request id (id:) is required") | the request's `id` from `historylist` (= the process id) |
+| `entityType` | **yes** (else 489 `InvalidInput` "Entity Type (entityType:) is required") | the request's `entityType` from `historylist`, e.g. `prd` |
+
+The answer is the `historylist` entry plus `comments`, newest first. Each comment has `user`, `comment`, `date`
+(epoch ms), `activity` (the activity's name), `commentDn` and `commentFullName`. The engine's own entries have
+`"user": "IDMProv"`, a `msgId` (`User_Task_Assigned`, `User_Task_Claimed`, `User_Task_Denied` …) and name the
+reviewer in the text ("User task denied by reviewer <full name>"). A comment made with an action carries the
+signed-in person's DN in `user` and `commentDn`; the OAuth client is not recorded anywhere.
+
+`GET /requests/history?nextIndex=1&size=5` (the short
 form) worked on 2026-09-15 and answered 489 "Failed to get process request
 history" on 2026-09-16 — prefer `historylist`.
 
