@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-10-30
+
 ### Added
 
 - `com.pointblue.dirxml.dev.apps.IdApps`, a client for Identity Applications' REST API, without vendor code (#118).
