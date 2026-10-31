@@ -146,6 +146,34 @@ public class IdAppsTest {
     }
 
     @Test
+    public void revokeRetractAndTheOtherCallsSendWhatTheLabTook() throws IOException {
+        IdApps apps = new IdApps(base, null, "secret", null);
+        IdApps.Session s = apps.session(apps.password("pat", "right".toCharArray()));
+        s.revoke("cn=Role,o=system", "ROLE", List.of(new IdApps.Session.Holder("cn=a,o=acme", "USER", null),
+            new IdApps.Session.Holder("cn=b,o=acme", null, null)), "no longer needed");
+        s.revoke("cn=Res,o=system", "resource", List.of(new IdApps.Session.Holder("cn=a,o=acme", "user", "8e38a4a7")), "gone");
+        assertThrows("no holder: the server would revoke nothing", IllegalArgumentException.class, () -> s.revoke("cn=Role,o=system", "role", List.of(), "x"));
+        s.retract("f517", "prd");
+        s.actWithForm("t9", "DenyAction", "no", Map.of());
+        s.holders("cn=Role,o=system", "ROLE", 1, 10);
+        s.resourceAssignments("cn=Res,o=system", 1, 10);
+        s.searchPermissions("resource", null, 1, 5);
+        s.tasksOfOthers(null, "cn=a,o=acme", 5);
+        s.workEntries("f517", 5);
+        String all = String.join("\n", seen);
+        assertTrue(all.contains("DELETE /IDMProv/rest/access/assignments/list Bearer a1 {\"reason\":\"no longer needed\",\"assignments\":[{\"id\":\"cn=Role,o=system\",\"entityType\":\"role\","
+            + "\"assignmentToList\":[{\"subtype\":\"user\",\"assignedToDn\":\"cn=a,o=acme\"},{\"subtype\":\"user\",\"assignedToDn\":\"cn=b,o=acme\"}]}]}"));
+        assertTrue("a resource holder carries its instance id", all.contains("{\"subtype\":\"user\",\"assignedToDn\":\"cn=a,o=acme\",\"instanceId\":\"8e38a4a7\"}"));
+        assertTrue(all.contains("DELETE /IDMProv/rest/access/requests/history Bearer a1 {\"requests\":[{\"id\":\"f517\",\"entityType\":\"prd\"}]}"));
+        assertTrue(all.contains("POST /IDMProv/rest/access/tasks/v2 Bearer a1 {\"taskId\":\"t9\",\"taskAction\":\"DenyAction\",\"comments\":\"no\",\"data\":[]}"));
+        assertTrue(all.contains("GET /IDMProv/rest/access/assignments/identities?permissionId=cn%3DRole%2Co%3Dsystem&permissionType=role&nextIndex=1&size=10"));
+        assertTrue(all.contains("POST /IDMProv/rest/catalog/resources/resource/assignments?nextIndex=1&size=10 Bearer a1 {\"dn\":\"cn=Res,o=system\"}"));
+        assertTrue(all.contains("GET /IDMProv/rest/catalog/resources/listV2?q=*&nextIndex=1&size=5"));
+        assertTrue(all.contains("GET /IDMProv/rest/access/tasks/list/others?q=*&recipient=cn%3Da%2Co%3Dacme&size=5"));
+        assertTrue(all.contains("GET /IDMProv/rest/access/tasks/workEntries?processId=f517&size=5"));
+    }
+
+        @Test
     public void requestBodiesAreTheOnesTheLabTook() throws IOException {
         IdApps apps = new IdApps(base, null, "secret", null);
         IdApps.Session s = apps.session(apps.password("pat", "right".toCharArray()));

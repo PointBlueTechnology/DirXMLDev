@@ -289,3 +289,84 @@ it. `GET /IDMProv/rest/catalog/roles?q=*` lists roles the same way (`roles`). Th
 for this project. It signs a person in once (password grant), keeps the refresh token, and renews the access token
 only when it is about to expire. It reads the `Fault` of a 489 or 400 as `IdApps.Fault`, and a refused grant as
 `IdApps.Refused`.
+
+## 13. Revoking, who holds what, approving with the form, retracting **[live, 2026-10-30]**
+
+Checked with a scratch role (made with `POST /IDMProv/rest/catalog/roles`, removed with `DELETE …/roles/role`), scratch
+users and a stock help-desk resource, all removed afterwards. Each endpoint's tag in the reference
+(`/idmappsdoc/openapi.json`) gives its base: Access → `/IDMProv/rest/access`, Catalog → `/IDMProv/rest/catalog`,
+Admin → `/IDMProv/rest/admin`.
+
+**Revoke: `DELETE /access/assignments/list`.**
+
+```json
+{"reason": "no longer needed",
+ "assignments": [{"id": "<role or resource DN>", "entityType": "role",
+                  "assignmentToList": [{"subtype": "user", "assignedToDn": "<holder DN>"}]}]}
+```
+
+- **`reason`:** required; without it, 489 "Reason for request is required.".
+- **`subtype`:** `user`, `group` or `container`, in lower case (`USER` is refused).
+- **Resources:** each holder entry also needs `instanceId`, the assignment's `instanceGuId` from
+  `POST /catalog/resources/resource/assignments {"dn": <resource DN>}`. Roles don't.
+- **Answer:** `{"success", "succeeded"[{id, name, revokeFrom, instanceId?}], "failed"[{…, reason}]}`; several holders
+  can go in one call.
+- **No `assignmentToList`:** 200 `{"success": true}`, and nothing is revoked. `IdApps.revoke` refuses an empty list.
+- **The history** shows a revocation as `requestOper` 15; a grant is 10.
+
+**Who holds a permission.**
+
+- **`GET /access/assignments/identities?permissionId=<DN>&permissionType=role|resource&nextIndex=1&size=`** returns
+  `{"assignmentToList": [{"subtype": "USER", "assignedToDn", "assigneeFullName"}], "totalCount"}`. Without
+  `permissionType` it answers an HTML 500.
+- **`POST /catalog/roles/role/assignments {"id": <role DN>}`** returns `roleAssignments`
+  [{identity, assignmentType, assignmentStatus, reason}].
+- **Only the user search root:** both reads, and the user searches (`GET /catalog/users?q=` matches first and last
+  names; `GET /access/users/list?q=`), see only users under the applications' `USER_ROOT_CONTAINER`
+  (`ism-configuration.properties`). A holder elsewhere is left out without an error.
+
+**Approve with the JSON approval form: `POST /access/tasks/v2`.**
+
+```json
+{"taskId": "<id>", "taskAction": "ApprovalAction", "comments": "…", "data": [{"key": "<form field>", "value": ["…"]}]}
+```
+
+- **`taskAction`:** `ApprovalAction` or `DenyAction`. Both were checked; a role request went on to `Completed` (state
+  50) or `Denied` (95).
+- **Answer:** `{"success": true, "message": "Form submission successfully processed."}`.
+- **Refusals:** every one (a bad action, no task id, a workflow already gone) reads 489 "Form submission failed to
+  process.".
+
+**Retract: `DELETE /access/requests/history`.**
+
+```json
+{"requests": [{"id": "<request id>", "entityType": "prd"}]}
+```
+
+- **Answer:** `{"success", "succeeded"}`.
+- **What it does:** the workflow ends (`requestState` 3 / `processState` 2), and its history gets "Request was
+  retracted through REST interface".
+- **What it leaves:** a role request it was approving stays "Approval Pending" (its `nrfRequest` object under
+  `cn=Requests,cn=RoleConfig,…`, `nrfStatus` 15). The approval task lingered for a minute.
+- **`retractable: false`** in the history did not stop it.
+
+**Other reads.**
+
+| Call | Answer |
+|---|---|
+| `GET /access/tasks/badge` | the caller's open task count |
+| `GET /access/tasks/list/others?size=` | other people's tasks (help desk, administrators) |
+| `GET /access/tasks/workEntries?processId=<request id>&size=` | the request's tasks: `id`, `Addressee`, `availableActions` (0 Approve, 1 Deny) |
+| `GET /access/requests/processes?processId=<request id>` | the workflow: `processStatus`, `approvalStatus`, `correlationId` |
+| `GET /catalog/roles/listV2?q=` and `GET /catalog/resources/listV2?q=` | the permission index's roles and resources (use these, not `GET /access/permissions`) |
+| `GET /catalog/roles/levels` | role levels, per installation |
+| `GET /access/sods/violations?sodDn=` | `sodDn` is required |
+
+**Did not work on idm254.**
+
+- `GET /access/tasks/historyList`: always 489 "An error occurred while obtaining the process or comment details from
+  the database".
+- `POST /access/requests/historylist/permission`: always "Permission id (id:) is required", wherever `id` was sent.
+
+`IdApps` has `revoke`, `holders`, `resourceAssignments`, `actWithForm`, `retract`, `tasksOfOthers`, `workEntries` and
+`searchPermissions` for these.

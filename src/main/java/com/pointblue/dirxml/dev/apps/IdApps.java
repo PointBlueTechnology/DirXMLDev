@@ -282,6 +282,99 @@ public final class IdApps {
             query.put("size", Math.max(1, size));
             return get(CATALOG + "/prds", query);
         }
+
+        /** The permission index's roles or resources matching {@code q} (§13): {@code roles} or {@code resources}. */
+        public Map<String, Object> searchPermissions(String entityType, String q, int nextIndex, int size) throws IOException {
+            String kind = "resource".equalsIgnoreCase(entityType) ? "resources" : "roles";
+            return get(CATALOG + "/" + kind + "/listV2", page(q == null ? "*" : q, nextIndex, size));
+        }
+
+        /**
+         * Who holds a role or resource (§13): {@code assignmentToList} [{subtype, assignedToDn, assigneeFullName}]. Only
+         * holders under the applications' user search root are listed.
+         */
+        public Map<String, Object> holders(String permissionDn, String entityType, int nextIndex, int size) throws IOException {
+            Map<String, Object> query = new LinkedHashMap<>();
+            query.put("permissionId", permissionDn);
+            query.put("permissionType", entityType.toLowerCase(java.util.Locale.ROOT));
+            query.put("nextIndex", Math.max(1, nextIndex));
+            query.put("size", Math.max(1, size));
+            return get(ACCESS + "/assignments/identities", query);
+        }
+
+        /** A resource's assignments with their instance ids (§13): {@code assignmentStatusList} [{recipientDn, instanceGuId, …}]. */
+        public Map<String, Object> resourceAssignments(String resourceDn, int nextIndex, int size) throws IOException {
+            return call("POST", CATALOG + "/resources/resource/assignments", page(null, nextIndex, size), ordered("dn", resourceDn));
+        }
+
+        /** One holder of a permission to revoke from: {@code subtype} user, group or container; {@code instanceId} for a resource. */
+        public record Holder(String dn, String subtype, String instanceId) {
+        }
+
+        /**
+         * Revoke a role or resource from {@code holders} (§13, {@code DELETE /assignments/list}). A resource needs each
+         * holder's assignment instance id ({@link #resourceAssignments}). With no holder the server answers success and
+         * revokes nothing, so none is refused here.
+         */
+        public Map<String, Object> revoke(String permissionDn, String entityType, List<Holder> holders, String reason) throws IOException {
+            if (holders == null || holders.isEmpty()) {
+                throw new IllegalArgumentException("name at least one holder: without one the server revokes nothing");
+            }
+            List<Object> to = new ArrayList<>();
+            for (Holder h : holders) {
+                Map<String, Object> m = ordered("subtype", h.subtype() == null ? "user" : h.subtype().toLowerCase(java.util.Locale.ROOT),
+                    "assignedToDn", h.dn());
+                if (h.instanceId() != null) {
+                    m.put("instanceId", h.instanceId());
+                }
+                to.add(m);
+            }
+            Map<String, Object> body = ordered("reason", reason, "assignments",
+                List.of(ordered("id", permissionDn, "entityType", entityType.toLowerCase(java.util.Locale.ROOT), "assignmentToList", to)));
+            return call("DELETE", ACCESS + "/assignments/list", null, body);
+        }
+
+        /** Retract a request (§13): the workflow ends; a role request it was approving stays as it was. */
+        public Map<String, Object> retract(String requestId, String entityType) throws IOException {
+            return call("DELETE", ACCESS + "/requests/history", null, ordered("requests", List.of(ordered("id", requestId, "entityType", entityType))));
+        }
+
+        /**
+         * Act on one task the way the JSON approval form does (§13, {@code POST /tasks/v2}): {@code taskAction}
+         * ApprovalAction or DenyAction, {@code data} the approval form's fields. Every refusal reads "Form submission
+         * failed to process.".
+         */
+        public Map<String, Object> actWithForm(String taskId, String taskAction, String comments, Map<String, List<String>> data) throws IOException {
+            List<Object> d = new ArrayList<>();
+            (data == null ? Map.<String, List<String>>of() : data).forEach((k, v) -> d.add(ordered("key", k, "value", v)));
+            return post(ACCESS + "/tasks/v2", ordered("taskId", taskId, "taskAction", taskAction, "comments", comments == null ? "" : comments, "data", d));
+        }
+
+        /** Other people's tasks, for a help desk user or an administrator (§13). */
+        public Map<String, Object> tasksOfOthers(String q, String recipient, int size) throws IOException {
+            Map<String, Object> query = new LinkedHashMap<>();
+            query.put("q", q == null || q.isBlank() ? "*" : q);
+            if (recipient != null && !recipient.isBlank()) {
+                query.put("recipient", recipient);
+            }
+            query.put("size", Math.max(1, size));
+            return get(ACCESS + "/tasks/list/others", query);
+        }
+
+        /** A request's work entries, its approval tasks with their addressees (§13). */
+        public Map<String, Object> workEntries(String requestId, int size) throws IOException {
+            return get(ACCESS + "/tasks/workEntries", ordered("processId", requestId, "size", Math.max(1, size)));
+        }
+    }
+
+    private static Map<String, Object> page(String q, int nextIndex, int size) {
+        Map<String, Object> query = new LinkedHashMap<>();
+        if (q != null) {
+            query.put("q", q.isBlank() ? "*" : q);
+        }
+        query.put("nextIndex", Math.max(1, nextIndex));
+        query.put("size", Math.max(1, size));
+        return query;
     }
 
     // ---- plumbing ----
