@@ -71,6 +71,8 @@ public class VendorFreeTest {
         {"com/pointblue/dirxml/dev/deploy/Environments$Environment", "*"},
         {"com/pointblue/dirxml/dev/LegacyTls", "enable"},
         {"com/pointblue/dirxml/dev/json/Json", "*"},
+        {"com/pointblue/dirxml/dev/apps/IdApps", "*"},             // the console's Identity Applications tools
+        {"com/pointblue/dirxml/dev/apps/IdApps$Session", "*"},
     };
 
     static boolean vendor(String internalName) {
