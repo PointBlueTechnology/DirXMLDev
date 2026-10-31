@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `com.pointblue.dirxml.dev.apps.IdApps`, a client for Identity Applications' REST API, without vendor code (#118).
+  It is for Directory Console's agent tools and for this project.
+  - **Signing in:** it signs a person in once with OSP's password grant, keeps the refresh token, and renews the
+    access token only when it is about to expire. That avoids the `oidpInstanceData` (-649) sign-in failures.
+  - **Calls:** tasks (list, read, act, act through the JSON approval form, other people's tasks, work entries);
+    requests (start a PRD, request a role or resource, history, one request, retract); assignments (a person's, who
+    holds a permission, a resource's assignments, revoke); and the permission index and catalog searches.
+  - **Errors:** refusals are `IdApps.Fault` (the fault's subcode), and refused sign-ins are `IdApps.Refused`.
+- `docs/idapps-rest.md` §11–13: the refresh grant, assignments, the catalog's request definitions, revoking, who
+  holds what, approving with the form, and retracting, as checked on a lab, with what did not work there.
+
 ## [0.59.0] - 2026-10-29
 
 ### Fixed

@@ -23,6 +23,7 @@ what the dashboard or the JSON form renderer sends.
 | Base | `https://<apps host>/IDMProv/rest/access` for everything below (the dashboard's `_restAccess`). Catalog calls (`/prds`, roles, resources) live under `/IDMProv/rest/catalog`; caching/admin under `/IDMProv/rest/admin`. A path called under the wrong base is a Tomcat 404 **[live]**. |
 | Token | `POST https://<apps host>/osp/a/idm/auth/oauth2/token`, header `Authorization: Basic base64(<client>:<client secret>)`, `Content-Type: application/x-www-form-urlencoded`, body `grant_type=password&username=<user>&password=<password>`. Response `{"access_token","token_type":"bearer","expires_in","refresh_token"}`. **Required:** all three body fields and the client credentials. Client ids that work: `rbpmrest` (the documented REST client) and `rbpm` (the dashboard's own); on the lab both accept the lab's client secret **[live]**. |
 | Sign-ins fill a user's `oidpInstanceData` | OSP writes data to the signed-in user's `oidpInstanceData` (one value) on every password sign-in. At about 32 KB eDirectory refuses the write (`-649 insufficient buffer`) and **every sign-in for that user then fails**: `HTTP 500 {"error":"server_error","error_description":"Unexpected error.","sub_error":"exception"}`, with OSP's log reading "Error writing instance data for '<user DN>'" **[live, 2026-10-15]**. It filled on idm254 after two days of scripted runs that signed in once per call, finished by a 9-minute polling loop. Recover by deleting the attribute's value (OSP starts it afresh; the user's outstanding OSP sessions go). Avoid it by signing in once and reusing the token until it expires: `bin/apps` does so within a process, and `permission --wait` polls with one sign-in. |
+| Refresh | `POST` the same token URL, same client header, body `grant_type=refresh_token&refresh_token=<refresh_token>` → `{"access_token","token_type","expires_in"}` only: OSP does **not** rotate the refresh token, which keeps working. A refresh with a wrong client secret is refused (401). A refresh writes nothing to `oidpInstanceData` (a password grant adds about 280 bytes), and a refresh token outlives OSP's session: on idm254 `refreshTokenTTL` is 2592000 s (30 days) for a client with a secret, `accessTokenTTL` 120 s **[live, 2026-10-30]**. Sign in once and keep the refresh token. |
 | Every call | `Authorization: Bearer <access_token>`, `Content-Type: application/json`, `Accept: application/json`. |
 | Errors | HTTP **489** (application error) or **400** (input rejected by the XSS filter) with `{"Fault":{"Code":{"Value":"Sender","Subcode":{"Value":"<code>"}},"Reason":{"Text":"…"}}}`. Subcodes seen/read: `PermissionIndexException` (permission not in the index), `InternalExceptionOccured`, `InvalidInput`, `SecurityException`, `NotFound`, `InvalidEnumValue` (a bad task action), `XSSValidationFailure` (400) **[live/server]**. A 200 with `"success": false` and no `Fault` is also a failure — see §2. |
 
@@ -258,3 +259,114 @@ templates — not used; the tool authors PRDs as-code), `/forms` (form details,
 `/supportedlocales`, `/preference`, `/info`, `/counts`, `/queue` (cart),
 `/dashboard`, `/orgChart`, `/relationships`, `/administration`, `/config`,
 `/monitoring`, `/data/migration`.
+
+## 11. A person's assignments, and the catalog's request definitions **[live, 2026-10-30]**
+
+`POST /assignments/list` → a person's role and resource assignments:
+
+```json
+{"dn": "cn=uaadmin,ou=sa,o=data", "nextIndex": 1, "size": 20}
+```
+
+| Field | Required | Accepted values |
+|---|---|---|
+| `dn` | **yes** for someone else; the caller when absent | the person's DN |
+| `nextIndex`, `size` | no | paging (1-based) |
+
+The answer is `{"total", "nextIndex", "token", "assignments": [{"id", "name", "description", "entityType" (role or resource), "link", "categories"}]}`.
+`GET /assignments` answers the same for the caller. `GET /assignments/list` is 405, and `/assignments/roles` and
+`/assignments/resources` are 404.
+
+`GET /IDMProv/rest/catalog/prds?q=*&nextIndex=1&size=50` lists the catalog's request definitions as
+`{"requestDefs": [{"id", "name", "description"}]}`. The catalog is the applications' own copy. On idm254 it still
+listed two PRDs deleted from the vault with LDAP, so check a PRD with `POST /permissions/item` (§4) before requesting
+it. `GET /IDMProv/rest/catalog/roles?q=*` lists roles the same way (`roles`). The index search
+`GET /permissions?q=*` still answered `arraySize 0` (§3).
+
+## 12. The Java client
+
+`com.pointblue.dirxml.dev.apps.IdApps` makes these calls without vendor code, for Directory Console's agents and
+for this project. It signs a person in once (password grant), keeps the refresh token, and renews the access token
+only when it is about to expire. It reads the `Fault` of a 489 or 400 as `IdApps.Fault`, and a refused grant as
+`IdApps.Refused`.
+
+## 13. Revoking, who holds what, approving with the form, retracting **[live, 2026-10-30]**
+
+Checked with a scratch role (made with `POST /IDMProv/rest/catalog/roles`, removed with `DELETE …/roles/role`), scratch
+users and a stock help-desk resource, all removed afterwards. Each endpoint's tag in the reference
+(`/idmappsdoc/openapi.json`) gives its base: Access → `/IDMProv/rest/access`, Catalog → `/IDMProv/rest/catalog`,
+Admin → `/IDMProv/rest/admin`.
+
+**Revoke: `DELETE /access/assignments/list`.**
+
+```json
+{"reason": "no longer needed",
+ "assignments": [{"id": "<role or resource DN>", "entityType": "role",
+                  "assignmentToList": [{"subtype": "user", "assignedToDn": "<holder DN>"}]}]}
+```
+
+- **`reason`:** required; without it, 489 "Reason for request is required.".
+- **`subtype`:** `user`, `group` or `container`, in lower case (`USER` is refused).
+- **Resources:** each holder entry also needs `instanceId`, the assignment's `instanceGuId` from
+  `POST /catalog/resources/resource/assignments {"dn": <resource DN>}`. Roles don't.
+- **Answer:** `{"success", "succeeded"[{id, name, revokeFrom, instanceId?}], "failed"[{…, reason}]}`; several holders
+  can go in one call.
+- **No `assignmentToList`:** 200 `{"success": true}`, and nothing is revoked. `IdApps.revoke` refuses an empty list.
+- **The history** shows a revocation as `requestOper` 15; a grant is 10.
+
+**Who holds a permission.**
+
+- **`GET /access/assignments/identities?permissionId=<DN>&permissionType=role|resource&nextIndex=1&size=`** returns
+  `{"assignmentToList": [{"subtype": "USER", "assignedToDn", "assigneeFullName"}], "totalCount"}`. Without
+  `permissionType` it answers an HTML 500.
+- **`POST /catalog/roles/role/assignments {"id": <role DN>}`** returns `roleAssignments`
+  [{identity, assignmentType, assignmentStatus, reason}].
+- **Only the user search root:** both reads, and the user searches (`GET /catalog/users?q=` matches first and last
+  names; `GET /access/users/list?q=`), see only users under the applications' `USER_ROOT_CONTAINER`
+  (`ism-configuration.properties`). A holder elsewhere is left out without an error.
+
+**Approve with the JSON approval form: `POST /access/tasks/v2`.**
+
+```json
+{"taskId": "<id>", "taskAction": "ApprovalAction", "comments": "…", "data": [{"key": "<form field>", "value": ["…"]}]}
+```
+
+- **`taskAction`:** `ApprovalAction` or `DenyAction`. Both were checked; a role request went on to `Completed` (state
+  50) or `Denied` (95).
+- **Answer:** `{"success": true, "message": "Form submission successfully processed."}`.
+- **Refusals:** every one (a bad action, no task id, a workflow already gone) reads 489 "Form submission failed to
+  process.".
+
+**Retract: `DELETE /access/requests/history`.**
+
+```json
+{"requests": [{"id": "<request id>", "entityType": "prd"}]}
+```
+
+- **Answer:** `{"success", "succeeded"}`.
+- **What it does:** the workflow ends (`requestState` 3 / `processState` 2), and its history gets "Request was
+  retracted through REST interface".
+- **What it leaves:** a role request it was approving stays "Approval Pending" (its `nrfRequest` object under
+  `cn=Requests,cn=RoleConfig,…`, `nrfStatus` 15). The approval task lingered for a minute.
+- **`retractable: false`** in the history did not stop it.
+
+**Other reads.**
+
+| Call | Answer |
+|---|---|
+| `GET /access/tasks/badge` | the caller's open task count |
+| `GET /access/tasks/list/others?size=` | other people's tasks (help desk, administrators) |
+| `GET /access/tasks/workEntries?processId=<request id>&size=` | the request's tasks: `id`, `Addressee`, `availableActions` (0 Approve, 1 Deny) |
+| `GET /access/requests/processes?processId=<request id>` | the workflow: `processStatus`, `approvalStatus`, `correlationId` |
+| `GET /catalog/roles/listV2?q=` and `GET /catalog/resources/listV2?q=` | the permission index's roles and resources (use these, not `GET /access/permissions`) |
+| `GET /catalog/roles/levels` | role levels, per installation |
+| `GET /access/sods/violations?sodDn=` | `sodDn` is required |
+
+**Did not work on idm254.**
+
+- `GET /access/tasks/historyList`: always 489 "An error occurred while obtaining the process or comment details from
+  the database".
+- `POST /access/requests/historylist/permission`: always "Permission id (id:) is required", wherever `id` was sent.
+
+`IdApps` has `revoke`, `holders`, `resourceAssignments`, `actWithForm`, `retract`, `tasksOfOthers`, `workEntries` and
+`searchPermissions` for these.
