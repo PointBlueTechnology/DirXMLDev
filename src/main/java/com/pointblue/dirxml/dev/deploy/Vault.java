@@ -941,6 +941,35 @@ public final class Vault implements VaultAccess {
         }
     }
 
+    /**
+     * The driver object's own eDirectory password, set as a user's password is: an LDAP modify of
+     * {@code userPassword}, which eDirectory turns into the object's password (it is not stored as an
+     * attribute value). The Remote Loader gives the engine this password.
+     */
+    @Override
+    public void setDriverObjectPassword(String driverDn, char[] value) {
+        byte[] bytes = IdmOps.utf8(value);
+        try {
+            BasicAttribute b = new BasicAttribute("userPassword", bytes);
+            ldap.modifyAttributes(driverDn, new ModificationItem[] {new ModificationItem(DirContext.REPLACE_ATTRIBUTE, b)});
+        } catch (Exception e) {
+            throw new VaultException("set driver object password " + driverDn + ": " + e.getMessage(), e);
+        } finally {
+            Arrays.fill(bytes, (byte) 0);
+            Arrays.fill(value, '\0');
+        }
+    }
+
+    /** {@code GetPasswordsState}: which of a driver's passwords are set, as {driver object, application, Remote Loader}; no values. */
+    public boolean[] passwordsState(String driverDn) {
+        try {
+            int state = call(Op.GET_PASSWORDS_STATE, driverDn).integer(0);
+            return new boolean[] {(state & 1) != 0, (state & 2) != 0, (state & 4) != 0};
+        } catch (Exception e) {
+            throw new VaultException("GetPasswordsState " + driverDn + ": " + e.getMessage(), e);
+        }
+    }
+
     @Override
     public void setMutualAuthKeyPassword(String driverDn, char[] value) {
         try {

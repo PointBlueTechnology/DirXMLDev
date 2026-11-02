@@ -16,6 +16,7 @@ import java.util.TreeSet;
  * <pre>
  *   AD Driver.shim-auth-password=…
  *   AD Driver.remote-loader-password=…
+ *   AD Driver.driver-object-password=…        # the driver object's password, which the Remote Loader sends
  *   AD Driver.shim-auth-id=…                 # when the id is a client id / API key, not a user name
  *   AD Driver.named.exchange-service=…
  *   driverset.named.smtp-relay=…
@@ -25,6 +26,7 @@ import java.util.TreeSet;
  *   AD Driver.remote-loader-passwordKeychain=idm-stg/ad-remote-loader     # macOS Keychain (service/account)
  * </pre>
  * Keys: {@code <driver>.shim-auth-password}, {@code <driver>.remote-loader-password},
+ * {@code <driver>.driver-object-password},
  * {@code <driver>.shim-auth-id}, {@code <driver>.named.<name>}, {@code driverset.named.<name>}. A value is a
  * literal, or resolved from an environment variable ({@code …Env}), a
  * command's stdout ({@code …Command}, trailing newline stripped) or the macOS
@@ -35,6 +37,11 @@ public final class Secrets {
 
     public static final String SHIM_AUTH = "shim-auth-password";
     public static final String REMOTE_LOADER = "remote-loader-password";
+    /**
+     * The driver object's own eDirectory password, which the Remote Loader gives the engine to prove
+     * it is the driver's Remote Loader (its "driver object password"). Set like a user's password.
+     */
+    public static final String DRIVER_OBJECT = "driver-object-password";
     /** The Remote Loader's mutual-authentication key password ({@code SetMutualAuthKeyPassword}, docs/console-gaps.md §11). */
     public static final String KEY = "mutual-auth-key-password";
     /** The Remote Loader's mutual-authentication keystore password ({@code SetMutualAuthKSPassword}). */
@@ -144,6 +151,10 @@ public final class Secrets {
 
     public static String key(String driver) {
         return driver + "." + KEY;
+    }
+
+    public static String driverObject(String driver) {
+        return driver + "." + DRIVER_OBJECT;
     }
 
     public static String keystore(String driver) {

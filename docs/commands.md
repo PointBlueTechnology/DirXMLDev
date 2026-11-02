@@ -1552,7 +1552,7 @@ More: [operate.md](operate.md#operations-and-what-backs-them).
 
 ### `driver.secrets`
 
-`list` shows a driver's named-password names (never the values). `set` and `remove` change one secret live: a named password, the shim's authentication password, the Remote Loader password, or the Remote Loader's mutual-authentication key or keystore password. `set` takes the value from the environment's secrets file, or one line on stdin with `--stdin`; never from an argument. `list` is read-only. `set` and `remove` write to the vault: need `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1`, `--yes` on a `stg` or `prd` tier, and `--confirm <env>` on a `prd` tier. Audited.
+`list` shows a driver's named-password names and whether its driver object, application and Remote Loader passwords are set (never the values). `set` and `remove` change one secret live: a named password, the shim's authentication password, the Remote Loader password, the driver object password (the one the Remote Loader signs in to the engine with; `set` only, since eDirectory replaces an object password but has no clearing it), or the Remote Loader's mutual-authentication key or keystore password. `set` takes the value from the environment's secrets file, or one line on stdin with `--stdin`; never from an argument. `list` is read-only. `set` and `remove` write to the vault: need `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1`, `--yes` on a `stg` or `prd` tier, and `--confirm <env>` on a `prd` tier. Audited.
 
 ```
 bin/idm driver.secrets list   --env <name> --driver <name> [--json]
@@ -1565,9 +1565,9 @@ bin/idm driver.secrets remove --env <name> --driver <name> [--kind <kind>] [--na
 | `list` \| `set` \| `remove` | | yes | the verb, right after the command |
 | `--env` | all | yes | an environment in `environments.properties` |
 | `--driver` | all | yes | a driver's name |
-| `--kind` | set, remove | no | `named`, `shim-auth`, `remote-loader`, `key`, `keystore`; default: `named` |
+| `--kind` | set, remove | no | `named`, `shim-auth`, `remote-loader`, `driver-object` (set only), `key`, `keystore`; default: `named` |
 | `--name` | set, remove | with `named` | the named password's name |
-| `--stdin` | set | no | read the value from one line on stdin. Without it, the secrets-file key is `<driver>.named.<name>`, `<driver>.shim-auth-password`, `<driver>.remote-loader-password`, `<driver>.mutual-auth-key-password` or `<driver>.mutual-auth-keystore-password` |
+| `--stdin` | set | no | read the value from one line on stdin. Without it, the secrets-file key is `<driver>.named.<name>`, `<driver>.shim-auth-password`, `<driver>.remote-loader-password`, `<driver>.driver-object-password`, `<driver>.mutual-auth-key-password` or `<driver>.mutual-auth-keystore-password` |
 | `--yes` | set, remove | by tier | |
 | `--confirm` | set, remove | by tier | the environment's name |
 | `--tree` | set, remove | no | where the audit line goes; default: the current directory |
