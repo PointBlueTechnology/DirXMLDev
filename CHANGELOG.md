@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-11-02
+
 ### Fixed
 
 - A deploy that changes a packaged object (a GCV object, policy or other driver resource that a package
