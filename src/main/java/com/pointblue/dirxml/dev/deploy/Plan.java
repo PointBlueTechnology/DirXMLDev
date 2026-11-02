@@ -258,10 +258,13 @@ public final class Plan {
                     Map<String, List<byte[]>> attrs = "package-stamps".equals(c.what)
                         ? new LinkedHashMap<>() : VaultMapping.attributes(a);
                     Map<String, List<byte[]>> stamps = VaultMapping.packageAttributes(tree, a, p.packageIndex);
+                    Artifact was = c.kind == ModelDiff.Kind.ARTIFACT_CHANGED ? diff.from().resolve(c.path) : null;
                     if (!stamps.isEmpty()) {
-                        attrs.putAll(stamps);   // an installed object: Designer's stamps, the installed checksum included
+                        // an installed object: Designer's stamps, the installed checksum included; on a changed
+                        // object only those that differ from the vault's
+                        attrs.putAll(changedStamps(stamps, was, p.packageIndex));
                     }
-                    if (Packages.isPackaged(a) && Packages.isCustomized(a) && !attrs.containsKey(VaultMapping.PKG_CHECKSUM)) {
+                    if (Packages.isPackaged(a) && Packages.isCustomized(a) && !stamps.containsKey(VaultMapping.PKG_CHECKSUM)) {
                         // customized, and no checksum recorded (a tree that named the package but never
                         // refreshed its stamp): a content-derived one, so the vault's pair differs from the baseline
                         byte[] content = VaultMapping.contentBytes(a);
@@ -276,7 +279,8 @@ public final class Plan {
                         bucket.add(new Step(Op.ADD, dn, null, classes, attrs,
                             dn + "  " + VaultMapping.objectClass(a) + " (" + size(attrs) + ")", c.path, a.driver));
                     } else {
-                        if (!stamps.isEmpty()) {
+                        if (!stamps.isEmpty() && (was == null || !VaultMapping.isStamped(was))) {
+                            // a vault object with stamps already has the class that holds them
                             bucket.add(new Step(Op.AUX_CLASS, dn, null, List.of(VaultMapping.PKG_ITEM_AUX), null,
                                 dn + "  objectClass += " + VaultMapping.PKG_ITEM_AUX, c.path, a.driver));
                         }
@@ -284,7 +288,6 @@ public final class Plan {
                             bucket.add(new Step(Op.MODIFY, dn, e.getKey(), null, Map.of(e.getKey(), e.getValue()),
                                 dn + "  " + e.getKey() + " (" + size(Map.of(e.getKey(), e.getValue())) + ")", c.path, a.driver));
                         }
-                        Artifact was = diff.from().resolve(c.path);
                         if (stamps.isEmpty() && was != null && stripSteps(p, to, bucket, dn, a.meta, was.meta, c.path, a.driver)) {
                             p.notes.add(c.path + ": package stamps removed (the driver was stripped of its packages)");
                         }
@@ -849,6 +852,26 @@ public final class Plan {
         bucket.add(new Step(Op.DROP_AUX_CLASS, dn, null, List.of(VaultMapping.PKG_ITEM_AUX), null,
             dn + "  objectClass -= " + VaultMapping.PKG_ITEM_AUX, change, driver));
         return true;
+    }
+
+    /**
+     * The stamp attributes of a changed artifact that differ from the vault object's ({@code was}, null when
+     * unknown: all of them). A content change used to rewrite every stamp with the value already there.
+     * {@code DirXML-pkgInitialState} is not in the vault's model, so it is always kept.
+     */
+    static Map<String, List<byte[]>> changedStamps(Map<String, List<byte[]>> stamps, Artifact was, com.pointblue.dirxml.dev.model.PackageStamps.Index index) {
+        if (was == null) {
+            return stamps;
+        }
+        Map<String, List<byte[]>> live = VaultMapping.packageAttributes(null, was, index);
+        Map<String, List<byte[]>> out = new LinkedHashMap<>();
+        for (Map.Entry<String, List<byte[]>> e : stamps.entrySet()) {
+            List<byte[]> v = live.get(e.getKey());
+            if (v == null || !sameBytes(v, e.getValue())) {
+                out.put(e.getKey(), e.getValue());
+            }
+        }
+        return out;
     }
 
     private static boolean sameBytes(List<byte[]> a, List<byte[]> b) {
