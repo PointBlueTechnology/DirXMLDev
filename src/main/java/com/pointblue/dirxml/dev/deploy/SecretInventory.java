@@ -15,8 +15,8 @@ import java.util.Set;
 /**
  * What secrets a driver needs, read off the model (docs/vault-deploy.md,
  * "Secrets"): the shim authentication password when the driver authenticates
- * (has a shim auth id or server), a Remote Loader password when its shim
- * config names a remote loader, and every named password its policies read
+ * (has a shim auth id or server), the Remote Loader password and the driver
+ * object password when it talks to a Remote Loader, and every named password its policies read
  * (the same scan the validator's {@code named-password} finding uses) or its
  * password-ref GCVs and shim parameters name.
  */
@@ -25,7 +25,7 @@ public final class SecretInventory {
     /** One secret a driver needs. */
     public static final class Need {
         public final String key;       // the Secrets key, e.g. "AD.named.svc"
-        public final String kind;      // shim-auth | remote-loader | named
+        public final String kind;      // shim-auth | remote-loader | driver-object | key | keystore | named
         public final String because;   // where the need comes from
         /** Set when it is not a problem for the secret to be absent (the Remote Loader's mutual-authentication passwords). */
         public final boolean optional;
@@ -57,9 +57,9 @@ public final class SecretInventory {
                 d.shimAuthIdSecret ? "the driver authenticates (id from the secrets file)"
                     : "the driver authenticates as '" + (d.shimAuthId == null ? "" : d.shimAuthId) + "'"));
         }
-        Element shim = d.config.get(Driver.SHIM_CONFIG_INFO);
-        if (shim != null && usesRemoteLoader(shim)) {
+        if (usesRemoteLoader(d)) {
             out.add(new Need(Secrets.remoteLoader(d.name), "remote-loader", "shim-config-info names a Remote Loader"));
+            out.add(new Need(Secrets.driverObject(d.name), "driver-object", "the Remote Loader signs in to the engine with the driver object's password"));
             out.add(new Need(Secrets.key(d.name), "key", "a Remote Loader with mutual authentication (set when the secrets file has it)", true));
             out.add(new Need(Secrets.keystore(d.name), "keystore", "a Remote Loader with mutual authentication (set when the secrets file has it)", true));
         }
@@ -90,7 +90,7 @@ public final class SecretInventory {
                 out.add(new Need(Secrets.named(d.name, n), "named", "password-ref GCV"));
             }
         }
-        for (String n : passwordRefs(shim)) {
+        for (String n : passwordRefs(d.config.get(Driver.SHIM_CONFIG_INFO))) {
             if (named.add(n)) {
                 out.add(new Need(Secrets.named(d.name, n), "named", "password-ref shim parameter"));
             }
@@ -126,6 +126,23 @@ public final class SecretInventory {
     }
 
     /** True if the shim config carries Remote Loader connection parameters. */
+    /** The Remote Loader's proxy shim: the real shim runs on the Remote Loader's host. */
+    static final String REMOTE_LOADER_SHIM = "com.novell.nds.dirxml.remote.driver.DriverShimImpl";
+
+    /**
+     * True when the driver talks to a Remote Loader: its shim is the Remote Loader proxy, its auth server
+     * holds the connection ({@code REMOTE(hostname=… port=…)…}, as Designer writes it for a native shim
+     * such as AD's), or a shim parameter names one.
+     */
+    static boolean usesRemoteLoader(Driver d) {
+        if (REMOTE_LOADER_SHIM.equals(d.shimClass)
+                || (d.shimAuthServer != null && d.shimAuthServer.strip().toUpperCase(java.util.Locale.ROOT).startsWith("REMOTE("))) {
+            return true;
+        }
+        Element shim = d.config.get(Driver.SHIM_CONFIG_INFO);
+        return shim != null && usesRemoteLoader(shim);
+    }
+
     static boolean usesRemoteLoader(Element shimConfig) {
         for (Element def : Dom.descendantsByName(shimConfig, "definition")) {
             String n = def.getAttribute("name").toLowerCase();
