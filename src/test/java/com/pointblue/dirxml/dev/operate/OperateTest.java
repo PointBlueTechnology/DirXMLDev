@@ -74,6 +74,25 @@ public class OperateTest {
         final Map<String, Map<String, List<byte[]>>> replaced = new LinkedHashMap<>();   // dn -> attr -> values
         final List<String> calls = new java.util.ArrayList<>();                           // the secret and log-event operations, as "op dn [detail]"
 
+        /** When set, the next app-password call answers as if it had to delete a clear-text value first (-638). */
+        boolean clearTextAppPassword;
+
+        @Override
+        public boolean setAppPassword(String dn, char[] value) {
+            calls.add("setAppPassword " + dn + " " + value.length);
+            boolean healed = clearTextAppPassword;
+            clearTextAppPassword = false;
+            return healed;
+        }
+
+        @Override
+        public boolean clearAppPassword(String dn) {
+            calls.add("clearAppPassword " + dn);
+            boolean healed = clearTextAppPassword;
+            clearTextAppPassword = false;
+            return healed;
+        }
+
         @Override
         public void setRemoteLoaderPassword(String dn, char[] value) {
             calls.add("setRemoteLoaderPassword " + dn + " " + value.length);
@@ -862,13 +881,20 @@ public class OperateTest {
         assertTrue(Operate.secretsSet(fake, env, DRIVER, "key", null, secrets, false, false, null, tree).ok);
         assertTrue(Operate.secretsSet(fake, env, DRIVER, "keystore", null, secrets, false, false, null, tree).ok);
         assertTrue(Operate.secretsSet(fake, env, DRIVER, "shim-auth", null, secrets, false, false, null, tree).ok);
-        assertEquals(List.of("setRemoteLoaderPassword " + DRIVER_DN + " 3", "setMutualAuthKeyPassword " + DRIVER_DN + " 2", "setMutualAuthKeystorePassword " + DRIVER_DN + " 3"), fake.calls);
-        assertEquals("sa1", fake.entries.get(DRIVER_DN).string("DirXML-ShimAuthPassword"));
+        assertEquals(List.of("setRemoteLoaderPassword " + DRIVER_DN + " 3", "setMutualAuthKeyPassword " + DRIVER_DN + " 2", "setMutualAuthKeystorePassword " + DRIVER_DN + " 3",
+            "setAppPassword " + DRIVER_DN + " 3"), fake.calls);
+        assertFalse("the shim password goes through the engine, never as an attribute write", fake.entries.get(DRIVER_DN).attrs.containsKey("DirXML-ShimAuthPassword"));
         fake.calls.clear();
         assertTrue(Operate.secretsRemove(fake, env, DRIVER, "remote-loader", null, false, null, tree).ok);
         assertTrue(Operate.secretsRemove(fake, env, DRIVER, "key", null, false, null, tree).ok);
         assertTrue(Operate.secretsRemove(fake, env, DRIVER, "keystore", null, false, null, tree).ok);
-        assertEquals(List.of("clearRemoteLoaderPassword " + DRIVER_DN, "clearMutualAuthKeyPassword " + DRIVER_DN, "clearMutualAuthKeystorePassword " + DRIVER_DN), fake.calls);
+        assertTrue(Operate.secretsRemove(fake, env, DRIVER, "shim-auth", null, false, null, tree).ok);
+        assertEquals(List.of("clearRemoteLoaderPassword " + DRIVER_DN, "clearMutualAuthKeyPassword " + DRIVER_DN, "clearMutualAuthKeystorePassword " + DRIVER_DN,
+            "clearAppPassword " + DRIVER_DN), fake.calls);
+        // a clear-text value an earlier version wrote is reported when it had to be deleted first
+        fake.clearTextAppPassword = true;
+        Operate.Result healed = Operate.secretsSet(fake, env, DRIVER, "shim-auth", null, secrets, false, false, null, tree);
+        assertTrue(healed.text(), healed.ok && healed.text().contains("note: a clear-text DirXML-ShimAuthPassword") && healed.json().contains("\"note\":"));
         Operate.Result bad = Operate.secretsSet(fake, env, DRIVER, "nope", null, secrets, false, false, null, tree);
         assertTrue(bad.text(), !bad.ok && bad.text().contains("--kind is one of"));
         Operate.Result noName = Operate.secretsSet(fake, env, DRIVER, "named", null, secrets, false, false, null, tree);

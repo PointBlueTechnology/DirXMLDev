@@ -62,6 +62,16 @@ public interface VaultAccess extends AutoCloseable {
     void setDriverStartOption(String driverDn, int option);
 
     /** {@code NotifyJobUpdate}: the engine's scheduler re-reads a job object after a deploy wrote it. */
+    /**
+     * {@code SetAppPassword}: the password the shim logs in to the connected system with (Designer's
+     * "Application Password"), which the engine stores encrypted in {@code DirXML-ShimAuthPassword}. Never
+     * write that attribute directly. Returns true when a clear-text value had to be removed first. The vault
+     * zeroes the array.
+     */
+    default boolean setAppPassword(String driverDn, char[] value) {
+        throw new UnsupportedOperationException("setAppPassword");
+    }
+
     /** {@code SetRemoteLoaderPassword} (docs/console-gaps.md §11). The vault zeroes the array. */
     default void setRemoteLoaderPassword(String driverDn, char[] value) {
         throw new UnsupportedOperationException("setRemoteLoaderPassword");

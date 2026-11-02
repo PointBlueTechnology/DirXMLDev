@@ -7,6 +7,18 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- The shim's authentication password (`driver.secrets set --kind shim-auth`, and `vault.deploy` setting
+  `<driver>.shim-auth-password`) is now set with the engine's `SetAppPassword` extended operation, as Designer and
+  iManager do. `driver.secrets remove --kind shim-auth` uses `ClearAppPassword`.
+  - **What was wrong:** earlier versions wrote `DirXML-ShimAuthPassword` with a plain LDAP modify. That stored the
+    password in clear text, which the engine cannot read. The shim then started with no credentials at all.
+    Checked on IDM 4.10.2 with a scratch driver whose connected system recorded what the shim presented.
+  - **Drivers set that way:** both extended operations fail with -638 (no character mapping) while such a value is
+    there. DirXMLDev now deletes it first, sets the password again, and says so in the result and the audit line.
+    Setting the password once more with this version repairs a driver.
+
 ## [0.60.0] - 2026-10-30
 
 ### Added
