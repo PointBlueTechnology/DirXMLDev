@@ -67,7 +67,7 @@ uses a command or an environment variable.
 ## Keys, once more
 
 ```properties
-<driver>.shim-auth-password        DirXML-ShimAuthPassword
+<driver>.shim-auth-password        the shim's authentication password (set with SetAppPassword)
 <driver>.remote-loader-password    the Remote Loader password
 <driver>.mutual-auth-key-password       the Remote Loader's mutual-authentication key password (optional)
 <driver>.mutual-auth-keystore-password  the Remote Loader's mutual-authentication keystore password (optional)
