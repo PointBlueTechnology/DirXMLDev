@@ -625,7 +625,7 @@ public final class Cli {
         sb.append("  driver.migrate --env E --driver D --xds FILE --yes [--confirm E]   into the application (--direction app, the default)\n");
         sb.append("  driver.migrate --env E --driver D --direction vault --base DN --filter F --class C [--max N] [--dry-run] [--yes] [--confirm E]   from it into the vault\n");
         sb.append("  driver.resync --env E --driver D [--since ISO] --yes [--confirm E]\n");
-        sb.append("  driver.secrets list|set|remove --env E --driver D [--kind named|shim-auth|remote-loader|key|keystore] [--name X] [--stdin] [--yes] [--confirm E]\n");
+        sb.append("  driver.secrets list|set|remove --env E --driver D [--kind named|shim-auth|remote-loader|driver-object|key|keystore] [--name X] [--stdin] [--yes] [--confirm E]\n");
         sb.append("  driver.trace show|set|reset|tail --env E --driver D [--level N] [--file F] [--lines N] [--grep RE] [--since MIN] [--follow] [--ldap [--seconds N] [--engine]]\n");
         sb.append("  driver.trace view --env E [--driver D] | --file FILE   open the DirXML Trace Viewer (desktop) connected to the vault, or on a file\n");
         sb.append("  trace.view --file F [--driver NAME] | --env E --driver D [--lines N|--since MIN|--ldap [--seconds N]] [--trace-driver NAME] [--channel C] [--status L] [--vetoed] [--text RE] [--last N] [--transaction N] [--json]\n");

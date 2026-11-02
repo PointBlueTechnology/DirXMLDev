@@ -99,6 +99,22 @@ public class OperateTest {
         }
 
         @Override
+        public void setDriverObjectPassword(String dn, char[] value) {
+            calls.add("setDriverObjectPassword " + dn + " " + value.length);
+        }
+
+        /** {driver object, application, Remote Loader}; null: the engine cannot say. */
+        boolean[] passwordsState;
+
+        @Override
+        public boolean[] passwordsState(String dn) {
+            if (passwordsState == null) {
+                throw new UnsupportedOperationException("passwordsState");
+            }
+            return passwordsState;
+        }
+
+        @Override
         public void setMutualAuthKeyPassword(String dn, char[] value) {
             calls.add("setMutualAuthKeyPassword " + dn + " " + value.length);
         }
@@ -642,6 +658,11 @@ public class OperateTest {
         fake.namedPasswords.put(DRIVER_DN, new ArrayList<>(List.of("svc")));
         Operate.Result list = Operate.secretsList(fake, dev, DRIVER);
         assertTrue(list.text().contains("svc"));
+        assertFalse("an engine that cannot say lists names only", list.text().contains("driver object password"));
+        fake.passwordsState = new boolean[] {true, false, true};
+        list = Operate.secretsList(fake, dev, DRIVER);
+        assertTrue(list.text(), list.text().contains("driver object password set, application password not set, Remote Loader password set"));
+        assertTrue(list.json(), list.json().contains("\"driverObjectPassword\":true,\"applicationPassword\":false,\"remoteLoaderPassword\":true"));
 
         Operate.Result removed = Operate.secretsRemove(fake, dev, DRIVER, "svc", false, null, tree);
         assertTrue(removed.ok);
@@ -874,15 +895,17 @@ public class OperateTest {
         FakeEngine fake = new FakeEngine();
         fake.entries.put(DRIVER_DN, FakeEngine.entry(DRIVER_DN, DRIVER, List.of("Top", "DirXML-Driver")));
         Secrets secrets = secretsWith(DRIVER + ".remote-loader-password", "rl1", DRIVER + ".mutual-auth-key-password", "k1",
-            DRIVER + ".mutual-auth-keystore-password", "ks1", DRIVER + ".shim-auth-password", "sa1");
+            DRIVER + ".mutual-auth-keystore-password", "ks1", DRIVER + ".shim-auth-password", "sa1", DRIVER + ".driver-object-password", "drv1");
         Path tree = Files.createTempDirectory("op");
         Environments.Environment env = env("dev", Environments.Tier.DEV);
         assertTrue(Operate.secretsSet(fake, env, DRIVER, "remote-loader", null, secrets, false, false, null, tree).ok);
         assertTrue(Operate.secretsSet(fake, env, DRIVER, "key", null, secrets, false, false, null, tree).ok);
         assertTrue(Operate.secretsSet(fake, env, DRIVER, "keystore", null, secrets, false, false, null, tree).ok);
         assertTrue(Operate.secretsSet(fake, env, DRIVER, "shim-auth", null, secrets, false, false, null, tree).ok);
+        Operate.Result drv = Operate.secretsSet(fake, env, DRIVER, "driver-object", null, secrets, false, false, null, tree);
+        assertTrue(drv.text(), drv.ok && drv.text().contains("set driver object password"));
         assertEquals(List.of("setRemoteLoaderPassword " + DRIVER_DN + " 3", "setMutualAuthKeyPassword " + DRIVER_DN + " 2", "setMutualAuthKeystorePassword " + DRIVER_DN + " 3",
-            "setAppPassword " + DRIVER_DN + " 3"), fake.calls);
+            "setAppPassword " + DRIVER_DN + " 3", "setDriverObjectPassword " + DRIVER_DN + " 4"), fake.calls);
         assertFalse("the shim password goes through the engine, never as an attribute write", fake.entries.get(DRIVER_DN).attrs.containsKey("DirXML-ShimAuthPassword"));
         fake.calls.clear();
         assertTrue(Operate.secretsRemove(fake, env, DRIVER, "remote-loader", null, false, null, tree).ok);
@@ -891,6 +914,9 @@ public class OperateTest {
         assertTrue(Operate.secretsRemove(fake, env, DRIVER, "shim-auth", null, false, null, tree).ok);
         assertEquals(List.of("clearRemoteLoaderPassword " + DRIVER_DN, "clearMutualAuthKeyPassword " + DRIVER_DN, "clearMutualAuthKeystorePassword " + DRIVER_DN,
             "clearAppPassword " + DRIVER_DN), fake.calls);
+        // a driver object password is replaced, never removed
+        Operate.Result noRemove = Operate.secretsRemove(fake, env, DRIVER, "driver-object", null, false, null, tree);
+        assertTrue(noRemove.text(), !noRemove.ok && noRemove.text().contains("not removed, only replaced"));
         // a clear-text value an earlier version wrote is reported when it had to be deleted first
         fake.clearTextAppPassword = true;
         Operate.Result healed = Operate.secretsSet(fake, env, DRIVER, "shim-auth", null, secrets, false, false, null, tree);

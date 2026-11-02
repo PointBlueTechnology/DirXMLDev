@@ -125,15 +125,26 @@ public class DeployLogAndInventoryTest {
 
         List<SecretInventory.Need> needs = SecretInventory.forDriver(ds, ad);
         List<String> keys = needs.stream().map(n -> n.key).toList();
-        assertEquals(List.of("AD.shim-auth-password", "AD.remote-loader-password", "AD.mutual-auth-key-password",
+        assertEquals(List.of("AD.shim-auth-password", "AD.remote-loader-password", "AD.driver-object-password", "AD.mutual-auth-key-password",
             "AD.mutual-auth-keystore-password", "AD.named.exchange-service", "AD.named.shared-secret", "AD.named.smtp-relay", "AD.named.api-key"), keys);
         assertEquals("shim-auth", needs.get(0).kind);
         // the Remote Loader's mutual-authentication passwords are optional: no missing-secret note when the file lacks them
-        assertTrue(!needs.get(1).optional && needs.get(2).optional && needs.get(3).optional);
-        assertTrue(needs.get(4).because.contains("drivers/AD/subscriber/sub-pw"));
+        assertTrue(!needs.get(1).optional && !needs.get(2).optional && needs.get(3).optional && needs.get(4).optional);
+        assertEquals("driver-object", needs.get(2).kind);
+        assertTrue(needs.get(5).because.contains("drivers/AD/subscriber/sub-pw"));
 
         // a driver with none
         Driver plain = new Driver("Loopback");
         assertTrue(SecretInventory.forDriver(ds, plain).isEmpty());
+
+        // a native shim behind a Remote Loader: the connection is in the auth server, no shim parameter names it
+        Driver nativeAd = new Driver("Native AD");
+        nativeAd.shimAuthServer = "REMOTE(hostname=dc.example.lab port=8090 kmo=idm)dc.example.lab";
+        assertEquals(List.of("Native AD.remote-loader-password", "Native AD.driver-object-password", "Native AD.mutual-auth-key-password",
+            "Native AD.mutual-auth-keystore-password"), SecretInventory.forDriver(ds, nativeAd).stream().filter(n -> !n.kind.equals("shim-auth")).map(n -> n.key).toList());
+        // the Remote Loader's proxy shim on its own
+        Driver proxy = new Driver("Proxy");
+        proxy.shimClass = "com.novell.nds.dirxml.remote.driver.DriverShimImpl";
+        assertTrue(SecretInventory.forDriver(ds, proxy).stream().anyMatch(n -> n.kind.equals("driver-object")));
     }
 }

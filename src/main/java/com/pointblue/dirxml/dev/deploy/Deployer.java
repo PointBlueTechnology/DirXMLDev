@@ -325,7 +325,7 @@ public final class Deployer {
                     }
                 }
             }
-            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault, o.deleteAllKinds);
+            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault, o.deleteAllKinds, scope);
             r.planText = validationNote + overrideNote + plan.text(env.name, dsDn);
             o.progress.accept("planned: " + plan.steps.size() + " write(s), " + (plan.restart.size() + plan.serverRestarts.size()) + " restart(s)");
             if (!plan.deleteDriverRefusals.isEmpty()) {
@@ -617,6 +617,8 @@ public final class Deployer {
                         vault.setNamedPassword(s.dn, name, name, value.clone());
                     } else if (key.endsWith("." + Secrets.REMOTE_LOADER)) {
                         vault.setRemoteLoaderPassword(s.dn, value.clone());
+                    } else if (key.endsWith("." + Secrets.DRIVER_OBJECT)) {
+                        vault.setDriverObjectPassword(s.dn, value.clone());
                     } else if (key.endsWith("." + Secrets.KEY)) {
                         vault.setMutualAuthKeyPassword(s.dn, value.clone());
                     } else if (key.endsWith("." + Secrets.KEYSTORE)) {
