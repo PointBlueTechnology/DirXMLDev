@@ -274,6 +274,26 @@ public class PlanTest {
     }
 
     @Test
+    public void forcedSecretsStayWithinTheDriverScope() throws IOException {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        Driver other = new Driver("Other");
+        other.shimClass = "com.example.Shim";
+        other.shimAuthId = "svc";
+        other.config.put(Driver.DRIVER_FILTER, ValidatorTest.xml("<filter/>"));
+        from.drivers.add(other);
+        to.drivers.add(other);
+        Path f = Files.createTempFile("secrets", ".properties");
+        Files.writeString(f, "AD.shim-auth-password=pw\n");
+        ModelDiff diff = VaultDiff.of(from, to, List.of("AD"));
+        Plan everyDriver = Plan.of(diff, to, DS, Secrets.load(f), "all", Map.of(), false, null, List.of(), null, List.of());
+        assertTrue(everyDriver.missingSecrets.toString(), everyDriver.missingSecrets.stream().anyMatch(m -> m.startsWith("Other.")));
+        Plan scoped = Plan.of(diff, to, DS, Secrets.load(f), "all", Map.of(), false, null, List.of(), null, List.of(), List.of("AD"));
+        assertTrue(scoped.text("stg", DS), scoped.missingSecrets.isEmpty());
+        assertEquals(List.of("AD.shim-auth-password"), scoped.steps.stream().filter(s -> s.op == Plan.Op.SET_SECRET).map(s -> s.attr).toList());
+    }
+
+    @Test
     public void driverObjectPasswordIsRequiredOnlyForANewRemoteLoaderDriver() throws IOException {
         DriverSet from = VaultMappingTest.model();
         DriverSet to = VaultMappingTest.model();
