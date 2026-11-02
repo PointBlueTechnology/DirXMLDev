@@ -437,6 +437,8 @@ public class OperateTest {
         assertTrue(r.ok);
         assertTrue(r.text().contains("svc-a"));
         assertTrue(r.text().contains("/tmp/t.log"));
+        assertTrue(r.text().contains("cache size      5 bytes"));
+        assertTrue(r.text().contains("unprocessed     2 bytes"));
         assertTrue(r.text().contains("driver.start '" + DRIVER + "'"));
         assertFalse(r.text().contains("OtherDriver"));
     }
@@ -695,7 +697,7 @@ public class OperateTest {
         assertTrue(r.text().contains("used=390"));
         assertTrue(r.text().contains("total=3072"));
         assertTrue(r.text().contains("current=15"));
-        assertTrue(r.text().contains("cache=5"));
+        assertTrue(r.text().contains("cache=5 bytes unprocessed=2 bytes"));
         assertTrue(r.text().contains("unprocessed=2"));
         assertTrue(r.json().contains("\"heapUsed\":\"390\""));
         assertTrue(r.json().contains("\"cacheSize\":\"5\""));
@@ -725,6 +727,14 @@ public class OperateTest {
         assertEquals("5", sizes[0]);
         assertEquals("2", sizes[1]);
         assertEquals("?", Operate.parseCacheSizes("")[0]);
+    }
+
+    @Test
+    public void cacheSizesArePrintedAsBytes() {
+        assertEquals("465 bytes", Operate.bytes("465"));
+        assertEquals("0 bytes", Operate.bytes("0"));
+        assertEquals("?", Operate.bytes("?"));
+        assertEquals("", Operate.bytes(""));
     }
 
     // ---- guarded live test (read-only) -------------------------------------------------------

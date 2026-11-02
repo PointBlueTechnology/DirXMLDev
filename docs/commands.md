@@ -1382,7 +1382,7 @@ More: [packages.md](packages.md#51-auditable-staging-no-customised-released-pack
 
 ### `driverset.status`
 
-Every driver of the set in one table: state, start option, cache size. Read-only.
+Every driver of the set in one table: state, start option, and the cache's size in bytes (`CACHE B`, `UNPR B`: all queued and not yet processed). The size is not a count of events; `driver.cache view` counts them. Read-only.
 
 ```
 bin/idm driverset.status --env <name> [--json]
@@ -1401,7 +1401,7 @@ More: [operate.md](operate.md#operations-and-what-backs-them).
 
 ### `driver.status`
 
-One driver: state, start option, cache size, trace level and file, named-password names, and its last five audit lines from the deploy log. Read-only. Exits 1 when the driver does not exist.
+One driver: state, start option, cache size in bytes (not a count of events; `driver.cache view` counts them), trace level and file, named-password names, and its last five audit lines from the deploy log. Read-only. Exits 1 when the driver does not exist.
 
 ```
 bin/idm driver.status --env <name> --driver <name> [--tree <dir>] [--json]
@@ -2119,7 +2119,7 @@ More: [operate.md](operate.md#operations-and-what-backs-them).
 
 ### `engine.stats`
 
-The engine's JVM heap and thread counts, and each driver's cache and operation counters (`GetDriverStats`). Read-only.
+The engine's JVM heap and thread counts, and each driver's cache size in bytes and operation counters (`GetDriverStats`). The JSON fields `cacheSize` and `unprocessedSize` are bytes too, not counts of events; `driver.cache view` counts the events. Read-only.
 
 ```
 bin/idm engine.stats --env <name> [--driver <name>]… [--json]
