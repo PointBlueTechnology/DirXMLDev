@@ -524,8 +524,8 @@ public final class Operate {
         text.append("  dn              ").append(dn).append('\n');
         text.append("  state           ").append(Vault.stateName(state)).append('\n');
         text.append("  start option    ").append(startOptionName(startOption)).append('\n');
-        text.append("  cache size      ").append(sizes[0]).append('\n');
-        text.append("  unprocessed     ").append(sizes[1]).append('\n');
+        text.append("  cache size      ").append(bytes(sizes[0])).append('\n');
+        text.append("  unprocessed     ").append(bytes(sizes[1])).append('\n');
         text.append("  trace level     ").append(traceLevel == null ? "-" : traceLevel).append('\n');
         text.append("  trace file      ").append(traceFile == null ? "-" : traceFile).append('\n');
         text.append("  named passwords ").append(names.isEmpty() ? "(none)" : String.join(", ", names)).append('\n');
@@ -2914,7 +2914,7 @@ public final class Operate {
             String dn = driverDn(env, d);
             DriverStat ds = parseDriverStats(d, safeDriverStats(engine, dn));
             text.append(String.format("  %-30s cache=%s unprocessed=%s reported=%s commands=%s%n",
-                d, ds.cacheSize, ds.unprocessedSize, ds.reportedEvents, ds.commands));
+                d, bytes(ds.cacheSize), bytes(ds.unprocessedSize), ds.reportedEvents, ds.commands));
             json.append(i == 0 ? "" : ",")
                 .append("{\"name\":").append(q(d)).append(",\"cacheSize\":").append(q(ds.cacheSize))
                 .append(",\"unprocessedSize\":").append(q(ds.unprocessedSize))
@@ -3025,7 +3025,10 @@ public final class Operate {
         return s;
     }
 
-    /** {@code {cacheSize, unprocessedSize}} from a {@code GetDriverStats} document; "?" on any failure. */
+    /**
+     * {@code {cacheSize, unprocessedSize}} from a {@code GetDriverStats} document; "?" on any failure. Both are the
+     * cache's size in bytes, not a count of events: {@code driver.cache view} counts the events.
+     */
     static String[] parseCacheSizes(String xml) {
         if (xml == null || xml.isBlank()) {
             return new String[] {"?", "?"};
@@ -3039,6 +3042,11 @@ public final class Operate {
         } catch (RuntimeException e) {
             return new String[] {"?", "?"};
         }
+    }
+
+    /** A cache size from {@link #parseCacheSizes} with its unit, so it is not read as a count of events; "?" stays "?". */
+    static String bytes(String size) {
+        return size.chars().allMatch(Character::isDigit) && !size.isEmpty() ? size + " bytes" : size;
     }
 
     private static Element firstElement(Document doc, String tag) {

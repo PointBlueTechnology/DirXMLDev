@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- `engine.stats` and `driver.status` print a driver's cache size with its unit (`cache=465 bytes`), so it is not
+  taken for a number of events. The engine reports the cache's size in bytes; `driver.cache view` counts the events
+  (465 bytes was 2 events). The JSON fields `cacheSize` and `unprocessedSize` keep their names and values; the docs
+  now say they are bytes. `docs/operate.md` no longer says `driverset.status` counts events or that
+  `driver.cache clear` takes its count from `GetDriverStats`.
+
 ## [0.61.0] - 2026-11-02
 
 ### Fixed
