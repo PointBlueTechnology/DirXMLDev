@@ -192,6 +192,45 @@ public class PlanTest {
         assertNotEquals(staleChecksum, checksum);
     }
 
+    private static void stamp(Policy p, String checksum) {
+        p.meta.put("dirxml-pkgguid", "PKGGUID_1;com.example.pkg;1.0.0;Example;PKG");
+        p.meta.put("dirxml-pkgassociationid", "ASSOC1");
+        p.meta.put("dirxml-pkgchecksum", checksum);
+    }
+
+    /** A changed packaged object whose stamps the vault already has: only its content is written (edir3, 2026-11-02). */
+    @Test
+    public void changedPackagedObjectDoesNotRewriteTheVaultsStamps() {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        stamp((Policy) from.resolve("drivers/AD/subscriber/sub-ctp"), "4234957497");
+        Policy ctp = (Policy) to.resolve("drivers/AD/subscriber/sub-ctp");
+        stamp(ctp, "4234957497");
+        ctp.content = ValidatorTest.xml("<policy><rule><description>edited</description><conditions/><actions/></rule></policy>");
+
+        Plan p = plan(from, to, Secrets.none(), "none");
+        for (Plan.Step s : p.steps) {
+            assertNotEquals(p.text("stg", DS), Plan.Op.AUX_CLASS, s.op);
+            assertTrue(p.text("stg", DS), s.attr == null || !s.attr.startsWith("DirXML-pkg"));
+        }
+        assertTrue(p.text("stg", DS), p.steps.stream().anyMatch(s -> VaultMapping.XML_DATA.equals(s.attr)));
+    }
+
+    @Test
+    public void changedPackagedObjectWritesOnlyTheStampThatDiffers() {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        stamp((Policy) from.resolve("drivers/AD/subscriber/sub-ctp"), "111111111");
+        Policy ctp = (Policy) to.resolve("drivers/AD/subscriber/sub-ctp");
+        stamp(ctp, "222222222");
+        ctp.content = ValidatorTest.xml("<policy><rule><description>edited</description><conditions/><actions/></rule></policy>");
+
+        Plan p = plan(from, to, Secrets.none(), "none");
+        List<String> pkg = p.steps.stream().filter(s -> s.attr != null && s.attr.startsWith("DirXML-pkg")).map(s -> s.attr).toList();
+        assertEquals(p.text("stg", DS), List.of(VaultMapping.PKG_CHECKSUM), pkg);
+        assertTrue(p.text("stg", DS), p.steps.stream().noneMatch(s -> s.op == Plan.Op.AUX_CLASS));
+    }
+
     @Test
     public void newDriverIsCreatedStoppedWithItsSecrets() throws IOException {
         DriverSet from = VaultMappingTest.model();
