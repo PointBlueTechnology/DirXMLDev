@@ -47,7 +47,7 @@ public final class IdmOps {
         GET_DRIVER_STATS(19), DRIVER_GET_SCHEMA(21), DRIVER_RESYNC(23),
         MIGRATE_APP(25), QUEUE_EVENT(27), SUBMIT_COMMAND(29), SUBMIT_EVENT(31),
         GET_CHUNKED_RESULT(33), CLOSE_CHUNKED_RESULT(35),
-        VIEW_CACHE_ENTRIES(41), DELETE_CACHE_ENTRIES(43),
+        VIEW_CACHE_ENTRIES(41), DELETE_CACHE_ENTRIES(43), GET_PASSWORDS_STATE(45),
         NOTIFY_JOB_UPDATE(53), START_JOB(55), ABORT_JOB(57), GET_JOB_STATE(59),
         SET_LOG_EVENTS(63), CLEAR_LOG_EVENTS(65),
         SET_APP_PASSWORD(67), CLEAR_APP_PASSWORD(69),
@@ -127,7 +127,8 @@ public final class IdmOps {
         return out.toByteArray();
     }
 
-    private static byte[] utf8(char[] pw) {
+    /** A password's UTF-8 bytes; the encoder's buffer is zeroed, the caller zeroes the result. */
+    static byte[] utf8(char[] pw) {
         ByteBuffer bb = StandardCharsets.UTF_8.encode(CharBuffer.wrap(pw));
         byte[] bytes = new byte[bb.remaining()];
         bb.get(bytes);

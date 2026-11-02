@@ -595,7 +595,9 @@ public final class Plan {
                         secretSteps.add(new Step(Op.SET_SECRET, dn, need.key, null, null,
                             "set secret " + need.key + " (" + need.kind + ")", "secrets#" + d.name, d.name));
                     } else {
-                        if (!need.optional) {
+                        // an existing driver's Remote Loader and driver object passwords already match its Remote
+                        // Loader; requiring them here would force a change on the Remote Loader's host too
+                        if (!need.optional && !need.kind.equals("remote-loader") && !need.kind.equals("driver-object")) {
                                 p.missingSecrets.add(need.key + " — " + need.because);
                             }
                     }

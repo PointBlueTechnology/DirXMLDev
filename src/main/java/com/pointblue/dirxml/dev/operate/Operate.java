@@ -159,6 +159,16 @@ public final class Operate {
             throw new UnsupportedOperationException("setRemoteLoaderPassword");
         }
 
+        /** The driver object's own password, which the Remote Loader sends the engine (set like a user's password). */
+        default void setDriverObjectPassword(String dn, char[] value) {
+            throw new UnsupportedOperationException("setDriverObjectPassword");
+        }
+
+        /** {@code GetPasswordsState}: whether the driver object, application and Remote Loader passwords are set. */
+        default boolean[] passwordsState(String dn) {
+            throw new UnsupportedOperationException("passwordsState");
+        }
+
         default void setMutualAuthKeyPassword(String dn, char[] value) {
             throw new UnsupportedOperationException("setMutualAuthKeyPassword");
         }
@@ -326,6 +336,16 @@ public final class Operate {
             @Override
             public void setRemoteLoaderPassword(String dn, char[] value) {
                 v.setRemoteLoaderPassword(dn, value);
+            }
+
+            @Override
+            public void setDriverObjectPassword(String dn, char[] value) {
+                v.setDriverObjectPassword(dn, value);
+            }
+
+            @Override
+            public boolean[] passwordsState(String dn) {
+                return v.passwordsState(dn);
             }
 
             @Override
@@ -1877,10 +1897,22 @@ public final class Operate {
     public static Result secretsList(Engine engine, Environments.Environment env, String driver) {
         String dn = driverDn(env, driver);
         List<String> names = engine.namedPasswords(dn);
+        boolean[] set = null;
+        try {
+            set = engine.passwordsState(dn);
+        } catch (RuntimeException e) {
+            // an engine (or a test double) that cannot say: list the named passwords only
+        }
         Result r = new Result();
         r.ok = true;
         r.text = names.isEmpty() ? "(no named passwords)\n" : String.join("\n", names) + "\n";
-        r.json = "{\"ok\":true,\"names\":" + strArr(names) + "}";
+        if (set != null) {
+            r.text += "driver object password " + (set[0] ? "set" : "not set") + ", application password " + (set[1] ? "set" : "not set")
+                + ", Remote Loader password " + (set[2] ? "set" : "not set") + "\n";
+        }
+        r.json = "{\"ok\":true,\"names\":" + strArr(names)
+            + (set != null ? ",\"driverObjectPassword\":" + set[0] + ",\"applicationPassword\":" + set[1] + ",\"remoteLoaderPassword\":" + set[2] : "")
+            + "}";
         return r;
     }
 
@@ -1892,8 +1924,12 @@ public final class Operate {
     /** What a shim-auth set or remove reports when it had to delete a clear-text value first (see {@link Vault#setAppPassword}). */
     static final String HEALED = "a clear-text DirXML-ShimAuthPassword, as written by DirXMLDev before 0.61.0, was deleted first";
 
-    /** The secret kinds {@code driver.secrets} knows: a named password, the shim's authentication password, the Remote Loader password, its mutual-authentication key and keystore passwords. */
-    public static final List<String> SECRET_KINDS = List.of("named", "shim-auth", "remote-loader", "key", "keystore");
+    /**
+     * The secret kinds {@code driver.secrets} knows: a named password, the shim's authentication password, the
+     * Remote Loader password, the driver object password (which the Remote Loader sends the engine), and the
+     * Remote Loader's mutual-authentication key and keystore passwords.
+     */
+    public static final List<String> SECRET_KINDS = List.of("named", "shim-auth", "remote-loader", "driver-object", "key", "keystore");
 
     /** The Secrets key of a kind for a driver ({@code named} needs the name). */
     public static String secretKey(String kind, String driver, String name) {
@@ -1901,6 +1937,7 @@ public final class Operate {
             case "named": return Secrets.named(driver, name);
             case "shim-auth": return Secrets.shimAuth(driver);
             case "remote-loader": return Secrets.remoteLoader(driver);
+            case "driver-object": return Secrets.driverObject(driver);
             case "key": return Secrets.key(driver);
             case "keystore": return Secrets.keystore(driver);
             default: throw new IllegalArgumentException("secret kind: " + kind);
@@ -1949,6 +1986,7 @@ public final class Operate {
                 case "named": engine.setNamedPassword(dn, name, name, value); break;
                 case "shim-auth": healed = engine.setAppPassword(dn, value); break;
                 case "remote-loader": engine.setRemoteLoaderPassword(dn, value); break;
+                case "driver-object": engine.setDriverObjectPassword(dn, value); break;
                 case "key": engine.setMutualAuthKeyPassword(dn, value); break;
                 default: engine.setMutualAuthKeystorePassword(dn, value); break;
             }
@@ -1981,6 +2019,9 @@ public final class Operate {
             boolean yes, String confirm, Path tree) throws IOException {
         if (!SECRET_KINDS.contains(kind)) {
             return Result.refused("--kind is one of " + String.join(", ", SECRET_KINDS) + ", not '" + kind + "'");
+        }
+        if ("driver-object".equals(kind)) {
+            return Result.refused("a driver object password is not removed, only replaced: set a new one with driver.secrets set --kind driver-object");
         }
         if ("named".equals(kind) && (name == null || name.isBlank())) {
             return Result.refused("a named password needs --name");

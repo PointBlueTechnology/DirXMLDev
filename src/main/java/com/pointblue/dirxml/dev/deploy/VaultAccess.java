@@ -77,6 +77,14 @@ public interface VaultAccess extends AutoCloseable {
         throw new UnsupportedOperationException("setRemoteLoaderPassword");
     }
 
+    /**
+     * The driver object's own password (an LDAP modify of {@code userPassword}, as for a user), which the
+     * Remote Loader sends the engine. The vault zeroes the array.
+     */
+    default void setDriverObjectPassword(String driverDn, char[] value) {
+        throw new UnsupportedOperationException("setDriverObjectPassword");
+    }
+
     /** {@code SetMutualAuthKeyPassword}: the Remote Loader's mutual-authentication key password. */
     default void setMutualAuthKeyPassword(String driverDn, char[] value) {
         throw new UnsupportedOperationException("setMutualAuthKeyPassword");

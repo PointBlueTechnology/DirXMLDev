@@ -617,6 +617,8 @@ public final class Deployer {
                         vault.setNamedPassword(s.dn, name, name, value.clone());
                     } else if (key.endsWith("." + Secrets.REMOTE_LOADER)) {
                         vault.setRemoteLoaderPassword(s.dn, value.clone());
+                    } else if (key.endsWith("." + Secrets.DRIVER_OBJECT)) {
+                        vault.setDriverObjectPassword(s.dn, value.clone());
                     } else if (key.endsWith("." + Secrets.KEY)) {
                         vault.setMutualAuthKeyPassword(s.dn, value.clone());
                     } else if (key.endsWith("." + Secrets.KEYSTORE)) {
