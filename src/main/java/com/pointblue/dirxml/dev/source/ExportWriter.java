@@ -449,6 +449,11 @@ public final class ExportWriter {
             e.setAttribute("value", d.shimAuthId);
             attrs.appendChild(e);
         }
+        if (d.traceSizeLimit != null) {
+            Element e = doc.createElement("trace-size-limit");
+            e.setAttribute("value", d.traceSizeLimit);
+            attrs.appendChild(e);
+        }
 
         Element filter = d.config.get(Driver.DRIVER_FILTER);
         if (filter != null) {

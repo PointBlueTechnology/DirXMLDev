@@ -371,7 +371,9 @@ public final class ModelDiff {
             return new ArrayList<>(affected);
         }
         for (Change c : changes) {
-            if (c.driver != null && c.kind != Kind.DRIVER_ADDED && c.kind != Kind.DRIVER_REMOVED && !c.kind.noRestart()) {
+            // the engine reads a driver's trace settings live, as driver.trace set relies on: no restart for the size limit
+            boolean traceSize = c.kind == Kind.DRIVER_SETTING && Driver.TRACE_SIZE_LIMIT.equals(c.what);
+            if (c.driver != null && c.kind != Kind.DRIVER_ADDED && c.kind != Kind.DRIVER_REMOVED && !c.kind.noRestart() && !traceSize) {
                 affected.add(c.driver);
             }
         }
@@ -1207,6 +1209,10 @@ public final class ModelDiff {
     private void diffDriverSettings(Driver a, Driver b) {
         settingChange(a, "shim-class", a.shimClass, b.shimClass);
         settingChange(a, "shim-auth-server", a.shimAuthServer, b.shimAuthServer);
+        if (b.traceSizeLimit != null) {
+            // a side that never recorded the limit (an older tree) asks for nothing
+            settingChange(a, Driver.TRACE_SIZE_LIMIT, a.traceSizeLimit, b.traceSizeLimit);
+        }
         if (a.shimAuthIdSecret || b.shimAuthIdSecret) {
             // the secrets file supplies the id: say that it differs, never what either side holds
             if (!Objects.equals(a.shimAuthId, b.shimAuthId)) {

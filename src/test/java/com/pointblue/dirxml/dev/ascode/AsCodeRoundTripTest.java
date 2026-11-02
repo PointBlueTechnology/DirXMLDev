@@ -75,6 +75,7 @@ public class AsCodeRoundTripTest {
         d.shimClass = "com.novell.nds.dirxml.driver.ad.ADDriverShim";
         d.shimAuthServer = "ad.example.com";
         d.shimAuthId = "svc-idm";
+        d.traceSizeLimit = "200000";
         d.meta.put("pkg.version", "4.1.2");
         d.config.put(Driver.DRIVER_FILTER, xml("<filter><filter-class class-name=\"User\" publisher=\"sync\" subscriber=\"sync\">"
             + "<filter-attr attr-name=\"Surname\" publisher=\"sync\" subscriber=\"sync\"/></filter-class></filter>"));
@@ -130,6 +131,7 @@ public class AsCodeRoundTripTest {
         assertNotNull(d);
         assertEquals("com.novell.nds.dirxml.driver.ad.ADDriverShim", d.shimClass);
         assertEquals("svc-idm", d.shimAuthId);
+        assertEquals("200000", d.traceSizeLimit);
         assertEquals("4.1.2", d.meta.get("pkg.version"));
         assertTrue(d.config.containsKey(Driver.DRIVER_FILTER));
         assertTrue(d.config.containsKey(Driver.CONFIG_VALUES));

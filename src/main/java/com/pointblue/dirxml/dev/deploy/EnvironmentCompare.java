@@ -21,7 +21,7 @@ import java.util.Objects;
  * <ul>
  *   <li><b>values</b>: every scalar value an override can carry ({@code drivers/<d>.gcv.<n>} for the
  *       driver's own GCVs, {@code .shim.<n>}, {@code .ecv.<n>}, {@code .shim-auth-server},
- *       {@code .shim-auth-id}, {@code driverset.gcv.<n>}) that both hold and that differs, keyed as the
+ *       {@code .shim-auth-id}, {@code .trace-size-limit}, {@code driverset.gcv.<n>}) that both hold and that differs, keyed as the
  *       overrides file keys it;</li>
  *   <li><b>drift</b>: the diff of the first against the second after the first takes the second's value
  *       for each of those, so what remains is what a value can't explain: policies, filters, linkage,
@@ -484,6 +484,7 @@ public final class EnvironmentCompare {
             definitions(d.config.get(Driver.ENGINE_CONTROL_VALUES), p + "ecv.", out);
             out.put(p + Driver.SHIM_AUTH_SERVER, d.shimAuthServer);
             out.put(p + Driver.SHIM_AUTH_ID, d.shimAuthId);
+            out.put(p + Driver.TRACE_SIZE_LIMIT, d.traceSizeLimit);
         }
         return out;
     }

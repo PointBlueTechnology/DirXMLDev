@@ -2745,6 +2745,11 @@ public final class ProjectWriter {
                 case "shim-class": attrName = "DirXML-JavaModule"; value = treeDriver.shimClass; break;
                 case "shim-auth-server": attrName = "DirXML-ShimAuthServer"; value = treeDriver.shimAuthServer; break;
                 case "shim-auth-id": attrName = "DirXML-ShimAuthID"; value = treeDriver.shimAuthId; break;
+                case Driver.TRACE_SIZE_LIMIT:
+                    attrName = "DirXML-TraceSizeLimit";
+                    value = treeDriver.traceSizeLimit;
+                    setStringAttribute(driverId, "IdmParameter:InheritTraceSize", String.valueOf(value == null), "CString");
+                    break;
                 default: return;
             }
             setStringAttribute(driverId, attrName, value, "CString");
@@ -2987,6 +2992,10 @@ public final class ProjectWriter {
             }
             if (treeDriver.shimAuthId != null) {
                 attrs.append(CObjectXml.attr("DirXML-ShimAuthID", treeDriver.shimAuthId, "CString"));
+            }
+            if (treeDriver.traceSizeLimit != null) {
+                attrs.append(CObjectXml.attr("IdmParameter:InheritTraceSize", "false", "CString"));
+                attrs.append(CObjectXml.attr("DirXML-TraceSizeLimit", treeDriver.traceSizeLimit, "CString"));
             }
             Element sci = treeDriver.config.get(Driver.SHIM_CONFIG_INFO);
             if (sci != null) {

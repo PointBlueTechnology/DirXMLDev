@@ -24,6 +24,8 @@ public final class Driver {
     /** Keys of {@link #serverSettings} and the {@code drivers/<d>.<setting>} override keys: the driver's own never-sync settings. */
     public static final String SHIM_AUTH_SERVER = "shim-auth-server";
     public static final String SHIM_AUTH_ID = "shim-auth-id";
+    /** The {@code drivers/<d>.trace-size-limit} setting and its {@code driver.xml} attribute. */
+    public static final String TRACE_SIZE_LIMIT = "trace-size-limit";
 
     /** The tree's name; {@link DriverSet#renameDriver} changes it on a throwaway model (an environment that names the driver differently). */
     public String name;
@@ -31,6 +33,13 @@ public final class Driver {
     public String shimClass;
     public String shimAuthServer;
     public String shimAuthId;
+    /**
+     * The most the driver's trace file may grow to ({@code DirXML-TraceSizeLimit}, as the vault holds it); null when
+     * the driver inherits the driver set's or the tree never recorded it. A deploy writes it on a new driver, and on
+     * an existing one only with {@code --trace-size-limit}: the trace level and file stay operational
+     * ({@code driver.trace}).
+     */
+    public String traceSizeLimit;
     /** Raw config blobs by kind (see constants) — the primary server's, or the only server's. */
     public final Map<String, Element> config = new LinkedHashMap<>();
     /**

@@ -72,6 +72,8 @@ public final class Deployer {
         public Map<String, String> driverServers = Map.of();
         /** {@code --delete-all} kinds ({@code entitlements}, {@code forms}, {@code prds}), repeatable. */
         public List<String> deleteAllKinds = List.of();
+        /** {@code --trace-size-limit}: write the tree's trace size limit over an existing driver's (a new driver always gets it). */
+        public boolean traceSizeLimit;
         public int restartWaitSeconds = 180;
         /**
          * Hears each step as it happens, one line each ("snapshot: …", "write 3/9: modify cn=…", "restarting AD: waiting
@@ -325,7 +327,7 @@ public final class Deployer {
                     }
                 }
             }
-            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault, o.deleteAllKinds, scope);
+            Plan plan = Plan.of(diff, to, dsDn, secrets, o.secretsMode, liveNamed, o.restart, o.tree, o.deleteDrivers, vault, o.deleteAllKinds, scope, o.traceSizeLimit);
             r.planText = validationNote + overrideNote + plan.text(env.name, dsDn);
             o.progress.accept("planned: " + plan.steps.size() + " write(s), " + (plan.restart.size() + plan.serverRestarts.size()) + " restart(s)");
             if (!plan.deleteDriverRefusals.isEmpty()) {
@@ -334,7 +336,9 @@ public final class Deployer {
             }
             if (plan.isEmpty()) {
                 r.ok = true;
-                r.planText += "nothing to deploy — the vault matches the tree\n";
+                // a difference the plan leaves alone on purpose (its note says why) is not a match
+                r.planText += diff.isEmpty() ? "nothing to deploy — the vault matches the tree\n"
+                    : "nothing to deploy — the plan leaves the differences above as the notes say\n";
                 return r;
             }
             if (!plan.missingSecrets.isEmpty() && !o.allowMissingSecrets) {
@@ -531,7 +535,9 @@ public final class Deployer {
     /** The tree (as {@code env} gets it) against the live vault, what the tree doesn't deploy there set aside either way. */
     private static ModelDiff driftOf(Path tree, Environments.Environment env, DriverSet live) throws IOException {
         ReadApplied r = readApplied(tree, env);
-        return r.applied().ignoreNotDeployed(ModelDiff.of(r.ds(), live));
+        // the vault's trace size limit is its own unless a deploy is told otherwise (--trace-size-limit): never drift
+        return r.applied().ignoreNotDeployed(ModelDiff.of(r.ds(), live))
+            .only(ch -> !(ch.kind == ModelDiff.Kind.DRIVER_SETTING && com.pointblue.dirxml.dev.model.Driver.TRACE_SIZE_LIMIT.equals(ch.what)));
     }
 
     /** Execute one step; records it in the result; throws on failure. */

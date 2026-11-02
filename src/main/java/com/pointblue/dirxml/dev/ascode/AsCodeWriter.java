@@ -121,6 +121,7 @@ public final class AsCodeWriter {
         Manifest m = new Manifest("driver");
         m.attr("name", d.name).attr("dn", d.dn).attr("shim-class", d.shimClass)
          .attr("shim-auth-server", d.shimAuthServer).attr("shim-auth-id", d.shimAuthId)
+         .attr(Driver.TRACE_SIZE_LIMIT, d.traceSizeLimit)
          .attr("environments", com.pointblue.dirxml.dev.model.EnvironmentList.format(d.environments))
                 .attr("planned", com.pointblue.dirxml.dev.model.EnvironmentList.format(d.planned));
         m.meta(d.meta);

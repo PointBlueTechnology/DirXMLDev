@@ -53,6 +53,7 @@ import java.util.Map;
  *     attributes/
  *       java-module[value]                              -&gt; Driver.shimClass
  *       shim-auth-server[value] shim-auth-id[value]      -&gt; Driver.shimAuthServer/shimAuthId
+ *       trace-size-limit[value] (not inherit="true")    -&gt; Driver.traceSizeLimit
  *                                                        (fallback: authentication-info/server,user)
  *       driver-filter-xml/filter                         -&gt; Driver.config[DRIVER_FILTER]
  *       global-config-values/configuration-values        the DRIVER's own GCVs -&gt; Driver.config[CONFIG_VALUES]
@@ -232,6 +233,12 @@ public final class ExportReader {
                 d.shimAuthServer = server == null ? null : nullIfEmpty(Xds.text(server));
                 d.shimAuthId = user == null ? null : nullIfEmpty(Xds.text(user));
             }
+        }
+
+        // <trace-size-limit value=…/>, or inherit="true" for the driver set's
+        Element traceSize = directChild(attrs, "trace-size-limit");
+        if (traceSize != null && !"true".equalsIgnoreCase(traceSize.getAttribute("inherit"))) {
+            d.traceSizeLimit = nullIfEmpty(traceSize.getAttribute("value"));
         }
 
         Element filter = Xds.firstByName(scanRoot, "filter");

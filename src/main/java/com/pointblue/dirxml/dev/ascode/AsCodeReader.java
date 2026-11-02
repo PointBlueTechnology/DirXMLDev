@@ -88,6 +88,7 @@ public final class AsCodeReader {
         d.shimClass = attr(m, "shim-class");
         d.shimAuthServer = attr(m, "shim-auth-server");
         d.shimAuthId = attr(m, "shim-auth-id");
+        d.traceSizeLimit = attr(m, Driver.TRACE_SIZE_LIMIT);
         d.environments.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(m, "environments")));
             d.planned.addAll(com.pointblue.dirxml.dev.model.EnvironmentList.parse(attr(m, "planned")));
         readMeta(m, d.meta);

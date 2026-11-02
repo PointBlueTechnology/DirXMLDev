@@ -196,6 +196,7 @@ public final class DriverOps {
             d.shimClass = from.shimClass;
             d.shimAuthServer = from.shimAuthServer;
             d.shimAuthId = from.shimAuthId;
+            d.traceSizeLimit = from.traceSizeLimit;
             for (Map.Entry<String, Element> c : from.config.entrySet()) {
                 if (c.getValue() != null) {
                     d.config.put(c.getKey(), CanonicalXml.parse(CanonicalXml.serialize(c.getValue())).getDocumentElement());

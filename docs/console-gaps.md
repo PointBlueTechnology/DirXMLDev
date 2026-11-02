@@ -243,7 +243,8 @@ log entries kept (0 turns the set's logging off), `DirXML-LogEventsType` the pag
 without its own values uses the driver set's; `--inherit` clears a driver's four. The command shows all of
 this for a driver or the set and sets it live; `--level specific-events` needs `--events`. The trace
 settings were never in the tree (they are operational, `driver.trace`), and the log level follows them
-rather than the note's earlier idea of a tree attribute.
+rather than the note's earlier idea of a tree attribute. *(2026-11-02: the trace size limit is the
+exception — driver configuration, recorded in the tree; see vault-deploy.md, Decisions 6.)*
 
 **G11 `driver.secrets set|remove --kind named|shim-auth|remote-loader|key|keystore`.** The engine's
 `SetRemoteLoaderPassword`, `SetMutualAuthKeyPassword` and `SetMutualAuthKSPassword` (and their Clear
