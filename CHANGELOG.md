@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-11-02
+
 ### Added
 
 - **The driver object password**, the one the Remote Loader signs in to the engine with, is a secret kind of its own:
