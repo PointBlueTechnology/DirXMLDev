@@ -24,6 +24,9 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - A driver whose Remote Loader connection is in its auth server (`REMOTE(hostname=… port=…)…`, as Designer writes it
   for a native shim such as AD's), or whose shim is the Remote Loader proxy, is now seen as a Remote Loader driver.
   Before, only a Remote Loader shim parameter counted, so a deploy never set such a driver's Remote Loader password.
+- `vault.deploy --driver … --secrets missing|all` now reaches only the drivers it is scoped to. Before, it planned the
+  secrets of every driver in the set, so a one-driver deploy was refused for other drivers' missing secrets (or would
+  have set them).
 
 ## [0.61.0] - 2026-11-02
 
