@@ -43,13 +43,13 @@ Remote Loader lifecycle (the RL process is outside the vault), `--delete-driver`
 
 | command | extended op / attribute | notes |
 |---|---|---|
-| `driverset.status` | `GetDriverState`, `GetDriverStartOption` per driver; cache count via `ViewCacheEntries` (first page only) | one table; the thing an operator looks at first |
+| `driverset.status` | `GetDriverState`, `GetDriverStartOption` per driver; cache size in bytes (cache and unprocessed) via `GetDriverStats`, not a count of events | one table; the thing an operator looks at first |
 | `driver.status` | the same, plus trace level/file, named-password names, last audit entries for the driver | |
 | `driver.start` | `StartDriver` → `waitForState(RUNNING)`; a start that falls back to STOPPED is reported as the engine refusing (check the trace) | |
 | `driver.stop` | `StopDriver` → `waitForState(STOPPED)`; some shims take >60 s to stop (spike 1b) — default wait 180 s | the cache is kept; events keep queueing |
 | `driver.restart` | `RestartDriver` (proven in spike 1b) | what deploy does |
 | `driver.cache view` | `ViewCacheEntries` paged through the chunked-result protocol (as `DxCacheReader`); `--out` writes the events as a simulator case dir (`cache.xds` + `input.xds`), the same shape `bin/sim dxcache` produces | read-only; the driver may be running |
-| `driver.cache clear` | `DeleteCacheEntries(dn, 0, size, "", 0)` — spike 5a: `(position, count)`, `count=0` rejected, `size` from `GetDriverStats`; verify with `ViewCacheEntries` | destructive: every queued event is discarded |
+| `driver.cache clear` | `DeleteCacheEntries(dn, 0, count, "", 0)` — spike 5a: `(position, count)`, `count=0` rejected, `count` = the events read by the paged `ViewCacheEntries` (`GetDriverStats` gives the size in bytes, not a count); verify with `ViewCacheEntries` | destructive: every queued event is discarded |
 | `driver.migrate` | `MigrateApp(dn, xds)` with an XDS file (`<nds><input><query class-name=…>` as iManager's Migrate from Application builds it) | the driver must be running |
 | `driver.resync` | `DriverResync(dn, since)` — epoch **seconds**; no `--since` = `Date(0)` = full resync | the driver must be running; a full resync of a big tree is a real load |
 | `driver.secrets list/set/remove` | `List/Set/RemoveNamedPassword`; `list` also says whether the driver object, application and Remote Loader passwords are set (`GetPasswordsState`, no values); `set` reads the value from the environment's secrets file (`<driver>.named.<name>`) or `--stdin`, never from an argument | `vault.secrets` from the Phase 4 note lands here |
