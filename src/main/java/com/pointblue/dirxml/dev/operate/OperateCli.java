@@ -493,14 +493,14 @@ public final class OperateCli {
                         result = Operate.secretsList(engine, env, driver);
                     } else if ("set".equals(sub)) {
                         if ("named".equals(kind) && name == null) {
-                            System.err.println("usage: driver.secrets set --env E --driver D [--kind named|shim-auth|remote-loader|key|keystore] [--name X] [--stdin]");
+                            System.err.println("usage: driver.secrets set --env E --driver D [--kind named|shim-auth|remote-loader|driver-object|key|keystore] [--name X] [--stdin]");
                             return 2;
                         }
                         Secrets secrets = env.secretsFile == null ? Secrets.none() : Secrets.load(env.secretsFile);
                         result = Operate.secretsSet(engine, env, driver, kind, name, secrets, opts.containsKey("stdin"), yes, confirm, tree);
                     } else if ("remove".equals(sub)) {
                         if ("named".equals(kind) && name == null) {
-                            System.err.println("usage: driver.secrets remove --env E --driver D [--kind named|shim-auth|remote-loader|key|keystore] [--name X]");
+                            System.err.println("usage: driver.secrets remove --env E --driver D [--kind named|shim-auth|remote-loader|driver-object|key|keystore] [--name X]");
                             return 2;
                         }
                         result = Operate.secretsRemove(engine, env, driver, kind, name, yes, confirm, tree);
@@ -853,7 +853,7 @@ public final class OperateCli {
         System.err.println("  vault.email-server [set] --env E [--host H] [--port N] [--from A] [--user U] [--tls true|false] [--timeout N] [--protocol P] [--auth M] [--password-key K|--stdin]   the notification collection's SMTP settings; set writes them");
         System.err.println("  driver.migrate --env E --driver D --direction vault --base DN --filter F --class C [--max N] [--dry-run] --yes   send vault objects into the application (one <sync> per object through the running driver)");
         System.err.println("  driver.log-level [set] --env E [--driver D] [--level errors|errors-and-warnings|last-log-time|off|specific-events] [--events id,…] [--limit N] [--events-type N] [--inherit]   the log level of a driver or the driver set; set writes it live, --inherit makes a driver use the set's");
-        System.err.println("  driver.secrets set|remove --env E --driver D [--kind named|shim-auth|remote-loader|key|keystore] [--name X] [--stdin]   one secret live; key and keystore are the Remote Loader's mutual-authentication passwords");
+        System.err.println("  driver.secrets set|remove --env E --driver D [--kind named|shim-auth|remote-loader|driver-object|key|keystore] [--name X] [--stdin]   one secret live; driver-object is the password the Remote Loader signs in to the engine with, key and keystore its mutual-authentication passwords");
         System.err.println("  driver.query --env E --driver D [--class C] [--scope subtree|subordinates|entry] [--dn DN] [--association A] [--search name=value…] [--read-attr A…|none]   ask the connected system through the running driver (the engine's query verb); the <instance>s it answers");
         System.err.println("  driver.health [clear] --env E --driver D [--yes]   the Driver Health job's last state per server, the health configuration on the driver, the set's health jobs; clear removes the recorded status");
         System.err.println("  driver.submit --env E --driver D --xds <file> [--mode command|event|queue] --yes [--tree DIR]   SubmitCommand (subscriber), SubmitEvent (publisher) or QueueEvent (into the cache); with --tree, the simulator canary");

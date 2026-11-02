@@ -7,8 +7,26 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **The driver object password**, the one the Remote Loader signs in to the engine with, is a secret kind of its own:
+  key `<driver>.driver-object-password`, and `driver.secrets set --kind driver-object`. It is set as a user's
+  password is, with an LDAP modify of the driver object's `userPassword`. `remove` refuses it: eDirectory replaces
+  an object password but has no clearing it.
+  - **A deploy:** a new Remote Loader driver needs it, as it needs the Remote Loader password. On an existing driver,
+    `--secrets all` sets either one only when the secrets file has it, since both have to match the Remote Loader's
+    own configuration.
+- `driver.secrets list` says whether the driver object, application and Remote Loader passwords are set, from the
+  engine's `GetPasswordsState` (no values).
+
 ### Fixed
 
+- A driver whose Remote Loader connection is in its auth server (`REMOTE(hostname=… port=…)…`, as Designer writes it
+  for a native shim such as AD's), or whose shim is the Remote Loader proxy, is now seen as a Remote Loader driver.
+  Before, only a Remote Loader shim parameter counted, so a deploy never set such a driver's Remote Loader password.
+- `vault.deploy --driver … --secrets missing|all` now reaches only the drivers it is scoped to. Before, it planned the
+  secrets of every driver in the set, so a one-driver deploy was refused for other drivers' missing secrets (or would
+  have set them).
 - `engine.stats` and `driver.status` print a driver's cache size with its unit (`cache=465 bytes`), so it is not
   taken for a number of events. The engine reports the cache's size in bytes; `driver.cache view` counts the events
   (465 bytes was 2 events). The JSON fields `cacheSize` and `unprocessedSize` keep their names and values; the docs

@@ -104,7 +104,8 @@ public class IdmOpsVendorTest {
             {"ClearMutualAuthKeyPasswordRequest", "CLEAR_MUTUAL_AUTH_KEY_PASSWORD"},
             {"ClearMutualAuthKSPasswordRequest", "CLEAR_MUTUAL_AUTH_KS_PASSWORD"}, {"DriverGetSchemaRequest", "DRIVER_GET_SCHEMA"},
             {"StartJobRequest", "START_JOB"}, {"AbortJobRequest", "ABORT_JOB"}, {"NotifyJobUpdateRequest", "NOTIFY_JOB_UPDATE"},
-            {"GetJobStateRequest", "GET_JOB_STATE"}, {"SetDriverSetRequest", "SET_DRIVER_SET"}}) {
+            {"GetJobStateRequest", "GET_JOB_STATE"}, {"SetDriverSetRequest", "SET_DRIVER_SET"},
+            {"GetPasswordsStateRequest", "GET_PASSWORDS_STATE"}}) {
             same(oneDn[0], a(dn), IdmOps.Op.valueOf(oneDn[1]), dn);
         }
         same("GetVersionRequest", a(), IdmOps.Op.GET_VERSION);
