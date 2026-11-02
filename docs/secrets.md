@@ -1,7 +1,7 @@
 # Credentials and secret managers
 
 Every credential the `idm` CLI reads — an environment's bind password, the applications
-password, a driver's shim or Remote Loader password, a named password, a shim auth id that is
+password, a driver's shim, Remote Loader or driver object password, a named password, a shim auth id that is
 an API key — comes from one of four forms of the same key, in a properties file the CLI reads
 (`environments.properties` for the environment, `secrets-<env>.properties` for the drivers;
 both kept at mode 600):
@@ -68,7 +68,8 @@ uses a command or an environment variable.
 
 ```properties
 <driver>.shim-auth-password        the shim's authentication password (set with SetAppPassword)
-<driver>.remote-loader-password    the Remote Loader password
+<driver>.remote-loader-password    the Remote Loader password (the engine gives it to the Remote Loader)
+<driver>.driver-object-password    the driver object's password (the Remote Loader gives it to the engine)
 <driver>.mutual-auth-key-password       the Remote Loader's mutual-authentication key password (optional)
 <driver>.mutual-auth-keystore-password  the Remote Loader's mutual-authentication keystore password (optional)
 <driver>.shim-auth-id              a shim auth id that is itself a credential (client id, API key); kept out of the tree

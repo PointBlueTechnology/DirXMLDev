@@ -165,6 +165,17 @@ public final class Plan {
     public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
                           Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree,
                           List<String> deleteDrivers, VaultAccess vault, List<String> deleteAllKinds) {
+        return of(diff, to, dsDn, secrets, secretsMode, liveNamedPasswords, restartRunning, tree, deleteDrivers, vault, deleteAllKinds, List.of());
+    }
+
+    /**
+     * @param onlyDrivers the drivers the deploy is scoped to ({@code --driver}, as the vault names them); empty for
+     *                    every driver. {@code --secrets missing|all} reaches only these drivers' secrets
+     */
+    public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
+                          Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree,
+                          List<String> deleteDrivers, VaultAccess vault, List<String> deleteAllKinds,
+                          java.util.Collection<String> onlyDrivers) {
         Plan p = new Plan();
         p.deleteAllKinds.addAll(deleteAllKinds);
         p.primaryServer = vault != null ? Servers.primary(vault) : to.meta.get(Servers.PRIMARY_META);
@@ -576,7 +587,7 @@ public final class Plan {
         // forced / missing secrets on existing drivers
         if (!"none".equals(secretsMode)) {
             for (Driver d : to.drivers) {
-                if (p.newDrivers.contains(d.name)) {
+                if (p.newDrivers.contains(d.name) || (!onlyDrivers.isEmpty() && !onlyDrivers.contains(d.name))) {
                     continue;
                 }
                 String dn = VaultMapping.driverDn(dsDn, d.name);
@@ -595,7 +606,9 @@ public final class Plan {
                         secretSteps.add(new Step(Op.SET_SECRET, dn, need.key, null, null,
                             "set secret " + need.key + " (" + need.kind + ")", "secrets#" + d.name, d.name));
                     } else {
-                        if (!need.optional) {
+                        // an existing driver's Remote Loader and driver object passwords already match its Remote
+                        // Loader; requiring them here would force a change on the Remote Loader's host too
+                        if (!need.optional && !need.kind.equals("remote-loader") && !need.kind.equals("driver-object")) {
                                 p.missingSecrets.add(need.key + " — " + need.because);
                             }
                     }

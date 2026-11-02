@@ -11,6 +11,7 @@ import com.pointblue.dirxml.dev.model.Scope;
 import com.pointblue.dirxml.dev.packages.InstalledChecksum;
 import com.pointblue.dirxml.dev.validate.ValidatorTest;
 import org.junit.Test;
+import org.w3c.dom.Element;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -270,6 +271,52 @@ public class PlanTest {
         assertEquals("AD.shim-auth-password", all.steps.get(0).attr);
         assertTrue(all.text("stg", DS).contains("set secret AD.shim-auth-password"));
         assertFalse(all.text("stg", DS).contains("pw"));   // never the value
+    }
+
+    @Test
+    public void forcedSecretsStayWithinTheDriverScope() throws IOException {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        Driver other = new Driver("Other");
+        other.shimClass = "com.example.Shim";
+        other.shimAuthId = "svc";
+        other.config.put(Driver.DRIVER_FILTER, ValidatorTest.xml("<filter/>"));
+        from.drivers.add(other);
+        to.drivers.add(other);
+        Path f = Files.createTempFile("secrets", ".properties");
+        Files.writeString(f, "AD.shim-auth-password=pw\n");
+        ModelDiff diff = VaultDiff.of(from, to, List.of("AD"));
+        Plan everyDriver = Plan.of(diff, to, DS, Secrets.load(f), "all", Map.of(), false, null, List.of(), null, List.of());
+        assertTrue(everyDriver.missingSecrets.toString(), everyDriver.missingSecrets.stream().anyMatch(m -> m.startsWith("Other.")));
+        Plan scoped = Plan.of(diff, to, DS, Secrets.load(f), "all", Map.of(), false, null, List.of(), null, List.of(), List.of("AD"));
+        assertTrue(scoped.text("stg", DS), scoped.missingSecrets.isEmpty());
+        assertEquals(List.of("AD.shim-auth-password"), scoped.steps.stream().filter(s -> s.op == Plan.Op.SET_SECRET).map(s -> s.attr).toList());
+    }
+
+    @Test
+    public void driverObjectPasswordIsRequiredOnlyForANewRemoteLoaderDriver() throws IOException {
+        DriverSet from = VaultMappingTest.model();
+        DriverSet to = VaultMappingTest.model();
+        Element rl = ValidatorTest.xml("<driver-config><definitions><definition name=\"remote-loader-host\" display-name=\"RL\" type=\"string\">"
+            + "<value>rl:8090</value></definition></definitions></driver-config>");
+        to.driver("AD").config.put(Driver.SHIM_CONFIG_INFO, rl);
+        from.driver("AD").config.put(Driver.SHIM_CONFIG_INFO, rl);
+        Driver n = new Driver("New");
+        n.shimClass = "com.novell.nds.dirxml.remote.driver.DriverShimImpl";
+        n.config.put(Driver.DRIVER_FILTER, ValidatorTest.xml("<filter/>"));
+        n.config.put(Driver.SHIM_CONFIG_INFO, rl);
+        to.drivers.add(n);
+        Path f = Files.createTempFile("secrets", ".properties");
+        Files.writeString(f, "AD.shim-auth-password=pw\nNew.remote-loader-password=rl\n");
+
+        Plan p = plan(from, to, Secrets.load(f), "all");
+        assertEquals(p.text("stg", DS), List.of("New.driver-object-password — the Remote Loader signs in to the engine with the driver object's password"), p.missingSecrets);
+
+        Files.writeString(f, "AD.shim-auth-password=pw\nAD.remote-loader-password=rl\nAD.driver-object-password=d\nNew.remote-loader-password=rl\nNew.driver-object-password=d\n");
+        Plan q = plan(from, to, Secrets.load(f), "all");
+        assertTrue(q.text("stg", DS), q.missingSecrets.isEmpty());
+        List<String> set = q.steps.stream().filter(s -> s.op == Plan.Op.SET_SECRET).map(s -> s.attr).toList();
+        assertTrue(set.toString(), set.contains("AD.driver-object-password") && set.contains("New.driver-object-password"));
     }
 
     @Test
