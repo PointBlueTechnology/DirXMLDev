@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- A deploy that changes a packaged object (a GCV object, policy or other driver resource that a package
+  installed) no longer rewrites its package stamps when the vault already has them. Before, it added the
+  `DirXML-PkgItemAux` class and wrote `DirXML-pkgGUID`, `DirXML-pkgAssociationId` and `DirXML-pkgChecksum`
+  again with the same values, so a one-value GCV change planned five steps. It now writes only the stamps that
+  differ, and adds the class only when the vault object has no stamps. Identity Applications objects already
+  worked this way.
+
 ## [0.62.0] - 2026-11-02
 
 ### Added
