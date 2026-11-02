@@ -100,7 +100,7 @@ public class IdmOpsVendorTest {
             {"GetDriverStateRequest", "GET_DRIVER_STATE"}, {"StartDriverRequest", "START_DRIVER"}, {"StopDriverRequest", "STOP_DRIVER"},
             {"RestartDriverRequest", "RESTART_DRIVER"}, {"GetDriverStartOptionRequest", "GET_DRIVER_START_OPTION"},
             {"ListNamedPasswordsRequest", "LIST_NAMED_PASSWORDS"}, {"ClearLogEventsRequest", "CLEAR_LOG_EVENTS"},
-            {"ClearRemoteLoaderPasswordRequest", "CLEAR_REMOTE_LOADER_PASSWORD"},
+            {"ClearRemoteLoaderPasswordRequest", "CLEAR_REMOTE_LOADER_PASSWORD"}, {"ClearAppPasswordRequest", "CLEAR_APP_PASSWORD"},
             {"ClearMutualAuthKeyPasswordRequest", "CLEAR_MUTUAL_AUTH_KEY_PASSWORD"},
             {"ClearMutualAuthKSPasswordRequest", "CLEAR_MUTUAL_AUTH_KS_PASSWORD"}, {"DriverGetSchemaRequest", "DRIVER_GET_SCHEMA"},
             {"StartJobRequest", "START_JOB"}, {"AbortJobRequest", "ABORT_JOB"}, {"NotifyJobUpdateRequest", "NOTIFY_JOB_UPDATE"},
@@ -128,6 +128,7 @@ public class IdmOpsVendorTest {
         same("RemoveNamedPasswordRequest", a(dn, "key"), IdmOps.Op.REMOVE_NAMED_PASSWORD, dn, "key");
         same("SetNamedPasswordRequest", a(dn, "key", "Key ä", "sëcret".toCharArray()), IdmOps.Op.SET_NAMED_PASSWORD,
             dn, "key", "Key ä", "sëcret".toCharArray());
+        same("SetAppPasswordRequest", a(dn, "äpp".toCharArray()), IdmOps.Op.SET_APP_PASSWORD, dn, "äpp".toCharArray());
         same("SetRemoteLoaderPasswordRequest", a(dn, "rl".toCharArray()), IdmOps.Op.SET_REMOTE_LOADER_PASSWORD, dn, "rl".toCharArray());
         same("SetMutualAuthKeyPasswordRequest", a(dn, "k".toCharArray()), IdmOps.Op.SET_MUTUAL_AUTH_KEY_PASSWORD, dn, "k".toCharArray());
         same("SetMutualAuthKSPasswordRequest", a(dn, "ks".toCharArray()), IdmOps.Op.SET_MUTUAL_AUTH_KS_PASSWORD, dn, "ks".toCharArray());

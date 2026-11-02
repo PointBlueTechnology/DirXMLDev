@@ -22,6 +22,8 @@ public final class FakeVault implements VaultAccess {
     final List<String> restarted = new ArrayList<>();
     final List<String> deleted = new ArrayList<>();
     final Map<String, List<String>> namedPasswords = new HashMap<>();
+    /** driver dn (lower case) → what {@code SetAppPassword} was given. */
+    final Map<String, String> appPasswords = new HashMap<>();
     boolean closed;
     /** When set, any write of {@code userPassword} fails with this message (the tree's password policy saying no). */
     public String refuseUserPasswords;
@@ -276,6 +278,14 @@ public final class FakeVault implements VaultAccess {
     public void setNamedPassword(String dn, String name, String displayName, char[] value) {
         open();
         namedPasswords.computeIfAbsent(key(dn), k -> new ArrayList<>()).add(name);
+    }
+
+    @Override
+    public boolean setAppPassword(String driverDn, char[] value) {
+        open();
+        appPasswords.put(key(driverDn), new String(value));
+        java.util.Arrays.fill(value, '\0');
+        return false;
     }
 
     @Override

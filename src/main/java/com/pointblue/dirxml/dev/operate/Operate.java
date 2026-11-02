@@ -145,6 +145,15 @@ public final class Operate {
 
         void setNamedPassword(String dn, String name, String displayName, char[] value);
 
+        /** {@code SetAppPassword} / {@code ClearAppPassword}: the shim's authentication password; true when a clear-text value was removed first (see {@link Vault#setAppPassword}). */
+        default boolean setAppPassword(String dn, char[] value) {
+            throw new UnsupportedOperationException("setAppPassword");
+        }
+
+        default boolean clearAppPassword(String dn) {
+            throw new UnsupportedOperationException("clearAppPassword");
+        }
+
         /** The Remote Loader password and the mutual-authentication key and keystore passwords (docs/console-gaps.md §11). */
         default void setRemoteLoaderPassword(String dn, char[] value) {
             throw new UnsupportedOperationException("setRemoteLoaderPassword");
@@ -302,6 +311,16 @@ public final class Operate {
 
             public Vault.Entry read(String dn, String... attrs) {
                 return v.read(dn, attrs);
+            }
+
+            @Override
+            public boolean setAppPassword(String dn, char[] value) {
+                return v.setAppPassword(dn, value);
+            }
+
+            @Override
+            public boolean clearAppPassword(String dn) {
+                return v.clearAppPassword(dn);
             }
 
             @Override
@@ -1870,6 +1889,9 @@ public final class Operate {
         return secretsSet(engine, env, driver, "named", name, secrets, stdin, yes, confirm, tree);
     }
 
+    /** What a shim-auth set or remove reports when it had to delete a clear-text value first (see {@link Vault#setAppPassword}). */
+    static final String HEALED = "a clear-text DirXML-ShimAuthPassword, as written by DirXMLDev before 0.61.0, was deleted first";
+
     /** The secret kinds {@code driver.secrets} knows: a named password, the shim's authentication password, the Remote Loader password, its mutual-authentication key and keystore passwords. */
     public static final List<String> SECRET_KINDS = List.of("named", "shim-auth", "remote-loader", "key", "keystore");
 
@@ -1887,7 +1909,7 @@ public final class Operate {
 
     /**
      * Set one secret of a driver live (docs/console-gaps.md §11): a named password ({@code SetNamedPassword}),
-     * the shim's authentication password ({@code DirXML-ShimAuthPassword}), the Remote Loader password or
+     * the shim's authentication password ({@code SetAppPassword}), the Remote Loader password or
      * its mutual-authentication key and keystore passwords (the engine's extended operations). The value
      * comes from the environment's secrets file by its key, or from stdin. Light write, audited.
      */
@@ -1920,11 +1942,12 @@ public final class Operate {
         }
         String dn = driverDn(env, driver);
         String error = null;
+        boolean healed = false;
         String what = "named".equals(kind) ? "named password '" + name + "'" : kind.replace('-', ' ') + " password";
         try {
             switch (kind) {
                 case "named": engine.setNamedPassword(dn, name, name, value); break;
-                case "shim-auth": engine.replace(dn, com.pointblue.dirxml.dev.deploy.VaultMapping.SHIM_AUTH_PASSWORD, List.of(new String(value).getBytes(StandardCharsets.UTF_8))); Arrays.fill(value, '\0'); break;
+                case "shim-auth": healed = engine.setAppPassword(dn, value); break;
                 case "remote-loader": engine.setRemoteLoaderPassword(dn, value); break;
                 case "key": engine.setMutualAuthKeyPassword(dn, value); break;
                 default: engine.setMutualAuthKeystorePassword(dn, value); break;
@@ -1938,12 +1961,13 @@ public final class Operate {
         if (error == null) {
             rec.secretsSet.add(secretKey(kind, driver, name));
         }
-        rec.detail = "driver.secrets set '" + driver + "': " + what + (error != null ? " — " + error : "");
+        String note = healed ? HEALED : null;
+        rec.detail = "driver.secrets set '" + driver + "': " + what + (note != null ? " (" + note + ")" : "") + (error != null ? " — " + error : "");
         DeployLog.append(tree, rec);
         Result r = new Result();
         r.ok = error == null;
-        r.text = error == null ? "set " + what + " on '" + driver + "'\n" : "FAILED   " + error + "\n";
-        r.json = "{\"ok\":" + r.ok + ",\"kind\":" + q(kind) + ",\"name\":" + q(name == null ? "" : name) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        r.text = error == null ? "set " + what + " on '" + driver + "'\n" + (note != null ? "  note: " + note + "\n" : "") : "FAILED   " + error + "\n";
+        r.json = "{\"ok\":" + r.ok + ",\"kind\":" + q(kind) + ",\"name\":" + q(name == null ? "" : name) + (note != null ? ",\"note\":" + q(note) : "") + (error != null ? ",\"error\":" + q(error) : "") + "}";
         return r;
     }
 
@@ -1968,10 +1992,11 @@ public final class Operate {
         String dn = driverDn(env, driver);
         String what = "named".equals(kind) ? "named password '" + name + "'" : kind.replace('-', ' ') + " password";
         String error = null;
+        boolean healed = false;
         try {
             switch (kind) {
                 case "named": engine.removeNamedPassword(dn, name); break;
-                case "shim-auth": engine.replace(dn, com.pointblue.dirxml.dev.deploy.VaultMapping.SHIM_AUTH_PASSWORD, List.of()); break;
+                case "shim-auth": healed = engine.clearAppPassword(dn); break;
                 case "remote-loader": engine.clearRemoteLoaderPassword(dn); break;
                 case "key": engine.clearMutualAuthKeyPassword(dn); break;
                 default: engine.clearMutualAuthKeystorePassword(dn); break;
@@ -1981,12 +2006,13 @@ public final class Operate {
         }
         DeployLog.Record rec = DeployLog.record(env.name, "operate");
         rec.outcome = error == null ? "ok" : "failed";
-        rec.detail = "driver.secrets remove '" + driver + "': " + what + (error != null ? " — " + error : "");
+        String note = healed ? HEALED : null;
+        rec.detail = "driver.secrets remove '" + driver + "': " + what + (note != null ? " (" + note + ")" : "") + (error != null ? " — " + error : "");
         DeployLog.append(tree, rec);
         Result r = new Result();
         r.ok = error == null;
-        r.text = error == null ? "removed " + what + " from '" + driver + "'\n" : "FAILED   " + error + "\n";
-        r.json = "{\"ok\":" + r.ok + ",\"kind\":" + q(kind) + ",\"name\":" + q(name == null ? "" : name) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        r.text = error == null ? "removed " + what + " from '" + driver + "'\n" + (note != null ? "  note: " + note + "\n" : "") : "FAILED   " + error + "\n";
+        r.json = "{\"ok\":" + r.ok + ",\"kind\":" + q(kind) + ",\"name\":" + q(name == null ? "" : name) + (note != null ? ",\"note\":" + q(note) : "") + (error != null ? ",\"error\":" + q(error) : "") + "}";
         return r;
     }
 

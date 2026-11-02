@@ -443,6 +443,33 @@ public class DeployerTest {
         return ds;
     }
 
+    /** A new driver's shim password goes to the engine with SetAppPassword, never as a DirXML-ShimAuthPassword write (clear text the shim never gets). */
+    @Test
+    public void aNewDriversShimPasswordIsSetThroughTheEngine() throws Exception {
+        FakeVault vault = seedVault(VaultMappingTest.model());
+        DriverSet to = VaultMappingTest.model();
+        Driver n = new Driver("New");
+        n.shimClass = "com.example.NewShim";
+        n.shimAuthServer = "ldap://app";
+        n.shimAuthId = "svc";
+        n.config.put(Driver.DRIVER_FILTER, ValidatorTest.xml("<filter/>"));
+        to.drivers.add(n);
+        Path tree = tmp.newFolder("newdrv").toPath();
+        AsCodeWriter.write(to, tree);
+        Path secrets = tmp.newFile("secrets.properties").toPath();
+        Files.writeString(secrets, "New.shim-auth-password=pw1\n", StandardCharsets.UTF_8);
+        Files.setPosixFilePermissions(secrets, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        Environments.Environment env = new Environments.Environment("test", "ldaps://fake:636", "cn=admin,o=system", "pw", DS,
+            Environments.Tier.STG, null, secrets, true, null, null);
+
+        Deployer.Result r = new Deployer(options(tree, env, List.of()), vault).run();
+        assertTrue(r.text(), r.ok);
+        String dn = VaultMapping.driverDn(DS, "New");
+        assertEquals("pw1", vault.appPasswords.get(dn.toLowerCase(java.util.Locale.ROOT)));
+        assertFalse(vault.read(dn).attrs.containsKey(VaultMapping.SHIM_AUTH_PASSWORD));
+        assertEquals(List.of("New.shim-auth-password"), r.secretsSet);
+    }
+
     @Test
     public void aDeployScopedToADriverIsNotHeldBackByAnErrorInAnotherDriver() throws Exception {
         FakeVault vault = seedVault(withBrokenDriver());

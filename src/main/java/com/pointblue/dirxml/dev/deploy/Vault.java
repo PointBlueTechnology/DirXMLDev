@@ -876,6 +876,60 @@ public final class Vault implements VaultAccess {
         }
     }
 
+    /**
+     * {@code SetAppPassword} (see {@link VaultAccess#setAppPassword}). A {@code DirXML-ShimAuthPassword} written
+     * with a plain LDAP modify (DirXMLDev before 0.61.0 did that) holds clear text, which the engine cannot read:
+     * both {@code SetAppPassword} and {@code ClearAppPassword} then fail with -638. In that one case the value is
+     * deleted with an LDAP modify and the call made once more; the return value says so, for the caller to report.
+     */
+    @Override
+    public boolean setAppPassword(String driverDn, char[] value) {
+        try {
+            try {
+                call(Op.SET_APP_PASSWORD, driverDn, value);
+                return false;
+            } catch (Exception e) {
+                if (!noCharacterMapping(e)) {
+                    throw e;
+                }
+            }
+            replace(driverDn, VaultMapping.SHIM_AUTH_PASSWORD, List.of());
+            call(Op.SET_APP_PASSWORD, driverDn, value);
+            return true;
+        } catch (VaultException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new VaultException("SetAppPassword " + driverDn + ": " + e.getMessage(), e);
+        } finally {
+            Arrays.fill(value, '\0');
+        }
+    }
+
+    /** {@code ClearAppPassword}; a clear-text value the engine cannot read (-638, see {@link #setAppPassword}) is deleted with an LDAP modify instead. Returns true in that case. */
+    public boolean clearAppPassword(String driverDn) {
+        try {
+            call(Op.CLEAR_APP_PASSWORD, driverDn);
+            return false;
+        } catch (Exception e) {
+            if (!noCharacterMapping(e)) {
+                throw new VaultException("ClearAppPassword " + driverDn + ": " + e.getMessage(), e);
+            }
+        }
+        replace(driverDn, VaultMapping.SHIM_AUTH_PASSWORD, List.of());
+        return true;
+    }
+
+    /** eDirectory's -638 (no character mapping), anywhere in the exception's messages. */
+    private static boolean noCharacterMapping(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            String m = t instanceof com.novell.ldap.LDAPException le ? le.getLDAPErrorMessage() + " " + t.getMessage() : t.getMessage();
+            if (m != null && m.contains("-638")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public void setRemoteLoaderPassword(String driverDn, char[] value) {
         try {

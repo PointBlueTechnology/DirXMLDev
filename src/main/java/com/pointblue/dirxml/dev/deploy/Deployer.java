@@ -608,7 +608,10 @@ public final class Deployer {
                 }
                 try {
                     if (key.endsWith("." + Secrets.SHIM_AUTH)) {
-                        vault.replace(s.dn, VaultMapping.SHIM_AUTH_PASSWORD, List.of(new String(value).getBytes(StandardCharsets.UTF_8)));
+                        // SetAppPassword: the engine encrypts it; a plain LDAP write would store clear text the shim never gets
+                        if (vault.setAppPassword(s.dn, value.clone())) {
+                            r.skipped.add("note: " + s.description + " — a clear-text DirXML-ShimAuthPassword, as written by DirXMLDev before 0.61.0, was deleted first");
+                        }
                     } else if (key.contains(".named.")) {
                         String name = key.substring(key.indexOf(".named.") + 7);
                         vault.setNamedPassword(s.dn, name, name, value.clone());
