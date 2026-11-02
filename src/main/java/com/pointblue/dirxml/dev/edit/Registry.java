@@ -583,7 +583,7 @@ public final class Registry {
         register("override.set", "set a value for one environment (overrides/<env>.properties); the tree keeps its base value",
             a -> new OverrideOps.Set(a.get("env"), a.get("key"), a.get("value")),
             req("env", "environment name"),
-            req("key", "drivers/<driver>.gcv.<name> | .shim.<name> | .ecv.<name> | .shim-auth-server | .shim-auth-id | .name (the driver's name in that vault) | driverset.gcv.<name>"),
+            req("key", "drivers/<driver>.gcv.<name> | .shim.<name> | .ecv.<name> | .shim-auth-server | .shim-auth-id | .trace-size-limit | .name (the driver's name in that vault) | driverset.gcv.<name>"),
             req("value", "the environment's value"));
         register("environments.set", "which environments get objects and which they are planned for (driver.xml / driverset.xml environments, planned); several objects at once, one tree path per line",
             a -> new EnvironmentOps.Set(a.get("paths"), a.containsKey("every") ? "" : a.get("environments"), a.containsKey("no-plan") ? "" : a.get("planned")),
@@ -607,9 +607,9 @@ public final class Registry {
             req("to", "the server to copy to: its DN, its name, or primary"),
             opt("driver", "one driver (default: every driver)"),
             opt("only", "some of gcv,shim,ecv,auth-server,auth-id (default: all)"));
-        register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, environments (the environments it is deployed to, comma-separated; --clear = every environment), planned (environments it is meant to reach but isn't promoted to yet), param:<shim parameter>, engine:<engine control value>",
+        register("driver.set", "set a driver setting: shim-class, shim-auth-server, shim-auth-id, trace-size-limit (the most its trace file grows to, as the vault holds it; --clear = the tree stops recording it and the vault keeps its own), environments (the environments it is deployed to, comma-separated; --clear = every environment), planned (environments it is meant to reach but isn't promoted to yet), param:<shim parameter>, engine:<engine control value>",
             a -> new ConfigOps.DriverSet_(a.get("driver"), a.get("key"), a.containsKey("clear") ? "" : a.get("value")),
-            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|environments|planned|param:<name>|engine:<name>"), opt("value", "the value"),
+            drv, req("key", "shim-class|shim-auth-server|shim-auth-id|trace-size-limit|environments|planned|param:<name>|engine:<name>"), opt("value", "the value"),
             flag("clear", "flag: make the setting empty (an empty --value reads as missing on the command line)"));
         register("driver.setting.add", "add a shim parameter (param:<name>, into a section of the shim config) or an engine control value (engine:<name>): its definition with display name, type and value",
             a -> new ConfigOps.DriverSettingAdd(a.get("driver"), a.get("key"), a.get("type"), a.get("display"), a.get("value"), a.get("section"), a.get("description")),

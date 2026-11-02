@@ -131,6 +131,7 @@ public final class LdifReader {
             d.shimClass = e.first("DirXML-JavaModule");
             d.shimAuthServer = e.first("DirXML-ShimAuthServer");
             d.shimAuthId = e.first("DirXML-ShimAuthID");
+            d.traceSizeLimit = e.first("DirXML-TraceSizeLimit");
             putConfig(d, Driver.SHIM_CONFIG_INFO, e.first("DirXML-ShimConfigInfo"));
             putConfig(d, Driver.CONFIG_VALUES, e.first("DirXML-ConfigValues"));
             putConfig(d, Driver.DRIVER_FILTER, e.first("DirXML-DriverFilter"));

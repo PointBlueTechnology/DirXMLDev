@@ -343,7 +343,7 @@ Since 0.46.0 (DirXMLDev-web #136):
 `key = value` line per value that differs from the tree's base. Keys:
 `drivers/<driver>.gcv.<name>`, `drivers/<driver>.shim.<name>`,
 `drivers/<driver>.ecv.<name>`, `drivers/<driver>.shim-auth-server`,
-`drivers/<driver>.shim-auth-id`, `driverset.gcv.<name>`
+`drivers/<driver>.shim-auth-id`, `drivers/<driver>.trace-size-limit`, `driverset.gcv.<name>`
 (docs/getting-started.md §3.1). Precedence for a shim auth id: the secrets
 file's `<driver>.shim-auth-id` beats the override, which beats the tree. Where
 it acts:
@@ -665,6 +665,14 @@ discipline), 5 and 7 are not.
    never touched on updates unless **forced** (`--secrets all|missing`,
    `vault.secrets --set`), verified by name where the vault allows, never
    printed, snapshotted or logged.
+6. ✅ **Confirmed 2026-11-02 (Jerry): the trace size limit is driver configuration.**
+   The tree records a driver's `DirXML-TraceSizeLimit` (`trace-size-limit` in
+   `driver.xml`). A new driver is created with it. Overwriting an existing driver's
+   value is optional: without `--trace-size-limit` the vault keeps its own and the
+   plan says so; with it, the plan writes the tree's. Either way no restart (the
+   engine reads trace settings live), and a difference is never drift. A tree that
+   doesn't record a limit asks for nothing. The trace level and file stay
+   operational (`driver.trace`).
 
 ## Incident 2026-09-16 — a stale tree emptied a kind (recovered from the snapshot)
 

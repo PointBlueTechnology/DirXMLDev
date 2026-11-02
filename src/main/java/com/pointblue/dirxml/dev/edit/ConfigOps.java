@@ -406,7 +406,7 @@ public final class ConfigOps {
 
     // ---- driver.set -----------------------------------------------------------
 
-    /** {@code driver.set --key shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name> --value v}. */
+    /** {@code driver.set --key shim-class|shim-auth-server|shim-auth-id|trace-size-limit|param:<name>|engine:<name> --value v}. */
     public static final class DriverSet_ implements Operation {
         private final String driver;
         private final String key;
@@ -436,6 +436,13 @@ public final class ConfigOps {
                 case "shim-class": d.shimClass = value; return;
                 case "shim-auth-server": d.shimAuthServer = value; return;
                 case "shim-auth-id": d.shimAuthId = value; return;
+                case Driver.TRACE_SIZE_LIMIT:
+                    // the most the trace file grows to; --clear = the tree stops recording it (a deploy then leaves the vault's)
+                    if (!value.isEmpty() && !value.chars().allMatch(Character::isDigit)) {
+                        throw new Refusal("trace-size-limit is a whole number, as the vault holds it (e.g. 200000), not '" + value + "'");
+                    }
+                    d.traceSizeLimit = value.isEmpty() ? null : value;
+                    return;
                 case "environments":
                     // the environments this driver is deployed to, comma-separated; empty = every environment
                     d.environments.clear();
@@ -469,7 +476,7 @@ public final class ConfigOps {
                 }
                 return;
             }
-            throw new Refusal("key must be shim-class|shim-auth-server|shim-auth-id|param:<name>|engine:<name>, not '" + key + "'");
+            throw new Refusal("key must be shim-class|shim-auth-server|shim-auth-id|trace-size-limit|param:<name>|engine:<name>, not '" + key + "'");
         }
 
         private static List<String> names(Element blob) {

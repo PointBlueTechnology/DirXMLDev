@@ -108,7 +108,7 @@ public final class Overrides {
 
     public static String format(String env, Map<String, String> values) {
         StringBuilder sb = new StringBuilder("# Values for environment '" + env + "' that differ from the tree's base values.\n"
-            + "# key = value; keys: drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, .shim-auth-server, .shim-auth-id, .name; driverset.gcv.<name>;\n"
+            + "# key = value; keys: drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, .shim-auth-server, .shim-auth-id, .trace-size-limit, .name; driverset.gcv.<name>;\n"
             + "# servers.<tree server's name> = <this environment's server's DN> (and servers.<its server's name>.prefer = <tree server's name>)\n");
         for (Map.Entry<String, String> e : new TreeMap<>(values).entrySet()) {
             if (!e.getKey().startsWith("?")) {
@@ -186,6 +186,9 @@ public final class Overrides {
             if (NAME.equals(setting)) {
                 return driver.name;
             }
+            if (Driver.TRACE_SIZE_LIMIT.equals(setting)) {
+                return driver.traceSizeLimit;
+            }
             return Driver.SHIM_AUTH_SERVER.equals(setting) ? driver.shimAuthServer : driver.shimAuthId;
         }
 
@@ -212,6 +215,8 @@ public final class Overrides {
             } else if (driver != null && !NAME.equals(setting)) {   // a name is applied by renaming, never set
                 if (Driver.SHIM_AUTH_SERVER.equals(setting)) {
                     driver.shimAuthServer = value;
+                } else if (Driver.TRACE_SIZE_LIMIT.equals(setting)) {
+                    driver.traceSizeLimit = value == null || value.isEmpty() ? null : value;
                 } else {
                     driver.shimAuthId = value;
                 }
@@ -250,7 +255,8 @@ public final class Overrides {
         }
         if (!key.startsWith("drivers/")) {
             return new Target(null, "a key starts with drivers/<driver>.gcv., drivers/<driver>.shim., drivers/<driver>.ecv., "
-                + "drivers/<driver>." + Driver.SHIM_AUTH_SERVER + ", drivers/<driver>." + Driver.SHIM_AUTH_ID + " or driverset.gcv.");
+                + "drivers/<driver>." + Driver.SHIM_AUTH_SERVER + ", drivers/<driver>." + Driver.SHIM_AUTH_ID + ", drivers/<driver>."
+                + Driver.TRACE_SIZE_LIMIT + " or driverset.gcv.");
         }
         String rest = key.substring("drivers/".length());
         // the name this environment's vault gives the driver: applied by renames(), after the values
@@ -259,8 +265,8 @@ public final class Overrides {
             Driver d = ds.driver(driverName);
             return d == null ? new Target(null, "no driver '" + driverName + "' in the tree") : Target.ofSetting(d, NAME);
         }
-        // the driver's own settings: drivers/<driver>.shim-auth-server, drivers/<driver>.shim-auth-id
-        for (String setting : List.of(Driver.SHIM_AUTH_SERVER, Driver.SHIM_AUTH_ID)) {
+        // the driver's own settings: drivers/<driver>.shim-auth-server, .shim-auth-id, .trace-size-limit
+        for (String setting : List.of(Driver.SHIM_AUTH_SERVER, Driver.SHIM_AUTH_ID, Driver.TRACE_SIZE_LIMIT)) {
             if (rest.endsWith("." + setting)) {
                 String driverName = rest.substring(0, rest.length() - setting.length() - 1);
                 Driver d = ds.driver(driverName);
@@ -279,7 +285,7 @@ public final class Overrides {
         }
         if (cut < 0) {
             return new Target(null, "a driver key is drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, ."
-                + Driver.SHIM_AUTH_SERVER + " or ." + Driver.SHIM_AUTH_ID);
+                + Driver.SHIM_AUTH_SERVER + ", ." + Driver.SHIM_AUTH_ID + " or ." + Driver.TRACE_SIZE_LIMIT);
         }
         String driverName = rest.substring(0, cut);
         Driver d = ds.driver(driverName);

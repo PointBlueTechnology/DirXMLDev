@@ -52,6 +52,7 @@ public class ExportReaderTest {
         + "    </policy-linkage>"
         + "    <shim-auth-id value=\"IDVAULTAPI\"/>"
         + "    <shim-auth-server value=\"https://rental2.ultipro.com\"/>"
+        + "    <trace-size-limit value=\"20000\"/>"
         + "    <shim-config-info-xml><driver-config name=\"REST Driver\">"
         + "      <driver-options><configuration-values><definitions/></configuration-values></driver-options>"
         + "    </driver-config></shim-config-info-xml>"
@@ -103,6 +104,7 @@ public class ExportReaderTest {
         assertNotNull(ukg);
         assertEquals("com.pointbluetech.idm.ukg.driv.UKGDriverShim", ukg.shimClass);
         assertEquals("https://rental2.ultipro.com", ukg.shimAuthServer);
+        assertEquals("20000", ukg.traceSizeLimit);
         assertEquals("IDVAULTAPI", ukg.shimAuthId);
 
         assertTrue(ukg.config.containsKey(Driver.DRIVER_FILTER));
