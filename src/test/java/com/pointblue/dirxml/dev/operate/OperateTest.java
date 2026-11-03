@@ -1158,6 +1158,16 @@ public class OperateTest {
         assertEquals("an LDAP DN is taken as it is", List.of("ou=x,o=data"), Operate.workOrderContainers(workOrderVault("ou=x,o=data"), env));
         assertEquals("no GCV: the driver itself, NetIQ's suggested container", List.of(WO_DRIVER), Operate.workOrderContainers(workOrderVault(null), env));
         assertEquals("no Work Order driver", List.of(), Operate.workOrderContainers(new FakeEngine(), env));
+
+        // NOVLWOBASE installs the GCV in a GCV object linked to the driver (policy set 14), not in the driver's own values
+        FakeEngine linked = workOrderVault(null);
+        String gcvs = "cn=NOVLWOBASE-GCVs," + WO_DRIVER;
+        Vault.Entry g = FakeEngine.entry(gcvs, "NOVLWOBASE-GCVs", List.of("Top", "DirXML-GlobalConfigDef"));
+        FakeEngine.put(g, "DirXML-ConfigValues", List.of("<configuration-values><definitions><definition name=\"idv.workorder.container\" type=\"dn\">"
+            + "<value>data\\WorkOrders</value></definition></definitions></configuration-values>"));
+        linked.entries.put(gcvs, g);
+        FakeEngine.put(linked.entries.get(WO_DRIVER), "DirXML-Policies", List.of(gcvs + "#0#14"));
+        assertEquals("from the linked GCV object", List.of(WO_CONTAINER), Operate.workOrderContainers(linked, env));
     }
 
     @Test

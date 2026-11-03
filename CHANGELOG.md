@@ -21,7 +21,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - **`workorder.list` finds work orders where the Work Order driver keeps them.** It searched under the driver set,
   but work orders live in the container the `idv.workorder.container` GCV names (a slash DN, now resolved a level at a
-  time), or the Work Order driver object, NetIQ's suggestion. `--base` still overrides.
+  time, from the driver's own values, the GCV objects linked to it as NOVLWOBASE installs them, or the set's), or the Work
+  Order driver object, NetIQ's suggestion. `--base` still overrides.
 - A body or document that does not parse no longer prints `[Fatal Error]` to stderr; the failure is still reported
   to the caller.
 
