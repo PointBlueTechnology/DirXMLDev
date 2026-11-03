@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-11-03
+
 ### Fixed
 
 - **A GCV tested by an `<if-global-variable>` condition but defined nowhere was a `gcv-undefined` error.** The
