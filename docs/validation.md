@@ -139,6 +139,7 @@ run time, so an undefined one fails the rule on its first event.
 | `script-required-attribute` | W | a DirXML-Script element lacks an attribute its grammar requires (Designer's DTD 4.7.5: `do-send-email-from-template` without `template-dn`, `token-map` without `src`/`dest`, `do-status` without `level`, …). The engine may still load the policy; Designer's importer drops it. Named by rule description |
 | `gcv-undefined` | E | a driver policy reads a GCV nothing in the driver's scope defines (names built from a local variable, `drv.x.$name$`, are skipped) |
 | `gcv-undefined-library` | W | a Library policy reads a GCV no driver in the set defines (it may be linked only by drivers that do) |
+| `gcv-undefined-condition` | I | an `<if-global-variable>` condition compares a GCV nothing defines; the engine reads it as having no value, so the test always comes out the same (`available` / `not-available` tests are never reported) |
 
 ### `mapping-tables` — MappingTableCheck
 

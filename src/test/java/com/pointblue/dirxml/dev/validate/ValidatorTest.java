@@ -284,6 +284,36 @@ public class ValidatorTest {
         assertTrue(f.get(0).message, f.get(0).message.endsWith("drv.missing"));
     }
 
+    /** The engine reads an undefined GCV in a condition as having no value; nothing fails. */
+    @Test
+    public void gcvUndefinedInAConditionIsInfo() {
+        DriverSet ds = clean();
+        addSub(ds, "gcv", "<policy><rule><description>r</description><conditions>"
+            + "<or><if-global-variable name=\"drv.optional\" op=\"not-available\"/>"
+            + "<if-global-variable name=\"drv.optional\" op=\"equal\">false</if-global-variable></or>"
+            + "<or><if-global-variable name=\"drv.only.asked\" op=\"available\"/>"
+            + "<if-global-variable name=\"drv.users\" op=\"equal\">true</if-global-variable></or>"
+            + "</conditions><actions/></rule></policy>");
+        Report r = owned().validate(ds);
+        assertTrue(r.text(), r.ok());
+        List<Finding> f = r.withCode("gcv-undefined-condition");
+        assertEquals(r.text(), 1, f.size());
+        assertTrue(f.get(0).message, f.get(0).message.startsWith("tests GCV(s) nothing defines: drv.optional "));
+    }
+
+    /** A GCV both tested and substituted is still an error for the substitution. */
+    @Test
+    public void gcvUndefinedTokenAndConditionIsOneError() {
+        DriverSet ds = clean();
+        addSub(ds, "gcv", "<policy><rule><description>r</description><conditions>"
+            + "<if-global-variable name=\"drv.missing\" op=\"equal\">true</if-global-variable></conditions><actions>"
+            + "<do-set-local-variable name=\"x\"><arg-string><token-global-variable name=\"drv.missing\"/>"
+            + "</arg-string></do-set-local-variable></actions></rule></policy>");
+        Report r = owned().validate(ds);
+        assertEquals(r.text(), 1, r.withCode("gcv-undefined").size());
+        assertTrue(r.text(), r.withCode("gcv-undefined-condition").isEmpty());
+    }
+
     /** #134: a driver that runs on another server of the set has its GCVs in that server's never-sync copy. */
     @Test
     public void gcvDefinedOnlyOnAnotherServerIsDefined() {
