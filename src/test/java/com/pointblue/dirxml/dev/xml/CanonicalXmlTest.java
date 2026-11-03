@@ -182,4 +182,14 @@ public class CanonicalXmlTest {
 
         assertEquals(CanonicalXml.serialize(jdkDoc), CanonicalXml.serialize(novellDoc));
     }
+
+    @Test
+    public void theCanonicalFormKeepsATemplatesText() {
+        // what a deploy writes: element-only whitespace re-indented, the text inside an element as it was
+        String body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><html xmlns:form=\"http://www.novell.com/dirxml/workflow/form\">\n\t<form:token-descriptions/>\n\t<body>\n"
+            + "\t\t<p>Hi <b>$Name$</b><i>!</i><br/>\n\t\t\tLine two &amp; more\n\t\t</p>\n\t\t<pre>  kept\n    as is</pre>\n\t</body>\n</html>";
+        String out = CanonicalXml.canonicalize(body);
+        assertTrue(out, out.contains("<p>Hi <b>$Name$</b><i>!</i><br/>\n\t\t\tLine two &amp; more\n\t\t</p>"));
+        assertTrue(out, out.contains("<pre>  kept\n    as is</pre>"));
+    }
 }

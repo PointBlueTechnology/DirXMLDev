@@ -7,6 +7,24 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Work orders can be made, changed and deleted:** `workorder.show`, `workorder.create`, `workorder.set` and
+  `workorder.delete`, light writes, audited. A new work order is `pending` and done once unless told otherwise;
+  `--due now` sets the do-it-now flag and no due date; times are taken as generalized time or ISO 8601; the repeat
+  interval is in minutes; a status a person sets is `pending` or `onhold`.
+- **`template.list` and `template.show`:** the notification templates the vault holds now, read-only: subject, body,
+  `$TOKEN$` markers, and whether DirXMLDev can read the body.
+- `Operate.Engine` has `add` and `delete` (default: refused), implemented for a vault.
+
+### Fixed
+
+- **`workorder.list` finds work orders where the Work Order driver keeps them.** It searched under the driver set,
+  but work orders live in the container the `idv.workorder.container` GCV names (a slash DN, now resolved a level at a
+  time), or the Work Order driver object, NetIQ's suggestion. `--base` still overrides.
+- A body or document that does not parse no longer prints `[Fatal Error]` to stderr; the failure is still reported
+  to the caller.
+
 ## [0.65.0] - 2026-11-03
 
 ### Fixed

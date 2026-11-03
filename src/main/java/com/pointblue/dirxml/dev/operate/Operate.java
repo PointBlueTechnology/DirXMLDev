@@ -127,6 +127,16 @@ public final class Operate {
 
         void replace(String dn, String attr, List<byte[]> values);
 
+        /** A new object with its classes and attributes (the work order commands); refused where not implemented. */
+        default void add(String dn, List<String> objectClasses, Map<String, List<byte[]>> attrs) {
+            throw new UnsupportedOperationException("add " + dn);
+        }
+
+        /** An object deleted (the work order commands); refused where not implemented. */
+        default void delete(String dn) {
+            throw new UnsupportedOperationException("delete " + dn);
+        }
+
         CachePage viewCache(String dn, int position, int count);
 
         void deleteCacheEntries(String dn, int p2, int p3, String p4, int priority);
@@ -284,6 +294,14 @@ public final class Operate {
 
             public void replace(String dn, String attr, List<byte[]> values) {
                 v.replace(dn, attr, values);
+            }
+
+            public void add(String dn, List<String> objectClasses, Map<String, List<byte[]>> attrs) {
+                v.add(dn, objectClasses, attrs);
+            }
+
+            public void delete(String dn) {
+                v.delete(dn);
             }
 
             public CachePage viewCache(String dn, int position, int count) {
@@ -2538,39 +2556,443 @@ public final class Operate {
         return r;
     }
 
-    /** The work orders ({@code DirXML-WorkOrder}, the Work Order driver's objects) under a base, newest due first. Read-only. */
-    public static Result workOrders(Engine engine, Environments.Environment env, String base, int limit) {
-        String b = base == null || base.isBlank() ? env.driverSetDn : base;
-        List<Vault.Entry> found;
+    // ---- G14: work orders ----------------------------------------------------------------------------
+
+    /** The Work Order driver's shim class. */
+    public static final String WORK_ORDER_SHIM = "com.novell.nds.dirxml.driver.workorder.WorkOrderDriverShim";
+    /** The GCV naming the container work orders live in (NOVLWOBASE: a dn GCV, dn-space dirxml, dn-type slash). */
+    public static final String WORK_ORDER_CONTAINER_GCV = "idv.workorder.container";
+    /** The statuses a person sets; the driver sets "configured" or "error" when it processes one (Identity Console 26.1.2 knows no other). */
+    public static final List<String> WORK_ORDER_STATUSES = List.of("pending", "onhold");
+
+    /**
+     * The fields a work order command takes, by option name, with the attribute each lands in and its kind: "text",
+     * "time" (generalized time; "now" for a due date means do it now), "minutes", "bool" or "dns" (several DNs).
+     * Grounded on the class's schema and Identity Console's work order page (26.1.2): the repeat interval is in minutes,
+     * a new work order is "pending" with a repeat interval of 0, and "do it now" is the flag with no due date.
+     */
+    public static final String[][] WORK_ORDER_FIELDS = {
+        { "description", "description", "text" }, { "status", "DirXML-nwoStatus", "text" }, { "due", "DirXML-DueDate", "time" },
+        { "repeat-minutes", "DirXML-nwoRepeatInterval", "minutes" }, { "delete-date", "DirXML-nwoDeleteDueDate", "time" },
+        { "delete-on-error", "DirXML-nwoDeleteOnError", "bool" }, { "dependent", "DirXML-nwoDependentWorkOrder", "dns" },
+        { "type", "DirXML-woType", "text" }, { "number", "DirXML-nwoWorkOrderNumber", "text" }, { "contact", "DirXML-nwoContactName", "text" },
+        { "content", "DirXML-nwoContent", "text" },
+    };
+
+    /** The Work Order drivers of the set: {@code DirXML-Driver} objects whose shim is {@link #WORK_ORDER_SHIM}. */
+    static List<Vault.Entry> workOrderDrivers(Engine engine, Environments.Environment env) {
         try {
-            found = engine.search(b, "(objectClass=DirXML-WorkOrder)", javax.naming.directory.SearchControls.SUBTREE_SCOPE);
+            return engine.search(env.driverSetDn, "(DirXML-JavaModule=" + WORK_ORDER_SHIM + ")", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
         } catch (RuntimeException e) {
-            return Result.refused("search " + b + ": " + e.getMessage());
+            return List.of();
         }
-        found = new ArrayList<>(found);
+    }
+
+    /**
+     * Where work orders live: the {@link #WORK_ORDER_CONTAINER_GCV} GCV's value from each Work Order driver's configuration
+     * values, else the driver set's, resolved from its slash form to an LDAP DN; failing that, the Work Order driver
+     * objects themselves (NetIQ's suggested container). Empty when the set has no Work Order driver.
+     */
+    public static List<String> workOrderContainers(Engine engine, Environments.Environment env) {
+        List<String> out = new ArrayList<>();
+        Vault.Entry set = engine.read(env.driverSetDn);
+        String setValue = set == null ? null : gcvValue(set.string("DirXML-ConfigValues"), WORK_ORDER_CONTAINER_GCV);
+        for (Vault.Entry d : workOrderDrivers(engine, env)) {
+            Vault.Entry full = engine.read(d.dn);
+            String value = full == null ? null : gcvValue(full.string("DirXML-ConfigValues"), WORK_ORDER_CONTAINER_GCV);
+            String dn = value != null && !value.isBlank() ? value : setValue;
+            String resolved = dn == null || dn.isBlank() ? null : ldapDnOf(engine, dn);
+            String c = resolved != null ? resolved : d.dn;
+            if (out.stream().noneMatch(x -> x.equalsIgnoreCase(c))) {
+                out.add(c);
+            }
+        }
+        return out;
+    }
+
+    /** The value of the GCV {@code name} in a {@code <configuration-values>} document; null when it is not there. */
+    static String gcvValue(String configValues, String name) {
+        if (configValues == null || configValues.isBlank()) {
+            return null;
+        }
+        try {
+            org.w3c.dom.NodeList defs = com.pointblue.dirxml.dev.xml.CanonicalXml.parse(configValues).getElementsByTagName("definition");
+            for (int i = 0; i < defs.getLength(); i++) {
+                org.w3c.dom.Element d = (org.w3c.dom.Element) defs.item(i);
+                if (name.equals(d.getAttribute("name"))) {
+                    org.w3c.dom.NodeList v = d.getElementsByTagName("value");
+                    return v.getLength() == 0 ? null : v.item(0).getTextContent().trim();
+                }
+            }
+        } catch (RuntimeException e) {
+            return null;
+        }
+        return null;
+    }
+
+    /**
+     * An LDAP DN for a DN in either form: an LDAP DN as it is; a slash DN ({@code data\WorkOrders}, {@code \TREE\data\WorkOrders})
+     * looked up a level at a time, as slash names carry no attribute types. Null when a level is not found.
+     */
+    public static String ldapDnOf(Engine engine, String dn) {
+        String d = dn.trim();
+        if (!d.contains("\\") && d.contains("=")) {
+            return d;
+        }
+        List<String> parts = new ArrayList<>(List.of(d.replaceAll("^\\\\+", "").split("\\\\")));
+        parts.removeIf(String::isBlank);
+        for (int skip = 0; skip <= 1 && skip < parts.size(); skip++) {
+            // a leading part may be the tree's name, which no LDAP DN carries
+            String base = "";
+            boolean found = true;
+            for (String part : parts.subList(skip, parts.size())) {
+                String value = ldapEscape(part);
+                List<Vault.Entry> hits;
+                try {
+                    hits = engine.search(base, "(|(o=" + value + ")(ou=" + value + ")(cn=" + value + ")(dc=" + value + ")(c=" + value + ")(l=" + value + "))",
+                        javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+                } catch (RuntimeException e) {
+                    hits = List.of();
+                }
+                Vault.Entry hit = hits.stream().filter(h -> rdnValue(h.dn).equalsIgnoreCase(part)).findFirst().orElse(null);
+                if (hit == null) {
+                    found = false;
+                    break;
+                }
+                base = hit.dn;
+            }
+            if (found && !base.isEmpty()) {
+                return base;
+            }
+        }
+        return null;
+    }
+
+    private static String rdnValue(String dn) {
+        String first = dn.split("(?<!\\\\),", 2)[0];
+        return first.substring(first.indexOf('=') + 1).replace("\\", "");
+    }
+
+    /** RFC 4515 escaping of a filter value. */
+    static String ldapEscape(String s) {
+        StringBuilder b = new StringBuilder();
+        for (char c : s.toCharArray()) {
+            switch (c) {
+                case '*' -> b.append("\\2a");
+                case '(' -> b.append("\\28");
+                case ')' -> b.append("\\29");
+                case '\\' -> b.append("\\5c");
+                case '\0' -> b.append("\\00");
+                default -> b.append(c);
+            }
+        }
+        return b.toString();
+    }
+
+    /**
+     * The work orders ({@code DirXML-WorkOrder}) under a base, newest due first. Read-only. Without a base, the
+     * containers the Work Order drivers use ({@link #workOrderContainers}); with no Work Order driver, the driver set.
+     */
+    public static Result workOrders(Engine engine, Environments.Environment env, String base, int limit) {
+        List<String> bases = base != null && !base.isBlank() ? List.of(base) : workOrderContainers(engine, env);
+        if (bases.isEmpty()) {
+            bases = List.of(env.driverSetDn);
+        }
+        List<Vault.Entry> found = new ArrayList<>();
+        for (String b : bases) {
+            try {
+                for (Vault.Entry e : engine.search(b, "(objectClass=DirXML-WorkOrder)", javax.naming.directory.SearchControls.SUBTREE_SCOPE)) {
+                    if (found.stream().noneMatch(x -> x.dn.equalsIgnoreCase(e.dn))) {
+                        found.add(e);
+                    }
+                }
+            } catch (RuntimeException e) {
+                return Result.refused("search " + b + ": " + e.getMessage());
+            }
+        }
         found.sort(java.util.Comparator.comparing((Vault.Entry e) -> e.string("DirXML-DueDate") == null ? "" : e.string("DirXML-DueDate")).reversed());
+        String where = String.join(", ", bases);
         StringBuilder t = new StringBuilder();
-        t.append(found.size()).append(" work order(s) under ").append(b).append('\n');
+        t.append(found.size()).append(" work order(s) under ").append(where).append('\n');
         t.append(String.format("%-36s %-10s %-20s %s", "work order", "status", "due", "description")).append('\n');
-        StringBuilder j = new StringBuilder("{\"ok\":true,\"base\":").append(q(b)).append(",\"total\":").append(found.size()).append(",\"workOrders\":[");
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"base\":").append(q(bases.get(0))).append(",\"bases\":[");
+        for (int i = 0; i < bases.size(); i++) {
+            j.append(i > 0 ? "," : "").append(q(bases.get(i)));
+        }
+        j.append("],\"total\":").append(found.size()).append(",\"workOrders\":[");
         int n = 0;
         for (Vault.Entry e : found) {
             if (n >= limit) {
                 break;
             }
-            String name = e.dn.substring(e.dn.indexOf('=') + 1, e.dn.indexOf(','));
+            String name = rdnValue(e.dn);
             String status = e.string("DirXML-nwoStatus");
+            boolean now = "TRUE".equalsIgnoreCase(e.string("DirXML-nwoDoItNowFlag"));
             String due = e.string("DirXML-DueDate");
             String desc = e.string("Description");
-            t.append(String.format("%-36s %-10s %-20s %s", name, status == null ? "-" : status, due == null ? "-" : due, desc == null ? "" : desc)).append('\n');
-            j.append(n++ > 0 ? "," : "").append("{\"name\":").append(q(name)).append(",\"dn\":").append(q(e.dn)).append(",\"status\":").append(q(status == null ? "" : status))
-             .append(",\"due\":").append(q(due == null ? "" : due)).append(",\"description\":").append(q(desc == null ? "" : desc)).append(",\"content\":").append(q(e.string("DirXML-nwoContent") == null ? "" : e.string("DirXML-nwoContent"))).append("}");
+            t.append(String.format("%-36s %-10s %-20s %s", name, status == null ? "-" : status, due != null ? due : now ? "now" : "-", desc == null ? "" : desc)).append('\n');
+            j.append(n++ > 0 ? "," : "").append(workOrderJson(e));
         }
         j.append("]}");
         Result r = new Result();
         r.ok = true;
         r.text = t.toString();
         r.json = j.toString();
+        return r;
+    }
+
+    /** One work order as JSON: its name, DN and every field, plus what the driver writes (log, creation, creator). */
+    static String workOrderJson(Vault.Entry e) {
+        StringBuilder j = new StringBuilder("{\"name\":").append(q(rdnValue(e.dn))).append(",\"dn\":").append(q(e.dn));
+        for (String[] f : WORK_ORDER_FIELDS) {
+            if (f[2].equals("dns")) {
+                j.append(",").append(q(f[0])).append(":[");
+                List<String> v = e.strings(f[1]);
+                for (int i = 0; i < v.size(); i++) {
+                    j.append(i > 0 ? "," : "").append(q(v.get(i)));
+                }
+                j.append("]");
+            } else {
+                String v = e.string(f[1]);
+                j.append(",").append(q(f[0])).append(":").append(v == null ? "null" : f[2].equals("bool") ? String.valueOf("TRUE".equalsIgnoreCase(v)) : q(v));
+            }
+        }
+        j.append(",\"now\":").append("TRUE".equalsIgnoreCase(e.string("DirXML-nwoDoItNowFlag")));
+        j.append(",\"created\":").append(e.string("DirXML-nwoCreationDate") == null ? "null" : q(e.string("DirXML-nwoCreationDate")));
+        j.append(",\"creator\":").append(e.string("DirXML-CreatorName") == null ? "null" : q(e.string("DirXML-CreatorName")));
+        j.append(",\"log\":[");
+        List<String> log = e.strings("DirXML-nwoProcessLog");
+        for (int i = 0; i < log.size(); i++) {
+            j.append(i > 0 ? "," : "").append(q(log.get(i)));
+        }
+        return j.append("]}").toString();
+    }
+
+    /** One work order: every field, the driver's log, and where it lives. Read-only. */
+    public static Result workOrderShow(Engine engine, Environments.Environment env, String dn) {
+        if (dn == null || dn.isBlank()) {
+            return Result.refused("--dn names the work order");
+        }
+        Vault.Entry e = engine.read(dn);
+        if (e == null || e.strings("objectClass").stream().noneMatch(c -> c.equalsIgnoreCase("DirXML-WorkOrder"))) {
+            return Result.refused(dn + " is not a work order");
+        }
+        StringBuilder t = new StringBuilder(e.dn).append('\n');
+        for (String[] f : WORK_ORDER_FIELDS) {
+            List<String> v = e.strings(f[1]);
+            t.append(String.format("  %-16s %s", f[0], v.isEmpty() ? "-" : String.join("; ", v))).append('\n');
+        }
+        t.append(String.format("  %-16s %s", "do it now", "TRUE".equalsIgnoreCase(e.string("DirXML-nwoDoItNowFlag")) ? "yes" : "no")).append('\n');
+        for (String l : e.strings("DirXML-nwoProcessLog")) {
+            t.append("  log  ").append(l).append('\n');
+        }
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = "{\"ok\":true,\"workOrder\":" + workOrderJson(e) + "}";
+        return r;
+    }
+
+    /**
+     * The attribute changes for work order fields given by option name (an empty value clears one; {@code due=now} sets
+     * "do it now" and clears the due date), checked: a status a person may set, generalized times, a whole number of
+     * minutes, a boolean, DNs that exist. Throws IllegalArgumentException on a bad value.
+     */
+    static Map<String, List<byte[]>> workOrderChanges(Engine engine, Map<String, String> fields, List<String> dependents) {
+        Map<String, List<byte[]>> m = new LinkedHashMap<>();
+        for (String[] f : WORK_ORDER_FIELDS) {
+            if (f[2].equals("dns")) {
+                if (dependents != null) {
+                    List<byte[]> v = new ArrayList<>();
+                    for (String d : dependents) {
+                        if (engine.read(d) == null) {
+                            throw new IllegalArgumentException("dependent work order " + d + " was not found");
+                        }
+                        v.add(d.getBytes(StandardCharsets.UTF_8));
+                    }
+                    m.put(f[1], v);
+                }
+                continue;
+            }
+            if (!fields.containsKey(f[0])) {
+                continue;
+            }
+            String v = fields.get(f[0]) == null ? "" : fields.get(f[0]).trim();
+            if (v.isEmpty()) {
+                m.put(f[1], List.of());
+                continue;
+            }
+            switch (f[2]) {
+                case "time" -> {
+                    if (f[0].equals("due") && v.equalsIgnoreCase("now")) {
+                        m.put("DirXML-DueDate", List.of());
+                        m.put("DirXML-nwoDoItNowFlag", List.of("TRUE".getBytes(StandardCharsets.UTF_8)));
+                        continue;
+                    }
+                    v = generalizedTime(v, f[0]);
+                    if (f[0].equals("due")) {
+                        m.put("DirXML-nwoDoItNowFlag", List.of());
+                    }
+                }
+                case "minutes" -> {
+                    try {
+                        if (Integer.parseInt(v) < 0) {
+                            throw new NumberFormatException();
+                        }
+                    } catch (NumberFormatException e) {
+                        throw new IllegalArgumentException("--" + f[0] + " is a whole number of minutes, 0 for no repeat");
+                    }
+                }
+                case "bool" -> {
+                    if (!v.equalsIgnoreCase("true") && !v.equalsIgnoreCase("false")) {
+                        throw new IllegalArgumentException("--" + f[0] + " is true or false");
+                    }
+                    v = v.toUpperCase(java.util.Locale.ROOT);
+                }
+                default -> {
+                    if (f[0].equals("status") && !WORK_ORDER_STATUSES.contains(v)) {
+                        throw new IllegalArgumentException("--status is pending or onhold (the driver sets configured or error)");
+                    }
+                }
+            }
+            m.put(f[1], List.of(v.getBytes(StandardCharsets.UTF_8)));
+        }
+        return m;
+    }
+
+    /** A time as generalized time ({@code 20261231235900Z}), from that or from ISO 8601 ({@code 2026-12-31T23:59:00Z}, an offset, or a bare date). */
+    static String generalizedTime(String v, String field) {
+        if (v.matches("\\d{14}Z")) {
+            return v;
+        }
+        java.time.format.DateTimeFormatter out = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss'Z'").withZone(java.time.ZoneOffset.UTC);
+        try {
+            return out.format(java.time.OffsetDateTime.parse(v).toInstant());
+        } catch (java.time.format.DateTimeParseException e) {
+            // not an offset date-time: an instant or a bare date
+        }
+        try {
+            return out.format(java.time.Instant.parse(v));
+        } catch (java.time.format.DateTimeParseException e) {
+            // a bare date, at midnight UTC
+        }
+        try {
+            return out.format(java.time.LocalDate.parse(v).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new IllegalArgumentException("--" + field + " is a time: 20261231235900Z, 2026-12-31T23:59:00Z or 2026-12-31" + (field.equals("due") ? ", or now" : ""));
+        }
+    }
+
+    /**
+     * A new work order {@code name} in {@code container} (the Work Order driver's container when null; refused when
+     * there are several): "pending" and no repeat unless given, as Identity Console makes one. Light write, audited.
+     */
+    public static Result workOrderCreate(Engine engine, Environments.Environment env, String container, String name, Map<String, String> fields,
+            List<String> dependents, boolean yes, String confirm, Path tree) throws IOException {
+        if (name == null || name.isBlank()) {
+            return Result.refused("--name names the new work order");
+        }
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        String c = container;
+        if (c == null || c.isBlank()) {
+            List<String> found = workOrderContainers(engine, env);
+            if (found.size() != 1) {
+                return Result.refused(found.isEmpty() ? "no Work Order driver in " + env.driverSetDn + ": give --container"
+                    : "several work order containers (" + String.join(", ", found) + "): give --container");
+            }
+            c = found.get(0);
+        }
+        String dn = "cn=" + com.pointblue.dirxml.dev.deploy.VaultMapping.escapeRdn(name.trim()) + "," + c;
+        if (engine.read(dn) != null) {
+            return Result.refused(dn + " already exists");
+        }
+        Map<String, String> withDefaults = new LinkedHashMap<>(fields);
+        withDefaults.putIfAbsent("status", "pending");
+        withDefaults.putIfAbsent("repeat-minutes", "0");
+        Map<String, List<byte[]>> attrs;
+        try {
+            attrs = workOrderChanges(engine, withDefaults, dependents);
+        } catch (IllegalArgumentException e) {
+            return Result.refused(e.getMessage());
+        }
+        attrs.values().removeIf(List::isEmpty);
+        attrs.put("cn", List.of(name.trim().getBytes(StandardCharsets.UTF_8)));
+        String error = null;
+        try {
+            engine.add(dn, List.of("Top", "DirXML-WorkOrder"), attrs);
+        } catch (RuntimeException e) {
+            error = e.getMessage();
+        }
+        return workOrderAudited(env, tree, "workorder.create " + dn, error, dn);
+    }
+
+    /** Work order fields changed (an empty value clears one). Light write, audited. */
+    public static Result workOrderSet(Engine engine, Environments.Environment env, String dn, Map<String, String> fields, List<String> dependents,
+            boolean yes, String confirm, Path tree) throws IOException {
+        if (fields.isEmpty() && dependents == null) {
+            return Result.refused("nothing to set: give a field (--status, --due, --repeat-minutes, --delete-date, …)");
+        }
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        Vault.Entry e = dn == null ? null : engine.read(dn);
+        if (e == null || e.strings("objectClass").stream().noneMatch(c -> c.equalsIgnoreCase("DirXML-WorkOrder"))) {
+            return Result.refused(dn + " is not a work order");
+        }
+        Map<String, List<byte[]>> changes;
+        try {
+            changes = workOrderChanges(engine, fields, dependents);
+        } catch (IllegalArgumentException x) {
+            return Result.refused(x.getMessage());
+        }
+        String error = null;
+        List<String> done = new ArrayList<>();
+        try {
+            for (Map.Entry<String, List<byte[]>> c : changes.entrySet()) {
+                if (c.getValue().isEmpty() && e.strings(c.getKey()).isEmpty()) {
+                    continue;   // clearing what is not there
+                }
+                engine.replace(dn, c.getKey(), c.getValue());
+                done.add(c.getKey());
+            }
+        } catch (RuntimeException x) {
+            error = x.getMessage();
+        }
+        return workOrderAudited(env, tree, "workorder.set " + dn + " " + String.join(", ", done), error, dn);
+    }
+
+    /** A work order deleted. Light write, audited. */
+    public static Result workOrderDelete(Engine engine, Environments.Environment env, String dn, boolean yes, String confirm, Path tree) throws IOException {
+        String refusal = gate(env, OpClass.LIGHT, yes, confirm);
+        if (refusal != null) {
+            return Result.refused(refusal);
+        }
+        Vault.Entry e = dn == null ? null : engine.read(dn);
+        if (e == null || e.strings("objectClass").stream().noneMatch(c -> c.equalsIgnoreCase("DirXML-WorkOrder"))) {
+            return Result.refused(dn + " is not a work order");
+        }
+        String error = null;
+        try {
+            engine.delete(dn);
+        } catch (RuntimeException x) {
+            error = x.getMessage();
+        }
+        return workOrderAudited(env, tree, "workorder.delete " + dn, error, dn);
+    }
+
+    private static Result workOrderAudited(Environments.Environment env, Path tree, String what, String error, String dn) throws IOException {
+        DeployLog.Record rec = DeployLog.record(env.name, "operate");
+        rec.outcome = error == null ? "ok" : "failed";
+        rec.detail = what + (error != null ? " — " + error : "");
+        DeployLog.append(tree, rec);
+        Result r = new Result();
+        r.ok = error == null;
+        r.text = (error == null ? "ok       " + what : "FAILED   " + what + ": " + error) + "\n";
+        r.json = "{\"ok\":" + r.ok + ",\"dn\":" + q(dn) + (error != null ? ",\"error\":" + q(error) : "") + "}";
         return r;
     }
 
@@ -2663,6 +3085,98 @@ public final class Operate {
         r.ok = error == null;
         r.text = error == null ? "e-mail server: " + String.join(", ", done) + "\n" : "FAILED   " + error + " (done before it: " + String.join(", ", done) + ")\n";
         r.json = "{\"ok\":" + r.ok + ",\"done\":" + q(String.join(", ", done)) + (error != null ? ",\"error\":" + q(error) : "") + "}";
+        return r;
+    }
+
+    // ---- G8: the notification templates, read live ----------------------------------------------------
+
+    /**
+     * The notification collection's templates ({@code notfMergeTemplate}): name, subject, and whether a package installed
+     * it. Read-only: templates are tree content (templates/, deployed by vault.deploy); this shows what the vault holds now.
+     */
+    public static Result templateList(Engine engine, Environments.Environment env) {
+        Vault.Entry c = emailCollection(engine);
+        if (c == null) {
+            return Result.refused("no notification collection under cn=Security (notfTemplateCollection)");
+        }
+        List<Vault.Entry> found;
+        try {
+            found = new ArrayList<>(engine.search(c.dn, "(objectClass=notfMergeTemplate)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE));
+        } catch (RuntimeException e) {
+            return Result.refused("search " + c.dn + ": " + e.getMessage());
+        }
+        found.sort(java.util.Comparator.comparing((Vault.Entry e) -> rdnValue(e.dn), String.CASE_INSENSITIVE_ORDER));
+        StringBuilder t = new StringBuilder().append(found.size()).append(" template(s) in ").append(c.dn).append('\n');
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"collection\":").append(q(c.dn)).append(",\"total\":").append(found.size()).append(",\"templates\":[");
+        int n = 0;
+        for (Vault.Entry e : found) {
+            String subject = e.string("notfMergeTemplateSubject");
+            boolean packaged = e.string("DirXML-pkgGUID") != null;
+            t.append(String.format("  %-60s %s%s", rdnValue(e.dn), subject == null ? "-" : subject, packaged ? "  (package)" : "")).append('\n');
+            j.append(n++ > 0 ? "," : "").append("{\"name\":").append(q(rdnValue(e.dn))).append(",\"dn\":").append(q(e.dn))
+             .append(",\"subject\":").append(subject == null ? "null" : q(subject)).append(",\"packaged\":").append(packaged).append("}");
+        }
+        j.append("]}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
+        return r;
+    }
+
+    /**
+     * One template: its subject, its body as the vault holds it, the {@code $TOKEN$} markers the body uses, and whether
+     * the body is XML core can read (a body it cannot read would be read as none, and a deploy would not keep it).
+     */
+    public static Result templateShow(Engine engine, Environments.Environment env, String name) {
+        Vault.Entry c = emailCollection(engine);
+        if (c == null) {
+            return Result.refused("no notification collection under cn=Security (notfTemplateCollection)");
+        }
+        if (name == null || name.isBlank()) {
+            return Result.refused("--name names the template");
+        }
+        String dn = "cn=" + com.pointblue.dirxml.dev.deploy.VaultMapping.escapeRdn(name) + "," + c.dn;
+        Vault.Entry e = engine.read(dn);
+        if (e == null) {
+            return Result.refused("no template named " + name + " in " + c.dn);
+        }
+        String subject = e.string("notfMergeTemplateSubject");
+        byte[] raw = e.bytes("notfMergeTemplateData");
+        String body = raw == null ? null : new String(raw, StandardCharsets.UTF_8);
+        boolean readable = false;
+        if (body != null) {
+            try {
+                com.pointblue.dirxml.dev.xml.CanonicalXml.parse(body);
+                readable = true;
+            } catch (RuntimeException x) {
+                readable = false;
+            }
+        }
+        java.util.Set<String> tokens = new java.util.LinkedHashSet<>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\$([A-Za-z0-9_.]+)\\$").matcher((subject == null ? "" : subject) + " " + (body == null ? "" : body));
+        while (m.find()) {
+            tokens.add(m.group(1));
+        }
+        StringBuilder t = new StringBuilder(dn).append('\n');
+        t.append("  subject  ").append(subject == null ? "-" : subject).append('\n');
+        t.append("  tokens   ").append(tokens.isEmpty() ? "-" : String.join(", ", tokens)).append('\n');
+        t.append("  body     ").append(body == null ? "none" : body.length() + " characters" + (readable ? "" : ", NOT XML core can read")).append('\n');
+        if (body != null) {
+            t.append(body).append(body.endsWith("\n") ? "" : "\n");
+        }
+        StringBuilder j = new StringBuilder("{\"ok\":true,\"name\":").append(q(name)).append(",\"dn\":").append(q(dn))
+            .append(",\"subject\":").append(subject == null ? "null" : q(subject)).append(",\"body\":").append(body == null ? "null" : q(body))
+            .append(",\"readable\":").append(readable).append(",\"packaged\":").append(e.string("DirXML-pkgGUID") != null).append(",\"tokens\":[");
+        int n = 0;
+        for (String tok : tokens) {
+            j.append(n++ > 0 ? "," : "").append(q(tok));
+        }
+        j.append("]}");
+        Result r = new Result();
+        r.ok = true;
+        r.text = t.toString();
+        r.json = j.toString();
         return r;
     }
 
