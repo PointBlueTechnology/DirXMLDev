@@ -332,4 +332,22 @@ projects with policies, read locally only; lab projects with templates):
   date and description. Listed, not modelled: they are the Work Order driver's runtime records, not
   configuration, so the note's "tree objects" idea was dropped. **Excluded objects**: this schema has no
   attribute for them and the console's route could not be grounded on a lab object; left out.
-
+  **Written too (2026-11-02):** `workorder.show`, `workorder.create`, `workorder.set`, `workorder.delete`. Grounded on the
+  class's schema (status, repeat interval and count, number, contact and type are strings; the due, delete and creation
+  dates generalized time; do it now, delete on error and send to publisher booleans; dependents DNs), Identity
+  Console 26.1.2's work order page (a new one is `pending` with repeat interval `0`; the interval is in minutes; "do it
+  now" is the flag with no due date; a person sets `pending` or `onhold`) and NOVLWOBASE 2.1.1 (the container is the
+  set GCV `idv.workorder.container`, `type="dn" dn-space="dirxml" dn-type="slash"`, which the driver's placement
+  policy joins with `\` and the name; NetIQ suggests the driver object itself). `workorder.list` now looks there by
+  default: under the driver set it found none where the container was elsewhere. `template.list` and `template.show`
+  read the live templates; the canonical form a deploy writes was checked against a lab's 351 templates: every body
+  parses, and only whitespace between elements changes, never the text inside one.
+  **Shown live (idm-ig4, 2026-11-02),** with a Work Order driver built like Designer's WorkOrder configuration and
+  NOVLWOBASE 2.1.1: `workorder.list` found the container from the driver's slash GCV, the value the shim read too. The
+  filter ignores `DirXML-WorkOrder` on the subscriber channel (so the package's create policy, which names
+  `DirXML-nwoType`, not in the schema, never applies); the shim polls the container on the publisher channel. A work
+  order made by `workorder.create --due now` ran on the first poll: a `DirXML-WorkToDo` `DO-<name>` in the container with
+  its content, description, type and DN, then status `configured`, a log line, and the processing time as due date (the
+  do-it-now flag stays). Run again by `workorder.set`, it failed with -606: the WorkToDo of the last run was still there,
+  and the driver set `error`. With that removed, `--repeat-minutes 1` moved the due date on by a minute and kept it
+  `pending`. `workorder.show` and `workorder.delete` worked as documented.

@@ -56,6 +56,12 @@ public final class OperateCli {
         Map.entry("engine.stats", takes("", "env driver")),
         Map.entry("driver.rights", takes("", "env driver dn attr")),
         Map.entry("workorder.list", takes("", "env base limit")),
+        Map.entry("workorder.show", takes("", "env dn")),
+        Map.entry("workorder.create", takes("yes", "env container name description status due repeat-minutes delete-date delete-on-error dependent type number contact content content-file confirm tree")),
+        Map.entry("workorder.set", takes("yes", "env dn description status due repeat-minutes delete-date delete-on-error dependent type number contact content content-file confirm tree")),
+        Map.entry("workorder.delete", takes("yes", "env dn confirm tree")),
+        Map.entry("template.list", takes("", "env")),
+        Map.entry("template.show", takes("", "env name")),
         Map.entry("driver.status", takes("", "env driver tree")),
         Map.entry("driver.start", takes("yes", "env driver wait confirm tree")),
         Map.entry("driver.stop", takes("yes", "env driver wait confirm tree")),
@@ -375,6 +381,42 @@ public final class OperateCli {
 
                 case "workorder.list":
                     result = Operate.workOrders(engine, env, first(opts, "base"), a.intOpt("limit", 200));
+                    break;
+
+                case "workorder.show":
+                    result = Operate.workOrderShow(engine, env, first(opts, "dn"));
+                    break;
+
+                case "workorder.create":
+                case "workorder.set": {
+                    Map<String, String> fields = new LinkedHashMap<>();
+                    for (String[] f : Operate.WORK_ORDER_FIELDS) {
+                        if (!f[2].equals("dns") && opts.containsKey(f[0])) {
+                            fields.put(f[0], first(opts, f[0]) == null ? "" : first(opts, f[0]));
+                        }
+                    }
+                    if (opts.containsKey("content-file")) {
+                        fields.put("content", java.nio.file.Files.readString(java.nio.file.Path.of(first(opts, "content-file")), java.nio.charset.StandardCharsets.UTF_8));
+                    }
+                    // --dependent repeats; one empty --dependent clears them
+                    List<String> dependents = opts.containsKey("dependent")
+                        ? opts.get("dependent").stream().filter(d -> d != null && !d.isBlank()).toList() : null;
+                    result = cmd.equals("workorder.create")
+                        ? Operate.workOrderCreate(engine, env, first(opts, "container"), first(opts, "name"), fields, dependents, yes, confirm, tree)
+                        : Operate.workOrderSet(engine, env, first(opts, "dn"), fields, dependents, yes, confirm, tree);
+                    break;
+                }
+
+                case "workorder.delete":
+                    result = Operate.workOrderDelete(engine, env, first(opts, "dn"), yes, confirm, tree);
+                    break;
+
+                case "template.list":
+                    result = Operate.templateList(engine, env);
+                    break;
+
+                case "template.show":
+                    result = Operate.templateShow(engine, env, first(opts, "name"));
                     break;
 
                 case "driver.status": {
@@ -849,7 +891,15 @@ public final class OperateCli {
         System.err.println("  driverset.servers [add|remove --server DN --yes] --env E   the servers of the set and what this connection's server runs; add/remove associate a server (SetDriverSet / ClearDriverSet, at that server)");
         System.err.println("  engine.metrics --env E [--base DN] [--json]        users, users with an association, enabled ones (the licensing count), and each driver's associations by state");
         System.err.println("  driver.rights --env E --driver D --dn <object> [--attr A…]   eDirectory's effective rights of the driver object on an object: entry, all attributes, named attributes");
-        System.err.println("  workorder.list --env E [--base DN] [--limit N]    the Work Order driver's DirXML-WorkOrder objects: status, due date, description");
+        System.err.println("  workorder.list --env E [--base DN] [--limit N]    the work orders: in the Work Order driver's container (idv.workorder.container), or under --base");
+        System.err.println("  workorder.show --env E --dn DN                     one work order: every field and the driver's log");
+        System.err.println("  workorder.create --env E --name N [--container DN] [--status pending|onhold] [--due TIME|now] [--repeat-minutes N]");
+        System.err.println("                   [--delete-date TIME] [--delete-on-error true|false] [--dependent DN…] [--type T] [--number N]");
+        System.err.println("                   [--contact C] [--description D] [--content TEXT | --content-file F] --yes   a new work order (light write)");
+        System.err.println("  workorder.set --env E --dn DN [the fields above; an empty value clears one] --yes   change a work order (light write)");
+        System.err.println("  workorder.delete --env E --dn DN --yes             delete a work order (light write)");
+        System.err.println("  template.list --env E                              the notification templates the vault holds now");
+        System.err.println("  template.show --env E --name N                     one template: subject, body, tokens, whether core can read it");
         System.err.println("  vault.email-server [set] --env E [--host H] [--port N] [--from A] [--user U] [--tls true|false] [--timeout N] [--protocol P] [--auth M] [--password-key K|--stdin]   the notification collection's SMTP settings; set writes them");
         System.err.println("  driver.migrate --env E --driver D --direction vault --base DN --filter F --class C [--max N] [--dry-run] --yes   send vault objects into the application (one <sync> per object through the running driver)");
         System.err.println("  driver.log-level [set] --env E [--driver D] [--level errors|errors-and-warnings|last-log-time|off|specific-events] [--events id,…] [--limit N] [--events-type N] [--inherit]   the log level of a driver or the driver set; set writes it live, --inherit makes a driver use the set's");

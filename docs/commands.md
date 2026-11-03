@@ -2006,7 +2006,7 @@ More: [console-gaps.md](console-gaps.md#13-as-built-l1-the-low-set).
 
 ### `workorder.list`
 
-The Work Order driver's `DirXML-WorkOrder` objects: status, due date, description, newest due date first. Read-only.
+The Work Order driver's `DirXML-WorkOrder` objects: status, due date ("now" when it is to be done at once), description, newest due date first. Read-only. Without `--base`, the container each Work Order driver uses: the `idv.workorder.container` GCV (the driver's own, a GCV object linked to it as NOVLWOBASE installs it, or the set's; a slash DN, found a level at a time), else the Work Order driver object itself, NetIQ's suggested container; with no Work Order driver, the driver set.
 
 ```
 bin/idm workorder.list --env <name> [--base <dn>] [--limit <n>] [--json]
@@ -2015,7 +2015,7 @@ bin/idm workorder.list --env <name> [--base <dn>] [--limit <n>] [--json]
 | Argument | Required | Values |
 |---|---|---|
 | `--env` | yes | an environment in `environments.properties` |
-| `--base` | no | the search base; default: the driver set |
+| `--base` | no | the search base; default: the Work Order container (above) |
 | `--limit` | no | the most objects listed; default: 200 |
 | `--json` | no | the result as JSON |
 
@@ -2024,6 +2024,133 @@ bin/idm workorder.list --env test
 ```
 
 More: [console-gaps.md](console-gaps.md#13-as-built-l1-the-low-set).
+
+### `workorder.show`
+
+One work order: every field, whether it is to be done now, and the driver's processing log. Read-only.
+
+```
+bin/idm workorder.show --env <name> --dn <work order> [--json]
+```
+
+| Argument | Required | Values |
+|---|---|---|
+| `--env` | yes | an environment in `environments.properties` |
+| `--dn` | yes | the work order |
+| `--json` | no | the result as JSON |
+
+```bash
+bin/idm workorder.show --env test --dn "cn=New hire jdoe,cn=Work Orders,cn=driverset1,o=system"
+```
+
+### `workorder.create`
+
+A new work order in the Work Order container (or `--container`), `pending` and done once unless the options say otherwise, as Identity Console makes one. Writes to the vault, as `vault.email-server set` does: `--confirm <env>` or `IDM_AGENT_ALLOW_WRITE=1`, `--yes` on a `stg` or `prd` tier, `--confirm <env>` on a `prd` tier. Audited.
+
+```
+bin/idm workorder.create --env <name> --name <name> [--container <dn>] [fields] [--yes] [--confirm <env>] [--json]
+```
+
+| Argument | Required | Values |
+|---|---|---|
+| `--env` | yes | an environment in `environments.properties` |
+| `--name` | yes | the work order's name |
+| `--container` | no | where it goes; default: the Work Order container, refused when there are several |
+| `--status` | no | `pending` (a new one's default) or `onhold`; the driver sets `configured` or `error` |
+| `--due` | no | when it is done: `now` (the do-it-now flag, no due date), or a time as `20261231235900Z`, `2026-12-31T23:59:00Z` or `2026-12-31` |
+| `--repeat-minutes` | no | repeat it every this many minutes; `0`, a new one's default, for once |
+| `--delete-date` | no | when the driver deletes it, a time as for `--due` |
+| `--delete-on-error` | no | `true` to delete it on the delete date even after an error |
+| `--dependent` | no | a work order it waits for; repeat for several |
+| `--type`, `--number`, `--contact`, `--description` | no | the work order's type (passed to the WorkToDo object), number, contact and description |
+| `--content`, `--content-file` | no | what the work order does, as text or from a file |
+
+```bash
+bin/idm workorder.create --env test --name "New hire jdoe" --due 2026-12-01T08:00:00Z --content-file jdoe.xml --confirm test
+```
+
+The Work Order driver polls its container and runs a work order when it is due: it adds a `DirXML-WorkToDo` object with
+the content, description, type and the work order's DN (NOVLWOBASE names it `DO-<work order>`, in the same container),
+then sets the status to `configured` (or `error`), adds a line to the log and writes the time it ran as the due date. One
+that repeats gets its next due date and stays `pending`. Under NOVLWOBASE a work order runs again only once whatever
+consumes its WorkToDo has removed it; until then the add fails (-606) and the status becomes `error`.
+
+### `workorder.set`
+
+A work order's fields changed; an empty value (`--description=`) clears one. Takes the fields of `workorder.create`. Writes to the vault, gated as `workorder.create`. Audited.
+
+```
+bin/idm workorder.set --env <name> --dn <work order> [fields] [--yes] [--confirm <env>] [--json]
+```
+
+| Argument | Required | Values |
+|---|---|---|
+| `--env` | yes | an environment in `environments.properties` |
+| `--dn` | yes | the work order |
+| `--status` | no | `pending` (a new one's default) or `onhold`; the driver sets `configured` or `error` |
+| `--due` | no | when it is done: `now` (the do-it-now flag, no due date), or a time as `20261231235900Z`, `2026-12-31T23:59:00Z` or `2026-12-31` |
+| `--repeat-minutes` | no | repeat it every this many minutes; `0`, a new one's default, for once |
+| `--delete-date` | no | when the driver deletes it, a time as for `--due` |
+| `--delete-on-error` | no | `true` to delete it on the delete date even after an error |
+| `--dependent` | no | a work order it waits for; repeat for several |
+| `--type`, `--number`, `--contact`, `--description` | no | the work order's type (passed to the WorkToDo object), number, contact and description |
+| `--content`, `--content-file` | no | what the work order does, as text or from a file |
+
+```bash
+bin/idm workorder.set --env test --dn "cn=New hire jdoe,cn=Work Orders,cn=driverset1,o=system" --status onhold --confirm test
+```
+
+### `workorder.delete`
+
+A work order deleted. Writes to the vault, gated as `workorder.create`. Audited.
+
+```
+bin/idm workorder.delete --env <name> --dn <work order> [--yes] [--confirm <env>] [--json]
+```
+
+| Argument | Required | Values |
+|---|---|---|
+| `--env` | yes | an environment in `environments.properties` |
+| `--dn` | yes | the work order |
+
+```bash
+bin/idm workorder.delete --env test --dn "cn=New hire jdoe,cn=Work Orders,cn=driverset1,o=system" --confirm test
+```
+
+### `template.list`
+
+The notification templates the vault holds now (`notfMergeTemplate` in the collection under `cn=Security`): name, subject, and whether a package installed it. Read-only: templates are tree content (`templates/`), changed by `vault.deploy`.
+
+```
+bin/idm template.list --env <name> [--json]
+```
+
+| Argument | Required | Values |
+|---|---|---|
+| `--env` | yes | an environment in `environments.properties` |
+| `--json` | no | the result as JSON |
+
+```bash
+bin/idm template.list --env test
+```
+
+### `template.show`
+
+One template as the vault holds it: the subject, the body, the `$TOKEN$` markers the two use, and whether the body is XML DirXMLDev can read (one it cannot would be read as no body, and a deploy would not keep it). Read-only.
+
+```
+bin/idm template.show --env <name> --name <template> [--json]
+```
+
+| Argument | Required | Values |
+|---|---|---|
+| `--env` | yes | an environment in `environments.properties` |
+| `--name` | yes | the template's name |
+| `--json` | no | the result as JSON |
+
+```bash
+bin/idm template.show --env test --name "Password Expiration Notification"
+```
 
 ### `vault.email-server`
 

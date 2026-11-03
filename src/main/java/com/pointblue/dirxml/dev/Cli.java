@@ -198,7 +198,7 @@ public final class Cli {
             if (args.length >= 1 && args[0].startsWith("viewer.")) {
                 System.exit(com.pointblue.dirxml.dev.operate.ViewerCli.run(args));
             }
-            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].startsWith("job.") || args[0].startsWith("rbe.") || args[0].startsWith("workorder.") || args[0].equals("object.inspect") || args[0].equals("vault.email-server") || args[0].equals("trace.view"))) {
+            if (args.length >= 1 && (args[0].startsWith("driver.") || args[0].startsWith("driverset.") || args[0].startsWith("engine.") || args[0].startsWith("job.") || args[0].startsWith("rbe.") || args[0].startsWith("workorder.") || args[0].startsWith("template.") || args[0].equals("object.inspect") || args[0].equals("vault.email-server") || args[0].equals("trace.view"))) {
                 System.exit(com.pointblue.dirxml.dev.operate.OperateCli.run(args));
             }
             if (args.length >= 1 && com.pointblue.dirxml.dev.promote.PromoteCli.handles(args[0])) {
@@ -636,6 +636,8 @@ public final class Cli {
         sb.append("  driver.health [clear] --env E --driver D [--yes]   the Driver Health job's last state per server, the health configuration, the set's health jobs; clear removes the recorded status\n");
         sb.append("  job.list --env E [--driver D] | job.status --env E --job J [--driver D] | job.start|abort --env E --job J [--driver D] [--yes]   the set's jobs with the engine's state; start or abort one\n");
         sb.append("  driverset.activation --env E [apply --file F --yes] | driverset.servers --env E [add|remove --server DN --yes] | engine.metrics --env E | driver.rights --env E --driver D --dn O | workorder.list --env E   the low console gaps (docs/console-gaps.md §13)\n");
+        sb.append("  workorder.show --env E --dn DN | workorder.create --env E --name N [fields] | workorder.set --env E --dn DN [fields] | workorder.delete --env E --dn DN   work orders (docs/commands.md)\n");
+        sb.append("  template.list --env E | template.show --env E --name N   the notification templates the vault holds now, read-only\n");
         sb.append("  vault.email-server [set] --env E [--host H] [--port N] [--from A] [--user U] [--tls true|false] [--timeout N] [--protocol P] [--auth M] [--password-key K|--stdin]   the notification collection's SMTP settings (the password never shown); set writes them\n");
         sb.append("  rbe.list --env E | rbe.members --env E --policy P   the entitlement policies of the set: priority, members, grants; one policy's computed members\n");
         sb.append("  engine.version --env E\n");
