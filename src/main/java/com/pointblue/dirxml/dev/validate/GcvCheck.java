@@ -25,7 +25,15 @@ import java.util.Set;
  * ({@code gcv-undefined-library}), since the policy may be linked only by drivers
  * that do define it.
  *
- * <p>Codes: {@code gcv-undefined} (E), {@code gcv-undefined-library} (W).
+ * <p>An {@code <if-global-variable>} condition is different: the engine reads an
+ * undefined GCV there as having no value ({@code not-available} is true, {@code equal}
+ * is false) and nothing fails. Packages test GCVs another package may define that way.
+ * A condition with {@code op="available"} or {@code "not-available"} asks exactly that
+ * and is never reported; any other op on an undefined GCV is an {@code INFO}
+ * ({@code gcv-undefined-condition}), since its outcome is then fixed.
+ *
+ * <p>Codes: {@code gcv-undefined} (E), {@code gcv-undefined-library} (W),
+ * {@code gcv-undefined-condition} (I).
  */
 public final class GcvCheck implements Check {
 
@@ -47,6 +55,7 @@ public final class GcvCheck implements Check {
                     r.add(Finding.error("gcv-undefined", p.path(),
                         "references undefined GCV(s): " + String.join(", ", missing)));
                 }
+                conditionFinding(r, p, defined);
             }
         }
         for (Policy p : ds.library.policies) {
@@ -55,13 +64,36 @@ public final class GcvCheck implements Check {
                 r.add(Finding.warning("gcv-undefined-library", p.path(),
                     "references GCV(s) no driver in this set defines: " + String.join(", ", missing)));
             }
+            conditionFinding(r, p, union);
         }
     }
 
-    /** {@code <if-global-variable name=…>} conditions read a GCV too; they have no token form, so the reference scan misses them. */
+    private static void conditionFinding(Report r, Policy p, Set<String> defined) {
+        if (p.content == null) {
+            return;
+        }
+        Set<String> names = new LinkedHashSet<>();
+        conditions(p.content, names);
+        names.removeAll(GcvReferences.referenced(p.content));
+        List<String> missing = undefined(names, defined);
+        if (!missing.isEmpty()) {
+            r.add(Finding.info("gcv-undefined-condition", p.path(),
+                "tests GCV(s) nothing defines: " + String.join(", ", missing)
+                    + " — the engine reads them as having no value, so those tests always come out the same"));
+        }
+    }
+
+    /**
+     * {@code <if-global-variable name=…>} conditions that compare a GCV's value; they have
+     * no token form, so the reference scan misses them. {@code available} and
+     * {@code not-available} only ask whether it is defined, so they're left out.
+     */
     private static void conditions(org.w3c.dom.Element e, Set<String> names) {
         if ("if-global-variable".equals(e.getNodeName()) && !e.getAttribute("name").isEmpty()) {
-            names.add(e.getAttribute("name"));
+            String op = e.getAttribute("op");
+            if (!"available".equals(op) && !"not-available".equals(op)) {
+                names.add(e.getAttribute("name"));
+            }
         }
         for (org.w3c.dom.Node c = e.getFirstChild(); c != null; c = c.getNextSibling()) {
             if (c instanceof org.w3c.dom.Element) {
@@ -71,12 +103,14 @@ public final class GcvCheck implements Check {
     }
 
     private static List<String> missing(Policy p, Set<String> defined) {
-        List<String> out = new ArrayList<>();
         if (p.content == null) {
-            return out;
+            return new ArrayList<>();
         }
-        Set<String> names = new java.util.LinkedHashSet<>(GcvReferences.referenced(p.content));
-        conditions(p.content, names);
+        return undefined(GcvReferences.referenced(p.content), defined);
+    }
+
+    private static List<String> undefined(java.util.Collection<String> names, Set<String> defined) {
+        List<String> out = new ArrayList<>();
         for (String name : names) {
             // A name built from a local variable (drv.x.$entName$) is resolved at run
             // time; nothing static to check.

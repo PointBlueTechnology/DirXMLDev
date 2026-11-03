@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **A GCV tested by an `<if-global-variable>` condition but defined nowhere was a `gcv-undefined` error.** The
+  engine reads an undefined GCV there as having no value (`not-available` is true, `equal` is false) and
+  nothing fails; packages test GCVs another package may define that way. An `available` / `not-available`
+  test is no longer reported, and any other op is the new info `gcv-undefined-condition`. A GCV that is
+  also substituted (`token-global-variable`, `~name~`) is still `gcv-undefined`.
+
 ## [0.64.0] - 2026-11-02
 
 ### Added
