@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.66.0] - 2026-11-03
+
 ### Added
 
 - **Work orders can be made, changed and deleted:** `workorder.show`, `workorder.create`, `workorder.set` and
