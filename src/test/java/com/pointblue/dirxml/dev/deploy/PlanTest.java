@@ -536,10 +536,11 @@ public class PlanTest {
 
     /**
      * The trace size limit is the driver's configuration: a new driver is created with the tree's, but an existing
-     * driver keeps the vault's unless the deploy is told to write it ({@code --trace-size-limit}).
+     * driver keeps the vault's unless the deploy is told to write it ({@code --trace-size-limit}). A new driver also
+     * starts with the trace level and file the tree saw; an existing driver's stay operational ({@code driver.trace}).
      */
     @Test
-    public void traceSizeLimitIsWrittenOnANewDriverAndOnAnExistingOneOnlyWhenAsked() {
+    public void traceSettingsAreWrittenOnANewDriverAndTheLimitOnAnExistingOneOnlyWhenAsked() {
         DriverSet from = VaultMappingTest.model();
         from.driver("AD").traceSizeLimit = "200000";
         DriverSet to = VaultMappingTest.model();
@@ -547,12 +548,19 @@ public class PlanTest {
         Driver n = new Driver("New");
         n.shimClass = "com.example.Shim";
         n.traceSizeLimit = "50000";
+        n.meta.put(Driver.META_TRACE_LEVEL, "3");
+        n.meta.put(Driver.META_TRACE_FILE, "/var/log/idm/new.trace");
         to.drivers.add(n);
+        from.driver("AD").meta.put(Driver.META_TRACE_LEVEL, "0");
+        to.driver("AD").meta.put(Driver.META_TRACE_LEVEL, "5");   // an existing driver's trace level is operational: never written
         ModelDiff diff = ModelDiff.of(from, to);
 
         Plan kept = Plan.of(diff, to, DS, Secrets.none(), "none", Map.of(), true, null, List.of(), null, List.of(), List.of(), false);
         Plan.Step add = kept.steps.stream().filter(s -> s.op == Plan.Op.ADD && "cn=New,cn=dvs,o=system".equals(s.dn)).findFirst().orElseThrow();
         assertEquals("50000", new String(add.values.get(VaultMapping.TRACE_SIZE_LIMIT).get(0), StandardCharsets.UTF_8));
+        assertEquals("3", new String(add.values.get(Vault.TRACE_LEVEL).get(0), StandardCharsets.UTF_8));
+        assertEquals("/var/log/idm/new.trace", new String(add.values.get(Vault.TRACE_FILE).get(0), StandardCharsets.UTF_8));
+        assertTrue(kept.text("stg", DS), kept.steps.stream().noneMatch(s -> Vault.TRACE_LEVEL.equals(s.attr)));
         assertTrue(kept.text("stg", DS), kept.steps.stream()
             .noneMatch(s -> s.op == Plan.Op.MODIFY && VaultMapping.TRACE_SIZE_LIMIT.equals(s.attr)));
         assertTrue(kept.notes.toString(), kept.notes.stream()

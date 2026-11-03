@@ -26,6 +26,12 @@ public final class Driver {
     public static final String SHIM_AUTH_ID = "shim-auth-id";
     /** The {@code drivers/<d>.trace-size-limit} setting and its {@code driver.xml} attribute. */
     public static final String TRACE_SIZE_LIMIT = "trace-size-limit";
+    /**
+     * Meta keys (the vault readers' lowercase attribute names) of the driver's trace level and file: operational
+     * ({@code driver.trace}), never compared, written only when a deploy creates the driver.
+     */
+    public static final String META_TRACE_LEVEL = "dirxml-tracelevel";
+    public static final String META_TRACE_FILE = "dirxml-tracefile";
 
     /** The tree's name; {@link DriverSet#renameDriver} changes it on a throwaway model (an environment that names the driver differently). */
     public String name;

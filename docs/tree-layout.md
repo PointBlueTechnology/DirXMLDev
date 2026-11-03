@@ -148,7 +148,8 @@ doesn't have.
 
 That driver's manifest: shim class, authentication server and id (not the
 password), its trace size limit (`trace-size-limit`, the vault's
-`DirXML-TraceSizeLimit`; absent when it inherits the driver set's), which environments get it (`environments="QA, PROD"`, absent = every
+`DirXML-TraceSizeLimit`; absent when it inherits the driver set's), the trace level and file
+it was read with (`dirxml-tracelevel` / `dirxml-tracefile` meta: a new driver starts with them), which environments get it (`environments="QA, PROD"`, absent = every
 environment) and which it is planned for but not promoted to yet
 (`planned="PROD"`), which config files exist, every policy and resource, the
 entitlements, and the **linkage** — which object runs in which policy set, in

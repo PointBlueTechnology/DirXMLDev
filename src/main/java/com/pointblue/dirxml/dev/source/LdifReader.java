@@ -751,7 +751,7 @@ public final class LdifReader {
                 continue;   // the package initial state is the tree's .package-baseline, not meta
             }
             if (a.startsWith("dirxml-pkg") || a.equals("dirxml-contenttype") || a.equals("dirxml-driverstartoption")
-                || a.equals("dirxml-tracelevel") || a.equals("dirxml-tracefile")) {
+                || a.equals(Driver.META_TRACE_LEVEL) || a.equals(Driver.META_TRACE_FILE)) {
                 String v = e.first(a);
                 if (v != null) {
                     meta.put(a, v);

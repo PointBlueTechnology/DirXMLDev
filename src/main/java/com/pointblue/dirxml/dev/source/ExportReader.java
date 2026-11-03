@@ -235,10 +235,18 @@ public final class ExportReader {
             }
         }
 
-        // <trace-size-limit value=…/>, or inherit="true" for the driver set's
+        // <trace-size-limit value=…/>, or inherit="true" for the driver set's; the level and file the same way, as meta
         Element traceSize = directChild(attrs, "trace-size-limit");
         if (traceSize != null && !"true".equalsIgnoreCase(traceSize.getAttribute("inherit"))) {
             d.traceSizeLimit = nullIfEmpty(traceSize.getAttribute("value"));
+        }
+        String[][] trace = { { "trace-level", Driver.META_TRACE_LEVEL }, { "trace-file", Driver.META_TRACE_FILE } };
+        for (String[] t : trace) {
+            Element te = directChild(attrs, t[0]);
+            String v = te == null || "true".equalsIgnoreCase(te.getAttribute("inherit")) ? null : nullIfEmpty(te.getAttribute("value"));
+            if (v != null) {
+                d.meta.put(t[1], v);
+            }
         }
 
         Element filter = Xds.firstByName(scanRoot, "filter");
