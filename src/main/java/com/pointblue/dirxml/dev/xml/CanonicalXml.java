@@ -97,6 +97,8 @@ public final class CanonicalXml {
 
             DocumentBuilder builder = factory.newDocumentBuilder();
             builder.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
+            // the failure is thrown to the caller; the default handler would also print "[Fatal Error]" to stderr
+            builder.setErrorHandler(new org.xml.sax.helpers.DefaultHandler());
 
             return builder.parse(new InputSource(new StringReader(xml)));
         } catch (ParserConfigurationException | SAXException | IOException e) {

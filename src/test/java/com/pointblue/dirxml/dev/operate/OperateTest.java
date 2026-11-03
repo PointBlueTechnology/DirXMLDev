@@ -298,6 +298,22 @@ public class OperateTest {
             return childrenOf.getOrDefault(base, List.of());
         }
 
+        final List<String> deletedDns = new ArrayList<>();
+
+        @Override
+        public void add(String dn, List<String> objectClasses, Map<String, List<byte[]>> attrs) {
+            Vault.Entry e = newEntry(dn);
+            put(e, "objectClass", objectClasses);
+            e.attrs.putAll(attrs);
+            entries.put(dn, e);
+        }
+
+        @Override
+        public void delete(String dn) {
+            deletedDns.add(dn);
+            entries.remove(dn);
+        }
+
         public void replace(String dn, String attr, List<byte[]> values) {
             Vault.Entry e = entries.get(dn);
             if (values.isEmpty()) {
@@ -1109,4 +1125,110 @@ public class OperateTest {
         assertTrue(r.text(), r.text().indexOf("wo2") < r.text().indexOf("wo1"));
         assertTrue(r.text(), r.text().contains("new hire"));
     }
+
+    // ---- G14 work orders, G8 templates read live -------------------------------------------------
+
+    private static final String WO_DRIVER = "cn=Work Orders," + DS_DN;
+    private static final String WO_CONTAINER = "ou=WorkOrders,o=data";
+
+    /** A Work Order driver whose container GCV is in slash form, and the levels it resolves through. */
+    private static FakeEngine workOrderVault(String gcv) {
+        FakeEngine fake = new FakeEngine();
+        Vault.Entry drv = FakeEngine.entry(WO_DRIVER, "Work Orders", List.of("Top", "DirXML-Driver"));
+        FakeEngine.put(drv, "DirXML-JavaModule", List.of(Operate.WORK_ORDER_SHIM));
+        if (gcv != null) {
+            FakeEngine.put(drv, "DirXML-ConfigValues", List.of("<configuration-values><definitions><definition dn-space=\"dirxml\" dn-type=\"slash\" name=\"idv.workorder.container\" type=\"dn\"><value>" + gcv + "</value></definition></definitions></configuration-values>"));
+        }
+        fake.entries.put(WO_DRIVER, drv);
+        fake.entries.put(DS_DN, FakeEngine.entry(DS_DN, "driverset1", List.of("Top", "DirXML-DriverSet")));
+        fake.searches.put("(DirXML-JavaModule=" + Operate.WORK_ORDER_SHIM + ")", List.of(drv));
+        Vault.Entry data = FakeEngine.entry("o=data", null, List.of("Top", "Organization"));
+        Vault.Entry wo = FakeEngine.entry(WO_CONTAINER, null, List.of("Top", "organizationalUnit"));
+        fake.entries.put(WO_CONTAINER, wo);
+        fake.searches.put("(|(o=data)(ou=data)(cn=data)(dc=data)(c=data)(l=data))", List.of(data));
+        fake.searches.put("(|(o=WorkOrders)(ou=WorkOrders)(cn=WorkOrders)(dc=WorkOrders)(c=WorkOrders)(l=WorkOrders))", List.of(wo));
+        return fake;
+    }
+
+    @Test
+    public void theWorkOrderContainerComesFromTheGcvInSlashForm() throws Exception {
+        Environments.Environment env = env("dev", Environments.Tier.DEV);
+        assertEquals(List.of(WO_CONTAINER), Operate.workOrderContainers(workOrderVault("data\\WorkOrders"), env));
+        assertEquals("a leading tree name is skipped", List.of(WO_CONTAINER), Operate.workOrderContainers(workOrderVault("\\TREE\\data\\WorkOrders"), env));
+        assertEquals("an LDAP DN is taken as it is", List.of("ou=x,o=data"), Operate.workOrderContainers(workOrderVault("ou=x,o=data"), env));
+        assertEquals("no GCV: the driver itself, NetIQ's suggested container", List.of(WO_DRIVER), Operate.workOrderContainers(workOrderVault(null), env));
+        assertEquals("no Work Order driver", List.of(), Operate.workOrderContainers(new FakeEngine(), env));
+    }
+
+    @Test
+    public void aWorkOrderIsCreatedChangedAndDeleted() throws Exception {
+        Path tree = Files.createTempDirectory("wo-tree");
+        Environments.Environment env = env("dev", Environments.Tier.DEV);
+        FakeEngine fake = workOrderVault("data\\WorkOrders");
+        Map<String, String> fields = new LinkedHashMap<>(Map.of("due", "2026-12-31T23:59:00Z", "description", "new hire", "content", "<add-user/>"));
+        Operate.Result made = Operate.workOrderCreate(fake, env, null, "wo1", fields, null, true, null, tree);
+        assertTrue(made.text(), made.ok);
+        Vault.Entry wo = fake.entries.get("cn=wo1," + WO_CONTAINER);
+        assertEquals("pending, as a new one is", "pending", wo.string("DirXML-nwoStatus"));
+        assertEquals("no repeat unless given", "0", wo.string("DirXML-nwoRepeatInterval"));
+        assertEquals("20261231235900Z", wo.string("DirXML-DueDate"));
+        assertNull(wo.string("DirXML-nwoDoItNowFlag"));
+        assertEquals("<add-user/>", wo.string("DirXML-nwoContent"));
+        assertTrue(wo.hasClass("DirXML-WorkOrder"));
+        assertFalse("not twice", Operate.workOrderCreate(fake, env, null, "wo1", fields, null, true, null, tree).ok);
+
+        assertFalse(Operate.workOrderCreate(fake, env, null, "bad", Map.of("status", "configured"), null, true, null, tree).ok);
+        assertFalse(Operate.workOrderCreate(fake, env, null, "bad", Map.of("repeat-minutes", "-5"), null, true, null, tree).ok);
+        assertFalse(Operate.workOrderCreate(fake, env, null, "bad", Map.of("due", "next tuesday"), null, true, null, tree).ok);
+        assertFalse(Operate.workOrderCreate(fake, env, null, "bad", Map.of(), List.of("cn=nope," + WO_CONTAINER), true, null, tree).ok);
+
+        // do it now: the flag, and no due date; a dependent; a cleared description
+        Operate.Result set = Operate.workOrderSet(fake, env, "cn=wo1," + WO_CONTAINER,
+            new LinkedHashMap<>(Map.of("due", "now", "description", "", "status", "onhold", "repeat-minutes", "1440")), List.of(WO_CONTAINER), true, null, tree);
+        assertTrue(set.text(), set.ok);
+        assertNull(wo.string("DirXML-DueDate"));
+        assertEquals("TRUE", wo.string("DirXML-nwoDoItNowFlag"));
+        assertNull(wo.string("description"));
+        assertEquals("onhold", wo.string("DirXML-nwoStatus"));
+        assertEquals("1440", wo.string("DirXML-nwoRepeatInterval"));
+        assertEquals(List.of(WO_CONTAINER), wo.strings("DirXML-nwoDependentWorkOrder"));
+
+        fake.searches.put("(objectClass=DirXML-WorkOrder)", List.of(wo));
+        Operate.Result list = Operate.workOrders(fake, env, null, 200);
+        assertTrue(list.text(), list.text().startsWith("1 work order(s) under " + WO_CONTAINER));
+        assertTrue(list.json(), list.json().contains("\"now\":true") && list.json().contains("\"status\":\"onhold\""));
+        assertTrue(Operate.workOrderShow(fake, env, "cn=wo1," + WO_CONTAINER).text().contains("1440"));
+        assertFalse(Operate.workOrderShow(fake, env, WO_DRIVER).ok);
+
+        assertTrue(Operate.workOrderDelete(fake, env, "cn=wo1," + WO_CONTAINER, true, null, tree).ok);
+        assertEquals(List.of("cn=wo1," + WO_CONTAINER), fake.deletedDns);
+        String log = Files.readString(DeployLog.file(tree, "dev"));
+        assertTrue(log, log.contains("workorder.create") && log.contains("workorder.set") && log.contains("workorder.delete"));
+    }
+
+    @Test
+    public void templatesAreListedAndShownAsTheVaultHoldsThem() throws Exception {
+        FakeEngine fake = new FakeEngine();
+        String coll = "cn=Default Notification Collection,cn=Security";
+        Vault.Entry c = FakeEngine.entry(coll, "Default Notification Collection", List.of("Top", "notfTemplateCollection"));
+        fake.searches.put("(objectClass=notfTemplateCollection)", List.of(c));
+        Vault.Entry t = FakeEngine.entry("cn=Welcome," + coll, "Welcome", List.of("Top", "notfMergeTemplate"));
+        FakeEngine.put(t, "notfMergeTemplateSubject", List.of("Hello $FirstName$"));
+        FakeEngine.put(t, "notfMergeTemplateData", List.of("<html xmlns:form=\"http://www.novell.com/dirxml/workflow/form\"><form:token-descriptions/><body><p>Dear <b>$FirstName$</b>,<br/>see $URL$</p></body></html>"));
+        FakeEngine.put(t, "DirXML-pkgGUID", List.of("ABC"));
+        Vault.Entry broken = FakeEngine.entry("cn=Broken," + coll, "Broken", List.of("Top", "notfMergeTemplate"));
+        FakeEngine.put(broken, "notfMergeTemplateData", List.of("<p>not closed"));
+        fake.entries.put(t.dn, t);
+        fake.entries.put(broken.dn, broken);
+        fake.searches.put("(objectClass=notfMergeTemplate)", List.of(t, broken));
+        Environments.Environment env = env("dev", Environments.Tier.DEV);
+        Operate.Result list = Operate.templateList(fake, env);
+        assertTrue(list.text(), list.ok && list.text().startsWith("2 template(s)"));
+        assertTrue(list.json(), list.json().contains("\"packaged\":true"));
+        Operate.Result show = Operate.templateShow(fake, env, "Welcome");
+        assertTrue(show.json(), show.json().contains("\"tokens\":[\"FirstName\",\"URL\"]") && show.json().contains("\"readable\":true"));
+        assertTrue(Operate.templateShow(fake, env, "Broken").json().contains("\"readable\":false"));
+        assertFalse(Operate.templateShow(fake, env, "Nope").ok);
+    }
+
 }
