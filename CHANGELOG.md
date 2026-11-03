@@ -16,8 +16,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   flag the plan notes the difference. The change never restarts a driver, because the engine reads trace
   settings live, and it never counts as drift. A tree that doesn't record a limit asks for nothing, so
   older trees diff as before. Also: `driver.set --key trace-size-limit`, the override key
-  `drivers/<driver>.trace-size-limit`, and `vault.compare-envs` values. The trace level and file stay
-  operational (`driver.trace`).
+  `drivers/<driver>.trace-size-limit`, and `vault.compare-envs` values.
+- **A new driver starts with its trace level and file.** A deploy that creates a driver writes the
+  `DirXML-TraceLevel` and `DirXML-TraceFile` the tree recorded. On an existing driver they stay operational
+  (`driver.trace`), and are never compared or written. Designer projects and exports now read and write the
+  driver's own trace level and file too.
 
 ### Changed
 

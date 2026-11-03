@@ -671,8 +671,10 @@ discipline), 5 and 7 are not.
    value is optional: without `--trace-size-limit` the vault keeps its own and the
    plan says so; with it, the plan writes the tree's. Either way no restart (the
    engine reads trace settings live), and a difference is never drift. A tree that
-   doesn't record a limit asks for nothing. The trace level and file stay
-   operational (`driver.trace`).
+   doesn't record a limit asks for nothing. A new driver also starts with the trace
+   level and file the tree saw (`dirxml-tracelevel` / `dirxml-tracefile` in
+   `driver.xml`); on an existing driver those stay operational (`driver.trace`),
+   never compared or written.
 
 ## Incident 2026-09-16 — a stale tree emptied a kind (recovered from the snapshot)
 

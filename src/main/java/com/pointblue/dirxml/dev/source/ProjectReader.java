@@ -772,6 +772,14 @@ public final class ProjectReader {
         if (traceSize != null && !traceSize.isEmpty() && !"true".equalsIgnoreCase(attrValue(m, "IdmParameter:InheritTraceSize"))) {
             d.traceSizeLimit = traceSize;
         }
+        String[][] trace = { { "DirXML-TraceLevel", "InheritTraceLevel", Driver.META_TRACE_LEVEL },
+            { "DirXML-TraceFile", "InheritTraceFile", Driver.META_TRACE_FILE } };
+        for (String[] t : trace) {
+            String v = attrValue(m, t[0]);
+            if (v != null && !v.isEmpty() && !"true".equalsIgnoreCase(attrValue(m, "IdmParameter:" + t[1]))) {
+                d.meta.put(t[2], v);
+            }
+        }
 
         String shimConfigInfo = attrValue(m, "DirXML-ShimConfigInfo");
         if (shimConfigInfo != null && !shimConfigInfo.isBlank()) {

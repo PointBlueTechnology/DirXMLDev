@@ -2997,6 +2997,16 @@ public final class ProjectWriter {
                 attrs.append(CObjectXml.attr("IdmParameter:InheritTraceSize", "false", "CString"));
                 attrs.append(CObjectXml.attr("DirXML-TraceSizeLimit", treeDriver.traceSizeLimit, "CString"));
             }
+            String traceLevel = treeDriver.meta.get(Driver.META_TRACE_LEVEL);
+            if (traceLevel != null) {
+                attrs.append(CObjectXml.attr("IdmParameter:InheritTraceLevel", "false", "CString"));
+                attrs.append(CObjectXml.attr("DirXML-TraceLevel", traceLevel, "CString"));
+            }
+            String traceFile = treeDriver.meta.get(Driver.META_TRACE_FILE);
+            if (traceFile != null) {
+                attrs.append(CObjectXml.attr("IdmParameter:InheritTraceFile", "false", "CString"));
+                attrs.append(CObjectXml.attr("DirXML-TraceFile", traceFile, "CString"));
+            }
             Element sci = treeDriver.config.get(Driver.SHIM_CONFIG_INFO);
             if (sci != null) {
                 attrs.append(CObjectXml.attr("DirXML-ShimConfigInfo", CanonicalXml.serialize(sci), "CString"));
