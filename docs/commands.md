@@ -2006,7 +2006,7 @@ More: [console-gaps.md](console-gaps.md#13-as-built-l1-the-low-set).
 
 ### `workorder.list`
 
-The Work Order driver's `DirXML-WorkOrder` objects: status, due date ("now" when it is to be done at once), description, newest due date first. Read-only. Without `--base`, the container each Work Order driver uses: the `idv.workorder.container` GCV (a slash DN, found a level at a time), else the Work Order driver object itself, NetIQ's suggested container; with no Work Order driver, the driver set.
+The Work Order driver's `DirXML-WorkOrder` objects: status, due date ("now" when it is to be done at once), description, newest due date first. Read-only. Without `--base`, the container each Work Order driver uses: the `idv.workorder.container` GCV (the driver's own, a GCV object linked to it as NOVLWOBASE installs it, or the set's; a slash DN, found a level at a time), else the Work Order driver object itself, NetIQ's suggested container; with no Work Order driver, the driver set.
 
 ```
 bin/idm workorder.list --env <name> [--base <dn>] [--limit <n>] [--json]

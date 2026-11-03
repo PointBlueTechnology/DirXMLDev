@@ -2596,10 +2596,10 @@ public final class Operate {
     public static List<String> workOrderContainers(Engine engine, Environments.Environment env) {
         List<String> out = new ArrayList<>();
         Vault.Entry set = engine.read(env.driverSetDn);
-        String setValue = set == null ? null : gcvValue(set.string("DirXML-ConfigValues"), WORK_ORDER_CONTAINER_GCV);
+        String setValue = set == null ? null : containerGcv(engine, set);
         for (Vault.Entry d : workOrderDrivers(engine, env)) {
             Vault.Entry full = engine.read(d.dn);
-            String value = full == null ? null : gcvValue(full.string("DirXML-ConfigValues"), WORK_ORDER_CONTAINER_GCV);
+            String value = full == null ? null : containerGcv(engine, full);
             String dn = value != null && !value.isBlank() ? value : setValue;
             String resolved = dn == null || dn.isBlank() ? null : ldapDnOf(engine, dn);
             String c = resolved != null ? resolved : d.dn;
@@ -2608,6 +2608,30 @@ public final class Operate {
             }
         }
         return out;
+    }
+
+    /**
+     * The container GCV on a driver or driver set: its own {@code DirXML-ConfigValues}, then the GCV objects it links
+     * (policy set 14), where a package install such as NOVLWOBASE's keeps it.
+     */
+    static String containerGcv(Engine engine, Vault.Entry e) {
+        String own = gcvValue(e.string("DirXML-ConfigValues"), WORK_ORDER_CONTAINER_GCV);
+        if (own != null && !own.isBlank()) {
+            return own;
+        }
+        for (String link : e.strings("DirXML-Policies")) {
+            int last = link.lastIndexOf('#');
+            int mid = last < 0 ? -1 : link.lastIndexOf('#', last - 1);
+            if (mid < 0 || !link.substring(last + 1).trim().equals("14")) {
+                continue;
+            }
+            Vault.Entry g = engine.read(link.substring(0, mid));
+            String v = g == null ? null : gcvValue(g.string("DirXML-ConfigValues"), WORK_ORDER_CONTAINER_GCV);
+            if (v != null && !v.isBlank()) {
+                return v;
+            }
+        }
+        return null;
     }
 
     /** The value of the GCV {@code name} in a {@code <configuration-values>} document; null when it is not there. */
