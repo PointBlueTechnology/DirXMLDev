@@ -767,6 +767,19 @@ public final class ProjectReader {
         d.shimClass = attrValue(m, "DirXML-JavaModule");
         d.shimAuthServer = attrValue(m, "DirXML-ShimAuthServer");
         d.shimAuthId = attrValue(m, "DirXML-ShimAuthID");
+        // the driver's own trace size limit: Designer keeps the vault's attribute, with IdmParameter:InheritTraceSize false
+        String traceSize = attrValue(m, "DirXML-TraceSizeLimit");
+        if (traceSize != null && !traceSize.isEmpty() && !"true".equalsIgnoreCase(attrValue(m, "IdmParameter:InheritTraceSize"))) {
+            d.traceSizeLimit = traceSize;
+        }
+        String[][] trace = { { "DirXML-TraceLevel", "InheritTraceLevel", Driver.META_TRACE_LEVEL },
+            { "DirXML-TraceFile", "InheritTraceFile", Driver.META_TRACE_FILE } };
+        for (String[] t : trace) {
+            String v = attrValue(m, t[0]);
+            if (v != null && !v.isEmpty() && !"true".equalsIgnoreCase(attrValue(m, "IdmParameter:" + t[1]))) {
+                d.meta.put(t[2], v);
+            }
+        }
 
         String shimConfigInfo = attrValue(m, "DirXML-ShimConfigInfo");
         if (shimConfigInfo != null && !shimConfigInfo.isBlank()) {

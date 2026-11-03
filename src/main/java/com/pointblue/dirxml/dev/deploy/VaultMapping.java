@@ -37,6 +37,7 @@ public final class VaultMapping {
     public static final String POLICIES = "DirXML-Policies";
     public static final String JAVA_MODULE = "DirXML-JavaModule";
     public static final String SHIM_AUTH_SERVER = "DirXML-ShimAuthServer";
+    public static final String TRACE_SIZE_LIMIT = "DirXML-TraceSizeLimit";
     public static final String SHIM_AUTH_ID = "DirXML-ShimAuthID";
     public static final String SHIM_AUTH_PASSWORD = "DirXML-ShimAuthPassword";
     public static final String SHIM_CONFIG_INFO = "DirXML-ShimConfigInfo";
@@ -239,6 +240,10 @@ public final class VaultMapping {
         put(m, JAVA_MODULE, d.shimClass);
         put(m, SHIM_AUTH_SERVER, d.shimAuthServer);
         put(m, SHIM_AUTH_ID, d.shimAuthId);
+        put(m, TRACE_SIZE_LIMIT, d.traceSizeLimit);
+        // the trace level and file the tree last saw: a new driver starts with them, an existing one keeps its own
+        put(m, Vault.TRACE_LEVEL, d.meta.get(Driver.META_TRACE_LEVEL));
+        put(m, Vault.TRACE_FILE, d.meta.get(Driver.META_TRACE_FILE));
         blob(m, SHIM_CONFIG_INFO, d.config.get(Driver.SHIM_CONFIG_INFO));
         blob(m, CONFIG_VALUES, d.config.get(Driver.CONFIG_VALUES));
         blob(m, DRIVER_FILTER, d.config.get(Driver.DRIVER_FILTER));

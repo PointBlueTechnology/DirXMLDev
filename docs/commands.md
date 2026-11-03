@@ -623,7 +623,7 @@ Deploys the tree to a vault in this order: validate, diff, plan, snapshot, write
 ```
 bin/idm vault.deploy <tree> --env <name> [--driver <name>…] --dry-run|--yes|--step [--confirm <name>]
         [--no-restart] [--secrets none|missing|all] [--allow-missing-secrets]
-        [--capture-drift] [--capture-only] [--base-branch <branch>]
+        [--capture-drift] [--capture-only] [--base-branch <branch>] [--trace-size-limit]
         [--driver-server <driver>=<serverDn>…] [--delete-driver <name>…] [--delete-all <kind>…] [--json]
 ```
 
@@ -642,6 +642,7 @@ bin/idm vault.deploy <tree> --env <name> [--driver <name>…] --dry-run|--yes|--
 | `--capture-drift` | no | when a `prd` vault differs from the last deploy on record, record its state as a commit on an `as-found/<env>/<time>` branch. The deploy is still refused: deploy again on top of it |
 | `--capture-only` | no | read the vault and capture its state only (`captured`, `verified` or `known`); no plan, no write, no `--yes` or `--confirm` needed. The tree must be in git |
 | `--base-branch` | no | a branch name; a `prd` deploy is refused unless the tree is on it |
+| `--trace-size-limit` | no | also write the tree's trace size limit (`trace-size-limit` in `driver.xml`) over an existing driver's. Default: a new driver gets the tree's, an existing driver keeps the vault's and the plan notes the difference. Never restarts a driver |
 | `--driver-server` | no, repeatable | `<driver>=<serverDn>`: the server a driver new to this environment runs on, when it is not the server the deploy connects through |
 | `--delete-driver` | no, repeatable | a driver in the vault but not in the tree, to delete with its subtree. It must be stopped; refused when it is still in the tree or not in the vault |
 | `--delete-all` | no, repeatable (one kind each) | allow deletes the mass-deletion guard would hold back for a kind: `entitlements`, `jobs`, `rbe-policies`, `templates`, `forms`, `prds`, `entities`, `choices`, `relationships`, `dm-configs`, `roles`, `resources`, `attestations`, `sods`, `role-configs`, `reports`, `nav-items`, `auth-types`, `web-app-configs`, `containers`, `others`. Another value is refused |
@@ -2692,7 +2693,7 @@ bin/idm driver.server.copy tree --from primary --to idm2 --driver "Active Direct
 
 ### `driver.set`
 
-Set a driver setting: shim-class, shim-auth-server, shim-auth-id, environments (the environments it is deployed to, comma-separated; --clear = every environment), planned (environments it is meant to reach but isn't promoted to yet), param:&lt;shim parameter&gt;, engine:&lt;engine control value&gt;.
+Set a driver setting: shim-class, shim-auth-server, shim-auth-id, trace-size-limit (the most its trace file grows to, as the vault holds it; --clear = the tree stops recording it and the vault keeps its own), environments (the environments it is deployed to, comma-separated; --clear = every environment), planned (environments it is meant to reach but isn't promoted to yet), param:&lt;shim parameter&gt;, engine:&lt;engine control value&gt;.
 
 ```
 bin/idm driver.set <tree> --driver <driver> --key <key> [--value <value>] [--clear] [--dry-run] [--force] [--json]
@@ -2702,7 +2703,7 @@ bin/idm driver.set <tree> --driver <driver> --key <key> [--value <value>] [--cle
 |---|---|---|
 | `<tree>` | yes | the IDM-as-code tree to change |
 | `--driver` | yes | driver name |
-| `--key` | yes | shim-class\|shim-auth-server\|shim-auth-id\|environments\|planned\|param:&lt;name&gt;\|engine:&lt;name&gt; |
+| `--key` | yes | shim-class\|shim-auth-server\|shim-auth-id\|trace-size-limit\|environments\|planned\|param:&lt;name&gt;\|engine:&lt;name&gt; |
 | `--value` | no | the value |
 | `--clear` | no, a flag | make the setting empty (an empty --value reads as missing on the command line) |
 
@@ -2792,7 +2793,7 @@ bin/idm override.set <tree> --env <env> --key <key> --value <value> [--dry-run] 
 |---|---|---|
 | `<tree>` | yes | the IDM-as-code tree to change |
 | `--env` | yes | environment name |
-| `--key` | yes | drivers/&lt;driver&gt;.gcv.&lt;name&gt; \| .shim.&lt;name&gt; \| .ecv.&lt;name&gt; \| .shim-auth-server \| .shim-auth-id \| .name (the driver's name in that vault) \| driverset.gcv.&lt;name&gt; |
+| `--key` | yes | drivers/&lt;driver&gt;.gcv.&lt;name&gt; \| .shim.&lt;name&gt; \| .ecv.&lt;name&gt; \| .shim-auth-server \| .shim-auth-id \| .trace-size-limit \| .name (the driver's name in that vault) \| driverset.gcv.&lt;name&gt; |
 | `--value` | yes | the environment's value |
 
 ```bash

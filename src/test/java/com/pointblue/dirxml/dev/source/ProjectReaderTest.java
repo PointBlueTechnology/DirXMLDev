@@ -167,6 +167,10 @@ public class ProjectReaderTest {
         String driverAttrs = cstring("DirXML-JavaModule", "com.novell.nds.dirxml.driver.ad.ADDriverShim")
             + cstring("DirXML-ShimAuthServer", "ad.example.com")
             + cstring("DirXML-ShimAuthID", "svc")
+            + cstring("IdmParameter:InheritTraceSize", "false")
+            + cstring("DirXML-TraceSizeLimit", "100000")
+            + cstring("IdmParameter:InheritTraceLevel", "false")
+            + cstring("DirXML-TraceLevel", "3")
             + cstring("DirXML-ShimConfigInfo", shimConfigInfo)
             + cstring("DirXML-EngineControlValues", engineControlValues)
             + "<attributes xsi:type=\"com.novell.designer.model:CHeavyData\" attrName=\"DirXML-ConfigValues\"/>"
@@ -264,6 +268,8 @@ public class ProjectReaderTest {
         assertNotNull(ad);
         assertEquals("com.novell.nds.dirxml.driver.ad.ADDriverShim", ad.shimClass);
         assertEquals("ad.example.com", ad.shimAuthServer);
+        assertEquals("100000", ad.traceSizeLimit);
+        assertEquals("3", ad.meta.get(Driver.META_TRACE_LEVEL));
         assertEquals("svc", ad.shimAuthId);
         assertEquals("cn=AD,cn=DS1,o=system", ad.dn);
         assertEquals("true", ad.meta.get("dn.synthesized"));

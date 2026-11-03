@@ -80,7 +80,7 @@ servers".
 Values that differ per stage — one file per environment, `key = value`
 lines for GCVs, shim parameters, engine control values and the driver's
 connection settings (`drivers/<driver>.gcv.<name>`, `.ecv.<name>`,
-`.shim-auth-server`, `.shim-auth-id`,
+`.shim-auth-server`, `.shim-auth-id`, `.trace-size-limit`,
 `drivers/<driver>.shim.<name>`, `driverset.gcv.<name>`). The tree's own
 files keep the base value; a deploy to that environment applies its file. See
 [getting-started.md](getting-started.md) §3.1.
@@ -147,7 +147,9 @@ doesn't have.
 ### `drivers/<driver>/driver.xml`
 
 That driver's manifest: shim class, authentication server and id (not the
-password), which environments get it (`environments="QA, PROD"`, absent = every
+password), its trace size limit (`trace-size-limit`, the vault's
+`DirXML-TraceSizeLimit`; absent when it inherits the driver set's), the trace level and file
+it was read with (`dirxml-tracelevel` / `dirxml-tracefile` meta: a new driver starts with them), which environments get it (`environments="QA, PROD"`, absent = every
 environment) and which it is planned for but not promoted to yet
 (`planned="PROD"`), which config files exist, every policy and resource, the
 entitlements, and the **linkage** — which object runs in which policy set, in

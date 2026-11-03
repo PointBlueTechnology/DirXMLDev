@@ -53,6 +53,7 @@ import java.util.Map;
  *     attributes/
  *       java-module[value]                              -&gt; Driver.shimClass
  *       shim-auth-server[value] shim-auth-id[value]      -&gt; Driver.shimAuthServer/shimAuthId
+ *       trace-size-limit[value] (not inherit="true")    -&gt; Driver.traceSizeLimit
  *                                                        (fallback: authentication-info/server,user)
  *       driver-filter-xml/filter                         -&gt; Driver.config[DRIVER_FILTER]
  *       global-config-values/configuration-values        the DRIVER's own GCVs -&gt; Driver.config[CONFIG_VALUES]
@@ -231,6 +232,20 @@ public final class ExportReader {
                 Element user = Xds.firstByName(auth, "user");
                 d.shimAuthServer = server == null ? null : nullIfEmpty(Xds.text(server));
                 d.shimAuthId = user == null ? null : nullIfEmpty(Xds.text(user));
+            }
+        }
+
+        // <trace-size-limit value=…/>, or inherit="true" for the driver set's; the level and file the same way, as meta
+        Element traceSize = directChild(attrs, "trace-size-limit");
+        if (traceSize != null && !"true".equalsIgnoreCase(traceSize.getAttribute("inherit"))) {
+            d.traceSizeLimit = nullIfEmpty(traceSize.getAttribute("value"));
+        }
+        String[][] trace = { { "trace-level", Driver.META_TRACE_LEVEL }, { "trace-file", Driver.META_TRACE_FILE } };
+        for (String[] t : trace) {
+            Element te = directChild(attrs, t[0]);
+            String v = te == null || "true".equalsIgnoreCase(te.getAttribute("inherit")) ? null : nullIfEmpty(te.getAttribute("value"));
+            if (v != null) {
+                d.meta.put(t[1], v);
             }
         }
 

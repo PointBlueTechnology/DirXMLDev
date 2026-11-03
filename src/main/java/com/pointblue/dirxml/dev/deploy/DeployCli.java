@@ -15,7 +15,7 @@ import java.util.Map;
  *   vault.diff     <tree> --env <name> [--driver D…] [--json]
  *   vault.deploy   <tree> --env <name> [--driver D…] [--dry-run | --yes | --step] [--confirm <name>]
  *                  [--no-restart] [--secrets none|missing|all] [--allow-missing-secrets] [--capture-drift] [--capture-only] [--base-branch B] [--json]
- *                  [--delete-driver D…] [--delete-all entitlements|jobs|rbe-policies|templates|forms|prds|roles|entities|… …]
+ *                  [--trace-size-limit] [--delete-driver D…] [--delete-all entitlements|jobs|rbe-policies|templates|forms|prds|roles|entities|… …]
  *   vault.verify   <tree> --env <name> [--driver D…] [--json]
  *   vault.rollback --env <name> --snapshot <file> [--yes] [--json]
  *   vault.secrets  --env <name> --driver D --set <key> …
@@ -31,7 +31,7 @@ public final class DeployCli {
         Map.entry("vault.diff", Args.Spec.of("", "env driver")),
         Map.entry("vault.verify", Args.Spec.of("", "env driver")),
         Map.entry("vault.compare-envs", Args.Spec.of("", "env with")),
-        Map.entry("vault.deploy", Args.Spec.of("dry-run yes step no-restart allow-missing-secrets capture-drift capture-only",
+        Map.entry("vault.deploy", Args.Spec.of("dry-run yes step no-restart allow-missing-secrets capture-drift capture-only trace-size-limit",
             "env driver confirm secrets base-branch driver-server delete-driver delete-all")),
         Map.entry("vault.rollback", Args.Spec.of("yes", "env snapshot confirm server")),
         Map.entry("vault.schema", Args.Spec.of("", "env")),
@@ -140,6 +140,7 @@ public final class DeployCli {
                 o.json = json;
                 o.deleteDrivers = opts.getOrDefault("delete-driver", List.of());
                 o.deleteAllKinds = opts.getOrDefault("delete-all", List.of());
+                o.traceSizeLimit = opts.containsKey("trace-size-limit");
                 Deployer.Result r = new Deployer(o).run();
                 System.out.print(json ? r.json() + "\n" : r.text());
                 return r.ok ? 0 : 1;
