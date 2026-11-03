@@ -7,6 +7,27 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **A driver's trace size limit is in the tree.** `DirXML-TraceSizeLimit` is driver configuration, so
+  `import-live`, a Designer project and a Designer export now record it as `trace-size-limit` in
+  `driver.xml` (absent when the driver inherits the driver set's). A new driver is created with it. An
+  existing driver keeps the vault's value unless `vault.deploy --trace-size-limit` is given; without the
+  flag the plan notes the difference. The change never restarts a driver, because the engine reads trace
+  settings live, and it never counts as drift. A tree that doesn't record a limit asks for nothing, so
+  older trees diff as before. Also: `driver.set --key trace-size-limit`, the override key
+  `drivers/<driver>.trace-size-limit`, and `vault.compare-envs` values.
+- **A new driver starts with its trace level and file.** A deploy that creates a driver writes the
+  `DirXML-TraceLevel` and `DirXML-TraceFile` the tree recorded. On an existing driver they stay operational
+  (`driver.trace`), and are never compared or written. Designer projects and exports now read and write the
+  driver's own trace level and file too.
+
+### Changed
+
+- A deploy whose plan is empty but whose diff isn't (a difference the plan leaves alone and notes) now
+  ends with "nothing to deploy — the plan leaves the differences above as the notes say" instead of
+  claiming the vault matches the tree.
+
 ## [0.63.0] - 2026-11-02
 
 ### Fixed

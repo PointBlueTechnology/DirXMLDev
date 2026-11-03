@@ -51,6 +51,7 @@ public class LdifReaderTest {
             entry(drv, "DirXML-Driver",
                 "DirXML-JavaModule", "com.novell.nds.dirxml.driver.ad.ADDriverShim",
                 "DirXML-ShimAuthServer", "ad.example.com", "DirXML-ShimAuthID", "svc",
+                "DirXML-TraceSizeLimit", "200000",
                 "DirXML-DriverFilter", "<filter/>",
                 "DirXML-pkgGUID", "PKG-1",
                 "DirXML-Policies", schema + "#0#0",
@@ -90,6 +91,7 @@ public class LdifReaderTest {
         assertNotNull(ad);
         assertEquals("com.novell.nds.dirxml.driver.ad.ADDriverShim", ad.shimClass);
         assertEquals("svc", ad.shimAuthId);
+        assertEquals("200000", ad.traceSizeLimit);
         assertTrue(ad.config.containsKey(Driver.DRIVER_FILTER));
         assertEquals("PKG-1", ad.meta.get("dirxml-pkgguid"));
         assertEquals(3, ad.policies.size());                 // sch_Map + startup + shutdown at driver scope

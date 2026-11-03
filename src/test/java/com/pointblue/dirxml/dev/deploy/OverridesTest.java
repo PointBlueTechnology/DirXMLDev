@@ -175,6 +175,25 @@ public class OverridesTest {
         return ds;
     }
 
+    /** An environment's own trace size limit: the override key sets it, and an empty value leaves the driver set's. */
+    @Test
+    public void traceSizeLimitIsOverridable() {
+        DriverSet ds = modelWithSettings();
+        ds.driver("AD Driver").traceSizeLimit = "100000";
+        ds.overrides.put("prd", new java.util.LinkedHashMap<>(Map.of("drivers/AD Driver.trace-size-limit", "500000")));
+        Overrides.Applied a = Overrides.apply(ds, "prd");
+        assertTrue(a.summary(), a.problems.isEmpty());
+        assertEquals("500000", ds.driver("AD Driver").traceSizeLimit);
+        assertEquals("500000", EnvironmentCompare.values(ds).get("drivers/AD Driver.trace-size-limit"));
+
+        DriverSet other = modelWithSettings();
+        other.driver("AD Driver").traceSizeLimit = "100000";
+        other.overrides.put("qa", new java.util.LinkedHashMap<>(Map.of("drivers/AD Driver.trace-size-limit", "")));
+        Overrides.Applied b = Overrides.apply(other, "qa");
+        assertTrue(b.summary(), b.problems.isEmpty());
+        assertNull(other.driver("AD Driver").traceSizeLimit);
+    }
+
     @Test
     public void driverSettingsAndEngineControlValuesAreOverridableToo() throws Exception {
         DriverSet ds = modelWithSettings();

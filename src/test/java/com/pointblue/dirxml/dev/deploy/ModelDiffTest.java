@@ -282,6 +282,22 @@ public class ModelDiffTest {
 
     // ---- DRIVER_SETTING ----
 
+    /** A tree that never recorded a trace size limit asks for nothing; one that records it shows a different vault value. */
+    @Test
+    public void traceSizeLimitIsComparedOnlyWhenTheTreeRecordsOne() throws IOException {
+        DriverSet vault = ValidatorTest.clean();
+        vault.driver("AD").traceSizeLimit = "200000";
+        DriverSet tree = copy(vault);
+        tree.driver("AD").traceSizeLimit = null;
+        assertTrue(of(ModelDiff.of(vault, tree), Kind.DRIVER_SETTING).isEmpty());
+
+        tree.driver("AD").traceSizeLimit = "100000";
+        List<Change> settings = of(ModelDiff.of(vault, tree), Kind.DRIVER_SETTING);
+        assertEquals(1, settings.size());
+        assertEquals(Driver.TRACE_SIZE_LIMIT, settings.get(0).what);
+        assertTrue(settings.get(0).summary, settings.get(0).summary.contains("200000 -> 100000"));
+    }
+
     @Test
     public void driverSetting() throws IOException {
         DriverSet from = ValidatorTest.clean();

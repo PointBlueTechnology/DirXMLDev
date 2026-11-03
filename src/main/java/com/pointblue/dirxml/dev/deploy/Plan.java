@@ -176,6 +176,17 @@ public final class Plan {
                           Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree,
                           List<String> deleteDrivers, VaultAccess vault, List<String> deleteAllKinds,
                           java.util.Collection<String> onlyDrivers) {
+        return of(diff, to, dsDn, secrets, secretsMode, liveNamedPasswords, restartRunning, tree, deleteDrivers, vault, deleteAllKinds, onlyDrivers, false);
+    }
+
+    /**
+     * @param writeTraceSizeLimit {@code --trace-size-limit}: write the tree's trace size limit over an existing driver's.
+     *                            Without it the vault keeps its own (a note says so); a new driver always gets the tree's
+     */
+    public static Plan of(ModelDiff diff, DriverSet to, String dsDn, Secrets secrets, String secretsMode,
+                          Map<String, List<String>> liveNamedPasswords, boolean restartRunning, java.nio.file.Path tree,
+                          List<String> deleteDrivers, VaultAccess vault, List<String> deleteAllKinds,
+                          java.util.Collection<String> onlyDrivers, boolean writeTraceSizeLimit) {
         Plan p = new Plan();
         p.deleteAllKinds.addAll(deleteAllKinds);
         p.primaryServer = vault != null ? Servers.primary(vault) : to.meta.get(Servers.PRIMARY_META);
@@ -320,6 +331,20 @@ public final class Plan {
                 case DRIVER_SETTING: {
                     Driver d = to.driver(c.driver);
                     String dn = VaultMapping.driverDn(dsDn, c.driver);
+                    if (Driver.TRACE_SIZE_LIMIT.equals(c.what)) {
+                        Driver was = diff.from().driver(c.driver);
+                        String held = was == null || was.traceSizeLimit == null ? "none (the driver set's)" : was.traceSizeLimit;
+                        if (!writeTraceSizeLimit) {
+                            p.notes.add("drivers/" + c.driver + ": trace size limit " + d.traceSizeLimit + " in the tree, " + held
+                                + " in the vault — left as the vault has it; --trace-size-limit writes the tree's");
+                            break;
+                        }
+                        p.touchedDns.add(dn);
+                        driverAttrs.add(new Step(Op.MODIFY, dn, VaultMapping.TRACE_SIZE_LIMIT, null,
+                            Map.of(VaultMapping.TRACE_SIZE_LIMIT, Vault.value(d.traceSizeLimit)),
+                            dn + "  " + VaultMapping.TRACE_SIZE_LIMIT + " = " + d.traceSizeLimit + " (was " + held + ")", c.path + "#" + c.what, c.driver));
+                        break;
+                    }
                     p.touchedDns.add(dn);
                     String attr = c.what.equals("shim-class") ? VaultMapping.JAVA_MODULE
                         : c.what.equals("shim-auth-server") ? VaultMapping.SHIM_AUTH_SERVER : VaultMapping.SHIM_AUTH_ID;

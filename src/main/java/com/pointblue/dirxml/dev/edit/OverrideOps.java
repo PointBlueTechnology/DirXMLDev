@@ -44,7 +44,7 @@ public final class OverrideOps {
         public void apply(DriverSet ds, Transaction tx) throws Refusal, IOException {
             String e = envOrRefuse(env);
             if (key == null || key.isBlank()) {
-                throw new Refusal("--key is required (drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, .shim-auth-server, .shim-auth-id, or driverset.gcv.<name>)");
+                throw new Refusal("--key is required (drivers/<driver>.gcv.<name>, .shim.<name>, .ecv.<name>, .shim-auth-server, .shim-auth-id, .trace-size-limit, or driverset.gcv.<name>)");
             }
             if (value == null) {
                 throw new Refusal("--value is required");
