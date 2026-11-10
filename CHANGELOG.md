@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- **DirXMLDev now pins the simulator at 1.8.0** (was 1.7.0). In `idm simulate`, a query now honours its scope:
+  `entry` is the base object, `subordinates` one level, and `subtree` (the default) the base and everything
+  below it. Before, `dest-dn` / `src-dn` had to match exactly, so `do-find-matching-object` under a container
+  found nothing. A case that relied on that may now see more results. Install 1.8.0 (`mvn install` in
+  DirXMLSimulator at `v1.8.0`, or from its release); `doctor` names the jar it expects.
+
 ## [0.66.0] - 2026-11-03
 
 ### Added
