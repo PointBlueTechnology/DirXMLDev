@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.67.0] - 2026-11-10
+
 ### Changed
 
 - **DirXMLDev now pins the simulator at 1.8.0** (was 1.7.0). In `idm simulate`, a query now honours its scope:
