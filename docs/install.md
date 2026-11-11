@@ -24,8 +24,8 @@ Identity Applications helper). There is no server, no database and no GUI.
 | **Maven 3.9+** | build; the enforcer rejects an older Maven | `mvn -v` |
 | **git** | the tree is versioned; the deploy gate reads commits | `git --version` |
 | **Python 3.8+** | only for `bin/apps` (standard library, nothing to install) | `python3 --version` |
-| **The DirXML Policy Simulator** built and installed locally | the engine that validates and simulates policies | `ls ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/` |
-| **The trace parser** (`dirxml-trace-core`) | `trace.view` ([trace-view.md](trace-view.md)) reads traces with the parser the trace viewer and the web share. It is not on Maven Central, so take the jar from a [DirXMLTraceViewer release](https://github.com/PointBlueTechnology/DirXMLTraceViewer/releases) at the version `pom.xml` pins (`tracecore.version`), then `mvn install:install-file -Dfile=dirxml-trace-core-<v>.jar -DgroupId=com.pointbluetech -DartifactId=dirxml-trace-core -Dversion=<v> -Dpackaging=jar`. A DirXMLDev release attaches it too. | `ls ~/.m2/repository/com/pointbluetech/dirxml-trace-core/` |
+| **The DirXML Policy Simulator** built and installed locally, or its release jar installed by `bin/install-deps` (§2.0) | the engine that validates and simulates policies | `ls ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/` |
+| **The trace parser** (`dirxml-trace-core`) | `trace.view` ([trace-view.md](trace-view.md)) reads traces with the parser the trace viewer and the web share. It is not on Maven Central: `bin/install-deps` installs it from its [DirXMLTraceViewer release](https://github.com/PointBlueTechnology/DirXMLTraceViewer/releases) at the version `pom.xml` pins (`tracecore.version`; §2.0). A DirXMLDev release attaches it too. | `ls ~/.m2/repository/com/pointbluetech/dirxml-trace-core/` |
 | **The Identity Manager engine jars** | proprietary; the simulator and the tool load the real policy compiler for `validate`'s compile check, `simulate` and package GCV checksums. **Talking to a vault needs none of them**: deploy, diff, import-live and the `driver.*`/`driverset.*`/`engine.*`/`job.*` commands use open-source JLDAP and the project's own extended operations ([vendor-free-vault.md](vendor-free-vault.md)) | see §2 |
 | **Network access to the vault** | LDAPS to the eDirectory server that holds the driver set (port 636) | `nc -z host 636` |
 | Optional: **SSH to the engine host** | `driver.trace tail` can read the trace file over SSH; without it the trace streams over LDAP | `ssh user@host true` |
@@ -37,6 +37,41 @@ Roles and resources are in scope as AppConfig objects (`role.*`, `resource.*`, `
 [appconfig.md](appconfig.md)). Assigning them to people happens in the Identity Applications.
 
 ## 2. Install
+
+### 2.0 Which repositories, in which order
+
+DirXMLDev is one of five repositories that build against each other. Each `pom.xml` pins the
+versions of the others it uses. None of them is on Maven Central, so Maven finds them only once
+they are in your local repository (`~/.m2`).
+
+| Order | Repository | Gives | Pinned by |
+|---|---|---|---|
+| 1 | [DirXMLTraceViewer](https://github.com/PointBlueTechnology/DirXMLTraceViewer) | `dirxml-trace-core`, the trace parser | DirXMLDev and DirXMLDevWeb: `tracecore.version` |
+| 2 | [DirXMLSimulator](https://github.com/PointBlueTechnology/DirXMLSimulator) | `dirxml-simulator`; building it needs the engine jars in its `lib/` | DirXMLDev and DirXMLDevWeb: `simulator.version` |
+| 3 | [directory-console](https://github.com/PointBlueTechnology/directory-console) | `console-auth` (sign-in and TLS trust for the web) | DirXMLDevWeb: `console.version` |
+| 4 | DirXMLDev (this repository) | `dirxml-dev` | DirXMLDevWeb: `dirxmldev.version` |
+| 5 | [DirXMLDevWeb](https://github.com/PointBlueTechnology/DirXMLDevWeb) | the web workbench | nothing |
+
+Build only the repositories you are changing. `bin/install-deps` installs the others from their
+GitHub releases, at the versions a pom pins:
+
+```bash
+bin/install-deps        # in DirXMLDev: the trace parser and the simulator
+```
+
+DirXMLDevWeb carries the same script; `bin/install-deps` there installs what the web pins, which
+adds `dirxml-dev` and `console-auth`.
+
+`bin/install-deps --list` shows each pin and whether it is installed. A version already in `~/.m2`
+is left alone, so a jar you built yourself is kept; `--force` replaces it with the release jar.
+To build one yourself instead, check out the tag its pin names (for example `git checkout v1.8.0`
+in DirXMLSimulator) and run `mvn install` there, in the order above. A dependency's default branch can
+be ahead of the pin, so build the tag, not main. The script needs `curl` and `mvn`; on
+Windows, run it from Git Bash or WSL.
+
+The engine jars are never downloaded: they are proprietary, and §2.1 says where they come from.
+The simulator's release jar replaces building the simulator, but `validate`'s compile check,
+`simulate` and the package checksums still need the engine jars in DirXMLDev's `lib/` (§2.2).
 
 ### 2.1 The simulator and the engine jars
 
@@ -56,6 +91,9 @@ the versioned name). Then build and install the simulator so Maven can find it:
 ```bash
 cd ~/IdeaProjects/DirXMLSimulator && JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q install
 ```
+
+Not changing the simulator? Skip that build: `bin/install-deps` in DirXMLDev (§2.2) installs its
+release jar at the pinned version. The clone is still a handy place to keep the engine jars.
 
 Resolving that installed `dirxml-simulator` may print that its POM is invalid:
 `systemPath` is still the literal `${project.basedir}/lib/...`, which fails
@@ -83,6 +121,7 @@ for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar js.jar jclient.jar \
          XDS.jar dhutil.jar CommonDriverShim.jar; do
   cp "$src/$j" "lib/$j"          # regular files; lib/ is gitignored
 done
+bin/install-deps                 # the trace parser, and the simulator if you did not build it
 JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q test  # builds and runs the test suite
 bin/idm                                                # prints every command
 ```

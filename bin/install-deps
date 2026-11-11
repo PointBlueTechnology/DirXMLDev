@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# Installs the Point Blue libraries that DirXMLDev and DirXMLDevWeb build against, at the
+# versions a pom pins, from their GitHub releases into the local Maven repository. None of
+# them is on Maven Central, so without this each one has to be built from a checkout of the
+# right tag, in the right order (DirXMLDev docs/install.md §2.0).
+#
+#   bin/install-deps                     # what this checkout's pom pins
+#   bin/install-deps --pom path/pom.xml  # what another pom pins
+#   bin/install-deps trace-core          # only the ones named
+#   bin/install-deps --list              # show the pins and what is installed
+#
+# Libraries, the pom property that pins each, and the release it comes from:
+#   trace-core    tracecore.version   PointBlueTechnology/DirXMLTraceViewer
+#   simulator     simulator.version   PointBlueTechnology/DirXMLSimulator
+#   dirxml-dev    dirxmldev.version   PointBlueTechnology/DirXMLDev
+#   console-auth  console.version     PointBlueTechnology/directory-console
+#
+# A version already in the local repository is left alone, so a jar you built yourself from
+# a checkout wins; --force replaces it with the release jar. The NetIQ/OpenText engine jars
+# are proprietary and are never downloaded: copy them into lib/ yourself (DirXMLDev docs/install.md).
+# Needs curl and mvn. M2_REPO installs into another local repository than ~/.m2/repository.
+# The same script is in DirXMLDev and DirXMLDevWeb (bin/install-deps); keep the two identical.
+set -euo pipefail
+
+usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; }
+
+HERE=$(cd "$(dirname "$0")/.." && pwd)
+POM="$HERE/pom.xml"
+FORCE=0
+DRY=0
+LIST=0
+NAMES=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --pom) [ $# -ge 2 ] || { echo "install-deps: --pom needs a file" >&2; exit 2; }; POM=$2; shift 2 ;;
+    --force) FORCE=1; shift ;;
+    --dry-run|-n) DRY=1; shift ;;
+    --list) LIST=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "install-deps: unknown option $1 (see --help)" >&2; exit 2 ;;
+    *) NAMES="$NAMES $1"; shift ;;
+  esac
+done
+[ -f "$POM" ] || { echo "install-deps: no pom at $POM" >&2; exit 2; }
+REPO=${M2_REPO:-$HOME/.m2/repository}
+ALL="trace-core simulator console-auth dirxml-dev"
+
+# name -> "property groupId artifactId owner/repo"
+spec() {
+  case "$1" in
+    trace-core)   echo "tracecore.version com.pointbluetech dirxml-trace-core PointBlueTechnology/DirXMLTraceViewer" ;;
+    simulator)    echo "simulator.version com.pointblue.dirxml dirxml-simulator PointBlueTechnology/DirXMLSimulator" ;;
+    console-auth) echo "console.version com.pointblue.console console-auth PointBlueTechnology/directory-console" ;;
+    dirxml-dev)   echo "dirxmldev.version com.pointblue.dirxml dirxml-dev PointBlueTechnology/DirXMLDev" ;;
+    *) return 1 ;;
+  esac
+}
+
+pinned() { sed -n "s#.*<$1>\([^<]*\)</$1>.*#\1#p" "$POM" | head -1; }
+
+# The pom installed with each jar. The jars' own poms name parents and system-scoped engine
+# jars a consumer does not have, so a flat one is written instead. Only trace-core needs a
+# dependency carried along (JLDAP, on Maven Central); the projects that use the others
+# declare those dependencies themselves.
+flat_pom() { # groupId artifactId version
+  local deps=""
+  if [ "$2" = dirxml-trace-core ]; then
+    deps='<dependencies><dependency><groupId>com.novell.ldap</groupId><artifactId>jldap</artifactId><version>4.3</version></dependency></dependencies>'
+  fi
+  printf '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>%s</groupId><artifactId>%s</artifactId><version>%s</version>%s</project>\n' "$1" "$2" "$3" "$deps"
+}
+
+explicit=1
+if [ -z "${NAMES// /}" ]; then NAMES=$ALL; explicit=0; fi
+for n in $NAMES; do
+  spec "$n" >/dev/null || { echo "install-deps: unknown library '$n' (one of: $ALL)" >&2; exit 2; }
+done
+
+if [ "$LIST" = 0 ] && [ "$DRY" = 0 ]; then
+  command -v curl >/dev/null || { echo "install-deps: curl not found" >&2; exit 1; }
+  command -v mvn >/dev/null || { echo "install-deps: mvn not found (Maven 3.9+)" >&2; exit 1; }
+fi
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+echo "pins from $POM"
+status=0
+for n in $NAMES; do
+  set -- $(spec "$n")
+  prop=$1 group=$2 artifact=$3 gh=$4
+  v=$(pinned "$prop")
+  if [ -z "$v" ]; then
+    if [ "$explicit" = 1 ]; then echo "  $n: the pom does not pin it (no <$prop>)" >&2; status=1; fi
+    continue
+  fi
+  jar="$REPO/$(echo "$group" | tr . /)/$artifact/$v/$artifact-$v.jar"
+  have=0; [ -f "$jar" ] && have=1
+  if [ "$LIST" = 1 ]; then
+    if [ "$have" = 1 ]; then echo "  $n $v  installed"; else echo "  $n $v  missing"; fi
+    continue
+  fi
+  if [ "$have" = 1 ] && [ "$FORCE" = 0 ]; then
+    echo "  $n $v  already installed (--force replaces it with the release jar)"
+    continue
+  fi
+  url="https://github.com/$gh/releases/download/v$v/$artifact-$v.jar"
+  if [ "$DRY" = 1 ]; then echo "  $n $v  would install from $url"; continue; fi
+  echo "  $n $v  from $url"
+  if ! curl -fsSL -o "$TMP/$artifact-$v.jar" "$url"; then
+    echo "  $n: no $artifact-$v.jar on the $gh release v$v. Build it instead: check out tag v$v there and run mvn install." >&2
+    status=1; continue
+  fi
+  flat_pom "$group" "$artifact" "$v" > "$TMP/$artifact.pom"
+  mvn -B -q ${M2_REPO:+-Dmaven.repo.local="$M2_REPO"} install:install-file -Dfile="$TMP/$artifact-$v.jar" -DpomFile="$TMP/$artifact.pom"
+done
+exit $status
