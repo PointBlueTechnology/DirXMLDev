@@ -20,13 +20,12 @@ so you can set them on the lab afterwards.
 ### 1.1 What you need on the workstation
 
 - **JDK 21**, **Maven 3.9+**, **git**.
-- The **DirXMLSimulator** repository, built and installed (`mvn install`), with
-  the engine jars from the customer's own IDM installation in its `lib/`
-  (`/opt/novell/eDirectory/lib/dirxml/classes/` on an engine server, or the
-  Designer install). The jars are proprietary and are never committed.
-- The **DirXMLDev** repository with the engine jars copied into a real `lib/`
-  directory (not symlinked), built once (`mvn -q test`). `bin/idm` then runs
-  everything; on Windows use
+- The **DirXMLDev** repository with the engine jars from the customer's own IDM
+  installation (`/opt/novell/eDirectory/lib/dirxml/classes/` on an engine
+  server, or the Designer install) copied into a real `lib/` directory (not
+  symlinked; proprietary, never committed), `bin/install-deps` run once (the
+  simulator and the trace parser, from Maven Central), built once (`mvn -q test`).
+  `bin/idm` then runs everything; on Windows use
   `bin\idm.cmd` (a JDK 21 in `IDM_JAVA_HOME` or `JAVA_HOME`).
 - **LDAPS** to the vault server that holds the driver set. If the driver set is
   served by more than one server, LDAPS to each of them, or an SSH tunnel per
