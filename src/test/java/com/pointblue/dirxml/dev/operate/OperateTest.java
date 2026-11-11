@@ -1141,7 +1141,7 @@ public class OperateTest {
         }
         fake.entries.put(WO_DRIVER, drv);
         fake.entries.put(DS_DN, FakeEngine.entry(DS_DN, "driverset1", List.of("Top", "DirXML-DriverSet")));
-        fake.searches.put("(DirXML-JavaModule=" + Operate.WORK_ORDER_SHIM + ")", List.of(drv));
+        fake.searches.put("(objectClass=DirXML-Driver)", List.of(drv));
         Vault.Entry data = FakeEngine.entry("o=data", null, List.of("Top", "Organization"));
         Vault.Entry wo = FakeEngine.entry(WO_CONTAINER, null, List.of("Top", "organizationalUnit"));
         fake.entries.put(WO_CONTAINER, wo);
@@ -1155,7 +1155,8 @@ public class OperateTest {
         Environments.Environment env = env("dev", Environments.Tier.DEV);
         assertEquals(List.of(WO_CONTAINER), Operate.workOrderContainers(workOrderVault("data\\WorkOrders"), env));
         assertEquals("a leading tree name is skipped", List.of(WO_CONTAINER), Operate.workOrderContainers(workOrderVault("\\TREE\\data\\WorkOrders"), env));
-        assertEquals("an LDAP DN is taken as it is", List.of("ou=x,o=data"), Operate.workOrderContainers(workOrderVault("ou=x,o=data"), env));
+        assertEquals("an LDAP DN that is there", List.of(WO_CONTAINER), Operate.workOrderContainers(workOrderVault(WO_CONTAINER), env));
+        assertEquals("an LDAP DN that is not: the driver itself", List.of(WO_DRIVER), Operate.workOrderContainers(workOrderVault("ou=x,o=data"), env));
         assertEquals("no GCV: the driver itself, NetIQ's suggested container", List.of(WO_DRIVER), Operate.workOrderContainers(workOrderVault(null), env));
         assertEquals("no Work Order driver", List.of(), Operate.workOrderContainers(new FakeEngine(), env));
 
@@ -1168,6 +1169,41 @@ public class OperateTest {
         linked.entries.put(gcvs, g);
         FakeEngine.put(linked.entries.get(WO_DRIVER), "DirXML-Policies", List.of(gcvs + "#0#14"));
         assertEquals("from the linked GCV object", List.of(WO_CONTAINER), Operate.workOrderContainers(linked, env));
+
+        // the same GCV object with the value in DirXML-Data instead
+        g.attrs.remove("DirXML-ConfigValues");
+        FakeEngine.put(g, "DirXML-Data", List.of("<configuration-values><definitions><definition name=\"idv.workorder.container\" type=\"dn\">"
+            + "<value>data\\WorkOrders</value></definition></definitions></configuration-values>"));
+        assertEquals("from the linked GCV object's DirXML-Data", List.of(WO_CONTAINER), Operate.workOrderContainers(linked, env));
+    }
+
+    @Test
+    public void eachWorkOrderDriverSaysWhereItsContainerCameFrom() throws Exception {
+        Operate.WorkOrderDriver resolved = Operate.workOrderDrivers(workOrderVault("data\\WorkOrders"), DS_DN).get(0);
+        assertEquals(WO_DRIVER, resolved.driver().dn);
+        assertEquals("data\\WorkOrders", resolved.gcv());
+        assertEquals(WO_CONTAINER, resolved.container());
+        assertEquals("gcv", resolved.from());
+        Operate.WorkOrderDriver unresolved = Operate.workOrderDrivers(workOrderVault("data\\Missing"), DS_DN).get(0);
+        assertEquals(List.of("data\\Missing", WO_DRIVER, "gcv-unresolved"), List.of(unresolved.gcv(), unresolved.container(), unresolved.from()));
+        Operate.WorkOrderDriver none = Operate.workOrderDrivers(workOrderVault(null), DS_DN).get(0);
+        assertEquals(java.util.Arrays.asList(null, WO_DRIVER, "driver"), java.util.Arrays.asList(none.gcv(), none.container(), none.from()));
+
+        // the GCV on the driver set when the driver has none
+        FakeEngine fromSet = workOrderVault(null);
+        FakeEngine.put(fromSet.entries.get(DS_DN), "DirXML-ConfigValues", List.of("<configuration-values><definitions><definition name=\"idv.workorder.container\" type=\"dn\">"
+            + "<value>data\\WorkOrders</value></definition></definitions></configuration-values>"));
+        assertEquals(WO_CONTAINER, Operate.workOrderDrivers(fromSet, DS_DN).get(0).container());
+
+        // a Work Order driver behind a Remote Loader runs the Remote Loader's shim, but has the workorder-dn shim parameter
+        FakeEngine remote = workOrderVault("data\\WorkOrders");
+        Vault.Entry drv = remote.entries.get(WO_DRIVER);
+        drv.attrs.remove("DirXML-JavaModule");
+        FakeEngine.put(drv, "DirXML-JavaModule", List.of("com.novell.nds.dirxml.remote.driver.DriverShimImpl"));
+        assertEquals("another driver is not a Work Order driver", List.of(), Operate.workOrderDrivers(remote, DS_DN));
+        FakeEngine.put(drv, "DirXML-ShimConfigInfo", List.of("<driver-config><driver-options/><subscriber-options/><publisher-options>"
+            + "<workorder-dn display-name=\"Work order container\">data\\WorkOrders</workorder-dn></publisher-options></driver-config>"));
+        assertEquals(WO_CONTAINER, Operate.workOrderDrivers(remote, DS_DN).get(0).container());
     }
 
     @Test
