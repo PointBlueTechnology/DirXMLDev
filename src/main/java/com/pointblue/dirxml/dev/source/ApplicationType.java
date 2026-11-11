@@ -35,7 +35,7 @@ import java.util.Map;
  * wrote): the User Application driver is {@code NProv} and the Role and Resource driver
  * {@code NrfApp} — neither has a driver definition of its own, and Designer's defs map
  * {@code ComposerDriverShim} to {@code PIVWorkflow}, which is not what it uses. And a SCIM
- * driver keeps {@code GenericApp}: {@code test11pf}'s {@code MITLL-Druva} is a
+ * driver keeps {@code GenericApp}: {@code test11pf}'s Druva driver is a
  * {@code SCIM-Driver} whose application Designer typed {@code GenericApp}, even though a
  * {@code SCIM} application type exists.
  */

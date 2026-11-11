@@ -36,7 +36,7 @@ import org.w3c.dom.Element;
  * the generator, which is the reminder to regenerate after a writer change:
  * <pre>
  *   mvn -q -o test-compile
- *   java -cp "target/test-classes:target/classes:lib/*:$HOME/.m2/repository/com/pointblue/dirxml/dirxml-simulator/&lt;ver&gt;/dirxml-simulator-&lt;ver&gt;.jar:&lt;junit-4 jar&gt;:&lt;hamcrest-core jar&gt;" com.pointblue.dirxml.dev.SyntheticDriverSet
+ *   java -cp "target/test-classes:target/classes:lib/*:$HOME/.m2/repository/com/pointbluetech/dirxml/dirxml-simulator/&lt;ver&gt;/dirxml-simulator-&lt;ver&gt;.jar:&lt;junit-4 jar&gt;:&lt;hamcrest-core jar&gt;" com.pointblue.dirxml.dev.SyntheticDriverSet
  * </pre>
  */
 public final class SyntheticDriverSet {

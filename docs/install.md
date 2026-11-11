@@ -41,15 +41,16 @@ Roles and resources are in scope as AppConfig objects (`role.*`, `resource.*`, `
 ### 2.0 Which repositories, in which order
 
 DirXMLDev is one of five repositories that build against each other. Each `pom.xml` pins the
-versions of the others it uses. None of them is on Maven Central, so Maven finds them only once
-they are in your local repository (`~/.m2`).
+versions of the others it uses. The libraries are moving to Maven Central under the groupId
+`com.pointbluetech` (§2.0.1). A pinned version that is there, Maven fetches by itself; one that
+is not, Maven finds only once it is in your local repository (`~/.m2`).
 
 | Order | Repository | Gives | Pinned by |
 |---|---|---|---|
 | 1 | [DirXMLTraceViewer](https://github.com/PointBlueTechnology/DirXMLTraceViewer) | `dirxml-trace-core`, the trace parser | DirXMLDev and DirXMLDevWeb: `tracecore.version` |
 | 2 | [DirXMLSimulator](https://github.com/PointBlueTechnology/DirXMLSimulator) | `dirxml-simulator`; building it needs the engine jars in its `lib/` | DirXMLDev and DirXMLDevWeb: `simulator.version` |
-| 3 | [directory-console](https://github.com/PointBlueTechnology/directory-console) | `console-auth` (sign-in and TLS trust for the web) | DirXMLDevWeb: `console.version` |
-| 4 | DirXMLDev (this repository) | `dirxml-dev` | DirXMLDevWeb: `dirxmldev.version` |
+| 3 | DirXMLDev (this repository) | `dirxml-dev` | DirXMLDevWeb and directory-console: `dirxmldev.version` |
+| 4 | [directory-console](https://github.com/PointBlueTechnology/directory-console) | `console-auth` (sign-in and TLS trust for the web; it builds on `dirxml-dev`) | DirXMLDevWeb: `console.version` |
 | 5 | [DirXMLDevWeb](https://github.com/PointBlueTechnology/DirXMLDevWeb) | the web workbench | nothing |
 
 Build only the repositories you are changing. `bin/install-deps` installs the others from their
@@ -73,6 +74,22 @@ The engine jars are never downloaded: they are proprietary, and §2.1 says where
 The simulator's release jar replaces building the simulator, but `validate`'s compile check,
 `simulate` and the package checksums still need the engine jars in DirXMLDev's `lib/` (§2.2).
 
+#### 2.0.1 Maven Central
+
+The Point Blue libraries are published to Maven Central under `com.pointbluetech`:
+`com.pointbluetech:dirxml-trace-core`, `com.pointbluetech.dirxml:dirxml-simulator`,
+`com.pointbluetech.dirxml:dirxml-dev` and `com.pointbluetech.console:console-auth`. The first
+version of each on Central is the first released after the move; earlier versions stay on GitHub
+releases only, under the old groupIds (`com.pointblue.*`), and `install-deps` installs them under
+whichever groupId the pinning pom names. No engine jar is ever published: the poms on Central are
+flattened and name only open-source dependencies.
+
+Maintainers publish a release with `bin/publish-central <checkout>` (`--module trace-core` for the
+trace viewer). It builds the repository's `central` profile (sources, javadoc, gpg signatures),
+refuses the bundle when any file in it names something on the publish blocklist (client names, kept
+outside every repository), and uploads that same bundle. Central never deletes a release; the
+script's header says where the token, the key and the blocklist come from.
+
 ### 2.1 The simulator and the engine jars
 
 ```bash
@@ -95,13 +112,12 @@ cd ~/IdeaProjects/DirXMLSimulator && JAVA_HOME=$(/usr/libexec/java_home -v 21) m
 Not changing the simulator? Skip that build: `bin/install-deps` in DirXMLDev (§2.2) installs its
 release jar at the pinned version. The clone is still a handy place to keep the engine jars.
 
-Resolving that installed `dirxml-simulator` may print that its POM is invalid:
-`systemPath` is still the literal `${project.basedir}/lib/...`, which fails
-Maven's absolute-path rule. That text is in the simulator artifact under
-`~/.m2`, written when the simulator was installed. It is not this repository's
-POM, and copying jars into DirXMLDev's `lib/` does not rewrite it. System-scoped
-dependencies are not transitive; this project declares the same jars itself.
-The message can appear whenever the engine profile resolves the simulator.
+A simulator built from source before 1.9.0 installs a pom that still names its
+engine jars with the literal `${project.basedir}/lib/...` `systemPath`, and
+resolving it may print that the POM is invalid. Harmless: system-scoped
+dependencies are not transitive, and this project declares the same jars itself.
+From 1.9.0 the installed pom is flattened and names no engine jar; `install-deps`
+installs a flat pom for any version.
 
 ### 2.2 DirXMLDev
 

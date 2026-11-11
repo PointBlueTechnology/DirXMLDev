@@ -269,6 +269,25 @@ public class DoctorTest {
         assertEquals("(no url)", Doctor.endpoint("  "));
     }
 
+    @Test
+    public void simulatorJarIsReadUnderTheOldAndTheNewGroupId() throws Exception {
+        for (String groupId : new String[] {"com.pointblue.dirxml", "com.pointbluetech.dirxml"}) {
+            Doctor.Request req = base();
+            writeJars(req.home);
+            req.simJar = simJar(Doctor.PROJECT_SIM_VERSION, groupId);
+            String text = Doctor.check(req).text();
+            assertTrue(groupId + ": " + text, text.contains("simulator: OK  " + Doctor.PROJECT_SIM_VERSION));
+        }
+    }
+
+    @Test
+    public void theLauncherDefaultIsTheNewGroupIdPath() {
+        Doctor.Request req = base();
+        String path = req.simJar().toString().replace('\\', '/');
+        assertTrue(path, path.endsWith("/.m2/repository/com/pointbluetech/dirxml/dirxml-simulator/"
+            + Doctor.PROJECT_SIM_VERSION + "/dirxml-simulator-" + Doctor.PROJECT_SIM_VERSION + ".jar"));
+    }
+
     private Doctor.Request ready() throws Exception {
         Doctor.Request req = base();
         writeJars(req.home);
@@ -296,10 +315,15 @@ public class DoctorTest {
     }
 
     private Path simJar(String version) throws IOException {
-        Path jar = tmp.getRoot().toPath().resolve("dirxml-simulator-" + version + ".jar");
-        String body = "version=" + version + "\ngroupId=com.pointblue.dirxml\nartifactId=dirxml-simulator\n";
+        return simJar(version, "com.pointblue.dirxml");
+    }
+
+    /** A jar that carries only the pom.properties a simulator jar carries, under that groupId. */
+    private Path simJar(String version, String groupId) throws IOException {
+        Path jar = tmp.getRoot().toPath().resolve("dirxml-simulator-" + version + "-" + groupId + ".jar");
+        String body = "version=" + version + "\ngroupId=" + groupId + "\nartifactId=dirxml-simulator\n";
         try (JarOutputStream jos = new JarOutputStream(Files.newOutputStream(jar), manifest())) {
-            JarEntry entry = new JarEntry("META-INF/maven/com.pointblue.dirxml/dirxml-simulator/pom.properties");
+            JarEntry entry = new JarEntry("META-INF/maven/" + groupId + "/dirxml-simulator/pom.properties");
             jos.putNextEntry(entry);
             jos.write(body.getBytes(StandardCharsets.UTF_8));
             jos.closeEntry();

@@ -7,6 +7,34 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- **Maven coordinates move to `com.pointbluetech` for Maven Central:** DirXMLDev is
+  `com.pointbluetech.dirxml:dirxml-dev`, and it depends on `com.pointbluetech.dirxml:dirxml-simulator`.
+  Java packages do not change. `bin/idm`, `bin/idm.cmd`, `require-engine.sh` and `doctor` look for the
+  simulator under `~/.m2/repository/com/pointbluetech/dirxml/`. **After updating, run `bin/install-deps`**:
+  it installs the pinned simulator (1.8.0) under the new groupId. `doctor` reads a simulator jar's version
+  under either groupId.
+- The installed (and published) pom is flattened: it names no engine jar and no `systemPath`, only
+  JLDAP, PostgreSQL and the trace parser.
+- `bin/install-deps` takes each library's groupId from the pom that pins it, and skips a version that is
+  on Maven Central (Maven fetches it).
+- `docs/install.md` §2.0: `dirxml-dev` comes before `console-auth`, which builds on it; §2.0.1 is
+  Maven Central.
+
+### Added
+
+- **`bin/publish-central`:** publishes a release of a Point Blue library to Maven Central. It builds the
+  checkout's `central` profile (sources, javadoc, signatures), refuses the bundle when any file in it
+  names something on the publish blocklist (kept outside every repository), and uploads that same
+  bundle. The token comes from the Keychain and the signing key from gpg-agent. A `central` profile in
+  this pom.
+
+### Fixed
+
+- A client name in a source comment and in `docs/designer-new-project.md` (an example driver's name)
+  is gone.
+
 ## [0.69.0] - 2026-11-11
 
 ### Added

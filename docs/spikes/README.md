@@ -23,7 +23,7 @@ touches a real object in any vault.
 ```bash
 export JAVA_HOME=…/zulu-21
 mvn -q compile
-java -cp "target/classes:$(ls lib/*.jar | tr '\n' ':')$HOME/.m2/repository/com/pointblue/dirxml/dirxml-simulator/1.5.0/dirxml-simulator-1.5.0.jar" \
+java -cp "target/classes:$(ls lib/*.jar | tr '\n' ':')$HOME/.m2/repository/com/pointbluetech/dirxml/dirxml-simulator/1.5.0/dirxml-simulator-1.5.0.jar" \
   -Dspike.url=ldaps://HOST:636 -Dspike.bindDn='cn=admin,ou=sa,o=system' -Dspike.password=… \
   -Dspike.driverSetDn='cn=driverset1,o=system' \
   com.pointblue.dirxml.dev.spike.LdapWriteSpike
