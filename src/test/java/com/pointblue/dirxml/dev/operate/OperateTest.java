@@ -22,6 +22,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -1175,6 +1176,23 @@ public class OperateTest {
         FakeEngine.put(g, "DirXML-Data", List.of("<configuration-values><definitions><definition name=\"idv.workorder.container\" type=\"dn\">"
             + "<value>data\\WorkOrders</value></definition></definitions></configuration-values>"));
         assertEquals("from the linked GCV object's DirXML-Data", List.of(WO_CONTAINER), Operate.workOrderContainers(linked, env));
+    }
+
+    @Test
+    public void aReadOnlyEngineLooksUpWorkOrderDriversThroughTheCallersOwnReads() throws Exception {
+        FakeEngine source = workOrderVault("data\\WorkOrders");
+        Operate.Engine reader = Operate.readOnly(new Operate.Directory() {
+            public Vault.Entry read(String dn) {
+                return source.read(dn);
+            }
+
+            public List<Vault.Entry> search(String base, String filter, int scope) {
+                return source.search(base, filter, scope);
+            }
+        });
+        assertEquals(WO_CONTAINER, Operate.workOrderDrivers(reader, DS_DN).get(0).container());
+        UnsupportedOperationException e = assertThrows(UnsupportedOperationException.class, () -> reader.startDriver(WO_DRIVER));
+        assertTrue(e.getMessage(), e.getMessage().contains("needs an engine connection"));
     }
 
     @Test

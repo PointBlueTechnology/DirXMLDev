@@ -232,6 +232,111 @@ public final class Operate {
         void removeNamedPassword(String dn, String name);
     }
 
+    /** Reads and searches through a caller's own directory connection: what {@link #readOnly} needs. */
+    public interface Directory {
+        /** The entry with all its attributes; null when it is not there. */
+        Vault.Entry read(String dn);
+
+        /** The entries {@code filter} finds, with all their attributes ({@link javax.naming.directory.SearchControls} scopes). */
+        List<Vault.Entry> search(String base, String filter, int scope);
+    }
+
+    /**
+     * An engine that only reads and searches, through {@code d}, for a caller that has a directory connection but no
+     * engine connection (or must send each request its own way, as Directory Console does with proxied authorization):
+     * enough for the read-only lookups such as {@link #workOrderDrivers}. Every engine operation is refused.
+     */
+    public static Engine readOnly(Directory d) {
+        return new Engine() {
+            @Override
+            public Vault.Entry read(String dn) {
+                return d.read(dn);
+            }
+
+            @Override
+            public List<Vault.Entry> search(String base, String filter, int scope) {
+                return d.search(base, filter, scope);
+            }
+
+            @Override
+            public List<Vault.Entry> children(String base) {
+                return d.search(base, "(objectClass=*)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+            }
+
+            private UnsupportedOperationException refused(String op) {
+                return new UnsupportedOperationException(op + " needs an engine connection; this one only reads");
+            }
+
+            public int driverState(String dn) {
+                throw refused("driverState");
+            }
+
+            public int driverStartOption(String dn) {
+                throw refused("driverStartOption");
+            }
+
+            public void startDriver(String dn) {
+                throw refused("startDriver");
+            }
+
+            public void stopDriver(String dn) {
+                throw refused("stopDriver");
+            }
+
+            public void restartDriver(String dn) {
+                throw refused("restartDriver");
+            }
+
+            public String waitForState(String dn, int wanted, int seconds) {
+                throw refused("waitForState");
+            }
+
+            public void replace(String dn, String attr, List<byte[]> values) {
+                throw refused("replace");
+            }
+
+            public CachePage viewCache(String dn, int position, int count) {
+                throw refused("viewCache");
+            }
+
+            public void deleteCacheEntries(String dn, int p2, int p3, String p4, int priority) {
+                throw refused("deleteCacheEntries");
+            }
+
+            public void migrateApp(String dn, byte[] xds) {
+                throw refused("migrateApp");
+            }
+
+            public void resync(String dn, long sinceMillis) {
+                throw refused("resync");
+            }
+
+            public int engineVersion() {
+                throw refused("engineVersion");
+            }
+
+            public String driverStats(String dn, int arg) {
+                throw refused("driverStats");
+            }
+
+            public String jvmStats(int a, int b) {
+                throw refused("jvmStats");
+            }
+
+            public List<String> namedPasswords(String dn) {
+                throw refused("namedPasswords");
+            }
+
+            public void setNamedPassword(String dn, String name, String displayName, char[] value) {
+                throw refused("setNamedPassword");
+            }
+
+            public void removeNamedPassword(String dn, String name) {
+                throw refused("removeNamedPassword");
+            }
+        };
+    }
+
     /** Adapts a real, connected {@link Vault} to {@link Engine}. */
     public static Engine vaultEngine(Vault v) {
         return new Engine() {
