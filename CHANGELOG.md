@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.68.0] - 2026-11-11
+
 ### Added
 
 - **`Operate.workOrderDrivers(engine, driverSetDn)`:** each Work Order driver with the container GCV's value, the
