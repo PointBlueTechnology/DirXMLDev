@@ -99,7 +99,7 @@ public final class Doctor {
             }
             String ver = simVersion == null || simVersion.isBlank() ? PROJECT_SIM_VERSION : simVersion;
             return Path.of(System.getProperty("user.home"), ".m2", "repository",
-                "com", "pointblue", "dirxml", "dirxml-simulator", ver,
+                "com", "pointbluetech", "dirxml", "dirxml-simulator", ver,
                 "dirxml-simulator-" + ver + ".jar");
         }
 
@@ -283,9 +283,10 @@ public final class Doctor {
             notes.add("IDM_SIM_VERSION selects " + version + "; this project pins " + PROJECT_SIM_VERSION + ".");
         }
         if (!Files.isRegularFile(jar)) {
-            String detail = "Install the DirXML Simulator and run 'mvn install' in that repo so "
-                + jar + " exists. The launcher reads IDM_SIM_VERSION (default " + PROJECT_SIM_VERSION
-                + ", the version in pom.xml). See docs/install.md section 2.";
+            String detail = "Run bin/install-deps (it installs the pinned simulator), or 'mvn install' in the "
+                + "DirXMLSimulator repo at that version, so " + jar + " exists. The launcher reads "
+                + "IDM_SIM_VERSION (default " + PROJECT_SIM_VERSION + ", the version in pom.xml). "
+                + "See docs/install.md section 2.";
             notes.add(detail);
             fields.put("detail", detail);
             return new Check("simulator", false, "simulator: FAIL  " + version + " missing", notes, fields);
@@ -295,15 +296,15 @@ public final class Doctor {
             embedded = embeddedVersion(jar);
         } catch (IOException e) {
             String detail = jar + " is not a readable dirxml-simulator jar (" + e.getMessage()
-                + "). Reinstall with 'mvn install' in the DirXMLSimulator repo.";
+                + "). Reinstall it: bin/install-deps --force simulator.";
             notes.add(detail);
             fields.put("detail", detail);
             return new Check("simulator", false, "simulator: FAIL  " + version + " unreadable", notes, fields);
         }
         fields.put("jarVersion", embedded == null ? "" : embedded);
         if (embedded == null) {
-            String detail = "No META-INF/maven/com.pointblue.dirxml/dirxml-simulator/pom.properties in " + jar
-                + ". Expected a jar produced by 'mvn install' of dirxml-simulator " + version + ".";
+            String detail = "No META-INF/maven/<groupId>/dirxml-simulator/pom.properties in " + jar
+                + ". Expected a dirxml-simulator " + version + " jar (bin/install-deps installs it).";
             notes.add(detail);
             fields.put("detail", detail);
             return new Check("simulator", false, "simulator: FAIL  " + version + " has no simulator version", notes, fields);
@@ -642,7 +643,11 @@ public final class Doctor {
 
     private static String embeddedVersion(Path jar) throws IOException {
         try (JarFile jf = new JarFile(jar.toFile())) {
-            JarEntry entry = jf.getJarEntry("META-INF/maven/com.pointblue.dirxml/dirxml-simulator/pom.properties");
+            // com.pointbluetech.dirxml from simulator 1.9.0 (Maven Central); com.pointblue.dirxml before.
+            JarEntry entry = jf.getJarEntry("META-INF/maven/com.pointbluetech.dirxml/dirxml-simulator/pom.properties");
+            if (entry == null) {
+                entry = jf.getJarEntry("META-INF/maven/com.pointblue.dirxml/dirxml-simulator/pom.properties");
+            }
             if (entry == null) {
                 return null;
             }

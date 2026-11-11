@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Installs the Point Blue libraries that DirXMLDev and DirXMLDevWeb build against, at the
-# versions a pom pins, from their GitHub releases into the local Maven repository. None of
-# them is on Maven Central, so without this each one has to be built from a checkout of the
-# right tag, in the right order (DirXMLDev docs/install.md §2.0).
+# versions a pom pins, from their GitHub releases into the local Maven repository. A version
+# that is on Maven Central is skipped: Maven fetches it by itself. Older versions are only on
+# GitHub releases; without this each one has to be built from a checkout of the right tag, in
+# the right order (DirXMLDev docs/install.md §2.0).
 #
 #   bin/install-deps                     # what this checkout's pom pins
 #   bin/install-deps --pom path/pom.xml  # what another pom pins
@@ -15,8 +16,10 @@
 #   dirxml-dev    dirxmldev.version   PointBlueTechnology/DirXMLDev
 #   console-auth  console.version     PointBlueTechnology/directory-console
 #
-# A version already in the local repository is left alone, so a jar you built yourself from
-# a checkout wins; --force replaces it with the release jar. The NetIQ/OpenText engine jars
+# The groupId is the one the pom names for that library (com.pointbluetech.* from the Maven
+# Central releases, com.pointblue.* before). A version already in the local repository is
+# left alone, so a jar you built yourself from a checkout wins; --force replaces it with the
+# release jar. The NetIQ/OpenText engine jars
 # are proprietary and are never downloaded: copy them into lib/ yourself (DirXMLDev docs/install.md).
 # Needs curl and mvn. M2_REPO installs into another local repository than ~/.m2/repository.
 # The same script is in DirXMLDev and DirXMLDevWeb (bin/install-deps); keep the two identical.
@@ -45,18 +48,26 @@ done
 REPO=${M2_REPO:-$HOME/.m2/repository}
 ALL="trace-core simulator console-auth dirxml-dev"
 
-# name -> "property groupId artifactId owner/repo"
+# name -> "property artifactId owner/repo"
 spec() {
   case "$1" in
-    trace-core)   echo "tracecore.version com.pointbluetech dirxml-trace-core PointBlueTechnology/DirXMLTraceViewer" ;;
-    simulator)    echo "simulator.version com.pointblue.dirxml dirxml-simulator PointBlueTechnology/DirXMLSimulator" ;;
-    console-auth) echo "console.version com.pointblue.console console-auth PointBlueTechnology/directory-console" ;;
-    dirxml-dev)   echo "dirxmldev.version com.pointblue.dirxml dirxml-dev PointBlueTechnology/DirXMLDev" ;;
+    trace-core)   echo "tracecore.version dirxml-trace-core PointBlueTechnology/DirXMLTraceViewer" ;;
+    simulator)    echo "simulator.version dirxml-simulator PointBlueTechnology/DirXMLSimulator" ;;
+    console-auth) echo "console.version console-auth PointBlueTechnology/directory-console" ;;
+    dirxml-dev)   echo "dirxmldev.version dirxml-dev PointBlueTechnology/DirXMLDev" ;;
     *) return 1 ;;
   esac
 }
 
 pinned() { sed -n "s#.*<$1>\([^<]*\)</$1>.*#\1#p" "$POM" | head -1; }
+
+# The groupId the pom gives a dependency on that artifactId: the last <groupId> before it.
+group_of() {
+  awk -v a="$1" '
+    /<groupId>/ { g = $0; sub(/.*<groupId>[[:space:]]*/, "", g); sub(/[[:space:]]*<\/groupId>.*/, "", g) }
+    /<artifactId>/ { x = $0; sub(/.*<artifactId>[[:space:]]*/, "", x); sub(/[[:space:]]*<\/artifactId>.*/, "", x)
+                     if (x == a && g != "") { print g; exit } }' "$POM"
+}
 
 # The pom installed with each jar. The jars' own poms name parents and system-scoped engine
 # jars a consumer does not have, so a flat one is written instead. Only trace-core needs a
@@ -87,20 +98,26 @@ echo "pins from $POM"
 status=0
 for n in $NAMES; do
   set -- $(spec "$n")
-  prop=$1 group=$2 artifact=$3 gh=$4
+  prop=$1 artifact=$2 gh=$3
   v=$(pinned "$prop")
-  if [ -z "$v" ]; then
-    if [ "$explicit" = 1 ]; then echo "  $n: the pom does not pin it (no <$prop>)" >&2; status=1; fi
+  group=$(group_of "$artifact")
+  if [ -z "$v" ] || [ -z "$group" ]; then
+    if [ "$explicit" = 1 ]; then echo "  $n: the pom does not pin it (no <$prop>, or no dependency on $artifact)" >&2; status=1; fi
     continue
   fi
   jar="$REPO/$(echo "$group" | tr . /)/$artifact/$v/$artifact-$v.jar"
   have=0; [ -f "$jar" ] && have=1
   if [ "$LIST" = 1 ]; then
-    if [ "$have" = 1 ]; then echo "  $n $v  installed"; else echo "  $n $v  missing"; fi
+    if [ "$have" = 1 ]; then echo "  $n $v  installed  ($group)"; else echo "  $n $v  missing  ($group)"; fi
     continue
   fi
   if [ "$have" = 1 ] && [ "$FORCE" = 0 ]; then
     echo "  $n $v  already installed (--force replaces it with the release jar)"
+    continue
+  fi
+  central="https://repo1.maven.org/maven2/$(echo "$group" | tr . /)/$artifact/$v/$artifact-$v.pom"
+  if [ "$FORCE" = 0 ] && curl -fsI -o /dev/null "$central" 2>/dev/null; then
+    echo "  $n $v  on Maven Central ($group): Maven fetches it, nothing to install"
     continue
   fi
   url="https://github.com/$gh/releases/download/v$v/$artifact-$v.jar"

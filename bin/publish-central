@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Publishes a Point Blue library to Maven Central from a release checkout: builds the signed bundle
+# with the checkout's `central` profile, refuses it if any file in it names something on the
+# publish blocklist, and uploads that same bundle to the Central Portal.
+#
+#   bin/publish-central ~/IdeaProjects/DirXMLSimulator
+#   bin/publish-central --module trace-core ~/IdeaProjects/DirXMLTraceViewer
+#   bin/publish-central --check-only ~/IdeaProjects/DirXMLDev     # build and check, no upload
+#
+# Central never deletes a release, so the check comes first and nothing is uploaded without it.
+#   blocklist  PUBLISH_BLOCKLIST, default ~/.config/pointblue/publish-blocklist: one name per line
+#              (client names, their domains), matched case-insensitively as whole words in every file
+#              of the bundle, class files and the jars inside it included ("acme" does not match
+#              "acmetric"). A line "substring:acme" matches anywhere, "AcmeDriver" too. Kept outside
+#              every repository: the list itself must never be published. Missing or empty: refused.
+#   token      the Central Portal user token, from the macOS Keychain: service maven-central,
+#              account = the token's user name, password = the token's password.
+#   signing    gpg's default key, or PUBLISH_GPG_KEY; the passphrase is gpg-agent's (pinentry).
+#
+# The checkout must be clean and at the annotated tag v<version> of its pom's release version.
+# --hold uploads for review: publish it at https://central.sonatype.com/publishing/deployments.
+set -euo pipefail
+
+usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
+
+MODULE=""
+CHECK_ONLY=0
+HOLD=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --module) [ $# -ge 2 ] || { echo "publish-central: --module needs a name" >&2; exit 2; }; MODULE=$2; shift 2 ;;
+    --check-only) CHECK_ONLY=1; shift ;;
+    --hold) HOLD=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "publish-central: unknown option $1 (see --help)" >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
+[ $# -eq 1 ] || { usage >&2; exit 2; }
+DIR=$(cd "$1" && pwd)
+die() { echo "publish-central: $*" >&2; exit 1; }
+
+BLOCKLIST=${PUBLISH_BLOCKLIST:-$HOME/.config/pointblue/publish-blocklist}
+[ -s "$BLOCKLIST" ] || die "no blocklist at $BLOCKLIST (one name per line). Nothing is published without it."
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+WORDS="$TMP/words" SUBS="$TMP/substrings"
+grep -v '^[[:space:]]*\(#\|$\)' "$BLOCKLIST" | sed 's/[[:space:]]*$//' > "$TMP/all" || true
+[ -s "$TMP/all" ] || die "the blocklist at $BLOCKLIST has no names in it"
+grep -v '^substring:' "$TMP/all" > "$WORDS" || true
+sed -n 's/^substring://p' "$TMP/all" > "$SUBS"
+
+# The release: a clean checkout at the tag of a non-SNAPSHOT version.
+cd "$DIR"
+[ -z "$(git status --porcelain)" ] || die "$DIR has uncommitted changes"
+POM=pom.xml
+[ -n "$MODULE" ] && POM="$MODULE/pom.xml"
+VERSION=$(mvn -B -q -f "$POM" help:evaluate -Dexpression=project.version -DforceStdout 2>/dev/null)
+case "$VERSION" in ''|*-SNAPSHOT) die "the version is '$VERSION': release versions only" ;; esac
+TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || true)
+[ "$TAG" = "v$VERSION" ] || die "HEAD is not at tag v$VERSION (it is at '${TAG:-no tag}')"
+
+# Build and sign the bundle. The profile stops short of uploading (skipUpload).
+ARGS=(-B -Pcentral deploy)
+[ -n "$MODULE" ] && ARGS+=(-pl "$MODULE")
+[ -n "${PUBLISH_GPG_KEY:-}" ] && ARGS+=("-Dgpg.keyname=$PUBLISH_GPG_KEY")
+echo "building the bundle for $(basename "$DIR") ${MODULE:+$MODULE }$VERSION"
+mvn -q "${ARGS[@]}"
+BUNDLE="$DIR/${MODULE:+$MODULE/}target/central-publishing/central-bundle.zip"
+[ -f "$BUNDLE" ] || die "no bundle at $BUNDLE (does the pom have the central profile?)"
+
+# Check every file in the bundle, and every file inside each jar in it.
+mkdir -p "$TMP/b"
+unzip -q "$BUNDLE" -d "$TMP/b"
+find "$TMP/b" -name '*.jar' | while read -r j; do mkdir -p "$j.x" && unzip -q "$j" -d "$j.x"; done
+[ -n "$(find "$TMP/b" -name '*.asc' | head -1)" ] || die "the bundle has no signatures (.asc)"
+HITS=$( { [ -s "$WORDS" ] && grep -rilawF -f "$WORDS" "$TMP/b"; [ -s "$SUBS" ] && grep -rilaF -f "$SUBS" "$TMP/b"; } | sort -u || true)
+if [ -n "$HITS" ]; then
+  echo "publish-central: REFUSED: these files name something on the blocklist:" >&2
+  echo "$HITS" | sed "s#^$TMP/b/#  #" >&2
+  exit 1
+fi
+echo "checked: $(find "$TMP/b" -type f | wc -l | tr -d ' ') files, none names anything on the blocklist"
+[ "$CHECK_ONLY" = 1 ] && { echo "--check-only: not uploaded ($BUNDLE)"; exit 0; }
+
+# Upload that same bundle.
+ACCT=$(security find-generic-password -s maven-central 2>/dev/null | sed -n 's/.*"acct"<blob>="\(.*\)"/\1/p')
+[ -n "$ACCT" ] || die "no maven-central item in the Keychain (security add-generic-password -s maven-central -a <user> -w)"
+AUTH=$(printf '%s:%s' "$ACCT" "$(security find-generic-password -s maven-central -a "$ACCT" -w)" | base64)
+TYPE=AUTOMATIC; [ "$HOLD" = 1 ] && TYPE=USER_MANAGED
+NAME="$(basename "$DIR")${MODULE:+-$MODULE}-$VERSION"
+ID=$(curl -fsS -X POST -H "Authorization: Bearer $AUTH" -F "bundle=@$BUNDLE" \
+  "https://central.sonatype.com/api/v1/publisher/upload?publishingType=$TYPE&name=$NAME")
+echo "uploaded $NAME: deployment $ID"
+while :; do
+  sleep 10
+  STATUS=$(curl -fsS -X POST -H "Authorization: Bearer $AUTH" "https://central.sonatype.com/api/v1/publisher/status?id=$ID")
+  STATE=$(printf '%s' "$STATUS" | sed -n 's/.*"deploymentState" *: *"\([A-Z_]*\)".*/\1/p')
+  case "$STATE" in
+    PENDING|VALIDATING|PUBLISHING) printf '  %s\n' "$STATE" ;;
+    VALIDATED) echo "validated, held for review: publish it at https://central.sonatype.com/publishing/deployments"; exit 0 ;;
+    PUBLISHED) echo "published. Search shows it within the hour; resolving works within minutes."; exit 0 ;;
+    *) echo "publish-central: deployment $ID is $STATE" >&2; printf '%s\n' "$STATUS" >&2; exit 1 ;;
+  esac
+done

@@ -679,7 +679,7 @@ bin/idm export-project tree/ <newProjectDir> --new
    byte-identical `_license.xml`, `_readme.txt`, `_<lang>.properties` and `_contents.xml` files.
    Only the minted ids differ.
 7. **SCIM drivers keep `GenericApp`.** Designer's driver definitions map `SCIM-Driver` to a
-   `SCIM` application type, but `test11pf`'s `MITLL-Druva` — a `SCIM-Driver` — has a
+   `SCIM` application type, but `test11pf`'s Druva driver — a `SCIM-Driver` — has a
    `GenericApp` application, so `SCIM-Driver` is deliberately absent from the driver-type table
    and a SCIM shim class returns `GenericApp`.
 8. **The driver set carries only what the tree records** (deviation for §4 of the N3 brief).

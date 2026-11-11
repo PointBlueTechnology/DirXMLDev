@@ -13,7 +13,7 @@ if [ "${1:-}" = "--inform" ]; then
 fi
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 SIM_VER="${IDM_SIM_VERSION:-1.8.0}"
-SIM_JAR="${HOME}/.m2/repository/com/pointblue/dirxml/dirxml-simulator/${SIM_VER}/dirxml-simulator-${SIM_VER}.jar"
+SIM_JAR="${HOME}/.m2/repository/com/pointbluetech/dirxml/dirxml-simulator/${SIM_VER}/dirxml-simulator-${SIM_VER}.jar"
 
 missing=""
 links=""
@@ -78,9 +78,9 @@ Setup (docs/install.md, section 2):
      or a Designer install. Do not commit them.
      Do not use: ln -s /path/to/DirXMLSimulator/lib lib
      Do not symlink the individual jars into lib/. Neither passes requireFilesExist.
-  2. Build the simulator and install it into the local Maven repository:
-       cd /path/to/DirXMLSimulator && mvn install
-     Expected artifact: com.pointblue.dirxml:dirxml-simulator:${SIM_VER}
+  2. Install the simulator into the local Maven repository: bin/install-deps
+     (or build it: cd /path/to/DirXMLSimulator && git checkout v${SIM_VER} && mvn install)
+     Expected artifact: com.pointbluetech.dirxml:dirxml-simulator:${SIM_VER}
      (IDM_SIM_VERSION overrides that pin only when you mean to select another build).
   3. Re-run: mvn -B test
      Without the jars, doctor and the write-gate tests still run:

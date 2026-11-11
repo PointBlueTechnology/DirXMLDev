@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.pointblue.dirxml</groupId>
+    <groupId>com.pointbluetech.dirxml</groupId>
     <artifactId>dirxml-dev</artifactId>
     <version>0.69.0</version>
     <packaging>jar</packaging>
@@ -13,6 +13,12 @@
     <description>Agent-driven IDM (DirXML) development: a typed model of a driver set,
         IDM-as-code on disk, validation, and vault deploy/operate with safeguards —
         built on the DirXML Policy Simulator as its test engine.</description>
+    <url>https://github.com/PointBlueTechnology/DirXMLDev</url>
+
+    <organization>
+        <name>Point Blue Technology</name>
+        <url>https://www.pointbluetech.com</url>
+    </organization>
 
     <licenses>
         <license>
@@ -21,6 +27,20 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
+
+    <developers>
+        <developer>
+            <name>Point Blue Technology</name>
+            <organization>Point Blue Technology</organization>
+            <organizationUrl>https://www.pointbluetech.com</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <url>https://github.com/PointBlueTechnology/DirXMLDev</url>
+        <connection>scm:git:https://github.com/PointBlueTechnology/DirXMLDev.git</connection>
+        <developerConnection>scm:git:git@github.com:PointBlueTechnology/DirXMLDev.git</developerConnection>
+    </scm>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
@@ -34,7 +54,8 @@
         <idm.lib>${project.basedir}/lib</idm.lib>
         <postgresql.version>42.7.7</postgresql.version>
         <!-- The trace parser the desktop viewer and the web share (trace.view, docs/trace-view.md).
-             Not on Maven Central: a DirXMLTraceViewer release attaches the jar (docs/install.md). -->
+             On Maven Central from 1.12.0; earlier versions come from a DirXMLTraceViewer release
+             (bin/install-deps, docs/install.md). -->
         <tracecore.version>1.10.0</tracecore.version>
     </properties>
 
@@ -132,7 +153,7 @@
                             <fail>true</fail>
                             <rules>
                                 <requireFilesExist>
-                                    <message>DirXMLDev needs the proprietary NetIQ/OpenText jars as regular files in a real lib/ directory, and dirxml-simulator ${simulator.version} installed by 'mvn install' in the DirXMLSimulator repo. They are not committed and not on Maven Central. A directory symlink of lib/, or a symlink of a jar, is not enough: requireFilesExist reports that path as missing. Copy the jars; an engine from 4.10.2 on ships xp.jar as xp-1.0.0.jar — copy it as xp.jar. `mvn test` is the full suite and stops here when they are absent or linked. Doctor and the write gate still run without them: mvn -B -Pidm.portable test. See docs/install.md section 2 and bin/require-engine.sh.</message>
+                                    <message>DirXMLDev needs the proprietary NetIQ/OpenText jars as regular files in a real lib/ directory, and dirxml-simulator ${simulator.version} in ~/.m2 (bin/install-deps installs it). The engine jars are not committed and not on Maven Central. A directory symlink of lib/, or a symlink of a jar, is not enough: requireFilesExist reports that path as missing. Copy the jars; an engine from 4.10.2 on ships xp.jar as xp-1.0.0.jar — copy it as xp.jar. `mvn test` is the full suite and stops here when they are absent or linked. Doctor and the write gate still run without them: mvn -B -Pidm.portable test. See docs/install.md section 2 and bin/require-engine.sh.</message>
                                     <files>
                                         <file>${idm.lib}/dirxml.jar</file>
                                         <file>${idm.lib}/dirxml_misc.jar</file>
@@ -143,11 +164,40 @@
                                         <file>${idm.lib}/dhutil.jar</file>
                                         <file>${idm.lib}/XDS.jar</file>
                                         <file>${idm.lib}/js.jar</file>
-                                        <file>${user.home}/.m2/repository/com/pointblue/dirxml/dirxml-simulator/${simulator.version}/dirxml-simulator-${simulator.version}.jar</file>
+                                        <file>${user.home}/.m2/repository/com/pointbluetech/dirxml/dirxml-simulator/${simulator.version}/dirxml-simulator-${simulator.version}.jar</file>
                                     </files>
                                 </requireFilesExist>
                             </rules>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- The pom installed into ~/.m2 and published: flattened, with the profiles removed, so it
+                 names no engine jar and no systemPath. Its dependencies are this pom's own section
+                 (JLDAP, PostgreSQL, the trace parser); a program that uses dirxml-dev declares the
+                 simulator and supplies the engine jars itself, as DirXMLDevWeb does. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.9.0</version>
+                <configuration>
+                    <flattenMode>ossrh</flattenMode>
+                    <updatePomFile>true</updatePomFile>
+                    <pomElements>
+                        <dependencies>interpolate</dependencies>
+                        <profiles>remove</profiles>
+                    </pomElements>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals><goal>flatten</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>flatten-clean</id>
+                        <phase>clean</phase>
+                        <goals><goal>clean</goal></goals>
                     </execution>
                 </executions>
             </plugin>
@@ -170,7 +220,7 @@
             </activation>
             <dependencies>
                 <dependency>
-                    <groupId>com.pointblue.dirxml</groupId>
+                    <groupId>com.pointbluetech.dirxml</groupId>
                     <artifactId>dirxml-simulator</artifactId>
                     <version>${simulator.version}</version>
                 </dependency>
@@ -245,6 +295,63 @@
                                 </configuration>
                             </execution>
                         </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <!-- Maven Central: sources, javadoc, signatures, and the bundle Central takes. The bundle is
+                 built, not uploaded (skipUpload): bin/publish-central checks it for names that must not
+                 be published, then uploads it. Needs lib/ and the simulator, like any full build. -->
+            <id>central</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals><goal>jar-no-fork</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.12.0</version>
+                        <configuration>
+                            <doclint>none</doclint>
+                            <quiet>true</quiet>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals><goal>jar</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.8</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals><goal>sign</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.12.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <skipUpload>true</skipUpload>
+                        </configuration>
                     </plugin>
                 </plugins>
             </build>

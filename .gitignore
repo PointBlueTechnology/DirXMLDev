@@ -51,3 +51,4 @@ mcp/**/node_modules/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+.flattened-pom.xml
