@@ -29,7 +29,7 @@ if not "%JV:~0,3%"=="21." (
   exit /b 1
 )
 set "SIM_VER=%IDM_SIM_VERSION%"
-if "%SIM_VER%"=="" set "SIM_VER=1.8.0"
+if "%SIM_VER%"=="" set "SIM_VER=1.9.0"
 set "SIM_JAR=%USERPROFILE%\.m2\repository\com\pointbluetech\dirxml\dirxml-simulator\%SIM_VER%\dirxml-simulator-%SIM_VER%.jar"
 if not exist "%SIM_JAR%" (
   if /I "%CMD%"=="doctor" (
