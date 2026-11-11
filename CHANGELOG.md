@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.71.0] - 2026-11-11
+
 ### Fixed
 
 - **A fresh clone builds:** `mvn test` no longer stops in the enforcer when the simulator is not yet in
