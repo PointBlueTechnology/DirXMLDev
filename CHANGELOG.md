@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`bin/install-deps`:** installs the Point Blue libraries DirXMLDev and DirXMLDevWeb build against
+  (the trace parser, the simulator, `dirxml-dev`, `console-auth`) from their GitHub releases at the
+  versions a pom pins, so building from source no longer means building each one from the right tag in
+  the right order. `--pom` reads another pom (the web's), `--list` shows the pins, `--force` replaces
+  an installed jar. `docs/install.md` §2.0 gives the repositories and their order. CI uses it for the
+  trace parser.
+
 ## [0.68.0] - 2026-11-11
 
 ### Added

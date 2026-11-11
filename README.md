@@ -205,13 +205,15 @@ are the same work by hand.
 JDK 21, Maven 3.9 or newer, and the Identity Manager engine jars copied into a
 real `lib/` directory (proprietary, never committed). A symlink of `lib/`, or
 symlinks of the jars, is not enough for Maven's file check. Build the
-DirXML Policy Simulator first so `dirxml-simulator` resolves from `~/.m2`.
+DirXML Policy Simulator first so `dirxml-simulator` resolves from `~/.m2`, or let
+`bin/install-deps` install its release jar and the trace parser at the versions `pom.xml` pins.
 `bin/idm` finds JDK 21 via `IDM_JAVA_HOME` (or `java_home -v 21` on macOS),
 compiles on first use if `target/classes` is missing, and puts the simulator
 jar on the classpath (`IDM_SIM_VERSION` selects another installed version).
 
 ```bash
 export IDM_JAVA_HOME=/path/to/jdk-21
+bin/install-deps
 mvn test
 bin/idm
 ```

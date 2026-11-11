@@ -253,7 +253,9 @@ of the simulator is not a substitute. Set IDM_SIM_VERSION only if I asked.
 
 Clone https://github.com/PointBlueTechnology/DirXMLDev into
 ~/IdeaProjects/DirXMLDev. mkdir -p lib and copy the same ten jars in as
-regular files. lib/ must be a real directory. Run mvn test with JDK 21.
+regular files. lib/ must be a real directory. Run bin/install-deps (it
+installs the trace parser from its release, and leaves the simulator you
+just installed alone), then mvn test with JDK 21.
 If Maven says the simulator POM is invalid because systemPath is still
 ${project.basedir}/lib/..., continue: that message is in the installed
 simulator artifact, not in DirXMLDev's POM. If mvn test fails for some
@@ -401,11 +403,12 @@ when that Java is 21, /usr/lib/jvm/*21*, and java on PATH when that java is
 Simulator: this repo pins dirxml-simulator 1.8.0. doctor looks for
 ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/1.8.0/dirxml-simulator-1.8.0.jar
 (bin\idm.cmd uses %USERPROFILE%\.m2\...). Produce it with mvn install in the
-DirXMLSimulator repo, run with JDK 21. If mvn install succeeded and doctor
+DirXMLSimulator repo, run with JDK 21, or with bin/install-deps simulator in
+DirXMLDev, which installs the release jar. If mvn install succeeded and doctor
 still says the jar is missing, Maven and the launcher are looking at
 different home directories; point them at the same .m2. Set IDM_SIM_VERSION
 only when I asked for a different installed build. A release zip of the
-simulator does not put this jar in .m2.
+simulator does not put this jar in .m2; bin/install-deps does.
 
 lib/: a real directory containing regular files dirxml.jar,
 dirxml_misc.jar, nxsl.jar, xp.jar, js.jar, jclient.jar, ldap.jar, XDS.jar,
