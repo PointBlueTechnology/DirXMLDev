@@ -61,7 +61,7 @@ Facts I am providing. None of these are secrets:
 - Bind DN of the deploy identity: <bind-dn>
 - Driver-set DN: <driver-set-dn>
 - Client working directory to create (its own git repo, outside both checkouts): <client-dir>
-- Clone locations, unless I name others: ~/IdeaProjects/DirXMLSimulator and ~/IdeaProjects/DirXMLDev
+- Clone location, unless I name another: ~/IdeaProjects/DirXMLDev
 
 Rules for the whole job:
 - Ask me before you install JDK, Maven, git, Node, or anything else.
@@ -230,12 +230,13 @@ git --version works. Show me those three lines. Do not clone repositories
 yet.
 ```
 
-### Phase 2 — simulator, jars, and DirXMLDev
+### Phase 2 — jars and DirXMLDev
 
 ```
-JDK 21, Maven, and git are in place. Install DirXMLDev and the DirXML
-Policy Simulator. Follow docs/install.md section 2 and
-docs/agent-assisted-setup.md in the DirXMLDev repo once it is cloned.
+JDK 21, Maven, and git are in place. Install DirXMLDev. Follow
+docs/install.md section 2 and docs/agent-assisted-setup.md in the DirXMLDev
+repo once it is cloned. The DirXML Policy Simulator and the trace parser come
+from Maven Central; do not clone or build them.
 
 Jars are already on disk at <path-to-idm-jars>. Copy these ten as regular
 files (cp, not ln -s), including ldap.jar, and keep the name XDS.jar:
@@ -243,23 +244,15 @@ dirxml.jar, dirxml_misc.jar, nxsl.jar, xp.jar, js.jar, jclient.jar,
 ldap.jar, XDS.jar, dhutil.jar, CommonDriverShim.jar. A 4.10.2 engine names
 xp.jar xp-1.0.0.jar: copy it as xp.jar.
 
-Clone https://github.com/PointBlueTechnology/DirXMLSimulator into
-~/IdeaProjects/DirXMLSimulator (or another directory I name). Copy the ten
-jars into that repo's lib/. With JAVA_HOME pointed at JDK 21, run
-mvn install. That must produce
-~/.m2/repository/com/pointbluetech/dirxml/dirxml-simulator/1.9.0/dirxml-simulator-1.9.0.jar
-(on Windows, under %USERPROFILE%\.m2). DirXMLDev pins 1.9.0. A release zip
-of the simulator is not a substitute. Set IDM_SIM_VERSION only if I asked.
-
 Clone https://github.com/PointBlueTechnology/DirXMLDev into
-~/IdeaProjects/DirXMLDev. mkdir -p lib and copy the same ten jars in as
-regular files. lib/ must be a real directory. Run bin/install-deps (it
-installs the trace parser from its release, and leaves the simulator you
-just installed alone), then mvn test with JDK 21.
-If Maven says the simulator POM is invalid because systemPath is still
-${project.basedir}/lib/..., continue: that message is in the installed
-simulator artifact, not in DirXMLDev's POM. If mvn test fails for some
-other reason, show me the failure; still run doctor afterward.
+~/IdeaProjects/DirXMLDev. mkdir -p lib and copy the ten jars in as
+regular files. lib/ must be a real directory. Run bin/install-deps: it
+fetches the simulator and the trace parser at the versions pom.xml pins from
+Maven Central into ~/.m2 (on Windows, %USERPROFILE%\.m2; run it from Git
+Bash). That must produce
+~/.m2/repository/com/pointbluetech/dirxml/dirxml-simulator/1.9.0/dirxml-simulator-1.9.0.jar.
+Set IDM_SIM_VERSION only if I asked. Then run mvn test with JDK 21.
+If mvn test fails, show me the failure; still run doctor afterward.
 
 Run bin/idm doctor (Windows: bin\idm.cmd doctor). Show me the report.
 Stop when it prints DOCTOR: OK. Do not commit the jars. Do not start a
@@ -402,13 +395,13 @@ when that Java is 21, /usr/lib/jvm/*21*, and java on PATH when that java is
 
 Simulator: this repo pins dirxml-simulator 1.9.0. doctor looks for
 ~/.m2/repository/com/pointbluetech/dirxml/dirxml-simulator/1.9.0/dirxml-simulator-1.9.0.jar
-(bin\idm.cmd uses %USERPROFILE%\.m2\...). Produce it with mvn install in the
-DirXMLSimulator repo, run with JDK 21, or with bin/install-deps simulator in
-DirXMLDev, which installs the release jar. If mvn install succeeded and doctor
-still says the jar is missing, Maven and the launcher are looking at
-different home directories; point them at the same .m2. Set IDM_SIM_VERSION
-only when I asked for a different installed build. A release zip of the
-simulator does not put this jar in .m2; bin/install-deps does.
+(bin\idm.cmd uses %USERPROFILE%\.m2\...). Produce it with bin/install-deps
+simulator in DirXMLDev, which fetches it from Maven Central (or with mvn
+install in a DirXMLSimulator checkout at tag v1.9.0, run with JDK 21). If that
+succeeded and doctor still says the jar is missing, Maven and the launcher
+are looking at different home directories; point them at the same .m2. Set
+IDM_SIM_VERSION only when I asked for a different installed build. A release
+zip of the simulator does not put this jar in .m2; bin/install-deps does.
 
 lib/: a real directory containing regular files dirxml.jar,
 dirxml_misc.jar, nxsl.jar, xp.jar, js.jar, jclient.jar, ldap.jar, XDS.jar,

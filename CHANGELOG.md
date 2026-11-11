@@ -7,6 +7,21 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **A fresh clone builds:** `mvn test` no longer stops in the enforcer when the simulator is not yet in
+  `~/.m2`. The rule checked for the jar before Maven could fetch it from Maven Central; it now checks only
+  the engine jars, and Maven resolves the simulator like any other dependency.
+
+### Changed
+
+- `bin/install-deps` fetches a pinned version that is on Maven Central into `~/.m2` (it used to skip it),
+  so `bin/idm` finds the simulator before the first build. Versions from before Maven Central still come
+  from their GitHub releases.
+- **Build instructions:** using DirXMLDev means cloning only this repository and copying in the engine
+  jars; the simulator and the trace parser come from Maven Central. `docs/install.md` §2, the README,
+  `docs/agent-assisted-setup.md` and the how-tos no longer build the simulator first.
+
 ## [0.70.0] - 2026-11-11
 
 ### Changed

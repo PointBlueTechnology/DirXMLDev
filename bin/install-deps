@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Installs the Point Blue libraries that DirXMLDev and DirXMLDevWeb build against, at the
-# versions a pom pins, from their GitHub releases into the local Maven repository. A version
-# that is on Maven Central is skipped: Maven fetches it by itself. Older versions are only on
-# GitHub releases; without this each one has to be built from a checkout of the right tag, in
-# the right order (DirXMLDev docs/install.md §2.0).
+# versions a pom pins, into the local Maven repository: from Maven Central when the version is
+# there (what a build fetches anyway; bin/idm needs the simulator in ~/.m2 before any build), else
+# from its GitHub release. Versions from before Maven Central are only on GitHub releases; without
+# this each one has to be built from a checkout of the right tag, in the right order (DirXMLDev
+# docs/install.md §2.0).
 #
 #   bin/install-deps                     # what this checkout's pom pins
 #   bin/install-deps --pom path/pom.xml  # what another pom pins
@@ -19,13 +20,13 @@
 # The groupId is the one the pom names for that library (com.pointbluetech.* from the Maven
 # Central releases, com.pointblue.* before). A version already in the local repository is
 # left alone, so a jar you built yourself from a checkout wins; --force replaces it with the
-# release jar. The NetIQ/OpenText engine jars
-# are proprietary and are never downloaded: copy them into lib/ yourself (DirXMLDev docs/install.md).
-# Needs curl and mvn. M2_REPO installs into another local repository than ~/.m2/repository.
+# GitHub release jar. The NetIQ/OpenText engine jars are proprietary and are never downloaded:
+# copy them into lib/ yourself (DirXMLDev docs/install.md). Needs curl and mvn. M2_REPO installs
+# into another local repository than ~/.m2/repository.
 # The same script is in DirXMLDev and DirXMLDevWeb (bin/install-deps); keep the two identical.
 set -euo pipefail
 
-usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 POM="$HERE/pom.xml"
@@ -117,7 +118,12 @@ for n in $NAMES; do
   fi
   central="https://repo1.maven.org/maven2/$(echo "$group" | tr . /)/$artifact/$v/$artifact-$v.pom"
   if [ "$FORCE" = 0 ] && curl -fsI -o /dev/null "$central" 2>/dev/null; then
-    echo "  $n $v  on Maven Central ($group): Maven fetches it, nothing to install"
+    if [ "$DRY" = 1 ]; then echo "  $n $v  would fetch from Maven Central ($group)"; continue; fi
+    echo "  $n $v  from Maven Central ($group)"
+    if ! mvn -B -q ${M2_REPO:+-Dmaven.repo.local="$M2_REPO"} dependency:get -Dartifact="$group:$artifact:$v" -Dtransitive=false; then
+      echo "  $n: Maven could not fetch $group:$artifact:$v from Maven Central" >&2
+      status=1
+    fi
     continue
   fi
   url="https://github.com/$gh/releases/download/v$v/$artifact-$v.jar"

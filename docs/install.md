@@ -24,8 +24,8 @@ Identity Applications helper). There is no server, no database and no GUI.
 | **Maven 3.9+** | build; the enforcer rejects an older Maven | `mvn -v` |
 | **git** | the tree is versioned; the deploy gate reads commits | `git --version` |
 | **Python 3.8+** | only for `bin/apps` (standard library, nothing to install) | `python3 --version` |
-| **The DirXML Policy Simulator** built and installed locally, or its release jar installed by `bin/install-deps` (§2.0) | the engine that validates and simulates policies | `ls ~/.m2/repository/com/pointblue/dirxml/dirxml-simulator/` |
-| **The trace parser** (`dirxml-trace-core`) | `trace.view` ([trace-view.md](trace-view.md)) reads traces with the parser the trace viewer and the web share. It is not on Maven Central: `bin/install-deps` installs it from its [DirXMLTraceViewer release](https://github.com/PointBlueTechnology/DirXMLTraceViewer/releases) at the version `pom.xml` pins (`tracecore.version`; §2.0). A DirXMLDev release attaches it too. | `ls ~/.m2/repository/com/pointbluetech/dirxml-trace-core/` |
+| **The DirXML Policy Simulator** (`dirxml-simulator`) | the engine that validates and simulates policies. On Maven Central: `bin/install-deps` fetches the version `pom.xml` pins (`simulator.version`; §2.0) | `ls ~/.m2/repository/com/pointbluetech/dirxml/dirxml-simulator/` |
+| **The trace parser** (`dirxml-trace-core`) | `trace.view` ([trace-view.md](trace-view.md)) reads traces with the parser the trace viewer and the web share. On Maven Central: Maven fetches the version `pom.xml` pins (`tracecore.version`) | `ls ~/.m2/repository/com/pointbluetech/dirxml-trace-core/` |
 | **The Identity Manager engine jars** | proprietary; the simulator and the tool load the real policy compiler for `validate`'s compile check, `simulate` and package GCV checksums. **Talking to a vault needs none of them**: deploy, diff, import-live and the `driver.*`/`driverset.*`/`engine.*`/`job.*` commands use open-source JLDAP and the project's own extended operations ([vendor-free-vault.md](vendor-free-vault.md)) | see §2 |
 | **Network access to the vault** | LDAPS to the eDirectory server that holds the driver set (port 636) | `nc -z host 636` |
 | Optional: **SSH to the engine host** | `driver.trace tail` can read the trace file over SSH; without it the trace streams over LDAP | `ssh user@host true` |
@@ -41,9 +41,10 @@ Roles and resources are in scope as AppConfig objects (`role.*`, `resource.*`, `
 ### 2.0 Which repositories, in which order
 
 DirXMLDev is one of five repositories that build against each other. Each `pom.xml` pins the
-versions of the others it uses. The libraries are moving to Maven Central under the groupId
-`com.pointbluetech` (§2.0.1). A pinned version that is there, Maven fetches by itself; one that
-is not, Maven finds only once it is in your local repository (`~/.m2`).
+versions of the others it uses, and every pinned library is on Maven Central under the groupId
+`com.pointbluetech` (§2.0.1), so Maven fetches it. **To use DirXMLDev you clone only this
+repository** and copy in the engine jars (§2.1, §2.2). The other repositories matter only when you
+change one of them.
 
 | Order | Repository | Gives | Pinned by |
 |---|---|---|---|
@@ -53,35 +54,38 @@ is not, Maven finds only once it is in your local repository (`~/.m2`).
 | 4 | [directory-console](https://github.com/PointBlueTechnology/directory-console) | `console-auth` (sign-in and TLS trust for the web; it builds on `dirxml-dev`) | DirXMLDevWeb: `console.version` |
 | 5 | [DirXMLDevWeb](https://github.com/PointBlueTechnology/DirXMLDevWeb) | the web workbench | nothing |
 
-Build only the repositories you are changing. `bin/install-deps` installs the others from their
-GitHub releases, at the versions a pom pins:
+Build only the repositories you are changing. `bin/install-deps` puts the others in your local
+Maven repository (`~/.m2`) at the versions a pom pins: from Maven Central, or, for a version from
+before Maven Central, from its GitHub release:
 
 ```bash
 bin/install-deps        # in DirXMLDev: the trace parser and the simulator
 ```
 
-DirXMLDevWeb carries the same script; `bin/install-deps` there installs what the web pins, which
-adds `dirxml-dev` and `console-auth`.
+A build fetches them from Maven Central by itself; the script matters because `bin/idm` puts the
+simulator on the class path from `~/.m2`, so it has to be there before the first build. It also
+builds an older tag that pins pre-Central versions. DirXMLDevWeb carries the same script, which
+there also covers `dirxml-dev` and `console-auth`.
 
 `bin/install-deps --list` shows each pin and whether it is installed. A version already in `~/.m2`
-is left alone, so a jar you built yourself is kept; `--force` replaces it with the release jar.
-To build one yourself instead, check out the tag its pin names (for example `git checkout v1.9.0`
-in DirXMLSimulator) and run `mvn install` there, in the order above. A dependency's default branch can
-be ahead of the pin, so build the tag, not main. The script needs `curl` and `mvn`; on
+is left alone, so a jar you built yourself is kept; `--force` replaces it with the GitHub release
+jar. To build one yourself instead, check out the tag its pin names (for example `git checkout
+v1.9.0` in DirXMLSimulator) and run `mvn install` there, in the order above. A dependency's default
+branch can be ahead of the pin, so build the tag, not main. The script needs `curl` and `mvn`; on
 Windows, run it from Git Bash or WSL.
 
 The engine jars are never downloaded: they are proprietary, and §2.1 says where they come from.
-The simulator's release jar replaces building the simulator, but `validate`'s compile check,
-`simulate` and the package checksums still need the engine jars in DirXMLDev's `lib/` (§2.2).
+`validate`'s compile check, `simulate` and the package checksums need them in DirXMLDev's `lib/`
+(§2.2).
 
 #### 2.0.1 Maven Central
 
 The Point Blue libraries are published to Maven Central under `com.pointbluetech`:
 `com.pointbluetech:dirxml-trace-core`, `com.pointbluetech.dirxml:dirxml-simulator`,
-`com.pointbluetech.dirxml:dirxml-dev` and `com.pointbluetech.console:console-auth`. The first
-version of each on Central is the first released after the move; earlier versions stay on GitHub
-releases only, under the old groupIds (`com.pointblue.*`), and `install-deps` installs them under
-whichever groupId the pinning pom names. No engine jar is ever published: the poms on Central are
+`com.pointbluetech.dirxml:dirxml-dev` and `com.pointbluetech.console:console-auth`, from trace-core
+1.12.0, simulator 1.9.0, DirXMLDev 0.70.0 and console-auth 0.4.11 on. Earlier versions stay on
+GitHub releases only, under the old groupIds (`com.pointblue.*`), and `install-deps` installs them
+under whichever groupId the pinning pom names. No engine jar is ever published: the poms on Central are
 flattened and name only open-source dependencies.
 
 Maintainers publish a release with `bin/publish-central <checkout>` (`--module trace-core` for the
@@ -90,27 +94,22 @@ refuses the bundle when any file in it names something on the publish blocklist 
 outside every repository), and uploads that same bundle. Central never deletes a release; the
 script's header says where the token, the key and the blocklist come from.
 
-### 2.1 The simulator and the engine jars
+### 2.1 The engine jars
+
+The engine jars come from your Identity Manager installation: the engine server
+(`/opt/novell/eDirectory/lib/dirxml/classes/`) or the Designer install. DirXMLDev needs
+`dirxml.jar`, `dirxml_misc.jar`, `nxsl.jar`, `xp.jar`, `js.jar`, `jclient.jar`, `XDS.jar`,
+`dhutil.jar` and `CommonDriverShim.jar` (§2.2). Engines from 4.10.2 on ship `xp.jar` as
+`xp-1.0.0.jar`: copy it as `xp.jar`, the name the POMs expect (`doctor` says so when it finds
+the versioned name). They are never committed and never downloaded.
+
+The simulator itself comes from Maven Central (§2.0). Build it only if you change it: clone
+[DirXMLSimulator](https://github.com/PointBlueTechnology/DirXMLSimulator), put the same jars and
+`ldap.jar` in its `lib/`, check out the tag DirXMLDev pins and install it:
 
 ```bash
-git clone https://github.com/PointBlueTechnology/DirXMLSimulator ~/IdeaProjects/DirXMLSimulator
+cd ~/IdeaProjects/DirXMLSimulator && git checkout v1.9.0 && JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q install
 ```
-
-Put the engine jars from your Identity Manager installation into the
-simulator's `lib/` (they are never committed; the directory is gitignored):
-`dirxml.jar`, `dirxml_misc.jar`, `nxsl.jar`, `xp.jar`, `js.jar`, `jclient.jar`,
-`ldap.jar`, `XDS.jar`, `dhutil.jar`, `CommonDriverShim.jar`. They come from
-the engine server (`/opt/novell/eDirectory/lib/dirxml/classes/`) or from the
-Designer install. Engines from 4.10.2 on ship `xp.jar` as `xp-1.0.0.jar`:
-copy it as `xp.jar`, the name both POMs expect (`doctor` says so when it finds
-the versioned name). Then build and install the simulator so Maven can find it:
-
-```bash
-cd ~/IdeaProjects/DirXMLSimulator && JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q install
-```
-
-Not changing the simulator? Skip that build: `bin/install-deps` in DirXMLDev (§2.2) installs its
-release jar at the pinned version. The clone is still a handy place to keep the engine jars.
 
 A simulator built from source before 1.9.0 installs a pom that still names its
 engine jars with the literal `${project.basedir}/lib/...` `systemPath`, and
@@ -132,12 +131,12 @@ and the package checksum need the jars. The trace over LDAP (`driver.trace tail 
 git clone <this repository> ~/IdeaProjects/DirXMLDev
 cd ~/IdeaProjects/DirXMLDev
 mkdir -p lib
-src=~/IdeaProjects/DirXMLSimulator/lib
+src=/path/to/engine/jars         # where you copied them from the engine or Designer (§2.1)
 for j in dirxml.jar dirxml_misc.jar nxsl.jar xp.jar js.jar jclient.jar \
          XDS.jar dhutil.jar CommonDriverShim.jar; do
   cp "$src/$j" "lib/$j"          # regular files; lib/ is gitignored
 done
-bin/install-deps                 # the trace parser, and the simulator if you did not build it
+bin/install-deps                 # the simulator and the trace parser, from Maven Central
 JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -q test  # builds and runs the test suite
 bin/idm                                                # prints every command
 ```

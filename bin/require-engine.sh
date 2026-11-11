@@ -59,7 +59,7 @@ ${headline}
 Missing:${missing}${sim_missing}${link_block}
 
 The NetIQ/OpenText jars are proprietary and are not committed (lib/ is gitignored).
-dirxml-simulator is not on Maven Central. The sources import both, so the suite
+dirxml-simulator comes from Maven Central. The sources import both, so the suite
 cannot pass without them. pom.xml keeps those dependencies in the engine profile
 (active when lib/dirxml.jar exists) so that mvn test on a machine without the
 jars stops in the enforcer's requireFilesExist rule — the file list above —
@@ -78,7 +78,8 @@ Setup (docs/install.md, section 2):
      or a Designer install. Do not commit them.
      Do not use: ln -s /path/to/DirXMLSimulator/lib lib
      Do not symlink the individual jars into lib/. Neither passes requireFilesExist.
-  2. Install the simulator into the local Maven repository: bin/install-deps
+  2. Put the simulator in the local Maven repository: bin/install-deps fetches it
+     from Maven Central (mvn test does too)
      (or build it: cd /path/to/DirXMLSimulator && git checkout v${SIM_VER} && mvn install)
      Expected artifact: com.pointbluetech.dirxml:dirxml-simulator:${SIM_VER}
      (IDM_SIM_VERSION overrides that pin only when you mean to select another build).

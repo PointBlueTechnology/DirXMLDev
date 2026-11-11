@@ -24,10 +24,9 @@ comparison. Both start from the same `tree\` of §2.
 
 1. JDK 21 and Maven 3.9 or newer installed; `set JAVA_HOME=C:\Program Files\Zulu\zulu-21`
    (or `IDM_JAVA_HOME`). Git, and Python 3 if you will use `bin\apps`.
-2. The simulator built once (`mvn install` in its repository, with the engine
-   jars in its `lib\`), and DirXMLDev cloned with `lib` pointing at those jars
-   (`mklink /J lib ..\DirXMLSimulator\lib` from an administrator prompt, or a
-   copy of the jars). `mvn -q test` in DirXMLDev builds it.
+2. DirXMLDev cloned, with the engine jars copied into its `lib\` as regular files, and
+   `bin/install-deps` run once from Git Bash (it fetches the simulator and the trace
+   parser from Maven Central). `mvn -q test` in DirXMLDev builds it.
 3. `bin\idm.cmd` is the Windows launcher (`bin\idm` from a Git Bash / WSL
    shell works too). `bin\idm` with no arguments lists every command.
 4. A working directory for the customer (not inside the DirXMLDev checkout),
