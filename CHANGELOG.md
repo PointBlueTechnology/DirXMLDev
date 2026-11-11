@@ -9,6 +9,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
+- **The simulator and the trace parser now come from Maven Central:** DirXMLDev pins
+  `com.pointbluetech.dirxml:dirxml-simulator:1.9.0` (was 1.8.0) and `com.pointbluetech:dirxml-trace-core:1.12.0`
+  (was 1.10.0), the first releases of each on Central. Maven fetches both during the build; building the
+  simulator yourself, or `bin/install-deps`, is no longer needed for them. The simulator's behaviour is the
+  same as 1.8.0, and the trace parser's as 1.10.0 / 1.11.0.
+
+### Changed
+
 - **Maven coordinates move to `com.pointbluetech` for Maven Central:** DirXMLDev is
   `com.pointbluetech.dirxml:dirxml-dev`, and it depends on `com.pointbluetech.dirxml:dirxml-simulator`.
   Java packages do not change. `bin/idm`, `bin/idm.cmd`, `require-engine.sh` and `doctor` look for the

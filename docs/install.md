@@ -65,7 +65,7 @@ adds `dirxml-dev` and `console-auth`.
 
 `bin/install-deps --list` shows each pin and whether it is installed. A version already in `~/.m2`
 is left alone, so a jar you built yourself is kept; `--force` replaces it with the release jar.
-To build one yourself instead, check out the tag its pin names (for example `git checkout v1.8.0`
+To build one yourself instead, check out the tag its pin names (for example `git checkout v1.9.0`
 in DirXMLSimulator) and run `mvn install` there, in the order above. A dependency's default branch can
 be ahead of the pin, so build the tag, not main. The script needs `curl` and `mvn`; on
 Windows, run it from Git Bash or WSL.
@@ -178,7 +178,7 @@ few gated writes. It is not required. [mcp.md](mcp.md) is the wiring.
 ### 2.4 Check the workstation (`doctor`) and what CI runs
 
 `bin/idm doctor` reports whether this machine can run the tool. It checks JDK 21,
-the simulator jar at the version this repo pins (`1.8.0`, or `IDM_SIM_VERSION`),
+the simulator jar at the version this repo pins (`1.9.0`, or `IDM_SIM_VERSION`),
 and the ten proprietary jars in `lib/`. It does not print passwords, bind DNs, or
 URLs.
 
