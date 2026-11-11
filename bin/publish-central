@@ -15,7 +15,8 @@
 #              every repository: the list itself must never be published. Missing or empty: refused.
 #   token      the Central Portal user token, from the macOS Keychain: service maven-central,
 #              account = the token's user name, password = the token's password.
-#   signing    gpg's default key, or PUBLISH_GPG_KEY; the passphrase is gpg-agent's (pinentry).
+#   signing    gpg's default key, or PUBLISH_GPG_KEY; the passphrase is gpg-agent's (pinentry). The script
+#              signs a line first, so the passphrase dialog appears before the build, not after it.
 #
 # The checkout must be clean and at the annotated tag v<version> of its pom's release version.
 # --hold uploads for review: publish it at https://central.sonatype.com/publishing/deployments.
@@ -60,8 +61,17 @@ case "$VERSION" in ''|*-SNAPSHOT) die "the version is '$VERSION': release versio
 TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || true)
 [ "$TAG" = "v$VERSION" ] || die "HEAD is not at tag v$VERSION (it is at '${TAG:-no tag}')"
 
-# Build and sign the bundle. The profile stops short of uploading (skipUpload).
-ARGS=(-B -Pcentral deploy)
+# Unlock the signing key first: Maven's gpg plugin will not open the passphrase dialog itself in
+# batch mode, and a dialog up front beats one that times out at the end of a long build.
+GPG_KEY_ARGS=()
+[ -n "${PUBLISH_GPG_KEY:-}" ] && GPG_KEY_ARGS=(--local-user "$PUBLISH_GPG_KEY")
+echo "unlocking the signing key (gpg-agent may ask for its passphrase)"
+echo "publish-central" | gpg --armor --detach-sign ${GPG_KEY_ARGS[@]+"${GPG_KEY_ARGS[@]}"} > /dev/null \
+  || die "gpg could not sign with the release key (no key, or the passphrase was not given)"
+
+# Build and sign the bundle. The profile stops short of uploading (skipUpload). Not batch mode (-B),
+# so the gpg plugin may still ask gpg-agent for the passphrase if its cache ran out during the build.
+ARGS=(-Pcentral deploy)
 [ -n "$MODULE" ] && ARGS+=(-pl "$MODULE")
 [ -n "${PUBLISH_GPG_KEY:-}" ] && ARGS+=("-Dgpg.keyname=$PUBLISH_GPG_KEY")
 echo "building the bundle for $(basename "$DIR") ${MODULE:+$MODULE }$VERSION"
