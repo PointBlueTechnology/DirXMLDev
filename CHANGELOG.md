@@ -7,6 +7,24 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`Operate.workOrderDrivers(engine, driverSetDn)`:** each Work Order driver with the container GCV's value, the
+  container it resolves to, and where that came from (`gcv`, `gcv-unresolved` or `driver`), for a caller such as
+  Directory Console that shows them. `containerGcv` is public too.
+- **`Operate.readOnly(directory)`:** an engine that only reads and searches, through the caller's own
+  `Operate.Directory`, for lookups like `workOrderDrivers` where there is no engine connection (or each request must
+  go the caller's way, as Directory Console's proxied authorization does). Engine operations are refused.
+
+### Fixed
+
+- **A Work Order driver behind a Remote Loader is found.** It runs the Remote Loader's shim, so it was missed;
+  a driver with a `workorder-dn` shim parameter now counts too, in `workorder.list` and `workorder.create`.
+- **A container GCV kept in a linked GCV object's `DirXML-Data`** is read as well as one in its
+  `DirXML-ConfigValues`.
+- **An LDAP DN in the container GCV that names nothing** now falls back to the driver object, as a slash DN that
+  does not resolve does, instead of listing a container that is not there.
+
 ## [0.67.0] - 2026-11-10
 
 ### Changed

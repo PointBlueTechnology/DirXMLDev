@@ -232,6 +232,111 @@ public final class Operate {
         void removeNamedPassword(String dn, String name);
     }
 
+    /** Reads and searches through a caller's own directory connection: what {@link #readOnly} needs. */
+    public interface Directory {
+        /** The entry with all its attributes; null when it is not there. */
+        Vault.Entry read(String dn);
+
+        /** The entries {@code filter} finds, with all their attributes ({@link javax.naming.directory.SearchControls} scopes). */
+        List<Vault.Entry> search(String base, String filter, int scope);
+    }
+
+    /**
+     * An engine that only reads and searches, through {@code d}, for a caller that has a directory connection but no
+     * engine connection (or must send each request its own way, as Directory Console does with proxied authorization):
+     * enough for the read-only lookups such as {@link #workOrderDrivers}. Every engine operation is refused.
+     */
+    public static Engine readOnly(Directory d) {
+        return new Engine() {
+            @Override
+            public Vault.Entry read(String dn) {
+                return d.read(dn);
+            }
+
+            @Override
+            public List<Vault.Entry> search(String base, String filter, int scope) {
+                return d.search(base, filter, scope);
+            }
+
+            @Override
+            public List<Vault.Entry> children(String base) {
+                return d.search(base, "(objectClass=*)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+            }
+
+            private UnsupportedOperationException refused(String op) {
+                return new UnsupportedOperationException(op + " needs an engine connection; this one only reads");
+            }
+
+            public int driverState(String dn) {
+                throw refused("driverState");
+            }
+
+            public int driverStartOption(String dn) {
+                throw refused("driverStartOption");
+            }
+
+            public void startDriver(String dn) {
+                throw refused("startDriver");
+            }
+
+            public void stopDriver(String dn) {
+                throw refused("stopDriver");
+            }
+
+            public void restartDriver(String dn) {
+                throw refused("restartDriver");
+            }
+
+            public String waitForState(String dn, int wanted, int seconds) {
+                throw refused("waitForState");
+            }
+
+            public void replace(String dn, String attr, List<byte[]> values) {
+                throw refused("replace");
+            }
+
+            public CachePage viewCache(String dn, int position, int count) {
+                throw refused("viewCache");
+            }
+
+            public void deleteCacheEntries(String dn, int p2, int p3, String p4, int priority) {
+                throw refused("deleteCacheEntries");
+            }
+
+            public void migrateApp(String dn, byte[] xds) {
+                throw refused("migrateApp");
+            }
+
+            public void resync(String dn, long sinceMillis) {
+                throw refused("resync");
+            }
+
+            public int engineVersion() {
+                throw refused("engineVersion");
+            }
+
+            public String driverStats(String dn, int arg) {
+                throw refused("driverStats");
+            }
+
+            public String jvmStats(int a, int b) {
+                throw refused("jvmStats");
+            }
+
+            public List<String> namedPasswords(String dn) {
+                throw refused("namedPasswords");
+            }
+
+            public void setNamedPassword(String dn, String name, String displayName, char[] value) {
+                throw refused("setNamedPassword");
+            }
+
+            public void removeNamedPassword(String dn, String name) {
+                throw refused("removeNamedPassword");
+            }
+        };
+    }
+
     /** Adapts a real, connected {@link Vault} to {@link Engine}. */
     public static Engine vaultEngine(Vault v) {
         return new Engine() {
@@ -2579,42 +2684,65 @@ public final class Operate {
         { "content", "DirXML-nwoContent", "text" },
     };
 
-    /** The Work Order drivers of the set: {@code DirXML-Driver} objects whose shim is {@link #WORK_ORDER_SHIM}. */
-    static List<Vault.Entry> workOrderDrivers(Engine engine, Environments.Environment env) {
-        try {
-            return engine.search(env.driverSetDn, "(DirXML-JavaModule=" + WORK_ORDER_SHIM + ")", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
-        } catch (RuntimeException e) {
-            return List.of();
-        }
+    /**
+     * A Work Order driver and where it keeps work orders. {@code gcv} is the container GCV's value as written (from the
+     * driver, else the driver set), or null; {@code container} is the LDAP DN work orders live in; {@code from} says
+     * where that came from: "gcv" (the GCV, resolved), "gcv-unresolved" (the GCV names no object, so the driver object
+     * is used) or "driver" (no GCV: the driver object, NetIQ's suggested container).
+     */
+    public record WorkOrderDriver(Vault.Entry driver, String gcv, String container, String from) {
     }
 
     /**
-     * Where work orders live: the {@link #WORK_ORDER_CONTAINER_GCV} GCV's value from each Work Order driver's configuration
-     * values, else the driver set's, resolved from its slash form to an LDAP DN; failing that, the Work Order driver
-     * objects themselves (NetIQ's suggested container). Empty when the set has no Work Order driver.
+     * The Work Order drivers of a driver set and the container each uses: drivers whose shim is {@link #WORK_ORDER_SHIM},
+     * or that have a {@code workorder-dn} shim parameter (a Work Order driver behind a Remote Loader runs the Remote
+     * Loader's shim). The container is the {@link #WORK_ORDER_CONTAINER_GCV} GCV's value from the driver
+     * ({@link #containerGcv}), else from the driver set, resolved to an LDAP DN ({@link #ldapDnOf}); failing that, the
+     * driver object. Reads only what {@code engine} can read; empty when it finds no Work Order driver.
      */
+    public static List<WorkOrderDriver> workOrderDrivers(Engine engine, String driverSetDn) {
+        List<Vault.Entry> drivers;
+        try {
+            drivers = engine.search(driverSetDn, "(objectClass=DirXML-Driver)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+        Vault.Entry set = engine.read(driverSetDn);
+        String fromSet = set == null ? null : containerGcv(engine, set);
+        List<WorkOrderDriver> out = new ArrayList<>();
+        for (Vault.Entry d : drivers) {
+            String shim = d.string("DirXML-ShimConfigInfo");
+            if (!WORK_ORDER_SHIM.equals(d.string("DirXML-JavaModule")) && (shim == null || !shim.contains("workorder-dn"))) {
+                continue;
+            }
+            String value = containerGcv(engine, d);
+            if (value == null) {
+                value = fromSet;
+            }
+            String resolved = value == null ? null : ldapDnOf(engine, value);
+            out.add(new WorkOrderDriver(d, value, resolved != null ? resolved : d.dn,
+                resolved != null ? "gcv" : value != null ? "gcv-unresolved" : "driver"));
+        }
+        return out;
+    }
+
+    /** Where the set's work orders live: each Work Order driver's container ({@link #workOrderDrivers}), once each. */
     public static List<String> workOrderContainers(Engine engine, Environments.Environment env) {
         List<String> out = new ArrayList<>();
-        Vault.Entry set = engine.read(env.driverSetDn);
-        String setValue = set == null ? null : containerGcv(engine, set);
-        for (Vault.Entry d : workOrderDrivers(engine, env)) {
-            Vault.Entry full = engine.read(d.dn);
-            String value = full == null ? null : containerGcv(engine, full);
-            String dn = value != null && !value.isBlank() ? value : setValue;
-            String resolved = dn == null || dn.isBlank() ? null : ldapDnOf(engine, dn);
-            String c = resolved != null ? resolved : d.dn;
-            if (out.stream().noneMatch(x -> x.equalsIgnoreCase(c))) {
-                out.add(c);
+        for (WorkOrderDriver d : workOrderDrivers(engine, env.driverSetDn)) {
+            if (out.stream().noneMatch(x -> x.equalsIgnoreCase(d.container()))) {
+                out.add(d.container());
             }
         }
         return out;
     }
 
     /**
-     * The container GCV on a driver or driver set: its own {@code DirXML-ConfigValues}, then the GCV objects it links
-     * (policy set 14), where a package install such as NOVLWOBASE's keeps it.
+     * The container GCV's value on a driver or driver set, or null: its own {@code DirXML-ConfigValues}, then the GCV
+     * objects it links (policy set 14), where a package install such as NOVLWOBASE's keeps it, in their
+     * {@code DirXML-ConfigValues} or {@code DirXML-Data}.
      */
-    static String containerGcv(Engine engine, Vault.Entry e) {
+    public static String containerGcv(Engine engine, Vault.Entry e) {
         String own = gcvValue(e.string("DirXML-ConfigValues"), WORK_ORDER_CONTAINER_GCV);
         if (own != null && !own.isBlank()) {
             return own;
@@ -2626,9 +2754,14 @@ public final class Operate {
                 continue;
             }
             Vault.Entry g = engine.read(link.substring(0, mid));
-            String v = g == null ? null : gcvValue(g.string("DirXML-ConfigValues"), WORK_ORDER_CONTAINER_GCV);
-            if (v != null && !v.isBlank()) {
-                return v;
+            if (g == null) {
+                continue;
+            }
+            for (String attr : new String[] {"DirXML-ConfigValues", "DirXML-Data"}) {
+                String v = gcvValue(g.string(attr), WORK_ORDER_CONTAINER_GCV);
+                if (v != null && !v.isBlank()) {
+                    return v;
+                }
             }
         }
         return null;
@@ -2655,13 +2788,17 @@ public final class Operate {
     }
 
     /**
-     * An LDAP DN for a DN in either form: an LDAP DN as it is; a slash DN ({@code data\WorkOrders}, {@code \TREE\data\WorkOrders})
-     * looked up a level at a time, as slash names carry no attribute types. Null when a level is not found.
+     * An LDAP DN for a DN in either form: an LDAP DN when it is there; a slash DN ({@code data\WorkOrders}, {@code \TREE\data\WorkOrders})
+     * looked up a level at a time, as slash names carry no attribute types. Null when the object (or a level) is not there.
      */
     public static String ldapDnOf(Engine engine, String dn) {
         String d = dn.trim();
         if (!d.contains("\\") && d.contains("=")) {
-            return d;
+            try {
+                return engine.read(d) != null ? d : null;
+            } catch (RuntimeException e) {
+                return null;
+            }
         }
         List<String> parts = new ArrayList<>(List.of(d.replaceAll("^\\\\+", "").split("\\\\")));
         parts.removeIf(String::isBlank);
