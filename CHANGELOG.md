@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.72.0] - 2026-11-13
+
 ### Fixed
 
 - **Driver-set GCV objects in the simulator:** `simulate` (and the web's simulator) now gives each driver the GCV
