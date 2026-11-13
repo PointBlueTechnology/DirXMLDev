@@ -214,7 +214,53 @@ public final class ExportWriter {
         children.appendChild(channelElement(doc, "subscriber", "Subscriber", d.subscriber.policies,
             d.resources, Scope.SUBSCRIBER, subscriberIncludes));
 
+        // The driver set's GCV objects (linked from the driver set, set 14) are in every
+        // driver's scope, as the engine loads them: without them a ~gcv~ only they define
+        // is undefined and the policy won't load. Last, so the driver's own values come first.
+        for (Resource r : driverSetGcvObjects(ds)) {
+            if (!libraryPlacement.containsKey(r.path())) {
+                children.appendChild(gcvDefElement(doc, r));
+            }
+        }
+
         return CanonicalXml.serialize(doc);
+    }
+
+    /** The Library GCV objects the driver set links ({@code driverset.linkage.N} meta), in link order. */
+    static List<Resource> driverSetGcvObjects(DriverSet ds) {
+        List<Integer> idx = new ArrayList<>();
+        for (String k : ds.meta.keySet()) {
+            if (k.startsWith("driverset.linkage.")) {
+                try {
+                    idx.add(Integer.parseInt(k.substring("driverset.linkage.".length())));
+                } catch (NumberFormatException ignored) {
+                    // not one of ours
+                }
+            }
+        }
+        Collections.sort(idx);
+        Set<String> seen = new LinkedHashSet<>();
+        List<Resource> out = new ArrayList<>();
+        for (int i : idx) {
+            String leaf = linkageLeaf(ds.meta.get("driverset.linkage." + i));
+            for (Resource r : ds.library.resources) {
+                if (r.isGcvDef() && r.name.equals(leaf) && seen.add(r.path())) {
+                    out.add(r);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The object name a {@code <dn>#<order>#<set>} linkage value points at (LDAP or slash DN). */
+    private static String linkageLeaf(String value) {
+        int hash = value.indexOf('#');
+        String dn = hash >= 0 ? value.substring(0, hash) : value;
+        if (dn.contains("=")) {
+            String first = dn.split("(?<!\\\\),")[0];
+            return first.substring(first.indexOf('=') + 1).trim();
+        }
+        return dn.substring(Math.max(dn.lastIndexOf('\\'), dn.lastIndexOf('/')) + 1);
     }
 
     /**

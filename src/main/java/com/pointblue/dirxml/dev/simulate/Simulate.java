@@ -233,7 +233,7 @@ public final class Simulate {
                 Comparer.Comparison cmp = null;
                 if (other != null) {
                     if (other.driver(driver) == null) {
-                        out.cases.add(new CaseOutcome(name, r.outcome, r.detail + "\n(--against tree has no driver '" + driver + "')", null));
+                        out.cases.add(new CaseOutcome(name, r.outcome, com.pointblue.dirxml.dev.EngineJars.explain(r.detail) + "\n(--against tree has no driver '" + driver + "')", null));
                         continue;
                     }
                     Path exportB = export(other, driver, scratch.resolve("b"), otherExports);
@@ -244,11 +244,11 @@ public final class Simulate {
                         cmp = Comparer.diff(rb, ra);   // B = before, A = the edited tree
                     } catch (RuntimeException e) {
                         out.cases.add(new CaseOutcome(name, BatchRunner.Outcome.ERROR,
-                            "comparison failed: " + rootCause(e), null));
+                            "comparison failed: " + rootCause(e) + withHint(e), null));
                         continue;
                     }
                 }
-                out.cases.add(new CaseOutcome(name, r.outcome, r.detail, cmp));
+                out.cases.add(new CaseOutcome(name, r.outcome, com.pointblue.dirxml.dev.EngineJars.explain(r.detail), cmp));
             }
         } finally {
             deleteRecursively(scratch);
@@ -366,6 +366,12 @@ public final class Simulate {
                 Files.deleteIfExists(p);
             }
         }
+    }
+
+    /** The missing-engine-jar hint for {@code t} on a line of its own, or "". */
+    private static String withHint(Throwable t) {
+        String h = com.pointblue.dirxml.dev.EngineJars.explain(t);
+        return h == null ? "" : "\n" + h;
     }
 
     private static String rootCause(Throwable t) {

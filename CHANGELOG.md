@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Driver-set GCV objects in the simulator:** `simulate` (and the web's simulator) now gives each driver the GCV
+  objects its driver set links, as the engine does. A policy naming a GCV only such an object defines, such as a
+  User Application package's `~UAProvURL~`, no longer fails with "referenced as ~UAProvURL~ but is not defined"
+  (DirXMLDevWeb#187). The driver's own values and the driver set's own GCVs still come first.
+- **A missing engine jar says which one:** when the engine can't find a class, the case's error names the jar it is
+  in and where to copy it from, for example `xp.jar` for `com.jclark.xml.sax.CommentDriver` (shipped as
+  `xp-1.0.0.jar` from 4.10.2 on) (DirXMLDevWeb#186). `EngineJars.explain` gives the same text to other callers.
+
 ## [0.71.0] - 2026-11-11
 
 ### Fixed
