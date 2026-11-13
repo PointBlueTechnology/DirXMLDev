@@ -39,6 +39,7 @@ import java.util.stream.Stream;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
@@ -278,6 +279,45 @@ public class ExportWriterTest {
         boolean foundTable = ad2.resources.stream()
             .anyMatch(r -> r.name.equals("CodeMap") && r.isMappingTable());
         assertTrue("expected the CodeMap mapping table in the written export", foundTable);
+    }
+
+    /**
+     * A GCV object linked from the driver set only (a package's driver-set GCVs, such as
+     * the UAProvURL a User Application package's policies read) is in every driver's
+     * scope: the single-driver export the simulator runs must carry it, or the engine
+     * refuses a policy that names one of its GCVs. The driver's own value still wins.
+     */
+    @Test
+    public void singleDriverExportCarriesTheDriverSetsGcvObjects() throws Exception {
+        DriverSet ds = singleDriverSample();
+        ds.configValues = xml("<configuration-values><definitions>"
+            + "<definition name=\"drvset.notif.email\" display-name=\"Email\" type=\"string\"><value>ops@example.com</value></definition>"
+            + "</definitions></configuration-values>");
+        Resource dsGcvs = new Resource("PKG-GCVs", Scope.LIBRARY, null, Resource.GCV_DEF);
+        dsGcvs.content = xml("<configuration-values><definitions>"
+            + "<definition name=\"UAProvURL\" display-name=\"UA URL\" type=\"string\"><value>https://ua.example.com/IDMProv</value></definition>"
+            + "<definition name=\"drvset.notif.email\" display-name=\"Email\" type=\"string\"><value>from-the-object@example.com</value></definition>"
+            + "</definitions></configuration-values>");
+        ds.library.resources.add(dsGcvs);
+        ds.meta.put("driverset.linkage.0", "cn=PKG-GCVs,cn=Library," + ds.dn + "#0#14");
+        // a Library GCV object nobody links stays out
+        Resource unlinked = new Resource("Unlinked-GCVs", Scope.LIBRARY, null, Resource.GCV_DEF);
+        unlinked.content = xml("<configuration-values><definitions>"
+            + "<definition name=\"only.unlinked\" display-name=\"X\" type=\"string\"><value>x</value></definition>"
+            + "</definitions></configuration-values>");
+        ds.library.resources.add(unlinked);
+
+        Path file = tmp.newFolder().toPath().resolve("AD.xml");
+        ExportWriter.writeDriver(ds, "AD", file);
+        com.novell.nds.dirxml.engine.gcv.GCDefinitions defs = DriverExport.load(file).gcvDefinitions();
+
+        assertEquals("UAProvURL from the driver set's GCV object",
+            "https://ua.example.com/IDMProv", defs.getValue("UAProvURL").getValue());
+        assertEquals("the driver set's own value comes before its GCV object's",
+            "ops@example.com", defs.getValue("drvset.notif.email").getValue());
+        assertNull("an unlinked GCV object is not in scope", defs.getValue("only.unlinked"));
+        String xml = ExportWriter.toDriverXml(ds, "AD");
+        assertEquals("the GCV object once", 1, xml.split("name=\"PKG-GCVs\"", -1).length - 1);
     }
 
     @Test
