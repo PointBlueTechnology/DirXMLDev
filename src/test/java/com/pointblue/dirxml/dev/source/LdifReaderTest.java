@@ -218,4 +218,115 @@ public class LdifReaderTest {
             org.junit.Assert.assertTrue(m, m.contains("driver set's DN downwards"));
         }
     }
+
+    /**
+     * #133: a whole vault's LDIF — two driver sets, each with a Library and a driver called AD, and a
+     * Library outside both — no longer fails on {@code duplicate artifact path}. Names are unique only in
+     * their container: the tree takes its own set's objects by DN, and from other Libraries only what it can use.
+     */
+    private static List<Entry> vault() {
+        String ds2 = "cn=DriverSet-Other,ou=services,o=identity";
+        String ds1 = "cn=DriverSet-Identity,ou=services,o=identity";
+        String global = "cn=Library,o=services";
+        String rule = "<policy><rule><description>%s</description><conditions/><actions/></rule></policy>";
+        return List.of(
+            entry(ds1, "DirXML-DriverSet"),
+            entry(ds2, "DirXML-DriverSet"),
+            entry("cn=Library," + ds1, "DirXML-Library"),
+            entry("cn=Library," + ds2, "DirXML-Library"),
+            entry(global, "DirXML-Library"),
+            // the same name in this set's Library, the shared Library and the other set's Library
+            entry("cn=pub-ets-ps-Relationships,cn=Library," + ds1, "DirXML-Rule", "XmlData", String.format(rule, "own")),
+            entry("cn=pub-ets-ps-Relationships," + global, "DirXML-Rule", "XmlData", String.format(rule, "shared")),
+            entry("cn=pub-ets-ps-Relationships,cn=Library," + ds2, "DirXML-Rule", "XmlData", String.format(rule, "other set")),
+            entry("cn=shared-only," + global, "DirXML-Rule", "XmlData", String.format(rule, "shared only")),
+            entry("cn=other-linked,cn=Library," + ds2, "DirXML-Rule", "XmlData", String.format(rule, "other, linked")),
+            entry("cn=other-unlinked,cn=Library," + ds2, "DirXML-Rule", "XmlData", String.format(rule, "other, not linked")),
+            // a driver of one name in each set, each with a publisher policy of one name
+            entry("cn=AD," + ds1, "DirXML-Driver",
+                "DirXML-Policies", "cn=pub-etp,cn=Publisher,cn=AD," + ds1 + "#0#2",
+                "DirXML-Policies", "cn=pub-ets-ps-Relationships,cn=Library," + ds1 + "#1#2",
+                "DirXML-Policies", "cn=shared-only," + global + "#2#2",
+                "DirXML-Policies", "cn=other-linked,cn=Library," + ds2 + "#3#2"),
+            entry("cn=Publisher,cn=AD," + ds1, "DirXML-Publisher"),
+            entry("cn=pub-etp,cn=Publisher,cn=AD," + ds1, "DirXML-Rule", "XmlData", String.format(rule, "own AD")),
+            entry("cn=Entitlement1,cn=AD," + ds1, "DirXML-Entitlement", "XmlData", "<entitlement/>"),
+            entry("cn=AD," + ds2, "DirXML-Driver",
+                "DirXML-Policies", "cn=pub-etp,cn=Publisher,cn=AD," + ds2 + "#0#2"),
+            entry("cn=Publisher,cn=AD," + ds2, "DirXML-Publisher"),
+            entry("cn=pub-etp,cn=Publisher,cn=AD," + ds2, "DirXML-Rule", "XmlData", String.format(rule, "other AD")),
+            entry("cn=Entitlement1,cn=AD," + ds2, "DirXML-Entitlement", "XmlData", "<entitlement/>"),
+            entry("cn=Job1,cn=AD," + ds2, "DirXML-Job", "XmlData", "<job/>"));
+    }
+
+    @Test
+    public void aWholeVaultLdifNeedsTheDriverSetNamed() {
+        try {
+            LdifReader.fromEntries(vault(), "vault.ldif");
+            fail("expected a refusal");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage(), e.getMessage().contains("holds 2 driver sets: cn=DriverSet-Identity,ou=services,o=identity, cn=DriverSet-Other"));
+            assertTrue(e.getMessage(), e.getMessage().contains("--driver-set <dn>"));
+        }
+        try {
+            LdifReader.fromEntries(vault(), "vault.ldif", Map.of(), "cn=Nope,o=identity");
+            fail("expected a refusal");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage(), e.getMessage().contains("has no driver set cn=Nope,o=identity"));
+        }
+    }
+
+    @Test
+    public void rdnsAreUniqueOnlyInTheirContainer() {
+        // spaces after the commas and another case: the same DN to the directory
+        DriverSet ds = LdifReader.fromEntries(vault(), "vault.ldif", Map.of(), "CN=DriverSet-Identity, ou=services, o=identity");
+        assertEquals("cn=DriverSet-Identity,ou=services,o=identity", ds.dn);
+        ds.index();   // threw "duplicate artifact path: library/pub-ets-ps-Relationships"
+
+        // one driver: this set's AD, with its own policy and entitlement, not the other set's
+        assertEquals(1, ds.drivers.size());
+        Driver ad = ds.driver("AD");
+        assertEquals(1, ad.publisher.policies.size());
+        assertTrue(CanonicalXmlText.of(ad.publisher.policies.get(0)).contains("own AD"));
+        assertEquals(1, ad.entitlements.size());
+        assertTrue(ad.jobs.isEmpty());
+        assertTrue(ds.jobs.isEmpty());
+
+        // the Library: its own copy of the shared name, kept; the shared Library's own object and what
+        // the set links from the other set's Library, as read-only references; nothing else of the other set
+        Policy own = (Policy) ds.resolve("library/pub-ets-ps-Relationships");
+        assertTrue(CanonicalXmlText.of(own).contains("own"));
+        assertNull(own.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
+        assertEquals(1, ds.duplicates.size());
+        assertTrue(ds.duplicates.get(0).note, ds.duplicates.get(0).note.contains("in cn=Library,o=services"));
+
+        Policy shared = (Policy) ds.resolve("library/shared-only");
+        assertEquals("cn=Library,o=services", shared.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
+        assertNotNull(com.pointblue.dirxml.dev.model.Libraries.outside(ds, shared));
+        Policy linked = (Policy) ds.resolve("library/other-linked");
+        assertEquals("cn=Library,cn=DriverSet-Other,ou=services,o=identity",
+            linked.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
+        assertNull(ds.resolve("library/other-unlinked"));
+        assertEquals(3, ds.library.policies.size());
+
+        // every link resolves, the other Libraries' targets to library/
+        assertTrue(ds.unresolvedLinks().toString(), ds.unresolvedLinks().isEmpty());
+        assertEquals(4, ad.links.size());
+
+        // and the other set reads the same way, with its own AD
+        DriverSet other = LdifReader.fromEntries(vault(), "vault.ldif", Map.of(), "cn=DriverSet-Other,ou=services,o=identity");
+        other.index();
+        assertTrue(CanonicalXmlText.of(other.driver("AD").publisher.policies.get(0)).contains("other AD"));
+        assertEquals(1, other.driver("AD").jobs.size());
+        // its own Library's objects are its own, linked or not
+        assertNotNull(other.resolve("library/other-unlinked"));
+        assertNull(other.resolve("library/other-unlinked").meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
+    }
+
+    /** A policy's XML as text, for asserting which copy was kept. */
+    private static final class CanonicalXmlText {
+        static String of(Policy p) {
+            return com.pointblue.dirxml.dev.xml.CanonicalXml.serialize(p.content);
+        }
+    }
 }

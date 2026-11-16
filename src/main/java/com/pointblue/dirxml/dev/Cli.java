@@ -30,7 +30,7 @@ public final class Cli {
         java.util.Map.entry("version", Args.Spec.of("check", "")),
         java.util.Map.entry("import", Args.Spec.of("", "")),
         java.util.Map.entry("import-project", Args.Spec.of("", "")),
-        java.util.Map.entry("import-ldif", Args.Spec.of("", "")),
+        java.util.Map.entry("import-ldif", Args.Spec.of("", "driver-set")),
         java.util.Map.entry("import-live", Args.Spec.of("mark-new-drivers", "env")),
         java.util.Map.entry("check", Args.Spec.of("", "")),
         java.util.Map.entry("simulate", Args.Spec.of("", "cases against env")),
@@ -234,11 +234,12 @@ public final class Cli {
         });
     }
 
-    /** {@code import-ldif <dump.ldif> <outDir>}. */
+    /** {@code import-ldif <dump.ldif> <outDir> [--driver-set DN]}. */
     static int importLdif(String[] args) throws Exception {
         return usageErrors(() -> {
-            Args a = parse(args, 2, 2, "usage: import-ldif <dump.ldif> <outDir>");
-            return write(com.pointblue.dirxml.dev.source.LdifReader.read(Paths.get(a.positional.get(0))), Paths.get(a.positional.get(1)));
+            Args a = parse(args, 2, 2, "usage: import-ldif <dump.ldif> <outDir> [--driver-set DN]");
+            return write(com.pointblue.dirxml.dev.source.LdifReader.read(Paths.get(a.positional.get(0)), a.first("driver-set")),
+                Paths.get(a.positional.get(1)));
         });
     }
 
@@ -540,7 +541,7 @@ public final class Cli {
         sb.append("                                        --env opens one LDAPS connection and does not print the password\n");
         sb.append("  import <export.xml> <outDir>          read a driver / driver-set export, write IDM-as-code\n");
         sb.append("  import-project <projectDir> <outDir>  read a Designer project, write IDM-as-code\n");
-        sb.append("  import-ldif <dump.ldif> <outDir>      read an LDIF of the driver-set subtree, write IDM-as-code\n");
+        sb.append("  import-ldif <dump.ldif> <outDir> [--driver-set DN]  read an LDIF of the driver-set subtree, write IDM-as-code\n");
         sb.append("  import-live <outDir> --env E [--mark-new-drivers]   read the live vault named in environments.properties (its driverSet; a DN before <outDir> overrides)\n");
         sb.append("  import-live <driverSetDN> <outDir>    read the live vault (IDM_JAVA_OPTS=-Dldap.url/.bindDn/.password)\n");
         sb.append("  vault.diff <tree> --env E [--driver D…] [--json]     the tree vs the live vault (exit 1 if they differ; docs/vault-deploy.md)\n");
