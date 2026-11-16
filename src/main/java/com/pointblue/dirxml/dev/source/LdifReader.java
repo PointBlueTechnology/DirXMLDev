@@ -3,6 +3,7 @@ package com.pointblue.dirxml.dev.source;
 import com.pointblue.dirxml.dev.model.AppConfigPolicy;
 import com.pointblue.dirxml.dev.model.AppObject;
 import com.pointblue.dirxml.dev.model.Driver;
+import com.pointblue.dirxml.dev.model.DuplicateArtifacts;
 import com.pointblue.dirxml.dev.model.DriverSet;
 import com.pointblue.dirxml.dev.model.Entitlement;
 import com.pointblue.dirxml.dev.model.Form;
@@ -60,7 +61,15 @@ public final class LdifReader {
 
     /** From an LDIF file (must include the DirXML data attributes — see the simulator docs). */
     public static DriverSet read(Path ldif) {
-        return fromEntries(LdifDriverSource.load(ldif).entries(), ldif.getFileName().toString(), driverImages(ldif));
+        return read(ldif, null);
+    }
+
+    /**
+     * The same, for the driver set at {@code driverSetDn} — needed when the LDIF holds several (a dump of
+     * the whole vault); null takes the only one.
+     */
+    public static DriverSet read(Path ldif, String driverSetDn) {
+        return fromEntries(LdifDriverSource.load(ldif).entries(), ldif.getFileName().toString(), driverImages(ldif), driverSetDn);
     }
 
     /**
@@ -88,14 +97,22 @@ public final class LdifReader {
      * {@code VaultDiff} reads it as bytes over LDAP, {@link #read} re-reads it from the LDIF.
      */
     public static DriverSet fromEntries(Collection<Entry> entries, String sourceName, Map<String, byte[]> driverImages) {
+        return fromEntries(entries, sourceName, driverImages, null);
+    }
+
+    /**
+     * The same, for the driver set at {@code driverSetDn} (null: the only one). Names are unique only in
+     * their container (#133): an LDIF of a whole vault can hold several driver sets, each with its own
+     * Library and drivers, and Libraries outside every driver set. The tree takes the chosen set's own
+     * objects, by DN, and from other Libraries only what it can use: every object of a Library outside
+     * every driver set, and what the set links from another set's Library. Those are read-only references
+     * marked with their Library's DN ({@link DuplicateArtifacts#LIBRARY_DN}), as {@link ProjectReader}
+     * records them; two of one name keep the driver set's own ({@link DuplicateArtifacts#drop}).
+     */
+    public static DriverSet fromEntries(Collection<Entry> entries, String sourceName, Map<String, byte[]> driverImages,
+                                        String driverSetDn) {
         // 1. the driver set
-        Entry dsEntry = null;
-        for (Entry e : entries) {
-            if (e.hasClass("DirXML-DriverSet")) {
-                dsEntry = e;
-                break;
-            }
-        }
+        Entry dsEntry = chooseDriverSet(entries, sourceName, driverSetDn);
         String dsDn;
         DriverSet ds;
         if (dsEntry != null) {
@@ -114,18 +131,20 @@ public final class LdifReader {
             // a dump of a single driver: synthesize the set from the driver's parent
             Entry anyDriver = entries.stream().filter(e -> e.hasClass("DirXML-Driver")).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(noDriverSetMessage(entries, sourceName)));
-            dsDn = parentDn(anyDriver.dn);
+            dsDn = driverSetDn != null ? driverSetDn : parentDn(anyDriver.dn);
             ds = new DriverSet(rdn(dsDn));
             ds.dn = dsDn;
         }
         ds.meta.put("source.file", sourceName);
 
-        // 2. drivers first (so artifacts can attach)
+        // 2. drivers first (so artifacts can attach): the set's own, not another set's of the same name
         Map<String, Driver> driversByLowerName = new LinkedHashMap<>();
+        List<Entry> driverEntries = new ArrayList<>();
         for (Entry e : entries) {
-            if (!e.hasClass("DirXML-Driver")) {
+            if (!e.hasClass("DirXML-Driver") || !sameDn(parentDn(e.dn), dsDn)) {
                 continue;
             }
+            driverEntries.add(e);
             Driver d = new Driver(rdn(e.dn));
             d.dn = e.dn;
             d.shimClass = e.first("DirXML-JavaModule");
@@ -146,6 +165,27 @@ public final class LdifReader {
             driversByLowerName.put(d.name.toLowerCase(), d);
         }
 
+        // what the set links (its own GCV objects, its drivers' policies), and the Libraries the entries hold
+        java.util.Set<String> linked = new java.util.HashSet<>();
+        for (Entry e : dsEntry == null ? driverEntries : concat(dsEntry, driverEntries)) {
+            for (String link : e.all("DirXML-Policies")) {
+                String target = linkTarget(link);
+                if (target != null) {
+                    linked.add(norm(target));
+                }
+            }
+        }
+        java.util.Set<String> libraries = new java.util.HashSet<>();
+        List<String> driverSets = new ArrayList<>();
+        for (Entry e : entries) {
+            if (e.hasClass("DirXML-Library")) {
+                libraries.add(norm(e.dn));
+            }
+            if (e.hasClass("DirXML-DriverSet")) {
+                driverSets.add(e.dn);
+            }
+        }
+
         // 3. artifacts, placed by DN structure
         for (Entry e : entries) {
             boolean policy = e.hasClass("DirXML-Rule") || e.hasClass("DirXML-StyleSheet");
@@ -156,7 +196,15 @@ public final class LdifReader {
             if (!policy && !resource) {
                 continue;
             }
-            Placement p = place(e.dn, dsDn);
+            String otherLibrary = null;
+            if (!isUnder(e.dn, dsDn)) {
+                // outside the set: only a Library's object it can use, as a read-only reference
+                otherLibrary = usableLibrary(e.dn, libraries, driverSets, linked);
+                if (otherLibrary == null) {
+                    continue;
+                }
+            }
+            Placement p = otherLibrary != null ? new Placement(Scope.LIBRARY, null) : place(e.dn, dsDn);
             Driver d = p.driver == null ? null : driversByLowerName.get(p.driver.toLowerCase());
             if (p.scope != Scope.LIBRARY && d == null) {
                 // an artifact under an unknown driver — keep it in the library, flagged
@@ -166,6 +214,9 @@ public final class LdifReader {
             if (policy) {
                 Policy pol = new Policy(name, p.scope, p.driver, xmlOrNull(e.first("XmlData")));
                 pol.meta.put("dn", e.dn);
+                if (otherLibrary != null) {
+                    pol.meta.put(DuplicateArtifacts.LIBRARY_DN, otherLibrary);
+                }
                 copyMeta(e, pol.meta, e.hasClass("DirXML-StyleSheet") ? "DirXML-StyleSheet" : "DirXML-Rule");
                 if (p.scope == Scope.LIBRARY) {
                     ds.library.policies.add(pol);
@@ -194,6 +245,9 @@ public final class LdifReader {
                     }
                 }
                 r.meta.put("dn", e.dn);
+                if (otherLibrary != null) {
+                    r.meta.put(DuplicateArtifacts.LIBRARY_DN, otherLibrary);
+                }
                 copyMeta(e, r.meta, gcvDef ? "DirXML-GlobalConfigDef" : "DirXML-Resource");
                 if (p.scope == Scope.LIBRARY) {
                     ds.library.resources.add(r);
@@ -205,7 +259,7 @@ public final class LdifReader {
 
         // 3b. entitlements: DirXML-Entitlement objects hanging directly off a driver (docs/entitlements.md)
         for (Entry e : entries) {
-            if (!e.hasClass("DirXML-Entitlement")) {
+            if (!e.hasClass("DirXML-Entitlement") || !isUnder(e.dn, dsDn)) {
                 continue;
             }
             Placement p = place(e.dn, dsDn);
@@ -221,7 +275,7 @@ public final class LdifReader {
 
         // 3c. jobs: DirXML-Job objects under a driver or directly under the set (docs/console-gaps.md §1)
         for (Entry e : entries) {
-            if (!e.hasClass("DirXML-Job")) {
+            if (!e.hasClass("DirXML-Job") || !isUnder(e.dn, dsDn)) {
                 continue;
             }
             Placement p = place(e.dn, dsDn);
@@ -320,10 +374,7 @@ public final class LdifReader {
         }
 
         // 4. linkage: DirXML-Policies = "<policyDN>#<order>#<setId>"
-        for (Entry e : entries) {
-            if (!e.hasClass("DirXML-Driver")) {
-                continue;
-            }
+        for (Entry e : driverEntries) {
             Driver d = driversByLowerName.get(rdn(e.dn).toLowerCase());
             int n = 0;
             for (String link : e.all("DirXML-Policies")) {
@@ -343,7 +394,8 @@ public final class LdifReader {
                     d.meta.put("linkage.unknown." + (n++), link);
                     continue;
                 }
-                Placement p = place(policyDn, dsDn);
+                // a target outside the set is in another Library: the tree keeps it in library/
+                Placement p = isUnder(policyDn, dsDn) ? place(policyDn, dsDn) : new Placement(Scope.LIBRARY, null);
                 String ref = com.pointblue.dirxml.dev.model.Artifact.path(
                     p.scope == Scope.LIBRARY ? Scope.LIBRARY : p.scope, p.driver, rdn(policyDn));
                 d.links.add(new PolicyLink(set, ref, order));
@@ -357,7 +409,105 @@ public final class LdifReader {
             }
             d.provisioning = readProvisioning(entries, d.dn);
         }
+        // two of one name in library/ (the set's own Library and another, or an object left directly
+        // under the set): the tree, like a container, holds one — keep one and say which
+        ds.duplicates.addAll(DuplicateArtifacts.drop(ds));
         return ds;
+    }
+
+    /**
+     * The driver set's entry: the one at {@code driverSetDn}, or the only one; null when the entries hold
+     * none (a dump of one driver). Several and none named: refused, listing them.
+     */
+    static Entry chooseDriverSet(Collection<Entry> entries, String sourceName, String driverSetDn) {
+        List<Entry> sets = new ArrayList<>();
+        for (Entry e : entries) {
+            if (e.hasClass("DirXML-DriverSet")) {
+                sets.add(e);
+            }
+        }
+        if (driverSetDn != null && !driverSetDn.isBlank()) {
+            for (Entry e : sets) {
+                if (sameDn(e.dn, driverSetDn)) {
+                    return e;
+                }
+            }
+            if (sets.isEmpty()) {
+                return null;   // a dump of drivers only: the set is synthesized from the DN given
+            }
+            throw new IllegalArgumentException(sourceName + " has no driver set " + driverSetDn + "; it holds "
+                + dns(sets));
+        }
+        if (sets.size() > 1) {
+            throw new IllegalArgumentException(sourceName + " holds " + sets.size() + " driver sets: " + dns(sets)
+                + ". Name the one to import with --driver-set <dn>");
+        }
+        return sets.isEmpty() ? null : sets.get(0);
+    }
+
+    private static String dns(List<Entry> entries) {
+        List<String> out = new ArrayList<>();
+        for (Entry e : entries) {
+            out.add(e.dn);
+        }
+        return String.join(", ", out);
+    }
+
+    private static List<Entry> concat(Entry first, List<Entry> rest) {
+        List<Entry> out = new ArrayList<>();
+        out.add(first);
+        out.addAll(rest);
+        return out;
+    }
+
+    /** The DN in a {@code DirXML-Policies} value ({@code <dn>#<order>#<set>}), or null. */
+    static String linkTarget(String link) {
+        int h2 = link.lastIndexOf('#');
+        int h1 = h2 < 0 ? -1 : link.lastIndexOf('#', h2 - 1);
+        return h1 < 0 ? null : link.substring(0, h1);
+    }
+
+    /**
+     * The DN of the Library an object outside the driver set lives in, when the set can use it: every
+     * object of a Library outside every driver set (a vault's shared Library), and an object the set
+     * links in another set's Library. Null otherwise (another set's own objects: not this set's).
+     */
+    static String usableLibrary(String dn, java.util.Set<String> libraries, List<String> driverSets, java.util.Set<String> linked) {
+        String parent = parentDn(dn);
+        boolean inLibrary = libraries.contains(norm(parent))
+            || libraries.isEmpty() && rdn(parent).equalsIgnoreCase("Library");   // an LDIF without the container entries
+        if (!inLibrary) {
+            return null;
+        }
+        if (linked.contains(norm(dn))) {
+            return parent;
+        }
+        for (String other : driverSets) {
+            if (isUnder(dn, other)) {
+                return null;
+            }
+        }
+        return parent;
+    }
+
+    /** A DN compared as the directory compares it: components trimmed, case ignored. */
+    static String norm(String dn) {
+        List<String> out = new ArrayList<>();
+        for (String c : components(dn == null ? "" : dn)) {
+            int eq = c.indexOf('=');
+            out.add((eq < 0 ? c : c.substring(0, eq).trim() + "=" + c.substring(eq + 1).trim()).toLowerCase());
+        }
+        return String.join(",", out);
+    }
+
+    static boolean sameDn(String a, String b) {
+        return norm(a).equals(norm(b));
+    }
+
+    /** {@code dn} is strictly below {@code base}. */
+    static boolean isUnder(String dn, String base) {
+        String b = norm(base);
+        return !b.isEmpty() && norm(dn).endsWith("," + b);
     }
 
     // ---- provisioning (cn=AppConfig subtree: JSON forms + PRDs) ----------------------
@@ -559,7 +709,7 @@ public final class LdifReader {
         List<String> comps = components(dn);
         List<String> sfx = components(suffix);
         int n = comps.size() - sfx.size();
-        if (n > 0 && dn.toLowerCase().endsWith(suffix.toLowerCase())) {
+        if (n > 0 && isUnder(dn, suffix)) {
             comps = comps.subList(0, n);
         }
         List<String> vals = new ArrayList<>();

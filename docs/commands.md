@@ -135,17 +135,21 @@ More: [getting-started.md](getting-started.md#4-import-the-driver-set).
 
 Reads an LDIF of the driver-set subtree and writes an IDM-as-code tree. The LDIF is a subtree export from the driver set's DN down, with `objectClass` and the DirXML data attributes. Same writing and exit behaviour as `import`.
 
+An LDIF of more than that (a whole vault, with several driver sets and Libraries outside them) works too, with `--driver-set` naming the driver set. The tree takes that driver set's own drivers and objects, found by DN: another driver set's driver or Library object of the same name stays out. From the other Libraries it takes every object of a Library outside every driver set, and what the driver set links from another driver set's Library, as read-only references ([tree-layout.md](tree-layout.md#library)). When two of these have one name, the tree keeps the driver set's own and a `NOTE:` line names the other.
+
 ```
-bin/idm import-ldif <dump.ldif> <outDir>
+bin/idm import-ldif <dump.ldif> <outDir> [--driver-set DN]
 ```
 
 | Argument | Required | Values |
 |---|---|---|
-| `<dump.ldif>` | yes | an LDIF of the driver-set subtree (an LDIF based on one driver yields only that driver) |
+| `<dump.ldif>` | yes | an LDIF of the driver-set subtree (an LDIF based on one driver yields only that driver), or of more |
 | `<outDir>` | yes | the tree directory to write; created if needed |
+| `--driver-set DN` | when the LDIF holds several driver sets | the driver set's DN. Without it, an LDIF with several stops and lists their DNs |
 
 ```bash
 bin/idm import-ldif driverset.ldif tree
+bin/idm import-ldif vault.ldif tree --driver-set cn=DriverSet-Identity,ou=services,o=identity
 ```
 
 More: [getting-started.md](getting-started.md#4-import-the-driver-set).

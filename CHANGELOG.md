@@ -7,6 +7,21 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **`import-ldif` of a whole vault (#133):** names are unique only in their container, and the reader assumed
+  more. An LDIF with several driver sets, or a Library outside the driver set (`cn=Library,o=services`),
+  stopped with `duplicate artifact path: library/…`, and took every driver set's drivers. The tree now takes
+  the chosen driver set's own drivers, policies, entitlements and jobs, by DN. From other Libraries it takes
+  every object of a Library outside every driver set and what the driver set links from another driver
+  set's Library, as read-only references (`library.dn`, as `import-project` records them). Two objects of
+  one name keep the driver set's own, with a `NOTE:` line.
+
+### Added
+
+- `import-ldif --driver-set DN`: the driver set to import from an LDIF that holds several. Without it, such
+  an LDIF stops and lists their DNs.
+
 ## [0.72.0] - 2026-11-13
 
 ### Fixed

@@ -128,7 +128,9 @@ the file stays in `library/`.
 A driver set can also use Libraries in other containers of the vault. A Designer
 project records them, and `import-project` puts their objects in `library/`
 too, each with a `library.dn` entry in `library.xml` naming the Library it lives
-in. These are read-only references:
+in. `import-ldif`, given an LDIF of more than the driver set, does the same for
+every object of a Library outside every driver set, and for the objects the
+driver set links from another driver set's Library. These are read-only references:
 - **Links** to them resolve, and a deploy writes their real DN into a driver's
   links.
 - **Compare and deploy** leave them alone: a deploy never creates a copy under
@@ -138,9 +140,9 @@ in. These are read-only references:
 
 `validate` lists them as `library-other` information. When the driver set's own
 Library and another one both hold an object of the same name, the tree keeps the
-driver set's own copy (`import-project` says so in a `NOTE:` line).
+driver set's own copy (`import-project` and `import-ldif` say so in a `NOTE:` line).
 
-The DN is the one in the project. If the other Library sits elsewhere in
+The DN is the one in the project or the LDIF. If the other Library sits elsewhere in
 another environment's vault, a driver deployed there links to a DN that vault
 doesn't have.
 
