@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.73.0] - 2026-11-16
+
 ### Fixed
 
 - **`import-ldif` of a whole vault (#133):** names are unique only in their container, and the reader assumed
