@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.74.0] - 2026-11-18
+
 ### Fixed
 
 - **`import-ldif` with a second Library inside the driver set (#133):** a DirXML-Library under the driver set
