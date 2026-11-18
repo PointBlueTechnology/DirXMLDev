@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **`import-ldif` with a second Library inside the driver set (#133):** a DirXML-Library under the driver set
+  other than `cn=Library` (`cn=SKyPRO,<driver set>`) was read as a driver. Its objects landed in `library/`
+  as the driver set's own, and the links to them pointed at `drivers/SKyPRO/…`, which resolve to nothing. Its
+  objects, and those in any container that is no driver or channel, are now read-only references that keep
+  their DN, like other Libraries' objects. A link now finds its target by the DN it names, so the two always
+  agree. A link that resolves to nothing is listed with that DN.
+
 ## [0.73.0] - 2026-11-16
 
 ### Fixed

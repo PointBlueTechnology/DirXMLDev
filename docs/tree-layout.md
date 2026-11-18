@@ -128,8 +128,10 @@ the file stays in `library/`.
 A driver set can also use Libraries in other containers of the vault. A Designer
 project records them, and `import-project` puts their objects in `library/`
 too, each with a `library.dn` entry in `library.xml` naming the Library it lives
-in. `import-ldif`, given an LDIF of more than the driver set, does the same for
-every object of a Library outside every driver set, and for the objects the
+in. `import-ldif` does the same for a second Library inside the driver set (any
+Library but `cn=Library,<driver set>`) and for a policy in a container that is
+no driver or channel. Given an LDIF of more than the driver set, it also does it
+for every object of a Library outside every driver set, and for the objects the
 driver set links from another driver set's Library. These are read-only references:
 - **Links** to them resolve, and a deploy writes their real DN into a driver's
   links.

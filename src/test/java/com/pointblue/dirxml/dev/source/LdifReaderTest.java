@@ -242,12 +242,21 @@ public class LdifReaderTest {
             entry("cn=shared-only," + global, "DirXML-Rule", "XmlData", String.format(rule, "shared only")),
             entry("cn=other-linked,cn=Library," + ds2, "DirXML-Rule", "XmlData", String.format(rule, "other, linked")),
             entry("cn=other-unlinked,cn=Library," + ds2, "DirXML-Rule", "XmlData", String.format(rule, "other, not linked")),
+            // a second Library inside the set (klasen's cn=SKyPRO), and a policy in a container that is no driver
+            entry("cn=SKyPRO," + ds1, "DirXML-Library"),
+            entry("cn=SPACDMCS-EcmaScript,cn=SKyPRO," + ds1, "DirXML-Resource",
+                "DirXML-ContentType", "text/ecmascript", "DirXML-Data", "function f(){}"),
+            entry("cn=pub-ets-ps-Relationships,cn=SKyPRO," + ds1, "DirXML-Rule", "XmlData", String.format(rule, "second Library")),
+            entry("cn=pub,cn=AD," + ds1, "organizationalUnit"),
+            entry("cn=pub-etp-ValidityPeriodLog,cn=pub,cn=AD," + ds1, "DirXML-Rule", "XmlData", String.format(rule, "odd container")),
             // a driver of one name in each set, each with a publisher policy of one name
             entry("cn=AD," + ds1, "DirXML-Driver",
                 "DirXML-Policies", "cn=pub-etp,cn=Publisher,cn=AD," + ds1 + "#0#2",
                 "DirXML-Policies", "cn=pub-ets-ps-Relationships,cn=Library," + ds1 + "#1#2",
                 "DirXML-Policies", "cn=shared-only," + global + "#2#2",
-                "DirXML-Policies", "cn=other-linked,cn=Library," + ds2 + "#3#2"),
+                "DirXML-Policies", "cn=other-linked,cn=Library," + ds2 + "#3#2",
+                "DirXML-Policies", "cn=SPACDMCS-EcmaScript,cn=SKyPRO," + ds1 + "#3#11",
+                "DirXML-Policies", "cn=pub-etp-ValidityPeriodLog,cn=pub,cn=AD," + ds1 + "#4#2"),
             entry("cn=Publisher,cn=AD," + ds1, "DirXML-Publisher"),
             entry("cn=pub-etp,cn=Publisher,cn=AD," + ds1, "DirXML-Rule", "XmlData", String.format(rule, "own AD")),
             entry("cn=Entitlement1,cn=AD," + ds1, "DirXML-Entitlement", "XmlData", "<entitlement/>"),
@@ -298,7 +307,10 @@ public class LdifReaderTest {
         assertTrue(CanonicalXmlText.of(own).contains("own"));
         assertNull(own.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
         assertEquals(1, ds.duplicates.size());
-        assertTrue(ds.duplicates.get(0).note, ds.duplicates.get(0).note.contains("in cn=Library,o=services"));
+        String note = ds.duplicates.get(0).note;
+        assertTrue(note, note.contains("3 objects are named library/pub-ets-ps-Relationships"));
+        assertTrue(note, note.contains("in cn=Library,o=services") && note.contains("in cn=SKyPRO,cn=DriverSet-Identity"));
+        assertTrue(ds.duplicates.get(0).advice, ds.duplicates.get(0).advice.startsWith("The tree has one Library"));
 
         Policy shared = (Policy) ds.resolve("library/shared-only");
         assertEquals("cn=Library,o=services", shared.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
@@ -307,11 +319,27 @@ public class LdifReaderTest {
         assertEquals("cn=Library,cn=DriverSet-Other,ou=services,o=identity",
             linked.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
         assertNull(ds.resolve("library/other-unlinked"));
-        assertEquals(3, ds.library.policies.size());
 
-        // every link resolves, the other Libraries' targets to library/
+        // the second Library inside the set, and the odd container: in library/, read-only, keeping their DNs
+        Resource script = (Resource) ds.resolve("library/SPACDMCS-EcmaScript");
+        assertEquals("cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity",
+            script.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
+        Policy odd = (Policy) ds.resolve("library/pub-etp-ValidityPeriodLog");
+        assertEquals("cn=pub,cn=AD,cn=DriverSet-Identity,ou=services,o=identity",
+            odd.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
+        assertEquals(4, ds.library.policies.size());
+        assertEquals(1, ds.library.resources.size());
+
+        // every link resolves (#133: drivers/SKyPRO/SPACDMCS-EcmaScript did not), by the DN it names
         assertTrue(ds.unresolvedLinks().toString(), ds.unresolvedLinks().isEmpty());
-        assertEquals(4, ad.links.size());
+        assertEquals(6, ad.links.size());
+        PolicyLink toScript = ad.links.stream().filter(l -> l.ref.equals("library/SPACDMCS-EcmaScript")).findFirst().orElseThrow();
+        assertEquals("cn=SPACDMCS-EcmaScript,cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity", toScript.sourceDn);
+        // and a deploy writes each link with the DN it was read from
+        List<String> values = com.pointblue.dirxml.dev.deploy.VaultMapping.policiesValues(ds.dn, ad, ds);
+        assertTrue(values.toString(), values.contains("cn=SPACDMCS-EcmaScript,cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity#3#11"));
+        assertTrue(values.toString(), values.contains("cn=pub-etp-ValidityPeriodLog,cn=pub,cn=AD,cn=DriverSet-Identity,ou=services,o=identity#4#2"));
+        assertTrue(values.toString(), values.contains("cn=shared-only,cn=Library,o=services#2#2"));
 
         // and the other set reads the same way, with its own AD
         DriverSet other = LdifReader.fromEntries(vault(), "vault.ldif", Map.of(), "cn=DriverSet-Other,ou=services,o=identity");
