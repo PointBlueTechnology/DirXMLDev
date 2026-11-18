@@ -11,6 +11,8 @@ public final class PolicyLink {
     public final PolicySet set;
     public String ref;      // artifact path, e.g. "drivers/AD/subscriber/sub-etp_Scoping"
     public int order;
+    /** The DN the link named, when it was read from a directory (LDIF or live); for messages only, never written. */
+    public String sourceDn;
 
     public PolicyLink(PolicySet set, String ref, int order) {
         this.set = Objects.requireNonNull(set, "set");

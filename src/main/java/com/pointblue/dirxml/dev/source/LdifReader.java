@@ -186,7 +186,8 @@ public final class LdifReader {
             }
         }
 
-        // 3. artifacts, placed by DN structure
+        // 3. artifacts, placed by DN structure; each one's path by its DN, so a link finds it wherever it is
+        Map<String, String> refByDn = new HashMap<>();
         for (Entry e : entries) {
             boolean policy = e.hasClass("DirXML-Rule") || e.hasClass("DirXML-StyleSheet");
             // a package's GCV definitions: class DirXML-GlobalConfigDef, content in
@@ -204,11 +205,19 @@ public final class LdifReader {
                     continue;
                 }
             }
-            Placement p = otherLibrary != null ? new Placement(Scope.LIBRARY, null) : place(e.dn, dsDn);
+            String parent = parentDn(e.dn);
+            Placement p = otherLibrary != null || libraries.contains(norm(parent))
+                ? new Placement(Scope.LIBRARY, null) : place(e.dn, dsDn);
             Driver d = p.driver == null ? null : driversByLowerName.get(p.driver.toLowerCase());
             if (p.scope != Scope.LIBRARY && d == null) {
-                // an artifact under an unknown driver — keep it in the library, flagged
+                // in a container that is no driver of the set's: kept in the library
                 p = new Placement(Scope.LIBRARY, null);
+            }
+            if (otherLibrary == null && p.scope == Scope.LIBRARY && !sameDn(parent, dsDn)
+                && !sameDn(parent, "cn=Library," + dsDn)) {
+                // another Library inside the set (#133: cn=SKyPRO,<set>), or another container: the tree's
+                // Library is cn=Library,<set>, so this one is a read-only reference that keeps its DN
+                otherLibrary = parent;
             }
             String name = rdn(e.dn);
             if (policy) {
@@ -218,6 +227,7 @@ public final class LdifReader {
                     pol.meta.put(DuplicateArtifacts.LIBRARY_DN, otherLibrary);
                 }
                 copyMeta(e, pol.meta, e.hasClass("DirXML-StyleSheet") ? "DirXML-StyleSheet" : "DirXML-Rule");
+                refByDn.put(norm(e.dn), pol.path());
                 if (p.scope == Scope.LIBRARY) {
                     ds.library.policies.add(pol);
                 } else if (p.scope == Scope.SUBSCRIBER) {
@@ -249,6 +259,7 @@ public final class LdifReader {
                     r.meta.put(DuplicateArtifacts.LIBRARY_DN, otherLibrary);
                 }
                 copyMeta(e, r.meta, gcvDef ? "DirXML-GlobalConfigDef" : "DirXML-Resource");
+                refByDn.put(norm(e.dn), r.path());
                 if (p.scope == Scope.LIBRARY) {
                     ds.library.resources.add(r);
                 } else {
@@ -394,11 +405,17 @@ public final class LdifReader {
                     d.meta.put("linkage.unknown." + (n++), link);
                     continue;
                 }
-                // a target outside the set is in another Library: the tree keeps it in library/
-                Placement p = isUnder(policyDn, dsDn) ? place(policyDn, dsDn) : new Placement(Scope.LIBRARY, null);
-                String ref = com.pointblue.dirxml.dev.model.Artifact.path(
-                    p.scope == Scope.LIBRARY ? Scope.LIBRARY : p.scope, p.driver, rdn(policyDn));
-                d.links.add(new PolicyLink(set, ref, order));
+                // the target's path as read, by its DN; a target the entries don't hold, by the DN's shape
+                // (outside the set: another Library, which the tree keeps in library/)
+                String ref = refByDn.get(norm(policyDn));
+                if (ref == null) {
+                    Placement p = isUnder(policyDn, dsDn) ? place(policyDn, dsDn) : new Placement(Scope.LIBRARY, null);
+                    ref = com.pointblue.dirxml.dev.model.Artifact.path(
+                        p.scope == Scope.LIBRARY ? Scope.LIBRARY : p.scope, p.driver, rdn(policyDn));
+                }
+                PolicyLink pl = new PolicyLink(set, ref, order);
+                pl.sourceDn = policyDn;
+                d.links.add(pl);
             }
         }
 

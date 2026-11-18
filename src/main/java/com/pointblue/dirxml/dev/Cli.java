@@ -522,7 +522,7 @@ public final class Cli {
                 + "referenced policies, or use a driver-set export/LDIF/live), or a dangling reference "
                 + "in the source itself:");
             for (PolicyLink l : broken) {
-                System.out.println("    - " + l);
+                System.out.println("    - " + l + (l.sourceDn == null ? "" : "   (" + l.sourceDn + ")"));
             }
         }
     }
