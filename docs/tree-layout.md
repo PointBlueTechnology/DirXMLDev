@@ -143,6 +143,10 @@ driver set links from another driver set's Library. These are read-only referenc
 `validate` lists them as `library-other` information. When the driver set's own
 Library and another one both hold an object of the same name, the tree keeps the
 driver set's own copy (`import-project` and `import-ldif` say so in a `NOTE:` line).
+That is the tree's limit, not IDM's: a driver set can link from any number of
+Libraries, and the vault keeps every copy. When the copies differ, the note says
+so and names the drivers that link the copy left out: in the tree their links
+read the kept copy, and a deploy that rewrites their links points them at it.
 
 The DN is the one in the project or the LDIF. If the other Library sits elsewhere in
 another environment's vault, a driver deployed there links to a DN that vault
@@ -157,7 +161,10 @@ it was read with (`dirxml-tracelevel` / `dirxml-tracefile` meta: a new driver st
 environment) and which it is planned for but not promoted to yet
 (`planned="PROD"`), which config files exist, every policy and resource, the
 entitlements, and the **linkage** — which object runs in which policy set, in
-which order. The linkage is what Designer's policy flow shows.
+which order. The linkage is what Designer's policy flow shows. A driver whose channel
+objects aren't called `Subscriber` and `Publisher` (the engine finds them by object
+class) keeps their names in `channel.subscriber` / `channel.publisher` meta; a
+deploy writes that driver's channel policies under them.
 `query tree/ chain "<driver>" sub` prints the subscriber order.
 `query tree/ fishbone "<driver>"` prints the same flow as the VS Code viewer.
 

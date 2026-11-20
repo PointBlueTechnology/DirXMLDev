@@ -186,6 +186,25 @@ public final class LdifReader {
             }
         }
 
+        // 2b. each driver's channels, by object class: the engine doesn't care what they're called (#133: cn=pub)
+        Map<String, Placement> channels = new HashMap<>();
+        for (Entry e : entries) {
+            boolean sub = e.hasClass("DirXML-Subscriber");
+            if (!sub && !e.hasClass("DirXML-Publisher")) {
+                continue;
+            }
+            for (Driver d : ds.drivers) {
+                if (sameDn(parentDn(e.dn), d.dn)) {
+                    channels.put(norm(e.dn), new Placement(sub ? Scope.SUBSCRIBER : Scope.PUBLISHER, d.name));
+                    String name = rdn(e.dn);
+                    if (!name.equalsIgnoreCase(sub ? "Subscriber" : "Publisher")) {
+                        d.meta.put(sub ? com.pointblue.dirxml.dev.deploy.VaultMapping.CHANNEL_SUBSCRIBER_META
+                            : com.pointblue.dirxml.dev.deploy.VaultMapping.CHANNEL_PUBLISHER_META, name);
+                    }
+                }
+            }
+        }
+
         // 3. artifacts, placed by DN structure; each one's path by its DN, so a link finds it wherever it is
         Map<String, String> refByDn = new HashMap<>();
         for (Entry e : entries) {
@@ -207,7 +226,8 @@ public final class LdifReader {
             }
             String parent = parentDn(e.dn);
             Placement p = otherLibrary != null || libraries.contains(norm(parent))
-                ? new Placement(Scope.LIBRARY, null) : place(e.dn, dsDn);
+                ? new Placement(Scope.LIBRARY, null)
+                : channels.containsKey(norm(parent)) ? channels.get(norm(parent)) : place(e.dn, dsDn);
             Driver d = p.driver == null ? null : driversByLowerName.get(p.driver.toLowerCase());
             if (p.scope != Scope.LIBRARY && d == null) {
                 // in a container that is no driver of the set's: kept in the library
@@ -409,7 +429,9 @@ public final class LdifReader {
                 // (outside the set: another Library, which the tree keeps in library/)
                 String ref = refByDn.get(norm(policyDn));
                 if (ref == null) {
-                    Placement p = isUnder(policyDn, dsDn) ? place(policyDn, dsDn) : new Placement(Scope.LIBRARY, null);
+                    Placement p = !isUnder(policyDn, dsDn) ? new Placement(Scope.LIBRARY, null)
+                        : channels.containsKey(norm(parentDn(policyDn))) ? channels.get(norm(parentDn(policyDn)))
+                        : place(policyDn, dsDn);
                     ref = com.pointblue.dirxml.dev.model.Artifact.path(
                         p.scope == Scope.LIBRARY ? Scope.LIBRARY : p.scope, p.driver, rdn(policyDn));
                 }

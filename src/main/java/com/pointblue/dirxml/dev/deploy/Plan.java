@@ -264,7 +264,7 @@ public final class Plan {
                         p.notes.add("cannot resolve " + c.path + " in the tree; skipped");
                         break;
                     }
-                    String dn = VaultMapping.artifactDn(dsDn, a);
+                    String dn = VaultMapping.artifactDn(dsDn, a, to);
                     p.touchedDns.add(dn);
                     Map<String, List<byte[]>> attrs = "package-stamps".equals(c.what)
                         ? new LinkedHashMap<>() : VaultMapping.attributes(a);
@@ -310,7 +310,7 @@ public final class Plan {
                     if (a == null) {
                         break;
                     }
-                    String dn = VaultMapping.artifactDn(dsDn, a);
+                    String dn = VaultMapping.artifactDn(dsDn, a, to);
                     p.touchedDns.add(dn);
                     deletes.add(new Step(Op.DELETE, dn, null, null, null, dn + "  (object class changes: delete, then add)", c.path, a.driver));
                     Map<String, List<byte[]>> attrs = VaultMapping.attributes(a);
@@ -323,7 +323,7 @@ public final class Plan {
                     break;
                 }
                 case ARTIFACT_REMOVED: {
-                    String dn = VaultMapping.pathDn(dsDn, c.path);
+                    String dn = VaultMapping.pathDn(dsDn, c.path, to);
                     p.touchedDns.add(dn);
                     deletes.add(new Step(Op.DELETE, dn, null, null, null, dn, c.path, c.driver));
                     break;
@@ -491,14 +491,14 @@ public final class Plan {
                     containers.add(new Step(Op.ADD, dn, null, driverClasses(dstamps), attrs,
                         dn + "  DirXML-Driver (new driver, created stopped)", c.path, c.driver));
                     for (Scope s : new Scope[] {Scope.SUBSCRIBER, Scope.PUBLISHER}) {
-                        String cdn = VaultMapping.channelDn(dsDn, c.driver, s);
+                        String cdn = VaultMapping.channelDn(dsDn, c.driver, s, to);
                         p.touchedDns.add(cdn);
                         containers.add(new Step(Op.ADD, cdn, null,
                             List.of("Top", s == Scope.SUBSCRIBER ? "DirXML-Subscriber" : "DirXML-Publisher"), Vault.attrs(),
                             cdn, c.path, c.driver));
                     }
                     for (Artifact a : d.artifacts()) {
-                        String adn = VaultMapping.artifactDn(dsDn, a);
+                        String adn = VaultMapping.artifactDn(dsDn, a, to);
                         p.touchedDns.add(adn);
                         Map<String, List<byte[]>> aa = VaultMapping.attributes(a);
                         Map<String, List<byte[]>> astamps = VaultMapping.packageAttributes(tree, a, p.packageIndex);
@@ -684,7 +684,7 @@ public final class Plan {
             for (ModelDiff.Change c : diff.changes()) {
                 if ((c.kind == ModelDiff.Kind.ARTIFACT_CHANGED || c.kind == ModelDiff.Kind.ARTIFACT_ADDED
                     || c.kind == ModelDiff.Kind.ARTIFACT_REMOVED) && c.path.startsWith("library/")
-                    && dsGcvObjects.contains(VaultMapping.pathDn(dsDn, c.path))) {
+                    && dsGcvObjects.contains(VaultMapping.pathDn(dsDn, c.path, to))) {
                     for (Driver d : to.drivers) {
                         affected.add(d.name);
                     }

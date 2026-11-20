@@ -514,7 +514,9 @@ public class ProjectReaderTest {
         String note = ds.duplicates.get(0).note;
         assertTrue(note, note.contains("kept the resource (in cn=Library,cn=DS1,o=system"));
         assertTrue(note, note.contains("left out the resource (in cn=Library,ou=shared,o=system"));
-        assertTrue(ds.duplicates.get(0).advice, ds.duplicates.get(0).advice.contains("one Library"));
+        // the tree's limit, not IDM's (#133)
+        assertTrue(note, note.contains("IDM itself links from any number of Libraries"));
+        assertTrue(ds.duplicates.get(0).advice, ds.duplicates.get(0).advice.startsWith("The copy left out stays in the vault as it is"));
     }
 
     @Test

@@ -902,6 +902,13 @@ public final class ProjectReader {
         if (m == null) {
             return;
         }
+        // a channel object not called Subscriber / Publisher keeps its name (#133)
+        String chanName = m.getAttribute("name");
+        if (chanName != null && !chanName.isEmpty()
+            && !chanName.equalsIgnoreCase(scope == Scope.SUBSCRIBER ? "Subscriber" : "Publisher")) {
+            d.meta.put(scope == Scope.SUBSCRIBER ? com.pointblue.dirxml.dev.deploy.VaultMapping.CHANNEL_SUBSCRIBER_META
+                : com.pointblue.dirxml.dev.deploy.VaultMapping.CHANNEL_PUBLISHER_META, chanName);
+        }
         List<Policy> bucket = scope == Scope.SUBSCRIBER ? d.subscriber.policies : d.publisher.policies;
         for (String key : relationKeys(m, "Idm:Policies")) {
             Policy p = readPolicy(idx, idOf(key), scope, d.name);

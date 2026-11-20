@@ -45,16 +45,17 @@ public final class DuplicateArtifacts {
     public static List<Dropped> drop(DriverSet ds) {
         List<Dropped> out = new ArrayList<>();
         String ownLibrary = ds.dn == null ? null : "cn=Library," + ds.dn;
-        drop(ds.library.policies, ds.library.resources, ownLibrary, out);
+        drop(ds.library.policies, ds.library.resources, ownLibrary, ds.drivers, out);
         for (Driver d : ds.drivers) {
-            drop(d.policies, d.resources, null, out);
-            drop(d.subscriber.policies, new ArrayList<>(), null, out);
-            drop(d.publisher.policies, new ArrayList<>(), null, out);
+            drop(d.policies, d.resources, null, ds.drivers, out);
+            drop(d.subscriber.policies, new ArrayList<>(), null, ds.drivers, out);
+            drop(d.publisher.policies, new ArrayList<>(), null, ds.drivers, out);
         }
         return out;
     }
 
-    private static void drop(List<Policy> policies, List<Resource> resources, String ownLibrary, List<Dropped> out) {
+    private static void drop(List<Policy> policies, List<Resource> resources, String ownLibrary, List<Driver> drivers,
+                             List<Dropped> out) {
         Map<String, List<Artifact>> byPath = new LinkedHashMap<>();
         for (Artifact a : policies) {
             byPath.computeIfAbsent(a.path(), k -> new ArrayList<>()).add(a);
@@ -76,14 +77,43 @@ public final class DuplicateArtifacts {
                     left.add(describe(a, inLibraries(same) ? ownLibrary : null));
                 }
             }
-            String how = identical(same) && !inLibraries(same) ? "they are the same, so kept one"
-                : "kept " + describe(keep, inLibraries(same) ? ownLibrary : null) + ", left out " + String.join(" and ", left);
-            out.add(new Dropped(e.getKey(), same.size() + " objects are named " + e.getKey()
-                + " (an Identity Vault holds one per name in a container): " + how,
-                inLibraries(same)
-                    ? "The tree has one Library, so the copy in the other Library isn't in it; that copy stays in the vault as it is"
-                    : "Delete the one you don't want in Designer, then import again"));
+            boolean libraries = inLibraries(same);
+            boolean sameContent = identical(same);
+            String how = sameContent && !libraries ? "they are the same, so kept one"
+                : "kept " + describe(keep, libraries ? ownLibrary : null) + ", left out " + String.join(" and ", left);
+            // the limit is the tree's, not IDM's: a driver set links from any number of Libraries (#133)
+            out.add(new Dropped(e.getKey(), libraries
+                ? same.size() + " objects in different Libraries are named " + e.getKey()
+                    + " (the tree's library/ holds one object per name; IDM itself links from any number of Libraries): " + how
+                : same.size() + " objects are named " + e.getKey()
+                    + " (an Identity Vault holds one per name in a container): " + how,
+                !libraries ? "Delete the one you don't want in Designer, then import again"
+                    : sameContent ? "The copy left out stays in the vault as it is; its content is the same, so the tree describes it too"
+                    : "The copy left out stays in the vault as it is, but its content DIFFERS: in the tree, a link to it reads"
+                        + " the kept copy, and a deploy that rewrites that driver's links points them at the kept copy."
+                        + linkingDrivers(same, keep, drivers)));
         }
+    }
+
+    /** Which drivers link a copy left out, when the links recorded the DN they named (an LDIF or vault read). */
+    private static String linkingDrivers(List<Artifact> same, Artifact keep, List<Driver> drivers) {
+        java.util.Set<String> leftDns = new java.util.HashSet<>();
+        for (Artifact a : same) {
+            String dn = a.meta.get("dn");
+            if (a != keep && dn != null) {
+                leftDns.add(dn.replaceAll("\\s*,\\s*", ",").toLowerCase());
+            }
+        }
+        java.util.Set<String> names = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (Driver d : drivers) {
+            for (PolicyLink l : d.links) {
+                if (l.sourceDn != null && leftDns.contains(l.sourceDn.replaceAll("\\s*,\\s*", ",").toLowerCase())) {
+                    names.add(d.name);
+                }
+            }
+        }
+        return names.isEmpty() ? " Check the links to it before deploying"
+            : " Drivers that link it: " + String.join(", ", names) + "; check their links before deploying them";
     }
 
     private static Artifact keeper(List<Artifact> same, String ownLibrary) {
