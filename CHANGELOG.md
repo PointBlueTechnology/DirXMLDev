@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.75.0] - 2026-11-20
+
 ### Fixed
 
 - **Channels found by object class (#133):** a driver's subscriber and publisher channel objects need not be
