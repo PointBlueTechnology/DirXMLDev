@@ -182,7 +182,7 @@ public final class ReleaseCheck {
             return;
         }
         String cmd = args[0];
-        if (cmd.equals("doctor") || cmd.equals("version") || cmd.equals("help")) {
+        if (cmd.equals("doctor") || cmd.equals("version") || cmd.equals("help") || cmd.equals("completion")) {
             return;
         }
         for (String a : args) {

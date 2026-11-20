@@ -27,7 +27,7 @@ public final class DeployCli {
     }
 
     /** What each command takes (docs/commands.md); the clone commands' are read by CloneCli. */
-    static final Map<String, Args.Spec> SPECS = Map.ofEntries(
+    public static final Map<String, Args.Spec> SPECS = Map.ofEntries(
         Map.entry("vault.diff", Args.Spec.of("", "env driver")),
         Map.entry("vault.verify", Args.Spec.of("", "env driver")),
         Map.entry("vault.compare-envs", Args.Spec.of("", "env with")),

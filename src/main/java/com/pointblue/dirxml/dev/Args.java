@@ -29,6 +29,16 @@ public final class Args {
         final Set<String> flags = new LinkedHashSet<>();
         final Set<String> options = new LinkedHashSet<>();
 
+        /** The flags, without dashes. */
+        public Set<String> flags() {
+            return java.util.Collections.unmodifiableSet(flags);
+        }
+
+        /** The options that take a value, without dashes. */
+        public Set<String> options() {
+            return java.util.Collections.unmodifiableSet(options);
+        }
+
         /** {@code flags} and {@code options} as space-separated names without dashes. */
         public static Spec of(String flags, String options) {
             Spec s = new Spec();

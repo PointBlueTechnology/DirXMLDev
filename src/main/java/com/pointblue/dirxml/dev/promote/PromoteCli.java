@@ -40,7 +40,7 @@ public final class PromoteCli {
      * command takes the two sides' cases. {@code --pending} is a flag of promote.plan/apply and an option
      * (a difference to leave pending) of promote.pair.
      */
-    static final Map<String, Args.Spec> SPECS = Map.ofEntries(
+    public static final Map<String, Args.Spec> SPECS = Map.ofEntries(
         Map.entry("tree.compare", Args.Spec.of("", "with from name cases source-cases")),
         Map.entry("promote.plan", Args.Spec.of("pending", "with from name object value contents cases source-cases")),
         Map.entry("promote.apply", Args.Spec.of("pending force dry-run", "with from name object value contents by cases source-cases")),

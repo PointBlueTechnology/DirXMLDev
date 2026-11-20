@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`idm completion bash`:** prints a standalone Bash completion script for `bin/idm`. Commands, options and
+  verbs are read from the parsers' own `Args.Spec` maps, `OperateCli`'s tables and the edit `Registry`, so
+  the script follows the CLI without hand maintenance. Regenerate it after an upgrade
+  ([install.md](docs/install.md#bash-completion)).
+
 ## [0.74.0] - 2026-11-18
 
 ### Fixed

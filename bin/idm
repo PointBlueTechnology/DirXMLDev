@@ -176,7 +176,7 @@ if [ -z "$JH" ]; then
   exit 1
 fi
 
-if [ ! -f "$SIM_JAR" ] && [ "$CMD" != "doctor" ]; then
+if [ ! -f "$SIM_JAR" ] && [ "$CMD" != "doctor" ] && [ "$CMD" != "completion" ]; then
   echo "ERROR: simulator jar $SIM_VER not installed; run bin/install-deps" >&2
   exit 1
 fi

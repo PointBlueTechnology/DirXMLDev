@@ -54,7 +54,7 @@ public final class ReadCli {
     }
 
     /** What each read command takes (docs/commands.md); query's events/event verbs are read by EventsCli (#104, #105). */
-    static final Map<String, Args.Spec> SPECS = Map.ofEntries(
+    public static final Map<String, Args.Spec> SPECS = Map.ofEntries(
         Map.entry("show", Args.Spec.of("", "")),
         Map.entry("query", Args.Spec.of("", "")),
         Map.entry("package.diff", Args.Spec.of("", "")),

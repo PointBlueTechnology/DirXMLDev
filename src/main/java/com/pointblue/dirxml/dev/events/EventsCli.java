@@ -32,13 +32,13 @@ public final class EventsCli {
     }
 
     /** What {@code query <tree> events} and {@code query <tree> event} take (docs/commands.md). */
-    static final Map<String, Args.Spec> QUERY_SPECS = Map.of(
+    public static final Map<String, Args.Spec> QUERY_SPECS = Map.of(
         "events", Args.Spec.of("own logged xml",
             "env dn under name driver policy stage type class since until event-id text attr limit"),
         "event", Args.Spec.of("xml", "env"));
 
     /** What {@code events.describe} and {@code events.case} take (docs/commands.md). */
-    static final Map<String, Args.Spec> SPECS = Map.of(
+    public static final Map<String, Args.Spec> SPECS = Map.of(
         "events.describe", Args.Spec.of("", "env"),
         "events.case", Args.Spec.of("replace dry-run", "env id name driver channel dir"));
 

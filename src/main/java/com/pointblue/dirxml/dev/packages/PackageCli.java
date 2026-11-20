@@ -35,7 +35,7 @@ public final class PackageCli {
     }
 
     /** What each catalog command takes (docs/commands.md): its flags, its options, and how many positionals. */
-    static final Map<String, Args.Spec> SPECS = Map.ofEntries(
+    public static final Map<String, Args.Spec> SPECS = Map.ofEntries(
         Map.entry("package.fetch", Args.Spec.of("all-versions dry-run", "catalog site short")),
         Map.entry("package.import", Args.Spec.of("", "catalog")),
         Map.entry("package.list", Args.Spec.of("base", "catalog driver-type type")),

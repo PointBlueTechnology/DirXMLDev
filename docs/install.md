@@ -153,6 +153,20 @@ the simulator jar on the class path. `IDM_SIM_VERSION` selects another
 installed simulator version; `IDM_JAVA_OPTS` passes JVM options through (used
 for `import-live` credentials and for TLS settings, below).
 
+#### Bash completion
+
+Generate a standalone Bash completion script with the current command list,
+common options and nested subcommands:
+
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+bin/idm completion bash > ~/.local/share/bash-completion/completions/idm
+```
+
+Reload Bash or start a new session to use it. The generated script is
+self-contained and does not need the checkout at completion time. Regenerate
+it after updating DirXMLDev to pick up new commands and options.
+
 Windows: `bin\idm.cmd` is the equivalent launcher (`IDM_JAVA_HOME` or
 `JAVA_HOME` must point at a JDK 21; the simulator jar is found under
 `%USERPROFILE%\.m2`); `bin/idm` also works from Git Bash or WSL. For the common

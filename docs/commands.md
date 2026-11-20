@@ -33,7 +33,7 @@ own `bin/sim` is the DirXMLSimulator repository's.
 
 ## Contents
 
-- [Set up and check](#set-up-and-check): `version`, `doctor`
+- [Set up and check](#set-up-and-check): `completion`, `version`, `doctor`
 - [Get a tree, and give it back](#get-a-tree-and-give-it-back): `import`, `import-project`,
   `import-ldif`, `import-live`, `export`, `export-project`
 - [Look at a tree](#look-at-a-tree): `check`, `validate`, `show`, `query`, `refs`,
@@ -53,6 +53,18 @@ own `bin/sim` is the DirXMLSimulator repository's.
   [AppConfig, roles and resources](#edit-appconfig-roles-and-resources)
 
 ## Set up and check
+
+### `completion`
+
+Prints a standalone Bash completion script to stdout, with commands, options
+and nested verbs taken from the current CLI usage.
+
+```
+bin/idm completion bash
+```
+
+Redirect the output into a Bash completion directory; see
+[install.md](install.md#bash-completion).
 
 ### `version`
 

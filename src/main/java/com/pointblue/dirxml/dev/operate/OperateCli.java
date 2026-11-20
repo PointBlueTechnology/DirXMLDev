@@ -44,7 +44,7 @@ public final class OperateCli {
      * "command verb"; a command whose verb is optional has its show form under the command alone.
      * Each entry is { flags, options with a value }.
      */
-    private static final Map<String, String[]> TAKES = Map.ofEntries(
+    public static final Map<String, String[]> TAKES = Map.ofEntries(
         Map.entry("driverset.status", takes("", "env")),
         Map.entry("driverset.activation", takes("", "env")),
         Map.entry("driverset.activation apply", takes("yes", "env file confirm tree")),
@@ -101,7 +101,7 @@ public final class OperateCli {
         Map.entry("driver.submit", takes("yes", "env driver xds mode confirm tree")));
 
     /** The verbs of the commands that have them (the second word). */
-    static final Map<String, List<String>> VERBS = Map.of(
+    public static final Map<String, List<String>> VERBS = Map.of(
         "driver.cache", List.of("view", "clear"),
         "driver.secrets", List.of("list", "set", "remove"),
         "driver.trace", List.of("show", "set", "reset", "tail", "view"),

@@ -93,6 +93,9 @@ public final class Cli {
         LegacyTls.enable();   // first thing: the JDK reads its TLS settings once
         ReleaseCheck.schedule(args, System.getenv(), System.console() != null, Version.current(), ReleaseCheck.cacheFile());
         try {
+            if (args.length >= 1 && args[0].equals("completion")) {
+                System.exit(CompletionCli.run(args));
+            }
             if (args.length >= 1 && args[0].equals("version")) {
                 System.exit(version(args));
             }
@@ -535,6 +538,7 @@ public final class Cli {
     static String usageText() {
         StringBuilder sb = new StringBuilder();
         sb.append("usage:\n");
+        sb.append("  completion bash                      print a standalone Bash completion script\n");
         sb.append("  version [--check]                     the running version; --check asks GitHub for the latest release\n");
         sb.append("  doctor [--json] [--env NAME]          JDK 21, simulator jar, lib/*.jar, environments (names, tiers,\n");
         sb.append("                                        whether url/bind/password/driverSet are set — never the values);\n");

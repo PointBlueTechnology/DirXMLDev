@@ -25,7 +25,7 @@ public final class ViewerCli {
     }
 
     /** What each command takes (docs/commands.md). */
-    static final Map<String, Args.Spec> SPECS = Map.of(
+    public static final Map<String, Args.Spec> SPECS = Map.of(
         "viewer.check", Args.Spec.of("", ""),
         "viewer.install", Args.Spec.of("source", "version dir"));
 
