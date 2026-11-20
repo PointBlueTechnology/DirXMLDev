@@ -7,6 +7,22 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Channels found by object class (#133):** a driver's subscriber and publisher channel objects need not be
+  called `Subscriber` and `Publisher` (`cn=sub`, `cn=pub`). `import-ldif` and `import-live` took such a
+  channel for a container: its policies went into `library/`, and two drivers' policies of one name became
+  one. Channels are now found by object class. A driver records their names (`channel.subscriber` /
+  `channel.publisher` meta, also read from a Designer project), and deploy, plan and `export-project` use
+  them.
+
+### Changed
+
+- **The duplicate-name note across Libraries** says the limit is the tree's (`library/` holds one object per
+  name), not IDM's, which links from any number of Libraries. When the copies differ, it says so and names
+  the drivers that link the copy left out, since a deploy that rewrites their links points them at the
+  kept copy.
+
 ## [0.74.0] - 2026-11-18
 
 ### Fixed

@@ -256,7 +256,8 @@ public class LdifReaderTest {
                 "DirXML-Policies", "cn=shared-only," + global + "#2#2",
                 "DirXML-Policies", "cn=other-linked,cn=Library," + ds2 + "#3#2",
                 "DirXML-Policies", "cn=SPACDMCS-EcmaScript,cn=SKyPRO," + ds1 + "#3#11",
-                "DirXML-Policies", "cn=pub-etp-ValidityPeriodLog,cn=pub,cn=AD," + ds1 + "#4#2"),
+                "DirXML-Policies", "cn=pub-etp-ValidityPeriodLog,cn=pub,cn=AD," + ds1 + "#4#2",
+                "DirXML-Policies", "cn=pub-ets-ps-Relationships,cn=SKyPRO," + ds1 + "#5#2"),
             entry("cn=Publisher,cn=AD," + ds1, "DirXML-Publisher"),
             entry("cn=pub-etp,cn=Publisher,cn=AD," + ds1, "DirXML-Rule", "XmlData", String.format(rule, "own AD")),
             entry("cn=Entitlement1,cn=AD," + ds1, "DirXML-Entitlement", "XmlData", "<entitlement/>"),
@@ -308,9 +309,13 @@ public class LdifReaderTest {
         assertNull(own.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
         assertEquals(1, ds.duplicates.size());
         String note = ds.duplicates.get(0).note;
-        assertTrue(note, note.contains("3 objects are named library/pub-ets-ps-Relationships"));
+        assertTrue(note, note.contains("3 objects in different Libraries are named library/pub-ets-ps-Relationships"));
         assertTrue(note, note.contains("in cn=Library,o=services") && note.contains("in cn=SKyPRO,cn=DriverSet-Identity"));
-        assertTrue(ds.duplicates.get(0).advice, ds.duplicates.get(0).advice.startsWith("The tree has one Library"));
+        // the tree's limit, not IDM's; and the copies differ, so the drivers linking the one left out are named
+        assertTrue(note, note.contains("objects in different Libraries are named") && note.contains("IDM itself links from any number of Libraries"));
+        String advice = ds.duplicates.get(0).advice;
+        assertTrue(advice, advice.contains("content DIFFERS"));
+        assertTrue(advice, advice.contains("Drivers that link it: AD"));
 
         Policy shared = (Policy) ds.resolve("library/shared-only");
         assertEquals("cn=Library,o=services", shared.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
@@ -332,7 +337,7 @@ public class LdifReaderTest {
 
         // every link resolves (#133: drivers/SKyPRO/SPACDMCS-EcmaScript did not), by the DN it names
         assertTrue(ds.unresolvedLinks().toString(), ds.unresolvedLinks().isEmpty());
-        assertEquals(6, ad.links.size());
+        assertEquals(7, ad.links.size());
         PolicyLink toScript = ad.links.stream().filter(l -> l.ref.equals("library/SPACDMCS-EcmaScript")).findFirst().orElseThrow();
         assertEquals("cn=SPACDMCS-EcmaScript,cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity", toScript.sourceDn);
         // and a deploy writes each link with the DN it was read from
@@ -356,5 +361,50 @@ public class LdifReaderTest {
         static String of(Policy p) {
             return com.pointblue.dirxml.dev.xml.CanonicalXml.serialize(p.content);
         }
+    }
+
+    /**
+     * #133: channels are found by object class, not by name. Two drivers whose publisher channel is {@code cn=pub}
+     * each keep their own {@code pub-ets-ps-Relationships}; the channel's name is kept for deploy.
+     */
+    @Test
+    public void channelsAreFoundByObjectClass() {
+        String set = "cn=DriverSet-Identity,ou=services,o=identity";
+        String rule = "<policy><rule><description>%s</description><conditions/><actions/></rule></policy>";
+        List<Entry> entries = new java.util.ArrayList<>();
+        entries.add(entry(set, "DirXML-DriverSet"));
+        for (String drv : new String[] {"SAP-HR-XXX", "SAP-HR-ZZZ"}) {
+            String d = "cn=" + drv + "," + set;
+            entries.add(entry(d, "DirXML-Driver",
+                "DirXML-Policies", "cn=pub-ets-ps-Relationships,cn=pub," + d + "#0#2",
+                "DirXML-Policies", "cn=sub-etp,cn=sub," + d + "#0#3"));
+            entries.add(entry("cn=pub," + d, "DirXML-Publisher"));
+            entries.add(entry("cn=sub," + d, "DirXML-Subscriber"));
+            entries.add(entry("cn=pub-ets-ps-Relationships,cn=pub," + d, "DirXML-Rule", "XmlData", String.format(rule, drv)));
+            entries.add(entry("cn=sub-etp,cn=sub," + d, "DirXML-Rule", "XmlData", String.format(rule, drv + " sub")));
+        }
+        DriverSet ds = LdifReader.fromEntries(entries, "vault.ldif");
+        ds.index();
+        assertTrue(ds.duplicates.toString(), ds.duplicates.isEmpty());
+        assertTrue(ds.library.artifacts().isEmpty());
+        assertTrue(ds.unresolvedLinks().toString(), ds.unresolvedLinks().isEmpty());
+        for (String drv : new String[] {"SAP-HR-XXX", "SAP-HR-ZZZ"}) {
+            Driver d = ds.driver(drv);
+            assertEquals("pub", d.meta.get(com.pointblue.dirxml.dev.deploy.VaultMapping.CHANNEL_PUBLISHER_META));
+            assertEquals("sub", d.meta.get(com.pointblue.dirxml.dev.deploy.VaultMapping.CHANNEL_SUBSCRIBER_META));
+            Policy pub = (Policy) ds.resolve("drivers/" + drv + "/publisher/pub-ets-ps-Relationships");
+            assertTrue(CanonicalXmlText.of(pub).contains(drv));
+            assertNotNull(ds.resolve("drivers/" + drv + "/subscriber/sub-etp"));
+            // a deploy writes them where they are
+            String dn = "cn=" + drv + "," + set;
+            assertEquals("cn=pub-ets-ps-Relationships,cn=pub," + dn,
+                com.pointblue.dirxml.dev.deploy.VaultMapping.artifactDn(set, pub, ds));
+            List<String> values = com.pointblue.dirxml.dev.deploy.VaultMapping.policiesValues(set, d, ds);
+            assertTrue(values.toString(), values.contains("cn=pub-ets-ps-Relationships,cn=pub," + dn + "#0#2"));
+            assertTrue(values.toString(), values.contains("cn=sub-etp,cn=sub," + dn + "#0#3"));
+            assertEquals("cn=sub," + dn, com.pointblue.dirxml.dev.deploy.VaultMapping.channelDn(set, drv, Scope.SUBSCRIBER, ds));
+        }
+        // a driver read without names keeps the defaults
+        assertEquals("cn=Publisher,cn=New," + set, com.pointblue.dirxml.dev.deploy.VaultMapping.channelDn(set, "New", Scope.PUBLISHER, ds));
     }
 }

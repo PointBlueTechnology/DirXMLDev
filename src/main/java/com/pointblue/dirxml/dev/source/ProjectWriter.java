@@ -3055,7 +3055,7 @@ public final class ProjectWriter {
             metaFileById.put(subId, subMetaFile);
             typeById.put(subId, "Subscriber");
             newlyCreatedIds.add(subId);
-            writeFile(subMetaFile, CObjectXml.cobject("Subscriber", "Subscriber", "", ""), true);
+            writeFile(subMetaFile, CObjectXml.cobject(com.pointblue.dirxml.dev.deploy.VaultMapping.channelName(treeDriver, Scope.SUBSCRIBER), "Subscriber", "", ""), true);
             channelIdCache.put(treeDriver.name + "|" + Scope.SUBSCRIBER, subId);
 
             String pubId = mintId();
@@ -3063,7 +3063,7 @@ public final class ProjectWriter {
             metaFileById.put(pubId, pubMetaFile);
             typeById.put(pubId, "Publisher");
             newlyCreatedIds.add(pubId);
-            writeFile(pubMetaFile, CObjectXml.cobject("Publisher", "Publisher", "", ""), true);
+            writeFile(pubMetaFile, CObjectXml.cobject(com.pointblue.dirxml.dev.deploy.VaultMapping.channelName(treeDriver, Scope.PUBLISHER), "Publisher", "", ""), true);
             channelIdCache.put(treeDriver.name + "|" + Scope.PUBLISHER, pubId);
 
             appendRelation(driverDoc, "Idm:Filter", "Child", filterId, "Filter");

@@ -82,38 +82,76 @@ public final class VaultMapping {
         return "cn=" + escapeRdn(driver) + "," + dsDn;
     }
 
+    /**
+     * Driver meta: the name of the driver's subscriber / publisher channel object when it isn't
+     * {@code Subscriber} / {@code Publisher} (#133: a vault whose channels are {@code cn=sub} and {@code cn=pub}).
+     * The engine finds a channel by its object class, not its name.
+     */
+    public static final String CHANNEL_SUBSCRIBER_META = "channel.subscriber";
+    public static final String CHANNEL_PUBLISHER_META = "channel.publisher";
+
+    /** The name of {@code d}'s channel object for {@code scope}: as read from the vault, else the default. */
+    public static String channelName(Driver d, Scope scope) {
+        String dflt = scope == Scope.SUBSCRIBER ? "Subscriber" : "Publisher";
+        if (d == null) {
+            return dflt;
+        }
+        String v = d.meta.get(scope == Scope.SUBSCRIBER ? CHANNEL_SUBSCRIBER_META : CHANNEL_PUBLISHER_META);
+        return v == null || v.isBlank() ? dflt : v;
+    }
+
     public static String channelDn(String dsDn, String driver, Scope scope) {
-        return "cn=" + (scope == Scope.SUBSCRIBER ? "Subscriber" : "Publisher") + "," + driverDn(dsDn, driver);
+        return channelDn(dsDn, driver, scope, null);
+    }
+
+    /** With the driver set: the channel's own name, when the driver has one ({@link #channelName}). */
+    public static String channelDn(String dsDn, String driver, Scope scope, DriverSet ds) {
+        Driver d = ds == null || driver == null ? null : ds.driver(driver);
+        return "cn=" + escapeRdn(channelName(d, scope)) + "," + driverDn(dsDn, driver);
     }
 
     /** The DN of an artifact given its path's scope, driver and name. */
     public static String artifactDn(String dsDn, Scope scope, String driver, String name) {
+        return artifactDn(dsDn, scope, driver, name, null);
+    }
+
+    /** The same, with the driver set, for its drivers' channel names. */
+    public static String artifactDn(String dsDn, Scope scope, String driver, String name, DriverSet ds) {
         switch (scope) {
             case LIBRARY:    return "cn=" + escapeRdn(name) + "," + libraryDn(dsDn);
             case DRIVER:     return "cn=" + escapeRdn(name) + "," + driverDn(dsDn, driver);
             case SUBSCRIBER:
-            case PUBLISHER:  return "cn=" + escapeRdn(name) + "," + channelDn(dsDn, driver, scope);
+            case PUBLISHER:  return "cn=" + escapeRdn(name) + "," + channelDn(dsDn, driver, scope, ds);
             default: throw new IllegalStateException();
         }
     }
 
     public static String artifactDn(String dsDn, Artifact a) {
-        return artifactDn(dsDn, a.scope, a.driver, a.name);
+        return artifactDn(dsDn, a.scope, a.driver, a.name, null);
+    }
+
+    public static String artifactDn(String dsDn, Artifact a, DriverSet ds) {
+        return artifactDn(dsDn, a.scope, a.driver, a.name, ds);
     }
 
     /** The DN for an artifact path ({@code library/X}, {@code drivers/D/subscriber/X} …). */
     public static String pathDn(String dsDn, String path) {
+        return pathDn(dsDn, path, null);
+    }
+
+    /** The same, with the driver set, for its drivers' channel names. */
+    public static String pathDn(String dsDn, String path, DriverSet ds) {
         String[] parts = path.split("/");
         if (parts.length == 2 && parts[0].equals("library")) {
-            return artifactDn(dsDn, Scope.LIBRARY, null, parts[1]);
+            return artifactDn(dsDn, Scope.LIBRARY, null, parts[1], ds);
         }
         if (parts.length == 3 && parts[0].equals("drivers")) {
-            return artifactDn(dsDn, Scope.DRIVER, parts[1], parts[2]);
+            return artifactDn(dsDn, Scope.DRIVER, parts[1], parts[2], ds);
         }
         if (parts.length == 4 && parts[0].equals("drivers")) {
             Scope s = parts[2].equals("subscriber") ? Scope.SUBSCRIBER : parts[2].equals("publisher") ? Scope.PUBLISHER : null;
             if (s != null) {
-                return artifactDn(dsDn, s, parts[1], parts[3]);
+                return artifactDn(dsDn, s, parts[1], parts[3], ds);
             }
         }
         throw new IllegalArgumentException("not an artifact path: " + path);
@@ -298,7 +336,7 @@ public final class VaultMapping {
         for (PolicySet set : PolicySet.values()) {
             for (PolicyLink l : d.links(set)) {
                 String other = ds == null ? null : com.pointblue.dirxml.dev.model.Libraries.outside(ds, index.get(l.ref));
-                out.add((other != null ? "cn=" + escapeRdn(index.get(l.ref).name) + "," + other : pathDn(dsDn, l.ref))
+                out.add((other != null ? "cn=" + escapeRdn(index.get(l.ref).name) + "," + other : pathDn(dsDn, l.ref, ds))
                     + "#" + l.order + "#" + set.id);
             }
         }
