@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.77.0] - 2026-11-23
+
 ### Changed
 
 - **Every Library in its own place in the tree (L1 of docs/library-containers.md, #133):** objects of a Library
