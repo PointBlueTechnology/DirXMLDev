@@ -302,49 +302,54 @@ public class LdifReaderTest {
         assertTrue(ad.jobs.isEmpty());
         assertTrue(ds.jobs.isEmpty());
 
-        // the Library: its own copy of the shared name, kept; the shared Library's own object and what
-        // the set links from the other set's Library, as read-only references; nothing else of the other set
+        // every Library its own folder (docs/library-containers.md): the three pub-ets-ps-Relationships are
+        // three objects, nothing is left out, and each link reaches the copy it names
+        assertTrue(ds.duplicates.toString(), ds.duplicates.isEmpty());
+        String L = com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN;
         Policy own = (Policy) ds.resolve("library/pub-ets-ps-Relationships");
         assertTrue(CanonicalXmlText.of(own).contains("own"));
-        assertNull(own.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
-        assertEquals(1, ds.duplicates.size());
-        String note = ds.duplicates.get(0).note;
-        assertTrue(note, note.contains("3 objects in different Libraries are named library/pub-ets-ps-Relationships"));
-        assertTrue(note, note.contains("in cn=Library,o=services") && note.contains("in cn=SKyPRO,cn=DriverSet-Identity"));
-        // the tree's limit, not IDM's; and the copies differ, so the drivers linking the one left out are named
-        assertTrue(note, note.contains("objects in different Libraries are named") && note.contains("IDM itself links from any number of Libraries"));
-        String advice = ds.duplicates.get(0).advice;
-        assertTrue(advice, advice.contains("content DIFFERS"));
-        assertTrue(advice, advice.contains("Drivers that link it: AD"));
+        assertNull(own.meta.get(L));
+        assertEquals(java.util.Map.of(
+                "Library@services", "cn=Library,o=services",
+                "Library@DriverSet-Other", "cn=Library,cn=DriverSet-Other,ou=services,o=identity",
+                "SKyPRO", "cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity",
+                "pub", "cn=pub,cn=AD,cn=DriverSet-Identity,ou=services,o=identity"),
+            ds.libraries);
+        Policy sharedCopy = (Policy) ds.resolve("libraries/Library@services/pub-ets-ps-Relationships");
+        assertTrue(CanonicalXmlText.of(sharedCopy).contains("shared"));
+        Policy secondCopy = (Policy) ds.resolve("libraries/SKyPRO/pub-ets-ps-Relationships");
+        assertTrue(CanonicalXmlText.of(secondCopy).contains("second Library"));
+        assertEquals("cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity", secondCopy.meta.get(L));
 
-        Policy shared = (Policy) ds.resolve("library/shared-only");
-        assertEquals("cn=Library,o=services", shared.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
+        Policy shared = (Policy) ds.resolve("libraries/Library@services/shared-only");
+        assertEquals("cn=Library,o=services", shared.meta.get(L));
         assertNotNull(com.pointblue.dirxml.dev.model.Libraries.outside(ds, shared));
-        Policy linked = (Policy) ds.resolve("library/other-linked");
-        assertEquals("cn=Library,cn=DriverSet-Other,ou=services,o=identity",
-            linked.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
-        assertNull(ds.resolve("library/other-unlinked"));
+        Policy linked = (Policy) ds.resolve("libraries/Library@DriverSet-Other/other-linked");
+        assertEquals("cn=Library,cn=DriverSet-Other,ou=services,o=identity", linked.meta.get(L));
+        assertNull(ds.resolve("libraries/Library@DriverSet-Other/other-unlinked"));
 
-        // the second Library inside the set, and the odd container: in library/, read-only, keeping their DNs
-        Resource script = (Resource) ds.resolve("library/SPACDMCS-EcmaScript");
-        assertEquals("cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity",
-            script.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
-        Policy odd = (Policy) ds.resolve("library/pub-etp-ValidityPeriodLog");
-        assertEquals("cn=pub,cn=AD,cn=DriverSet-Identity,ou=services,o=identity",
-            odd.meta.get(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN));
-        assertEquals(4, ds.library.policies.size());
+        // the second Library inside the set, and the odd container: their own folders, read-only, keeping their DNs
+        Resource script = (Resource) ds.resolve("libraries/SKyPRO/SPACDMCS-EcmaScript");
+        assertEquals("cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity", script.meta.get(L));
+        Policy odd = (Policy) ds.resolve("libraries/pub/pub-etp-ValidityPeriodLog");
+        assertEquals("cn=pub,cn=AD,cn=DriverSet-Identity,ou=services,o=identity", odd.meta.get(L));
+        assertEquals(6, ds.library.policies.size());
         assertEquals(1, ds.library.resources.size());
 
-        // every link resolves (#133: drivers/SKyPRO/SPACDMCS-EcmaScript did not), by the DN it names
+        // every link resolves, to the copy whose DN it names
         assertTrue(ds.unresolvedLinks().toString(), ds.unresolvedLinks().isEmpty());
         assertEquals(7, ad.links.size());
-        PolicyLink toScript = ad.links.stream().filter(l -> l.ref.equals("library/SPACDMCS-EcmaScript")).findFirst().orElseThrow();
+        PolicyLink toScript = ad.links.stream().filter(l -> l.ref.equals("libraries/SKyPRO/SPACDMCS-EcmaScript")).findFirst().orElseThrow();
         assertEquals("cn=SPACDMCS-EcmaScript,cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity", toScript.sourceDn);
+        assertTrue(ad.links.stream().anyMatch(l -> l.ref.equals("libraries/SKyPRO/pub-ets-ps-Relationships")));
+        assertTrue(ad.links.stream().anyMatch(l -> l.ref.equals("library/pub-ets-ps-Relationships")));
         // and a deploy writes each link with the DN it was read from
         List<String> values = com.pointblue.dirxml.dev.deploy.VaultMapping.policiesValues(ds.dn, ad, ds);
         assertTrue(values.toString(), values.contains("cn=SPACDMCS-EcmaScript,cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity#3#11"));
         assertTrue(values.toString(), values.contains("cn=pub-etp-ValidityPeriodLog,cn=pub,cn=AD,cn=DriverSet-Identity,ou=services,o=identity#4#2"));
         assertTrue(values.toString(), values.contains("cn=shared-only,cn=Library,o=services#2#2"));
+        assertTrue(values.toString(), values.contains("cn=pub-ets-ps-Relationships,cn=SKyPRO,cn=DriverSet-Identity,ou=services,o=identity#5#2"));
+        assertTrue(values.toString(), values.contains("cn=pub-ets-ps-Relationships,cn=Library,cn=DriverSet-Identity,ou=services,o=identity#1#2"));
 
         // and the other set reads the same way, with its own AD
         DriverSet other = LdifReader.fromEntries(vault(), "vault.ldif", Map.of(), "cn=DriverSet-Other,ou=services,o=identity");

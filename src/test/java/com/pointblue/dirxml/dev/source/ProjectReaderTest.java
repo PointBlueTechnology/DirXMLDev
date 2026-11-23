@@ -505,18 +505,17 @@ public class ProjectReaderTest {
 
         DriverSet ds = ProjectReader.read(root);
 
+        // each Library its own place (docs/library-containers.md): both es-misc are in the tree
         List<Resource> js = ds.library.resources.stream().filter(r -> r.name.equals("es-misc")).collect(Collectors.toList());
-        assertEquals(1, js.size());
-        assertEquals("function f(){}", js.get(0).text);
-        assertNull("the driver set's own Library: no DN recorded, so it follows the driver set's DN", js.get(0).meta.get("library.dn"));
-        assertNotNull("the tree's index loads", ds.index().get("library/es-misc"));
-        assertEquals(1, ds.duplicates.size());
-        String note = ds.duplicates.get(0).note;
-        assertTrue(note, note.contains("kept the resource (in cn=Library,cn=DS1,o=system"));
-        assertTrue(note, note.contains("left out the resource (in cn=Library,ou=shared,o=system"));
-        // the tree's limit, not IDM's (#133)
-        assertTrue(note, note.contains("IDM itself links from any number of Libraries"));
-        assertTrue(ds.duplicates.get(0).advice, ds.duplicates.get(0).advice.startsWith("The copy left out stays in the vault as it is"));
+        assertEquals(2, js.size());
+        assertTrue(ds.duplicates.toString(), ds.duplicates.isEmpty());
+        Resource own = (Resource) ds.index().get("library/es-misc");
+        assertEquals("function f(){}", own.text);
+        assertNull("the driver set's own Library: no DN recorded, so it follows the driver set's DN", own.meta.get("library.dn"));
+        assertEquals(java.util.Map.of("Library", "cn=Library,ou=shared,o=system"), ds.libraries);
+        Resource shared = (Resource) ds.index().get("libraries/Library/es-misc");
+        assertEquals("function shared(){}", shared.text);
+        assertEquals("cn=Library,ou=shared,o=system", shared.meta.get("library.dn"));
     }
 
     @Test

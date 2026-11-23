@@ -141,6 +141,16 @@ public final class VaultMapping {
 
     /** The same, with the driver set, for its drivers' channel names. */
     public static String pathDn(String dsDn, String path, DriverSet ds) {
+        if (path.startsWith("libraries/")) {
+            // libraries/<alias>/<name>: the alias's DN, recorded in its folder (docs/library-containers.md)
+            int slash = path.indexOf('/', "libraries/".length());
+            String alias = slash < 0 ? null : path.substring("libraries/".length(), slash);
+            String libraryDn = alias == null || ds == null ? null : ds.libraries.get(alias);
+            if (libraryDn == null) {
+                throw new IllegalArgumentException("not an artifact path, or a Library this tree doesn't know: " + path);
+            }
+            return "cn=" + escapeRdn(path.substring(slash + 1)) + "," + libraryDn;
+        }
         String[] parts = path.split("/");
         if (parts.length == 2 && parts[0].equals("library")) {
             return artifactDn(dsDn, Scope.LIBRARY, null, parts[1], ds);

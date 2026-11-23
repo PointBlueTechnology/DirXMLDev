@@ -44,6 +44,132 @@ public final class Libraries {
         return out;
     }
 
+    // ---- one folder per Library (docs/library-containers.md) ----
+
+    /**
+     * Gives every artifact from another Library or container its alias ({@link Artifact#library}), and
+     * {@code ds.libraries} an entry per alias. {@code extraDns} are containers that only links reach
+     * (their objects aren't in the source), so a link keeps its DN. An alias already in
+     * {@code ds.libraries} is kept. A new one is the container's name, plus the nearest parent names
+     * when another container has the same name ({@code Library@services}), and {@code ~2}... last.
+     */
+    public static void assignAliases(DriverSet ds, java.util.Collection<String> extraDns) {
+        java.util.Map<String, String> byNorm = new java.util.LinkedHashMap<>();   // norm(dn) → dn as read
+        for (Artifact a : ds.library.artifacts()) {
+            String dn = outside(ds, a);
+            if (dn != null) {
+                byNorm.putIfAbsent(norm(dn), dn);
+            }
+        }
+        String own = ownDn(ds);
+        for (String dn : extraDns) {
+            if (dn != null && !dn.isBlank() && (own == null || !norm(dn).equals(norm(own))) && (ds.dn == null || !norm(dn).equals(norm(ds.dn)))) {
+                byNorm.putIfAbsent(norm(dn), dn);
+            }
+        }
+        java.util.Map<String, String> aliasByNorm = new java.util.HashMap<>();
+        java.util.Set<String> taken = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (java.util.Map.Entry<String, String> e : ds.libraries.entrySet()) {
+            aliasByNorm.put(norm(e.getValue()), e.getKey());
+            taken.add(e.getKey());
+        }
+        List<String> fresh = new ArrayList<>();
+        for (String n : byNorm.keySet()) {
+            if (!aliasByNorm.containsKey(n)) {
+                fresh.add(n);
+            }
+        }
+        java.util.Map<String, List<String>> all = new java.util.HashMap<>();   // every DN in play, for the names that collide
+        for (java.util.Map.Entry<String, String> e : byNorm.entrySet()) {
+            all.put(e.getKey(), values(e.getValue()));
+        }
+        for (java.util.Map.Entry<String, String> e : ds.libraries.entrySet()) {
+            all.putIfAbsent(norm(e.getValue()), values(e.getValue()));
+        }
+        for (String n : fresh) {
+            String alias = alias(n, all);
+            String candidate = alias;
+            for (int i = 2; taken.contains(candidate); i++) {
+                candidate = alias + "~" + i;
+            }
+            taken.add(candidate);
+            aliasByNorm.put(n, candidate);
+            ds.libraries.put(candidate, byNorm.get(n));
+        }
+        for (Artifact a : ds.library.artifacts()) {
+            String dn = outside(ds, a);
+            if (dn != null && a.library == null) {
+                a.library = aliasByNorm.get(norm(dn));
+            }
+        }
+    }
+
+    /** The alias of the container at {@code dn}, or null when the set has none for it. */
+    public static String aliasOf(DriverSet ds, String dn) {
+        if (dn == null) {
+            return null;
+        }
+        String n = norm(dn);
+        for (java.util.Map.Entry<String, String> e : ds.libraries.entrySet()) {
+            if (norm(e.getValue()).equals(n)) {
+                return e.getKey();
+            }
+        }
+        return null;
+    }
+
+    /** The container's name, then its nearest parents' names as far as another container in {@code all} shares them. */
+    private static String alias(String n, java.util.Map<String, List<String>> all) {
+        List<String> mine = all.get(n);
+        int k = 0;
+        while (true) {
+            String candidate = candidate(mine, k);
+            boolean clash = false;
+            for (java.util.Map.Entry<String, List<String>> e : all.entrySet()) {
+                if (!e.getKey().equals(n) && candidate(e.getValue(), k).equalsIgnoreCase(candidate)) {
+                    clash = true;
+                    break;
+                }
+            }
+            if (!clash || k + 1 >= mine.size()) {
+                return candidate;
+            }
+            k++;
+        }
+    }
+
+    private static String candidate(List<String> values, int k) {
+        StringBuilder b = new StringBuilder(values.isEmpty() ? "library" : values.get(0));
+        if (k > 0 && values.size() > 1) {
+            b.append('@').append(String.join(".", values.subList(1, Math.min(values.size(), k + 1))));
+        }
+        return b.toString().replace('/', '_');
+    }
+
+    /** The RDN values of a DN, child first, as written ({@code cn=Library,o=services} → [Library, services]). */
+    private static List<String> values(String dn) {
+        List<String> out = new ArrayList<>();
+        for (String c : dn.trim().split("(?<!\\\\),")) {
+            int eq = c.indexOf('=');
+            out.add((eq < 0 ? c : c.substring(eq + 1)).trim().replace("\\,", ","));
+        }
+        return out;
+    }
+
+    /** A DN as the directory compares it: components trimmed, case ignored. */
+    public static String normDn(String dn) {
+        return norm(dn);
+    }
+
+    static String norm(String dn) {
+        List<String> out = new ArrayList<>();
+        for (String c : dn.trim().split("(?<!\\\\),")) {
+            int eq = c.indexOf('=');
+            out.add(eq < 0 ? c.trim() : c.substring(0, eq).trim() + "=" + c.substring(eq + 1).trim());
+        }
+        return String.join(",", out).toLowerCase();
+    }
+
     /** Why an edit can't change {@code a}. */
     public static String readOnly(DriverSet ds, Artifact a) {
         return a.path() + " is read-only here: it lives in " + outside(ds, a) + ", outside the driver set's Library ("

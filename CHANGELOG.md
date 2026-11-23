@@ -7,6 +7,21 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- **Every Library in its own place in the tree (L1 of docs/library-containers.md, #133):** objects of a Library
+  other than the driver set's own `cn=Library` now go in `libraries/<alias>/`, one folder per Library or
+  other container, beside `library/`. The folder's `library.xml` records the DN once. Two Libraries can each
+  hold an object of the same name: nothing is left out any more, and each link reaches the copy it names
+  (`libraries/<alias>/<name>`). The alias is the container's name, with the nearest parent names added only
+  when another container shares it (`Library@services`). `import-ldif`, `import-live` and `import-project`
+  write the new layout. The objects stay read-only references, as before: never compared, never deployed.
+  Compare matches links into these folders by DN, so two reads that name a folder differently agree.
+  Deploy and `export-project` give links into them the Library's DN.
+- **Trees imported before this version** keep other Libraries' objects in `library/` with `library.dn`, and
+  work as before. Import again to move them into `libraries/`: expect one commit that rewrites the links of
+  the drivers that use them.
+
 ## [0.76.0] - 2026-11-23
 
 ### Added

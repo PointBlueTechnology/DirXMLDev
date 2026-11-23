@@ -3290,6 +3290,14 @@ public final class ProjectWriter {
             if (ref.startsWith("library/")) {
                 return "cn=" + leaf + ",cn=Library," + dsDn;
             }
+            if (ref.startsWith("libraries/")) {
+                // another Library's object: its own DN (docs/library-containers.md)
+                try {
+                    return com.pointblue.dirxml.dev.deploy.VaultMapping.pathDn(dsDn, ref, treeDs);
+                } catch (IllegalArgumentException unknown) {
+                    // a Library the tree doesn't know: as a driver-set object
+                }
+            }
             return "cn=" + leaf + ",cn=" + owner.name + "," + dsDn;
         }
 

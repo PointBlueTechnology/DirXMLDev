@@ -19,9 +19,12 @@ DriverSet  name, dn, configValues (GCVs, XML), library, drivers[], meta
 
 - **Artifact** = `Policy` | `Resource`. Every artifact has a `name`, a `Scope`
   (`library`, `driver`, `subscriber`, `publisher`), the owning driver (unless library)
-  and a **path** that is its identity: `library/<name>`, `drivers/<driver>/<name>`,
+  and a **path** that is its identity: `library/<name>`, `libraries/<alias>/<name>` (an
+  object of another Library or container, read-only; `Artifact.library` is the alias and
+  `DriverSet.libraries` maps it to the DN), `drivers/<driver>/<name>`,
   `drivers/<driver>/subscriber/<name>`, `drivers/<driver>/publisher/<name>`. Names are
-  unique within a scope (eDir enforces cn uniqueness per container), so paths are unique.
+  unique within a container (eDir enforces cn uniqueness per container), and each
+  container has its own path prefix, so paths are unique.
 - **Policy** holds the raw content element (`<policy>`, `<xsl:stylesheet>` /
   `<xsl:transform>`, `<attr-name-map>`) and its derived `kind`. **Resource** holds a
   `contentType` and either XML content (mapping tables) or text (ECMAScript).
@@ -63,6 +66,8 @@ Sources feed the same model: driver / driver-set **export** (`ExportReader`), **
     <name>.mapping-table.xml
     <name>.js                       ECMAScript resource (text)
     <name>.resource.xml             other XML resources
+  libraries/<alias>/                another Library or container (docs/library-containers.md)
+    library.xml                     manifest: name, dn, artifacts (as library/library.xml)
   drivers/<driver>/
     driver.xml                      manifest: dn, shim, config files, artifacts, LINKAGE
     shim-config-info.xml  config-values.xml  driver-filter.xml  engine-control-values.xml

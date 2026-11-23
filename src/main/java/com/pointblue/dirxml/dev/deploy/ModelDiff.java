@@ -1380,12 +1380,30 @@ public final class ModelDiff {
         for (PolicySet set : PolicySet.values()) {
             List<String> oldRefs = refs(a.links(set));
             List<String> newRefs = refs(b.links(set));
-            if (!oldRefs.equals(newRefs)) {
+            // a link into another Library compares by its DN: two reads can name its folder differently
+            if (!linkKeys(from, a.links(set)).equals(linkKeys(to, b.links(set)))) {
                 changes.add(new Change(Kind.DRIVER_LINKAGE, a.name, "drivers/" + a.name, set.key,
                     "~ linkage changed: " + set.key,
                     textDiff(String.join("\n", oldRefs), String.join("\n", newRefs))));
             }
         }
+    }
+
+    /** Each link's identity: its path, or for one into another Library ({@code libraries/<alias>/X}), its DN. */
+    private static List<String> linkKeys(DriverSet ds, List<PolicyLink> links) {
+        List<String> out = new ArrayList<>();
+        for (PolicyLink l : links) {
+            String key = l.ref;
+            if (ds != null && l.ref.startsWith("libraries/")) {
+                try {
+                    key = "dn:" + com.pointblue.dirxml.dev.model.Libraries.normDn(VaultMapping.pathDn(ds.dn, l.ref, ds));
+                } catch (IllegalArgumentException unknown) {
+                    // an alias the tree doesn't know: compare the path
+                }
+            }
+            out.add(key);
+        }
+        return out;
     }
 
     private static List<String> refs(List<PolicyLink> links) {

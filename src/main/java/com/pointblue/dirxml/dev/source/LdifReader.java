@@ -206,7 +206,7 @@ public final class LdifReader {
         }
 
         // 3. artifacts, placed by DN structure; each one's path by its DN, so a link finds it wherever it is
-        Map<String, String> refByDn = new HashMap<>();
+        Map<String, com.pointblue.dirxml.dev.model.Artifact> refByDn = new HashMap<>();
         for (Entry e : entries) {
             boolean policy = e.hasClass("DirXML-Rule") || e.hasClass("DirXML-StyleSheet");
             // a package's GCV definitions: class DirXML-GlobalConfigDef, content in
@@ -247,7 +247,7 @@ public final class LdifReader {
                     pol.meta.put(DuplicateArtifacts.LIBRARY_DN, otherLibrary);
                 }
                 copyMeta(e, pol.meta, e.hasClass("DirXML-StyleSheet") ? "DirXML-StyleSheet" : "DirXML-Rule");
-                refByDn.put(norm(e.dn), pol.path());
+                refByDn.put(norm(e.dn), pol);
                 if (p.scope == Scope.LIBRARY) {
                     ds.library.policies.add(pol);
                 } else if (p.scope == Scope.SUBSCRIBER) {
@@ -279,7 +279,7 @@ public final class LdifReader {
                     r.meta.put(DuplicateArtifacts.LIBRARY_DN, otherLibrary);
                 }
                 copyMeta(e, r.meta, gcvDef ? "DirXML-GlobalConfigDef" : "DirXML-Resource");
-                refByDn.put(norm(e.dn), r.path());
+                refByDn.put(norm(e.dn), r);
                 if (p.scope == Scope.LIBRARY) {
                     ds.library.resources.add(r);
                 } else {
@@ -404,6 +404,19 @@ public final class LdifReader {
             ds.templates.add(t);
         }
 
+        // 3f. each other Library or container its alias, libraries/<alias>/ (docs/library-containers.md):
+        // those the artifacts came from, and those only a link reaches (the target isn't in the source)
+        List<String> linkOnly = new ArrayList<>();
+        for (Entry e : driverEntries) {
+            for (String link : e.all("DirXML-Policies")) {
+                String target = linkTarget(link);
+                if (target != null && !refByDn.containsKey(norm(target)) && outsideOwnLibrary(target, dsDn, libraries)) {
+                    linkOnly.add(parentDn(target));
+                }
+            }
+        }
+        com.pointblue.dirxml.dev.model.Libraries.assignAliases(ds, linkOnly);
+
         // 4. linkage: DirXML-Policies = "<policyDN>#<order>#<setId>"
         for (Entry e : driverEntries) {
             Driver d = driversByLowerName.get(rdn(e.dn).toLowerCase());
@@ -427,7 +440,13 @@ public final class LdifReader {
                 }
                 // the target's path as read, by its DN; a target the entries don't hold, by the DN's shape
                 // (outside the set: another Library, which the tree keeps in library/)
-                String ref = refByDn.get(norm(policyDn));
+                com.pointblue.dirxml.dev.model.Artifact target = refByDn.get(norm(policyDn));
+                String ref = target == null ? null : target.path();
+                String alias = ref != null || !outsideOwnLibrary(policyDn, dsDn, libraries) ? null
+                    : com.pointblue.dirxml.dev.model.Libraries.aliasOf(ds, parentDn(policyDn));
+                if (alias != null) {
+                    ref = com.pointblue.dirxml.dev.model.Artifact.libraryPath(alias, rdn(policyDn));
+                }
                 if (ref == null) {
                     Placement p = !isUnder(policyDn, dsDn) ? new Placement(Scope.LIBRARY, null)
                         : channels.containsKey(norm(parentDn(policyDn))) ? channels.get(norm(parentDn(policyDn)))
@@ -509,6 +528,18 @@ public final class LdifReader {
         out.add(first);
         out.addAll(rest);
         return out;
+    }
+
+    /**
+     * A link target in another Library or container than the set's own Library: outside the set, or in a
+     * Library inside it other than {@code cn=Library}.
+     */
+    private static boolean outsideOwnLibrary(String dn, String dsDn, java.util.Set<String> libraries) {
+        String parent = parentDn(dn);
+        if (!isUnder(dn, dsDn)) {
+            return true;
+        }
+        return libraries.contains(norm(parent)) && !sameDn(parent, "cn=Library," + dsDn);
     }
 
     /** The DN in a {@code DirXML-Policies} value ({@code <dn>#<order>#<set>}), or null. */

@@ -38,6 +38,10 @@ tree/
     <name>.js
     <name>.mapping-table.xml
     <name>.gcv.xml
+  libraries/                      other Libraries the drivers link from (read-only)
+    Library@services/
+      library.xml                 its DN, and its objects
+      <name>.policy.xml
   drivers/
     AD Driver/
       driver.xml
@@ -125,14 +129,33 @@ driver. `library.xml` lists them. A driver uses a library object by linking
 it (`policy.link`); the link is recorded in that driver's `driver.xml`, and
 the file stays in `library/`.
 
-A driver set can also use Libraries in other containers of the vault. A Designer
-project records them, and `import-project` puts their objects in `library/`
-too, each with a `library.dn` entry in `library.xml` naming the Library it lives
-in. `import-ldif` does the same for a second Library inside the driver set (any
-Library but `cn=Library,<driver set>`) and for a policy in a container that is
-no driver or channel. Given an LDIF of more than the driver set, it also does it
-for every object of a Library outside every driver set, and for the objects the
-driver set links from another driver set's Library. These are read-only references:
+### `libraries/<alias>/`
+
+A driver set can also use Libraries in other containers of the vault. Each one
+gets a folder of its own under `libraries/`, beside `library/`
+([library-containers.md](library-containers.md)). The folder's `library.xml`
+records the Library's DN once (`dn="cn=Library,o=services"`) and lists its
+objects. A link to one of them is `libraries/<alias>/<name>`, so two Libraries
+can each hold an object of the same name and every link reaches the one it names.
+
+Which containers get a folder:
+- `import-project`: every Library a Designer project's driver set uses, other than
+  its own `cn=Library`.
+- `import-ldif` and `import-live`: a second Library inside the driver set (any
+  Library but `cn=Library,<driver set>`), and any other container a driver links
+  from that is no driver or channel.
+- `import-ldif`, given an LDIF of more than the driver set: also every object of a
+  Library outside every driver set, and the objects the driver set links from
+  another driver set's Library. A Library that only a link reaches (its object
+  isn't in the LDIF) gets a folder with just its DN, so the link keeps it.
+
+The alias is the container's name. When another container in the tree has the
+same name, the nearest parent names are added (`Library@services`,
+`customizing@services.global`). It's a label: the DN in `library.xml` is what
+counts. Two reads of a vault can name a folder differently; compare matches links
+into these folders by DN.
+
+These objects are read-only references:
 - **Links** to them resolve, and a deploy writes their real DN into a driver's
   links.
 - **Compare and deploy** leave them alone: a deploy never creates a copy under
@@ -140,13 +163,13 @@ driver set links from another driver set's Library. These are read-only referenc
 - **Edits:** an edit that would change one is refused, even with `--force`.
   Change it in Designer, or in that Library.
 
-`validate` lists them as `library-other` information. When the driver set's own
-Library and another one both hold an object of the same name, the tree keeps the
-driver set's own copy (`import-project` and `import-ldif` say so in a `NOTE:` line).
-That is the tree's limit, not IDM's: a driver set can link from any number of
-Libraries, and the vault keeps every copy. When the copies differ, the note says
-so and names the drivers that link the copy left out: in the tree their links
-read the kept copy, and a deploy that rewrites their links points them at it.
+`validate` lists them as `library-other` information.
+
+**Trees imported before 0.77.0** hold these objects in `library/`, each with a
+`library.dn` entry, and only one object of each name. They still work as they
+did. Import again (`import-ldif`, `import-project`, or **Update this branch** in
+the web) to move them into `libraries/`. Expect one commit that rewrites the
+links of every driver that uses them.
 
 The DN is the one in the project or the LDIF. If the other Library sits elsewhere in
 another environment's vault, a driver deployed there links to a DN that vault
