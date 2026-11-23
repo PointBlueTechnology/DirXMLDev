@@ -12,6 +12,9 @@ idm vault.schema tree/ --env lab                 # cn=schema → schema/vault.xm
 idm query tree/ schema                           # classes, with the custom ones marked *
 ```
 
+`import-ldif` fills `schema/vault.xml` too when the LDIF carries the `cn=schema` entry (its
+`attributeTypes` and `objectClasses`); an LDIF without it leaves the tree without a schema, as before.
+
 Every attribute (NDS and LDAP names, OID, syntax, single-valued, no-user-modification) and class
 (kind, superclasses, mandatory and optional attributes, containment, naming attributes).
 Importing a Designer project reads its `…_schema.xml` into the same file — that is the project's

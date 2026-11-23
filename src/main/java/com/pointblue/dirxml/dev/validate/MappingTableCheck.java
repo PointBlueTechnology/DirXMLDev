@@ -16,7 +16,9 @@ import java.util.Map;
  * the driver's reach (its own resources or the library), and the {@code src}/
  * {@code dest} columns it names must be columns of that table. A table reference
  * that goes through a local variable ({@code table="$dn$"}) is resolved by the engine
- * at run time and can't be checked statically — reported as {@code INFO}.
+ * at run time and can't be checked statically — reported as {@code INFO}. So is a column
+ * named by a local variable or a GCV ({@code src="$lv.map.col$"}, {@code dest="~col~"}, #140):
+ * its value is known only when the policy runs or on each server.
  *
  * <p>Codes: {@code mapping-table-missing} (E), {@code mapping-table-column} (E),
  * {@code mapping-table-dynamic} (I), {@code mapping-table-malformed} (E).
@@ -120,6 +122,13 @@ public final class MappingTableCheck implements Check {
             String src = map.hasAttribute("src") ? map.getAttribute("src") : map.getAttribute("source");
             String dest = map.getAttribute("dest");
             for (String c : new String[] {src, dest}) {
+                if (c != null && (c.contains("$") || c.contains("~"))) {
+                    String what = "column '" + c + "' of " + name;
+                    if (!dynamic.contains(what)) {
+                        dynamic.add(what);
+                    }
+                    continue;
+                }
                 if (c != null && !c.isBlank() && !cols.contains(c)) {
                     r.add(Finding.error("mapping-table-column", p.path(),
                         "<token-map> names column '" + c + "' but table '" + name + "' has columns: " + String.join(", ", cols)));
@@ -128,7 +137,8 @@ public final class MappingTableCheck implements Check {
         }
         if (!dynamic.isEmpty()) {
             r.add(Finding.info("mapping-table-dynamic", p.path(),
-                "Map token table(s) resolved at run time, not checked here: " + String.join(", ", dynamic)));
+                "Map token table(s) or column(s) named by a variable or GCV, resolved when the policy runs, not checked here: "
+                    + String.join(", ", dynamic)));
         }
     }
 
