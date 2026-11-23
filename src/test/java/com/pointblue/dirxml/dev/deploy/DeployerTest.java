@@ -227,6 +227,27 @@ public class DeployerTest {
         assertTrue(last.detail, last.detail.contains("--delete-all: entitlements"));
     }
 
+    /**
+     * A tree whose trace size limit differs from the vault's, deployed without {@code --trace-size-limit}: the plan
+     * leaves the vault's as it is, and verify doesn't call that a mismatch (it did, so the deploy read FAILED).
+     */
+    @Test
+    public void aTraceSizeLimitLeftAloneIsNoVerifyMismatch() throws Exception {
+        DriverSet ds = VaultMappingTest.model();
+        FakeVault vault = seedVault(ds);
+        DriverSet tree = VaultMappingTest.model();
+        tree.driver("AD").traceSizeLimit = "2048";
+        tree.driver("AD").links.add(new com.pointblue.dirxml.dev.model.PolicyLink(
+            com.pointblue.dirxml.dev.model.PolicySet.SUB_COMMAND, "library/lib-shared", 0));   // a change to deploy
+        Path dir = tmp.newFolder("tree").toPath();
+        AsCodeWriter.write(tree, dir);
+
+        Deployer.Result r = new Deployer(options(dir, stgEnv("test"), List.of()), vault).run();
+        assertTrue(r.text(), r.ok);
+        assertTrue(r.text(), r.verified);
+        assertNull("the vault keeps its own", vault.read("cn=AD," + DS).string("DirXML-TraceSizeLimit"));
+    }
+
     private static void git(Path dir, String... args) throws Exception {
         List<String> cmd = new ArrayList<>(List.of("git", "-C", dir.toString()));
         cmd.addAll(List.of(args));

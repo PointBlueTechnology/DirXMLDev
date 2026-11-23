@@ -7,6 +7,25 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- **Vault reads take in other Libraries (#115):** `import-live`, Compare, Plan, deploy's own read and capture now
+  read the objects the driver set's links name outside it, as the LDIF and Designer
+  imports do. A Library outside every driver set is read whole; from another driver set's Library, or any other
+  container, only what is linked. They land in `libraries/<alias>/` as read-only references, so a tree captured
+  from the vault no longer reports `link-unresolved` for them. An object a link names that can't be read is a note
+  naming its DN; the read goes on.
+- **Folder names kept:** a read written over an existing tree (`import-live`, a capture) keeps the tree's folder
+  name for each Library it already has. A read sees only the Libraries its links name, so it could name one
+  differently (`Library` against the import's `Library@services`).
+- **The LDIF import** takes a linked object from any container outside the driver set, not only from a Library.
+
+### Fixed
+
+- **Deploy's verify and the trace size limit:** a deploy without `--trace-size-limit` leaves the vault's trace size
+  limit as it is, but verify still compared it, so the deploy ended `verify: MISMATCH` / FAILED when the tree's
+  limit differed. Verify now leaves it alone too (since 0.64.0).
+
 ## [0.78.0] - 2026-11-23
 
 ### Changed
