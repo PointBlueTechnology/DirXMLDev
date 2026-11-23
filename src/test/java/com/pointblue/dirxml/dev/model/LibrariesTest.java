@@ -102,4 +102,95 @@ public class LibrariesTest {
         }
         assertTrue(said);
     }
+
+    // ---- a folder per Library (docs/library-containers.md) ----
+
+    private static Resource from(String name, String dn) {
+        Resource r = js(name, "function " + name.replace('-', '_') + "(){}");
+        r.meta.put(DuplicateArtifacts.LIBRARY_DN, dn);
+        return r;
+    }
+
+    /** Each container's name, plus the nearest parents' names only where another container shares it. */
+    @Test
+    public void aliasesNameEachLibrary() {
+        DriverSet ds = new DriverSet("DS");
+        ds.dn = "cn=DS,o=system";
+        ds.library.resources.add(from("a", "cn=Library,o=services"));
+        ds.library.resources.add(from("b", "cn=Library,ou=idm,o=services"));
+        ds.library.resources.add(from("c", "cn=customizing,o=services"));
+        ds.library.resources.add(from("d", "cn=customizing,ou=services,o=global"));
+        ds.library.resources.add(from("e", "cn=SKyPRO,cn=DS,o=system"));
+        ds.library.resources.add(from("f", "CN=SKyPRO, cn=DS, o=system"));   // the same container, written otherwise
+        Libraries.assignAliases(ds, List.of("cn=OnlyLinked,o=elsewhere", "cn=Library,cn=DS,o=system"));
+        assertEquals(java.util.Map.of(
+            "Library@services", "cn=Library,o=services",
+            "Library@idm", "cn=Library,ou=idm,o=services",
+            "customizing@services", "cn=customizing,o=services",
+            "customizing@services.global", "cn=customizing,ou=services,o=global",
+            "SKyPRO", "cn=SKyPRO,cn=DS,o=system",
+            "OnlyLinked", "cn=OnlyLinked,o=elsewhere"), ds.libraries);
+        assertEquals("libraries/SKyPRO/f", ds.library.resources.get(5).path());
+        assertEquals("libraries/Library@idm/b", ds.library.resources.get(1).path());
+
+        // an alias already given is kept when another container joins
+        ds.library.resources.add(from("g", "cn=SKyPRO,o=other"));
+        Libraries.assignAliases(ds, List.of());
+        assertEquals("cn=SKyPRO,cn=DS,o=system", ds.libraries.get("SKyPRO"));
+        assertEquals("libraries/SKyPRO@other/g", ds.library.resources.get(6).path());
+    }
+
+    /** The tree on disk: a folder per Library with its DN; objects without per-object DNs; read back the same. */
+    @Test
+    public void foldersRoundTripThroughTheTree() throws Exception {
+        DriverSet ds = set();
+        ds.library.resources.add(from("es-shared", "cn=Library,o=services"));   // same name, another Library
+        Libraries.assignAliases(ds, List.of("cn=Gone,o=services"));            // a Library only a link reaches
+        Driver loop = ds.drivers.get(0);
+        loop.links.clear();
+        loop.links.add(new PolicyLink(PolicySet.ECMASCRIPT, "library/es-own", 0));
+        loop.links.add(new PolicyLink(PolicySet.ECMASCRIPT, "libraries/Library@shared/es-shared", 1));
+        loop.links.add(new PolicyLink(PolicySet.ECMASCRIPT, "libraries/Library@services/es-shared", 2));
+        loop.links.add(new PolicyLink(PolicySet.ECMASCRIPT, "libraries/Gone/es-missing", 3));
+        assertEquals(java.util.Set.of("Library@shared", "Library@services", "Gone"), ds.libraries.keySet());
+
+        Path dir = tmp.newFolder("tree").toPath();
+        AsCodeWriter.write(ds, dir);
+        String manifest = java.nio.file.Files.readString(dir.resolve("libraries/Library@services/library.xml"));
+        assertTrue(manifest, manifest.contains("dn=\"cn=Library,o=services\""));
+        assertFalse("the DN is the folder's, not each object's", manifest.contains("library.dn"));
+        assertTrue(java.nio.file.Files.exists(dir.resolve("libraries/Gone/library.xml")));
+
+        DriverSet back = com.pointblue.dirxml.dev.ascode.AsCodeReader.read(dir);
+        assertEquals(ds.libraries, back.libraries);
+        assertEquals(ds.index().keySet(), back.index().keySet());
+        Artifact services = back.resolve("libraries/Library@services/es-shared");
+        assertEquals("cn=Library,o=services", services.meta.get(DuplicateArtifacts.LIBRARY_DN));
+        assertEquals("Library@services", services.library);
+        assertEquals(List.of("libraries/Gone/es-missing"), back.unresolvedLinks().stream().map(l -> l.ref).collect(java.util.stream.Collectors.toList()));
+        assertEquals(List.of(
+                "cn=es-own,cn=Library,cn=DS,o=system#0#3",
+                "cn=es-shared," + SHARED + "#1#3",
+                "cn=es-shared,cn=Library,o=services#2#3",
+                "cn=es-missing,cn=Gone,o=services#3#3"),
+            VaultMapping.policiesValues(back.dn, back.drivers.get(0), back));
+
+        // another read of the vault that named the folders otherwise is the same linkage
+        DriverSet renamed = com.pointblue.dirxml.dev.ascode.AsCodeReader.read(dir);
+        renamed.libraries.clear();
+        renamed.libraries.put("Shared", SHARED);
+        renamed.libraries.put("Services", "cn=Library,o=services");
+        renamed.libraries.put("Gone", "cn=Gone,o=services");
+        for (Artifact a : renamed.library.artifacts()) {
+            if ("Library@shared".equals(a.library)) {
+                a.library = "Shared";
+            } else if ("Library@services".equals(a.library)) {
+                a.library = "Services";
+            }
+        }
+        for (PolicyLink l : renamed.drivers.get(0).links) {
+            l.ref = l.ref.replace("Library@shared", "Shared").replace("Library@services", "Services");
+        }
+        assertTrue(ModelDiff.of(back, renamed).changes().toString(), ModelDiff.of(back, renamed).changes().isEmpty());
+    }
 }

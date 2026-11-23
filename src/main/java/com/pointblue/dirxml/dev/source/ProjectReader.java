@@ -240,6 +240,14 @@ public final class ProjectReader {
                 "cn=" + r.name + ",cn=Library," + ds.dn + "#" + gcN + "#" + PolicySet.GCV.id);
             gcN++;
         }
+        // every other Library its folder, libraries/<alias>/ (docs/library-containers.md), before the
+        // drivers' links are read, so a link to one of its objects gets that path
+        com.pointblue.dirxml.dev.model.Libraries.assignAliases(ds, java.util.List.of());
+        for (Artifact a : ds.library.artifacts()) {
+            if (a.library != null && a.meta.get("designer.id") != null) {
+                idx.setLibrary(a.meta.get("designer.id"), a.library);
+            }
+        }
 
         Map<String, Driver> driversByDesignerId = new LinkedHashMap<>();
         for (String drvKey : relationKeys(m, "Idm:Drivers")) {
@@ -1680,7 +1688,18 @@ public final class ProjectReader {
         /** The artifact path already recorded for this designer id, or null if unknown. */
         String artifactPath(String id) {
             ArtifactRef ref = registry.get(id);
-            return ref == null ? null : Artifact.path(ref.scope, ref.driver, ref.name);
+            if (ref == null) {
+                return null;
+            }
+            return ref.library != null ? Artifact.libraryPath(ref.library, ref.name) : Artifact.path(ref.scope, ref.driver, ref.name);
+        }
+
+        /** The other Library a recorded artifact lives in ({@code libraries/<alias>/}). */
+        void setLibrary(String id, String alias) {
+            ArtifactRef ref = registry.get(id);
+            if (ref != null) {
+                ref.library = alias;
+            }
         }
     }
 
@@ -1689,6 +1708,8 @@ public final class ProjectReader {
         final Scope scope;
         final String driver;
         final String name;
+        /** The alias of another Library it lives in; null for the driver set's own. */
+        String library;
         ArtifactRef(Scope scope, String driver, String name) {
             this.scope = scope;
             this.driver = driver;

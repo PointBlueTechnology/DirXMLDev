@@ -70,7 +70,7 @@ public final class AsCodeWriter {
      * everything else in a tree (cases, deploy-log, README …) is the repository's own.
      */
     public static final java.util.List<String> MANAGED_PATHS = java.util.List.of(
-        DRIVERSET_MANIFEST, CONFIG_VALUES_FILE, "library", "drivers", "jobs", "rbe-policies", "templates");
+        DRIVERSET_MANIFEST, CONFIG_VALUES_FILE, "library", "libraries", "drivers", "jobs", "rbe-policies", "templates");
 
     public static void write(DriverSet ds, Path root) throws IOException {
         Files.createDirectories(root);
@@ -99,6 +99,11 @@ public final class AsCodeWriter {
         for (Driver d : drivers) {
             m.child("driver").attr("name", d.name).attr("dir", "drivers/" + fileSafe(d.name));
         }
+        // the other Libraries and containers: a folder each, its DN in the folder's library.xml
+        Map<String, String> libraryDirs = libraryDirs(ds);
+        for (Map.Entry<String, String> e : libraryDirs.entrySet()) {
+            m.child("other-library").attr("name", e.getKey()).attr("dir", e.getValue());
+        }
         writeText(root.resolve(DRIVERSET_MANIFEST), m.toXml());
         com.pointblue.dirxml.dev.deploy.Overrides.write(root, ds.overrides);
         com.pointblue.dirxml.dev.deploy.KnownDifferences.write(root, ds.known);
@@ -107,8 +112,16 @@ public final class AsCodeWriter {
         Path lib = root.resolve("library");
         Files.createDirectories(lib);
         Manifest lm = new Manifest("library");
-        writeArtifacts(lm, lib, sorted(ds.library.artifacts()), Scope.LIBRARY);
+        writeArtifacts(lm, lib, sorted(ownLibrary(ds)), Scope.LIBRARY);
         writeText(lib.resolve(LIBRARY_MANIFEST), lm.toXml());
+        for (Map.Entry<String, String> e : libraryDirs.entrySet()) {
+            Path dir = root.resolve(e.getValue());
+            Files.createDirectories(dir);
+            Manifest om = new Manifest("library");
+            om.attr("name", e.getKey()).attr("dn", ds.libraries.get(e.getKey()));
+            writeArtifacts(om, dir, sorted(inLibrary(ds, e.getKey())), Scope.LIBRARY);
+            writeText(dir.resolve(LIBRARY_MANIFEST), om.toXml());
+        }
 
         // drivers
         for (Driver d : drivers) {
@@ -335,8 +348,58 @@ public final class AsCodeWriter {
                     writeXml(dir.resolve(file), p.content);
                 }
             }
-            e.meta(a.meta);
+            if (a.library != null) {
+                // the Library's DN is the folder's (library.xml dn=), not each object's
+                Map<String, String> meta = new LinkedHashMap<>(a.meta);
+                meta.remove(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN);
+                e.meta(meta);
+            } else {
+                e.meta(a.meta);
+            }
         }
+    }
+
+    /** The driver set's own Library's artifacts (and, in a tree from before library folders, the marked others). */
+    static List<Artifact> ownLibrary(DriverSet ds) {
+        List<Artifact> out = new ArrayList<>();
+        for (Artifact a : ds.library.artifacts()) {
+            if (a.library == null) {
+                out.add(a);
+            }
+        }
+        return out;
+    }
+
+    static List<Artifact> inLibrary(DriverSet ds, String alias) {
+        List<Artifact> out = new ArrayList<>();
+        for (Artifact a : ds.library.artifacts()) {
+            if (alias.equals(a.library)) {
+                out.add(a);
+            }
+        }
+        return out;
+    }
+
+    /** Each other Library's folder, {@code libraries/<alias>}, by alias: file-safe and unique ignoring case. */
+    public static Map<String, String> libraryDirs(DriverSet ds) {
+        java.util.Set<String> aliases = new java.util.TreeSet<>(ds.libraries.keySet());
+        for (Artifact a : ds.library.artifacts()) {
+            if (a.library != null) {
+                aliases.add(a.library);
+            }
+        }
+        Map<String, String> out = new LinkedHashMap<>();
+        Set<String> used = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (String alias : aliases) {
+            String dir = fileSafe(alias);
+            String candidate = dir;
+            for (int i = 2; used.contains(candidate); i++) {
+                candidate = dir + "~" + i;
+            }
+            used.add(candidate);
+            out.put(alias, "libraries/" + candidate);
+        }
+        return out;
     }
 
     // ---- naming ----
@@ -382,7 +445,10 @@ public final class AsCodeWriter {
      */
     public static Map<String, String> files(DriverSet ds) {
         Map<String, String> out = new LinkedHashMap<>();
-        fileNames(out, "library/", sorted(ds.library.artifacts()), "");
+        fileNames(out, "library/", sorted(ownLibrary(ds)), "");
+        for (Map.Entry<String, String> e : libraryDirs(ds).entrySet()) {
+            fileNames(out, e.getValue() + "/", sorted(inLibrary(ds, e.getKey())), "");
+        }
         for (Driver d : ds.drivers) {
             String dir = "drivers/" + fileSafe(d.name) + "/";
             List<Artifact> driverScope = new ArrayList<>(d.policies);

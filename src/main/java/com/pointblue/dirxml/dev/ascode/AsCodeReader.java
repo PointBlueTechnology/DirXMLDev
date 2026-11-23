@@ -70,6 +70,32 @@ public final class AsCodeReader {
             }
         }
 
+        // the other Libraries and containers, a folder each (docs/library-containers.md)
+        for (Element o : children(dsm, "other-library")) {
+            Path dir = root.resolve(attr(o, "dir"));
+            if (!Files.exists(dir.resolve(AsCodeWriter.LIBRARY_MANIFEST))) {
+                continue;
+            }
+            Element om = manifest(dir.resolve(AsCodeWriter.LIBRARY_MANIFEST));
+            String alias = attr(om, "name") != null ? attr(om, "name") : attr(o, "name");
+            String dn = attr(om, "dn");
+            if (alias == null || dn == null) {
+                continue;
+            }
+            ds.libraries.put(alias, dn);
+            List<Policy> policies = new ArrayList<>();
+            List<Resource> resources = new ArrayList<>();
+            for (Element a : children(om, "artifact")) {
+                readArtifact(a, dir, null, policies, resources);
+            }
+            for (Artifact a : concat(policies, resources)) {
+                a.library = alias;
+                a.meta.put(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN, dn);
+            }
+            ds.library.policies.addAll(policies);
+            ds.library.resources.addAll(resources);
+        }
+
         // drivers
         for (Element d : children(dsm, "driver")) {
             Path dir = root.resolve(attr(d, "dir"));
@@ -79,6 +105,12 @@ public final class AsCodeReader {
         // load one, and validation reports the other (DuplicateArtifactCheck)
         ds.duplicates.addAll(com.pointblue.dirxml.dev.model.DuplicateArtifacts.drop(ds));
         return ds;
+    }
+
+    private static List<Artifact> concat(List<Policy> policies, List<Resource> resources) {
+        List<Artifact> out = new ArrayList<>(policies);
+        out.addAll(resources);
+        return out;
     }
 
     private static Driver readDriver(Path dir) throws IOException {

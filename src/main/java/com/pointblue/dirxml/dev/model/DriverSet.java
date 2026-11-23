@@ -23,6 +23,12 @@ public final class DriverSet {
     /** The vault's schema as the tree keeps it ({@code schema/vault.xml}), or null until read. */
     public VaultSchema schema;
     public final Library library = new Library();
+    /**
+     * The other Libraries and containers the set's artifacts or links reach, by alias
+     * ({@code libraries/<alias>/}) → DN (docs/library-containers.md). Their artifacts are in
+     * {@link #library} with {@link Artifact#library} set.
+     */
+    public final java.util.Map<String, String> libraries = new java.util.TreeMap<>();
     public final List<Driver> drivers = new ArrayList<>();
     /** The servers that serve this set ({@code DirXML-ServerList}), the connection's own included; empty when unknown. */
     public final List<String> servers = new ArrayList<>();

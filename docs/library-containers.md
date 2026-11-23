@@ -1,6 +1,6 @@
 # Every Library in its own place in the tree (design note)
 
-**Status: decided 2026-11-23 (D1–D6 below); to build in L1–L3.** Follows #111 (other Libraries
+**Status: decided 2026-11-23 (D1–D6 below). L1 built (core 0.77.0); L2 and L3 to build.** Follows #111 (other Libraries
 read-only) and #133 (an LDIF of a whole vault; a second Library inside the driver set).
 
 ## Why
@@ -51,7 +51,7 @@ tree/
       library.xml                dn="cn=Library,o=services"
       NQCE-lib-AJC.resource.xml  its own copy, no longer left out
     customizing@services/
-    customizing@global/          cn=customizing,ou=services,o=global
+    customizing@services.global/ cn=customizing,ou=services,o=global
 ```
 
 - **Paths:** `libraries/<alias>/<name>`. A link to `cn=NQCE-lib-AJC,cn=Library,o=services` is
@@ -60,7 +60,7 @@ tree/
   `library.dn` meta. `pathDn` reads it to give the link's DN back to a deploy.
 - **The alias** is the Library's `cn` when no other Library in the tree has that name. Otherwise
   it is the `cn` plus the fewest parent RDN values that make it unique (`Library@services`,
-  `customizing@global`), with `~2` as a last resort. It's a label only: the DN in `library.xml`
+  `customizing@services.global`), with `~2` as a last resort. It's a label only: the DN in `library.xml`
   is what counts.
 - **Two of one name across Libraries stop being duplicates.** Each has its own path.
   `DuplicateArtifacts` remains only for two objects of one name in one container, as a Designer
