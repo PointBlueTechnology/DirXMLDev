@@ -346,6 +346,22 @@ public class ValidatorTest {
 
     // ---- mapping tables ----
 
+    /** #140: a column named by a local variable or a GCV is known only when the policy runs: info, not an error. */
+    @Test
+    public void mappingTableColumnFromAVariableIsNotChecked() {
+        DriverSet ds = clean();
+        addSub(ds, "maps", "<policy><rule><description>r</description><conditions/><actions>"
+            + "<do-set-local-variable name=\"x\"><arg-string>"
+            + "<token-map dest=\"$lv.map.col$\" src=\"code\" table=\"..\\..\\Library\\CodeMap\"><token-text>1</token-text></token-map>"
+            + "<token-map dest=\"~map.col~\" src=\"code\" table=\"..\\..\\Library\\CodeMap\"><token-text>1</token-text></token-map>"
+            + "</arg-string></do-set-local-variable></actions></rule></policy>");
+        Report r = owned().validate(ds);
+        assertTrue(r.text(), r.withCode("mapping-table-column").isEmpty());
+        assertEquals(r.text(), 1, r.withCode("mapping-table-dynamic").size());
+        String msg = r.withCode("mapping-table-dynamic").get(0).message;
+        assertTrue(msg, msg.contains("column '$lv.map.col$' of CodeMap") && msg.contains("column '~map.col~' of CodeMap"));
+    }
+
     @Test
     public void mappingTableMissingAndColumn() {
         DriverSet ds = clean();

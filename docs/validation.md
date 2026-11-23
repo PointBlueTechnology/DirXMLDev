@@ -150,7 +150,7 @@ run time, so an undefined one fails the rule on its first event.
 | `mapping-table-malformed` | E | no `<col-def>`, or no content |
 | `mapping-table-ragged-row` | W | rows whose `<col>` count differs from the column count — the engine loads them (missing cells read empty) but it's almost always a mistake |
 | `resource-content-mismatch` | W | content type says mapping table but the root element is something else |
-| `mapping-table-dynamic` | I | `table="$var$"` — resolved at run time, not checked |
+| `mapping-table-dynamic` | I | `table="$var$"`, or a `src`/`dest` column named by a local variable or GCV (`$lv.col$`, `~col~`): resolved when the policy runs, not checked |
 
 ### `ecmascript` — EcmaScriptCheck
 

@@ -407,4 +407,41 @@ public class LdifReaderTest {
         // a driver read without names keeps the defaults
         assertEquals("cn=Publisher,cn=New," + set, com.pointblue.dirxml.dev.deploy.VaultMapping.channelDn(set, "New", Scope.PUBLISHER, ds));
     }
+
+    /** #139: an LDIF that carries cn=schema gives the tree the vault's schema, as vault.schema does live. */
+    @Test
+    public void theSchemaComesFromCnSchema() throws Exception {
+        Path ldif = Files.createTempFile("vault", ".ldif");
+        try {
+            Files.writeString(ldif, String.join("\n",
+                "version: 1",
+                "",
+                "dn: cn=schema",
+                "objectClass: top",
+                "objectClass: subschema",
+                "attributeTypes: ( 2.5.4.3 NAME ( 'cn' 'commonName' ) SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{64} X-NDS_NAME 'CN' X-NDS_LOWER_BOUND '1' X-NDS_UPPER_BOUND '64' )",
+                "attributeTypes: ( 2.16.840.1.113719.1.1.4.1.999 NAME 'pbtCostCenter' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE X-NDS_PUBLIC_READ '1' )",
+                "objectClasses: ( 2.5.6.0 NAME 'top' ABSTRACT MUST objectClass )",
+                "objectClasses: ( 2.16.840.1.113719.1.1.6.1.999 NAME 'pbtPerson' SUP top AUXILIARY MAY pbtCostCenter )",
+                "",
+                "dn: " + DS,
+                "objectClass: Top",
+                "objectClass: DirXML-DriverSet",
+                "",
+                "dn: cn=AD," + DS,
+                "objectClass: Top",
+                "objectClass: DirXML-Driver",
+                ""));
+            DriverSet ds = LdifReader.read(ldif);
+            assertNotNull("cn=schema read", ds.schema);
+            assertNotNull(ds.schema.attribute("pbtCostCenter"));
+            assertNotNull(ds.schema.classDef("pbtPerson"));
+            assertEquals(ldif.getFileName().toString(), ds.schema.meta.get("source"));
+            // and without cn=schema, no schema, as before
+            DriverSet none = LdifReader.fromEntries(List.of(entry(DS, "DirXML-DriverSet"), entry("cn=AD," + DS, "DirXML-Driver")), "x.ldif");
+            assertNull(none.schema);
+        } finally {
+            Files.deleteIfExists(ldif);
+        }
+    }
 }

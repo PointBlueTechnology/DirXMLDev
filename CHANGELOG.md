@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **`import-ldif` reads the schema (#139):** when the LDIF carries the `cn=schema` entry, its `attributeTypes`
+  and `objectClasses` become the tree's `schema/vault.xml`, as `vault.schema` reads them live. The schema
+  checks then use it.
+
+### Fixed
+
+- **`mapping-table-column` and variable columns (#140):** a `<token-map>` whose `src` or `dest` column is
+  named by a local variable or a GCV (`$lv.map.col$`, `~col~`) was an error, because the name isn't a column.
+  Its value is known only when the policy runs, so it is now listed under the `mapping-table-dynamic` info,
+  as a table named by a variable already was.
+
 ## [0.75.0] - 2026-11-20
 
 ### Fixed

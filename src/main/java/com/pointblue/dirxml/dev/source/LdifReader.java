@@ -448,6 +448,18 @@ public final class LdifReader {
             }
             d.provisioning = readProvisioning(entries, d.dn);
         }
+        // 6. the vault's schema, when the LDIF carries cn=schema (#139), as vault.schema reads it live
+        for (Entry e : entries) {
+            if (sameDn(e.dn, "cn=schema") || e.hasClass("subschema")) {
+                List<String> types = e.all("attributeTypes");
+                List<String> classes = e.all("objectClasses");
+                if (!types.isEmpty() || !classes.isEmpty()) {
+                    ds.schema = com.pointblue.dirxml.dev.model.VaultSchema.fromLdap(
+                        com.pointblue.dirxml.dev.clone.Schema.of(types, classes), sourceName);
+                }
+                break;
+            }
+        }
         // two of one name in library/ (the set's own Library and another, or an object left directly
         // under the set): the tree, like a container, holds one — keep one and say which
         ds.duplicates.addAll(DuplicateArtifacts.drop(ds));
