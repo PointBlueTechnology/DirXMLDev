@@ -1,6 +1,6 @@
 # Every Library in its own place in the tree (design note)
 
-**Status: proposed 2026-11-23, awaiting decisions (D1–D6 below).** Follows #111 (other Libraries
+**Status: decided 2026-11-23 (D1–D6 below); to build in L1–L3.** Follows #111 (other Libraries
 read-only) and #133 (an LDIF of a whole vault; a second Library inside the driver set).
 
 ## Why
@@ -83,7 +83,20 @@ tree/
 | Web | The Library view groups objects by Library, own first. Links, `FlowView` and `PromoteView` show `libraries/…` paths. The read-only badge exists already. |
 | Designer project out | `ProjectWriter` should write each object into its own Library in the project. To check whether it writes other Libraries' objects today. |
 
-## Decisions needed
+## Decided (Jerry, 2026-11-23)
+
+1. **D1:** a top-level `libraries/<alias>/` beside `library/`; existing paths don't change.
+2. **D2:** the alias is derived from the DN (the `cn`, plus parent RDN values only when needed),
+   with the DN recorded in the folder's `library.xml`. A person-chosen alias per environment can
+   come later if projects per environment need it.
+3. **D3 and D5:** every container other than `cn=Library,<driver set>` gets its own folder: a
+   second Library inside the driver set, Libraries outside it, and any other non-driver container
+   a driver links from.
+4. **D4:** objects in `libraries/` stay read-only: never compared, never deployed, edits refused.
+5. **D6:** existing trees move by re-import (`import-ldif`, `import-project`, **Update this
+   branch**); no `library.split` operation.
+
+## The options as they were put
 
 - **D1. Where they go.**
   - **(a) Recommended:** a top-level `libraries/<alias>/`, beside `library/`. Existing paths and
