@@ -1,6 +1,6 @@
 # Every Library in its own place in the tree (design note)
 
-**Status: decided 2026-11-23 (D1–D6 below). L1 built (core 0.77.0), L2 built (core 0.78.0); L3 (web) to build.** Follows #111 (other Libraries
+**Status: decided 2026-11-23 (D1–D6 below); built: L1 (core 0.77.0), L2 (core 0.78.0), L3 (DirXMLDevWeb 0.97.0).** Follows #111 (other Libraries
 read-only) and #133 (an LDIF of a whole vault; a second Library inside the driver set).
 
 ## Why
