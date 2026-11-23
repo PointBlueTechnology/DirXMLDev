@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.78.0] - 2026-11-23
+
 ### Changed
 
 - **Other Libraries beyond the tree layout (L2 of docs/library-containers.md, #133):**
