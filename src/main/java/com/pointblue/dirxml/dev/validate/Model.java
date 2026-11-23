@@ -144,9 +144,15 @@ final class Model {
     /** Mapping tables visible to a driver, by name: its own driver-scope tables first, then the library's. */
     static Map<String, Resource> mappingTables(DriverSet ds, Driver d) {
         Map<String, Resource> out = new java.util.LinkedHashMap<>();
+        // the driver set's own Library first: its table wins a name another Library shares (#133)
         for (Resource r : ds.library.resources) {
-            if (r.isMappingTable()) {
+            if (r.isMappingTable() && r.library == null) {
                 out.put(r.name, r);
+            }
+        }
+        for (Resource r : ds.library.resources) {
+            if (r.isMappingTable() && r.library != null) {
+                out.putIfAbsent(r.name, r);
             }
         }
         if (d != null) {

@@ -64,5 +64,8 @@ public class ValidationScopeTest {
         assertTrue(ValidationScope.blocks("drivers/ad/p", new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER) {{ add("AD"); }}, java.util.Set.of(), false));
         assertFalse(ValidationScope.blocks("drivers/AD-Driver/p", java.util.Set.of("AD"), java.util.Set.of(), false));
         assertTrue(ValidationScope.blocks("drivers/AD", java.util.Set.of("AD"), java.util.Set.of(), false));
+        // another Library's objects (docs/library-containers.md): read-only, a deploy never writes them
+        assertFalse(ValidationScope.blocks("libraries/Library/es-shared", java.util.Set.of("AD"), java.util.Set.of("libraries/Library/es-shared"), false));
+        assertEquals("Library Library@services", ValidationScope.owner("libraries/Library@services/x"));
     }
 }

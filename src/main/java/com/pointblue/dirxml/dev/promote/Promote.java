@@ -479,6 +479,10 @@ public final class Promote {
         if (parts.length >= 2 && parts[0].equals("library") && !path.equals("library/" + AsCodeWriter.LIBRARY_MANIFEST)) {
             return "library/" + AsCodeWriter.LIBRARY_MANIFEST;
         }
+        // another Library's folder (docs/library-containers.md): its own library.xml; that one is in driverset.xml
+        if (parts.length >= 3 && parts[0].equals("libraries") && !(parts.length == 3 && parts[2].equals(AsCodeWriter.LIBRARY_MANIFEST))) {
+            return "libraries/" + parts[1] + "/" + AsCodeWriter.LIBRARY_MANIFEST;
+        }
         return AsCodeWriter.DRIVERSET_MANIFEST;   // the drivers, the Library and the set's own objects
     }
 

@@ -320,6 +320,68 @@ public class ExportWriterTest {
         assertEquals("the GCV object once", 1, xml.split("name=\"PKG-GCVs\"", -1).length - 1);
     }
 
+    /**
+     * #133 / docs/library-containers.md: a driver links lib-sub-command from the driver set's Library and another
+     * of that name from another Library. In the export each is embedded under its own name, and the simulator's
+     * chain runs both, in link order.
+     */
+    @Test
+    public void twoLibraryObjectsOfOneNameAreBothInTheChain() throws Exception {
+        DriverSet ds = singleDriverSample();
+        Policy other = new Policy("lib-sub-command", Scope.LIBRARY, null, xml(LIB_SUB_COMMAND_XML));
+        other.meta.put(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN, "cn=Library,o=services");
+        ds.library.policies.add(other);
+        com.pointblue.dirxml.dev.model.Libraries.assignAliases(ds, List.of());
+        assertEquals("libraries/Library/lib-sub-command", other.path());
+        Driver ad = ds.driver("AD");
+        ad.links.add(new PolicyLink(PolicySet.SUB_COMMAND, other.path(), 2));
+
+        String xml = ExportWriter.toDriverXml(ds, "AD");
+        assertTrue(xml, xml.contains("name=\"lib-sub-command\""));
+        assertTrue(xml, xml.contains("name=\"lib-sub-command@Library\""));
+        assertTrue(xml, xml.contains("cn=lib-sub-command@Library,cn=Subscriber,"));
+
+        Path file = tmp.newFolder().toPath().resolve("AD.xml");
+        ExportWriter.writeDriver(ds, "AD", file);
+        DriverExport export = DriverExport.load(file);
+        export.mappingTables().forEach(MappingTableStore::register);
+        List<String> chain = stageNames(export.subscriberChain(EngineContext.create("\\[root]\\dvs\\AD")));
+        int own = indexOfStage(chain, "lib-sub-command", false);
+        int theirs = indexOfStage(chain, "lib-sub-command@Library", true);
+        assertTrue(chain.toString(), own >= 0 && theirs > own);
+    }
+
+    private static int indexOfStage(List<String> chain, String name, boolean exact) {
+        for (int i = 0; i < chain.size(); i++) {
+            String n = chain.get(i);
+            if (exact ? n.contains(name) : n.contains(name) && !n.contains(name + "@")) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** The driver set links the GCV object in another Library: that one is in scope, not the own one of that name. */
+    @Test
+    public void theDriverSetsGcvObjectIsTheOneItsLinkNames() {
+        DriverSet ds = singleDriverSample();
+        Resource own = new Resource("PKG-GCVs", Scope.LIBRARY, null, Resource.GCV_DEF);
+        own.content = xml("<configuration-values><definitions/></configuration-values>");
+        Resource theirs = new Resource("PKG-GCVs", Scope.LIBRARY, null, Resource.GCV_DEF);
+        theirs.content = xml("<configuration-values><definitions/></configuration-values>");
+        theirs.meta.put(com.pointblue.dirxml.dev.model.DuplicateArtifacts.LIBRARY_DN, "cn=Library,o=services");
+        ds.library.resources.add(own);
+        ds.library.resources.add(theirs);
+        com.pointblue.dirxml.dev.model.Libraries.assignAliases(ds, List.of());
+        ds.meta.put("driverset.linkage.0", "cn=PKG-GCVs, cn=Library, o=services#0#14");
+        assertEquals(List.of(theirs), ExportWriter.driverSetGcvObjects(ds));
+        ds.meta.put("driverset.linkage.0", "cn=PKG-GCVs,cn=Library," + ds.dn + "#0#14");
+        assertEquals(List.of(own), ExportWriter.driverSetGcvObjects(ds));
+        // a DN neither has (written another way, say): by name, the driver set's own first
+        ds.meta.put("driverset.linkage.0", "\\TREE\\system\\PKG-GCVs#0#14");
+        assertEquals(List.of(own), ExportWriter.driverSetGcvObjects(ds));
+    }
+
     @Test
     public void singleDriverExportAssemblesSubscriberChainWithLibraryPolicyAndTable() throws Exception {
         DriverSet ds = singleDriverSample();

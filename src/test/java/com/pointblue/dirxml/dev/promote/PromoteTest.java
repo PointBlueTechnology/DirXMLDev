@@ -376,6 +376,8 @@ public class PromoteTest {
         assertEquals("drivers/AD/driver.xml", Promote.manifestOf("drivers/AD/subscriber/sub-ctp.policy.xml"));
         assertEquals("drivers/AD/driver.xml", Promote.manifestOf("drivers/AD/config-values.xml"));
         assertEquals("driverset.xml", Promote.manifestOf("drivers/AD/driver.xml"));
+        assertEquals("libraries/Library@services/library.xml", Promote.manifestOf("libraries/Library@services/es-misc.js"));
+        assertEquals("driverset.xml", Promote.manifestOf("libraries/Library@services/library.xml"));
         assertEquals("library/library.xml", Promote.manifestOf("library/lib-shared.policy.xml"));
         assertEquals("driverset.xml", Promote.manifestOf("library/library.xml"));
         assertEquals("driverset.xml", Promote.manifestOf("jobs/StatisticsJob.xml"));

@@ -106,6 +106,9 @@ public final class ValidationScope {
             String artifact = seg.length >= 2 ? seg[0] + "/" + stripExtension(seg[1]) : p;
             return linkedLibrary.contains(artifact) || linkedLibrary.contains(p);
         }
+        if (p.startsWith("libraries/")) {
+            return false;   // another Library's objects: read-only references a deploy never writes
+        }
         if (p.startsWith("rbe-policies/")) {
             return rbeInScope;
         }
@@ -123,6 +126,9 @@ public final class ValidationScope {
         String[] seg = path.replace('\\', '/').split("/");
         if (seg[0].equals("drivers") && seg.length > 1) {
             return seg[1];
+        }
+        if (seg[0].equals("libraries") && seg.length > 1) {
+            return "Library " + seg[1];
         }
         return seg[0].equals("library") ? "Library" : seg[0];
     }
