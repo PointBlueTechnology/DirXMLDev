@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.76.0] - 2026-11-23
+
 ### Added
 
 - **`import-ldif` reads the schema (#139):** when the LDIF carries the `cn=schema` entry, its `attributeTypes`
