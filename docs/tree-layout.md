@@ -163,7 +163,12 @@ These objects are read-only references:
 - **Edits:** an edit that would change one is refused, even with `--force`.
   Change it in Designer, or in that Library.
 
-`validate` lists them as `library-other` information.
+`validate` lists them as `library-other` information, one line per folder. A
+finding in one never blocks a scoped deploy, which doesn't write them. Where
+another Library holds a mapping table of the same name as the driver set's own,
+checks read the driver set's own. In a simulator run, a driver that links two
+objects of one name gets both: the one from another Library runs as
+`<name>@<alias>`.
 
 **Trees imported before 0.77.0** hold these objects in `library/`, each with a
 `library.dn` entry, and only one object of each name. They still work as they

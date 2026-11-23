@@ -193,4 +193,30 @@ public class LibrariesTest {
         }
         assertTrue(ModelDiff.of(back, renamed).changes().toString(), ModelDiff.of(back, renamed).changes().isEmpty());
     }
+
+    /** Validation in the new layout: each Library under its own folder, its table second to the driver set's own. */
+    @Test
+    public void validationKnowsTheFolders() throws Exception {
+        DriverSet ds = set();
+        Libraries.assignAliases(ds, List.of());
+        Resource ownTable = new Resource("CodeMap", Scope.LIBRARY, null, Resource.MAPPING_TABLE);
+        ownTable.content = com.pointblue.dirxml.dev.xml.CanonicalXml.parse("<mapping-table><col-def name=\"a\"/><row><col>1</col></row></mapping-table>").getDocumentElement();
+        Resource theirTable = new Resource("CodeMap", Scope.LIBRARY, null, Resource.MAPPING_TABLE);
+        theirTable.content = ownTable.content;
+        theirTable.meta.put(DuplicateArtifacts.LIBRARY_DN, SHARED);
+        ds.library.resources.add(theirTable);
+        ds.library.resources.add(ownTable);
+        Libraries.assignAliases(ds, List.of());
+
+        Path dir = tmp.newFolder("tree").toPath();
+        AsCodeWriter.write(ds, dir);
+        boolean said = false;
+        for (Finding f : Validator.standard().validate(dir).findings()) {
+            if (f.code.equals("library-other")) {
+                assertEquals("libraries/Library", f.path);
+                said = f.message.contains(SHARED);
+            }
+        }
+        assertTrue(said);
+    }
 }

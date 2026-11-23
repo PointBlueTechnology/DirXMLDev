@@ -62,7 +62,7 @@ public final class CompileCheck implements Check {
         Map<String, Set<String>> linkedBy = new HashMap<>();
         for (Driver d : ds.drivers) {
             for (PolicyLink l : d.links) {
-                if (l.ref.startsWith("library/")) {
+                if (l.ref.startsWith("library/") || l.ref.startsWith("libraries/")) {
                     linkedBy.computeIfAbsent(l.ref, k -> new LinkedHashSet<>()).add(d.name);
                 }
             }
@@ -94,7 +94,8 @@ public final class CompileCheck implements Check {
                 union.merge(gcvs(ds, d, index));
             }
             for (Policy p : ds.library.policies) {
-                if (!linkedBy.containsKey(p.path())) {
+                // another Library's policy no driver links: a read-only reference nothing here loads
+                if (!linkedBy.containsKey(p.path()) && com.pointblue.dirxml.dev.model.Libraries.outside(ds, p) == null) {
                     compile(p, dsDn + "\\Library", union, r, null, seen);
                 }
             }
@@ -110,8 +111,16 @@ public final class CompileCheck implements Check {
                 MappingTableStore.register(t.name, CanonicalXml.serialize(t.content));
             }
         }
+        // the driver set's own Library last, so its objects win a name another Library shares
         for (Policy p : ds.library.policies) {
-            registerPolicy(p);
+            if (p.library != null) {
+                registerPolicy(p);
+            }
+        }
+        for (Policy p : ds.library.policies) {
+            if (p.library == null) {
+                registerPolicy(p);
+            }
         }
         if (d != null) {
             for (Policy p : Model.policies(d)) {

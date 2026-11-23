@@ -174,15 +174,17 @@ public final class ExportWriter {
         // Every Library artifact this driver's links reach, and which scope (channel
         // or driver) to embed each one at — keyed by artifact path (= library/<name>).
         Map<String, Scope> libraryPlacement = collectLibraryPlacement(ds, d);
+        // ... and the name each is embedded under: unique where it's embedded (docs/library-containers.md)
+        Map<String, String> exportNames = exportNames(ds, d, libraryPlacement);
 
         Element attrs = doc.createElement("attributes");
         root.appendChild(attrs);
         writeCommonDriverAttrs(doc, attrs, d);
-        writeLinkage(doc, attrs, d, l -> dnForRefSingle(ds, d, l.ref, libraryPlacement));
+        writeLinkage(doc, attrs, d, l -> dnForRefSingle(ds, d, l.ref, libraryPlacement, exportNames));
 
-        List<Element> driverIncludes = libraryElementsFor(doc, ds, libraryPlacement, Scope.DRIVER);
-        List<Element> publisherIncludes = libraryElementsFor(doc, ds, libraryPlacement, Scope.PUBLISHER);
-        List<Element> subscriberIncludes = libraryElementsFor(doc, ds, libraryPlacement, Scope.SUBSCRIBER);
+        List<Element> driverIncludes = libraryElementsFor(doc, ds, libraryPlacement, Scope.DRIVER, exportNames);
+        List<Element> publisherIncludes = libraryElementsFor(doc, ds, libraryPlacement, Scope.PUBLISHER, exportNames);
+        List<Element> subscriberIncludes = libraryElementsFor(doc, ds, libraryPlacement, Scope.SUBSCRIBER, exportNames);
 
         // Library mapping tables referenced by <token-map table=…> but never linked —
         // the engine still resolves them at compile time, so Designer includes them too.
@@ -242,14 +244,46 @@ public final class ExportWriter {
         Set<String> seen = new LinkedHashSet<>();
         List<Resource> out = new ArrayList<>();
         for (int i : idx) {
-            String leaf = linkageLeaf(ds.meta.get("driverset.linkage." + i));
+            String value = ds.meta.get("driverset.linkage." + i);
+            String leaf = linkageLeaf(value);
+            // the object whose DN the link names (#133: two Libraries can hold one of that name); else by name,
+            // the driver set's own Library first
+            Resource match = null;
+            String dn = linkageDn(value);
             for (Resource r : ds.library.resources) {
-                if (r.isGcvDef() && r.name.equals(leaf) && seen.add(r.path())) {
-                    out.add(r);
+                if (r.isGcvDef() && dn != null && dn.contains("=")
+                    && com.pointblue.dirxml.dev.model.Libraries.normDn(dn).equals(com.pointblue.dirxml.dev.model.Libraries.normDn(libraryObjectDn(ds, r)))) {
+                    match = r;
+                    break;
                 }
+            }
+            if (match == null) {
+                for (Resource r : ds.library.resources) {
+                    if (r.isGcvDef() && r.name.equals(leaf) && (match == null || match.library != null && r.library == null)) {
+                        match = r;
+                    }
+                }
+            }
+            if (match != null && seen.add(match.path())) {
+                out.add(match);
             }
         }
         return out;
+    }
+
+    /** The DN a Library object has in the vault: in another Library, that Library's; else the driver set's own. */
+    private static String libraryObjectDn(DriverSet ds, Artifact a) {
+        String other = com.pointblue.dirxml.dev.model.Libraries.outside(ds, a);
+        return "cn=" + a.name + "," + (other != null ? other : "cn=Library," + dsDn(ds));
+    }
+
+    /** The DN of a {@code <dn>#<order>#<set>} linkage value. */
+    private static String linkageDn(String value) {
+        if (value == null) {
+            return null;
+        }
+        int hash = value.indexOf('#');
+        return hash >= 0 ? value.substring(0, hash) : value;
     }
 
     /** The object name a {@code <dn>#<order>#<set>} linkage value points at (LDAP or slash DN). */
@@ -294,19 +328,73 @@ public final class ExportWriter {
     /** The rendered {@code <rule>}/{@code <stylesheet>}/{@code <resource>}/{@code <global-config-def>}
      * elements for every Library artifact placed at {@code scope}. */
     private static List<Element> libraryElementsFor(Document doc, DriverSet ds, Map<String, Scope> placement,
-                                                      Scope scope) {
+                                                      Scope scope, Map<String, String> exportNames) {
         List<Element> out = new ArrayList<>();
         for (Map.Entry<String, Scope> e : placement.entrySet()) {
             if (e.getValue() != scope) {
                 continue;
             }
             Artifact a = ds.resolve(e.getKey());
+            Element el = null;
             if (a instanceof Policy) {
-                out.add(policyWrapper(doc, (Policy) a));
+                el = policyWrapper(doc, (Policy) a);
             } else if (a instanceof Resource) {
                 Resource r = (Resource) a;
-                out.add(r.isGcvDef() ? gcvDefElement(doc, r) : resourceElement(doc, r));
+                el = r.isGcvDef() ? gcvDefElement(doc, r) : resourceElement(doc, r);
             }
+            if (el != null) {
+                el.setAttribute("name", exportNames.getOrDefault(e.getKey(), a.name));
+                out.add(el);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The name each Library artifact is embedded under in a single-driver export: its own, unless an object
+     * of that name is already where it's embedded (the driver's own, or one of another Library's of the
+     * same name, #133). Then {@code <name>@<alias>} ({@code @Library} for the driver set's own), so every
+     * link reaches its own copy. The driver's own objects, then the driver set's Library, keep their names.
+     */
+    static Map<String, String> exportNames(DriverSet ds, Driver d, Map<String, Scope> placement) {
+        Map<Scope, Set<String>> used = new java.util.EnumMap<>(Scope.class);
+        for (Scope s : Scope.values()) {
+            used.put(s, new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER));
+        }
+        for (Policy p : d.policies) {
+            used.get(Scope.DRIVER).add(p.name);
+        }
+        for (Resource r : d.resources) {
+            used.get(r.scope).add(r.name);
+        }
+        for (Policy p : d.subscriber.policies) {
+            used.get(Scope.SUBSCRIBER).add(p.name);
+        }
+        for (Policy p : d.publisher.policies) {
+            used.get(Scope.PUBLISHER).add(p.name);
+        }
+        List<Map.Entry<String, Scope>> order = new ArrayList<>(placement.entrySet());
+        order.sort(java.util.Comparator.comparing(e -> {
+            Artifact a = ds.resolve(e.getKey());
+            return a == null || a.library != null ? 1 : 0;
+        }));
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Map.Entry<String, Scope> e : order) {
+            Artifact a = ds.resolve(e.getKey());
+            if (a == null) {
+                continue;
+            }
+            Set<String> names = used.get(e.getValue());
+            String name = a.name;
+            if (names.contains(name)) {
+                String base = a.name + "@" + (a.library != null ? a.library : "Library");
+                name = base;
+                for (int i = 2; names.contains(name); i++) {
+                    name = base + "~" + i;
+                }
+            }
+            names.add(name);
+            out.put(e.getKey(), name);
         }
         return out;
     }
@@ -341,14 +429,22 @@ public final class ExportWriter {
                     continue;
                 }
                 String name = leafName(table);
-                String path = Artifact.path(Scope.LIBRARY, null, name);
-                if (seen.contains(path)) {
-                    continue;
+                // a policy of another Library reads that Library's table first, then the driver set's own
+                List<String> paths = new ArrayList<>();
+                if (p.library != null) {
+                    paths.add(Artifact.libraryPath(p.library, name));
                 }
-                Artifact a = ds.resolve(path);
-                if (a instanceof Resource && ((Resource) a).isMappingTable()) {
-                    out.add((Resource) a);
-                    seen.add(path);
+                paths.add(Artifact.path(Scope.LIBRARY, null, name));
+                for (String path : paths) {
+                    if (seen.contains(path)) {
+                        break;
+                    }
+                    Artifact a = ds.resolve(path);
+                    if (a instanceof Resource && ((Resource) a).isMappingTable()) {
+                        out.add((Resource) a);
+                        seen.add(path);
+                        break;
+                    }
                 }
             }
         }
@@ -372,7 +468,8 @@ public final class ExportWriter {
      * Library artifact instead points at wherever it was embedded in this document
      * ({@code libraryPlacement}), since this form has no Library container.
      */
-    private static String dnForRefSingle(DriverSet ds, Driver owner, String ref, Map<String, Scope> libraryPlacement) {
+    private static String dnForRefSingle(DriverSet ds, Driver owner, String ref, Map<String, Scope> libraryPlacement,
+                                         Map<String, String> exportNames) {
         Artifact a = ds.resolve(ref);
         if (a == null) {
             return dnForUnresolvedRef(ds, owner, ref);
@@ -381,14 +478,15 @@ public final class ExportWriter {
             return dnForArtifact(ds, a);
         }
         Scope placed = libraryPlacement.getOrDefault(a.path(), Scope.DRIVER);
+        String name = exportNames.getOrDefault(a.path(), a.name);
         switch (placed) {
             case SUBSCRIBER:
-                return "cn=" + a.name + ",cn=Subscriber," + driverDn(ds, owner.name);
+                return "cn=" + name + ",cn=Subscriber," + driverDn(ds, owner.name);
             case PUBLISHER:
-                return "cn=" + a.name + ",cn=Publisher," + driverDn(ds, owner.name);
+                return "cn=" + name + ",cn=Publisher," + driverDn(ds, owner.name);
             case DRIVER:
             default:
-                return "cn=" + a.name + "," + driverDn(ds, owner.name);
+                return "cn=" + name + "," + driverDn(ds, owner.name);
         }
     }
 

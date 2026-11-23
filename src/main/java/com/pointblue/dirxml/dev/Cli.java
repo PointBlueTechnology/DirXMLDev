@@ -507,8 +507,23 @@ public final class Cli {
         for (com.pointblue.dirxml.dev.model.DuplicateArtifacts.Dropped d : ds.duplicates) {
             System.out.println("NOTE: " + d.note + ". " + d.advice + ".");
         }
-        System.out.println("  library: " + ds.library.policies.size() + " policies, "
-            + ds.library.resources.size() + " resources");
+        int ownPolicies = 0;
+        int ownResources = 0;
+        java.util.Map<String, Integer> others = new java.util.TreeMap<>();
+        for (Artifact a : ds.library.artifacts()) {
+            if (a.library != null) {
+                others.merge(a.library, 1, Integer::sum);
+            } else if (a instanceof com.pointblue.dirxml.dev.model.Policy) {
+                ownPolicies++;
+            } else {
+                ownResources++;
+            }
+        }
+        System.out.println("  library: " + ownPolicies + " policies, " + ownResources + " resources");
+        // the other Libraries, a folder each (docs/library-containers.md): read-only references
+        for (String alias : ds.libraries.keySet()) {
+            System.out.printf("  libraries/%s: %d object(s), read-only, in %s%n", alias, others.getOrDefault(alias, 0), ds.libraries.get(alias));
+        }
         for (Driver d : ds.drivers) {
             List<Artifact> a = d.artifacts();
             System.out.printf("  driver %-40s %2d driver-scope, %2d subscriber, %2d publisher, %2d resources, %3d links%n",

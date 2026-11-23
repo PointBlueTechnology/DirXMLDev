@@ -125,7 +125,7 @@ public final class EcmaScriptCheck implements Check {
             }
             Set<String> libRefs = new LinkedHashSet<>();
             for (PolicyLink l : d.links) {
-                if (l.ref.startsWith("library/")) {
+                if (l.ref.startsWith("library/") || l.ref.startsWith("libraries/")) {
                     libRefs.add(l.ref);
                 }
             }

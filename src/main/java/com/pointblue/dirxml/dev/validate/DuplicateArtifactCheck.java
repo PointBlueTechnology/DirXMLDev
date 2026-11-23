@@ -27,11 +27,15 @@ public final class DuplicateArtifactCheck implements Check {
                 + " <artifact> entry and file from the manifest's folder"));
         }
         java.util.Map<String, java.util.List<String>> byLibrary = new java.util.TreeMap<>();
+        java.util.Map<String, String> where = new java.util.HashMap<>();   // DN → the folder it's in
         for (com.pointblue.dirxml.dev.model.Artifact a : com.pointblue.dirxml.dev.model.Libraries.outside(ds)) {
-            byLibrary.computeIfAbsent(com.pointblue.dirxml.dev.model.Libraries.outside(ds, a), k -> new java.util.ArrayList<>()).add(a.name);
+            String dn = com.pointblue.dirxml.dev.model.Libraries.outside(ds, a);
+            byLibrary.computeIfAbsent(dn, k -> new java.util.ArrayList<>()).add(a.name);
+            // its own folder (docs/library-containers.md); library/ in a tree from before 0.77.0
+            where.putIfAbsent(dn, a.library != null ? "libraries/" + a.library : "library");
         }
         for (java.util.Map.Entry<String, java.util.List<String>> e : byLibrary.entrySet()) {
-            r.add(Finding.info("library-other", "library", e.getValue().size() + " Library object(s) live in " + e.getKey()
+            r.add(Finding.info("library-other", where.get(e.getKey()), e.getValue().size() + " Library object(s) live in " + e.getKey()
                 + ", outside the driver set's Library: read-only here, never compared or deployed; links to them keep their DN ("
                 + String.join(", ", e.getValue()) + ")"));
         }

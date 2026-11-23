@@ -7,6 +7,19 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- **Other Libraries beyond the tree layout (L2 of docs/library-containers.md, #133):**
+  - **The simulator** gets every Library object a driver links, also two of one name. In its export, one from
+    another Library is embedded as `<name>@<alias>` where the name is taken, so each link runs its own copy.
+    A `<token-map>` in another Library's policy reads that Library's table first. The driver set's GCV object
+    is the one its link's DN names.
+  - **Validation:** `library-other` names each folder (`libraries/<alias>`). A finding in another Library's
+    object never blocks a scoped deploy. The driver set's own mapping table wins a name another Library shares,
+    for the Map token and compile checks. Another Library's policy no driver links is no longer compiled.
+  - **Promotion** knows a `libraries/` file's manifest. **`check` and the imports** print one line per other
+    Library, with its DN.
+
 ## [0.77.0] - 2026-11-23
 
 ### Changed
