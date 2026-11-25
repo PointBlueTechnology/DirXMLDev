@@ -144,6 +144,12 @@ Which containers get a folder:
 - `import-ldif` and `import-live`: a second Library inside the driver set (any
   Library but `cn=Library,<driver set>`), and any other container a driver links
   from that is no driver or channel.
+- `import-live`, and every other read of a vault (Compare, Plan, deploy's own read,
+  capture), since 0.79.0: the Libraries outside the driver
+  set that its links name. A Library outside every driver set is read whole; from
+  another driver set's Library, or any other container, only the objects the links
+  name. An object a link names that the vault doesn't have, or that the account
+  can't read, is a note naming its DN, and that link reads as unresolved.
 - `import-ldif`, given an LDIF of more than the driver set: also every object of a
   Library outside every driver set, and the objects the driver set links from
   another driver set's Library. A Library that only a link reaches (its object
@@ -153,7 +159,8 @@ The alias is the container's name. When another container in the tree has the
 same name, the nearest parent names are added (`Library@services`,
 `customizing@services.global`). It's a label: the DN in `library.xml` is what
 counts. Two reads of a vault can name a folder differently; compare matches links
-into these folders by DN.
+into these folders by DN. A read written over an existing tree (`import-live`, a
+capture) keeps the tree's folder name for a Library the tree already has.
 
 These objects are read-only references:
 - **Links** to them resolve, and a deploy writes their real DN into a driver's

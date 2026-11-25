@@ -306,6 +306,11 @@ public final class Cli {
                     System.err.println("note: " + n);
                 }
             }
+            // over an existing tree: its folder for each other Library it already has, whatever this read would call it
+            if (java.nio.file.Files.isRegularFile(outDir.resolve(com.pointblue.dirxml.dev.ascode.AsCodeWriter.DRIVERSET_MANIFEST))) {
+                com.pointblue.dirxml.dev.model.Libraries.adoptAliases(live,
+                    base != null ? base : com.pointblue.dirxml.dev.ascode.AsCodeReader.read(outDir));
+            }
             if (envName != null && java.nio.file.Files.isDirectory(outDir.resolve(com.pointblue.dirxml.dev.deploy.Overrides.DIR))) {
                 live.overrides.putAll(com.pointblue.dirxml.dev.deploy.Overrides.read(outDir));
                 for (String n : com.pointblue.dirxml.dev.deploy.Overrides.foldBack(live, envName, base)) {

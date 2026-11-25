@@ -1,6 +1,6 @@
 # Every Library in its own place in the tree (design note)
 
-**Status: decided 2026-11-23 (D1–D6 below); built: L1 (core 0.77.0), L2 (core 0.78.0), L3 (DirXMLDevWeb 0.97.0).** Follows #111 (other Libraries
+**Status: decided 2026-11-23 (D1–D6 below); built: L1 (core 0.77.0), L2 (core 0.78.0), L3 (DirXMLDevWeb 0.97.0); vault reads of other Libraries (#115, core 0.79.0).** Follows #111 (other Libraries
 read-only) and #133 (an LDIF of a whole vault; a second Library inside the driver set).
 
 ## Why
@@ -117,7 +117,7 @@ tree/
 - **D4. Read-only.** Keep objects in `libraries/` read-only: never compared, never deployed.
   - **Recommended: keep.** A Library outside the driver set is often shared with other driver
     sets, so deploying it would change them too.
-  - Making them comparable needs vault reads of those Libraries (#115) and a separate decision.
+  - Making them comparable is a separate decision. Vault reads take them in since core 0.79.0 (#115).
 - **D5. Containers that are neither a Library nor a driver or channel** (0.74.0 reads their
   objects as references).
   - **Recommended:** the same folder treatment, named after the container. Since 0.75.0, channels
@@ -139,4 +139,4 @@ tree/
 - **L3 (web):** Library view grouped by Library, paths in links, flow and promote views; pin core.
   Release web and update the lab.
 
-Not in scope: vault reads of other Libraries (#115) and deploying them (D4).
+Not in scope: deploying them (D4). Vault reads of other Libraries came after, as #115 (core 0.79.0).

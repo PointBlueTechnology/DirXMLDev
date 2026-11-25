@@ -3,6 +3,7 @@ package com.pointblue.dirxml.dev.deploy;
 import com.pointblue.dirxml.dev.ascode.AsCodeReader;
 import com.pointblue.dirxml.dev.model.Driver;
 import com.pointblue.dirxml.dev.model.DriverSet;
+import com.pointblue.dirxml.dev.model.Libraries;
 import com.pointblue.dirxml.dev.source.LdifReader;
 import com.pointblue.dirxml.sim.JndiLdapSearch;
 
@@ -112,6 +113,8 @@ public final class VaultDiff {
                 driverImages.put(e.dn.toLowerCase(), image);
             }
         }
+        // what the set links outside it (#115): a Library elsewhere in the tree, or any other container
+        entries.addAll(linkedOutside(v, driverSetDn, entries, notes));
         // the vault's notification templates live outside the driver set (cn=Security): read them too
         try {
             for (Vault.Entry c : v.search("cn=Security", "(objectClass=notfTemplateCollection)", javax.naming.directory.SearchControls.ONELEVEL_SCOPE)) {
@@ -123,6 +126,107 @@ public final class VaultDiff {
             // no cn=Security, or no rights to it: a tree without templates
         }
         return LdifReader.fromEntries(entries, sourceName, driverImages);
+    }
+
+    /** The classes of a Library's objects the tree models (a package's GCV definitions are resources). */
+    private static final String ARTIFACT_FILTER = "(|(objectClass=DirXML-Rule)(objectClass=DirXML-StyleSheet)"
+        + "(objectClass=DirXML-Resource)(objectClass=DirXML-GlobalConfigDef))";
+
+    /**
+     * The objects the driver set and its drivers link outside the set (#115), so a read of the vault gives
+     * the tree the LDIF and Designer imports give: a Library elsewhere in the tree whole, with its container
+     * entry; from another driver set's Library, or any other container, only what is linked. They become
+     * read-only references in {@code libraries/<alias>/}. An object that can't be read is a note naming its
+     * DN, not a failed read: its link stays unresolved.
+     */
+    static List<com.pointblue.dirxml.sim.LdifDriverSource.Entry> linkedOutside(VaultAccess v, String driverSetDn,
+            List<com.pointblue.dirxml.sim.LdifDriverSource.Entry> read, java.util.function.Consumer<String> notes) {
+        List<com.pointblue.dirxml.sim.LdifDriverSource.Entry> out = new ArrayList<>();
+        java.util.Set<String> have = new java.util.HashSet<>();
+        java.util.Map<String, List<String>> byContainer = new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> containerDn = new java.util.HashMap<>();
+        for (String target : LdifReader.linkedOutside(read, driverSetDn)) {
+            String c = LdifReader.parentDn(target);
+            String key = Libraries.normDn(c);
+            containerDn.putIfAbsent(key, c);
+            byContainer.computeIfAbsent(key, k -> new ArrayList<>()).add(target);
+        }
+        for (java.util.Map.Entry<String, List<String>> group : byContainer.entrySet()) {
+            String c = containerDn.get(group.getKey());
+            Vault.Entry container = readOrNote(v, c, notes);
+            if (container != null && container.hasClass("DirXML-Library")) {
+                out.add(toSourceEntry(container));
+                Vault.Entry parent = readOrNote(v, LdifReader.parentDn(c), s -> { });
+                if (parent == null || !parent.hasClass("DirXML-DriverSet")) {
+                    // a Library of its own, outside every driver set: all of it, as the imports take it
+                    for (Vault.Entry e : libraryObjects(v, c, notes)) {
+                        if (have.add(Libraries.normDn(e.dn))) {
+                            out.add(toSourceEntry(e));
+                        }
+                    }
+                }
+            }
+            for (String target : group.getValue()) {
+                if (have.contains(Libraries.normDn(target))) {
+                    continue;
+                }
+                Vault.Entry e;
+                try {
+                    e = readTolerant(v, target, notes);
+                } catch (RuntimeException ex) {
+                    notes.accept(target + ": a link names it, but it can't be read (" + ex.getMessage() + ")."
+                        + " The link stays as it is and reads as unresolved in the tree.");
+                    continue;
+                }
+                if (e == null) {
+                    notes.accept(target + ": a link names it, but the vault doesn't have it, or this account can't see it."
+                        + " The link stays as it is and reads as unresolved in the tree.");
+                    continue;
+                }
+                have.add(Libraries.normDn(target));
+                out.add(toSourceEntry(e));
+            }
+        }
+        return out;
+    }
+
+    /** A Library's policies and resources, one level down; object by object when one value can't be returned. */
+    private static List<Vault.Entry> libraryObjects(VaultAccess v, String libraryDn, java.util.function.Consumer<String> notes) {
+        List<Vault.Entry> found;
+        try {
+            found = v.search(libraryDn, ARTIFACT_FILTER, javax.naming.directory.SearchControls.ONELEVEL_SCOPE);
+        } catch (RuntimeException e) {
+            if (!Vault.invalidSyntax(e)) {
+                notes.accept(libraryDn + ": its objects can't be listed (" + e.getMessage() + "); only those a link names were read");
+                return List.of();
+            }
+            found = new ArrayList<>();
+            for (String dn : v.names(libraryDn, ARTIFACT_FILTER, javax.naming.directory.SearchControls.ONELEVEL_SCOPE)) {
+                Vault.Entry one = readOrNote(v, dn, notes);
+                if (one != null) {
+                    found.add(one);
+                }
+            }
+        }
+        List<Vault.Entry> out = new ArrayList<>();
+        for (Vault.Entry e : found) {
+            boolean artifact = e.hasClass("DirXML-Rule") || e.hasClass("DirXML-StyleSheet") || e.hasClass("DirXML-Resource")
+                || e.hasClass("DirXML-GlobalConfigDef");
+            if (artifact && LdifReader.sameDn(LdifReader.parentDn(e.dn), libraryDn)) {
+                out.add(e);
+            }
+        }
+        return out;
+    }
+
+    /** {@link #readTolerant}, with any other failure (no rights, a referral) a note and null. */
+    private static Vault.Entry readOrNote(VaultAccess v, String dn, java.util.function.Consumer<String> notes) {
+        try {
+            return readTolerant(v, dn, notes);
+        } catch (RuntimeException e) {
+            notes.accept(dn + ": can't be read (" + e.getMessage() + ")");
+            return null;
+        }
     }
 
     /**

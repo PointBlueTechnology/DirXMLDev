@@ -482,6 +482,11 @@ public final class Deployer {
             DriverSet after = VaultDiff.fromVault(vault, dsDn);
             Servers.readOverrides(after, dsDn, vault, s -> vaultFor(vault, env, s), n -> r.skipped.add("note: " + n));
             ModelDiff verify = overrides.leaveAlone(VaultDiff.of(after, to, scope.isEmpty() ? diff.affectedDrivers() : scope));
+            if (!o.traceSizeLimit) {
+                // the plan left the vault's trace size limit as it is (no --trace-size-limit): not a mismatch either
+                verify = verify.only(ch -> !(ch.kind == ModelDiff.Kind.DRIVER_SETTING
+                    && com.pointblue.dirxml.dev.model.Driver.TRACE_SIZE_LIMIT.equals(ch.what)));
+            }
             r.verified = verify.isEmpty();
             r.verifyText = verify.isEmpty() ? "" : verify.text();
             // affectedDrivers() never includes a deleted driver (never restarted), so its removal
@@ -888,6 +893,14 @@ public final class Deployer {
             // exactly the live state: clear the managed paths first so nothing stale survives,
             // and make sure git stores the bytes as they are
             Files.createDirectories(wtTree);
+            // the base commit's folder for each other Library, whatever this read would call it
+            if (Files.isRegularFile(wtTree.resolve(AsCodeWriter.DRIVERSET_MANIFEST))) {
+                try {
+                    com.pointblue.dirxml.dev.model.Libraries.adoptAliases(live, com.pointblue.dirxml.dev.ascode.AsCodeReader.read(wtTree));
+                } catch (RuntimeException | IOException unreadable) {
+                    // a base the reader can't take: the read's own aliases
+                }
+            }
             for (String managed : AsCodeWriter.MANAGED_PATHS) {
                 deleteRecursively(wtTree.resolve(managed));
             }

@@ -104,6 +104,69 @@ public final class Libraries {
         }
     }
 
+    /**
+     * Gives {@code ds}'s other Libraries the aliases {@code tree} already uses for the same DNs, so a read written
+     * over an existing tree ({@code import-live}, a capture) keeps its folders: an alias depends on which
+     * containers a read sees ({@code Library} alone, {@code Library@services} beside another {@code Library}).
+     * The artifacts' aliases and the drivers' links into {@code libraries/} follow. A DN the tree doesn't know
+     * keeps its alias, with {@code ~2}... when the tree's aliases took it.
+     */
+    public static void adoptAliases(DriverSet ds, DriverSet tree) {
+        if (tree == null || tree.libraries.isEmpty() || ds.libraries.isEmpty()) {
+            return;
+        }
+        java.util.Map<String, String> treeAlias = new java.util.HashMap<>();   // norm(dn) → the tree's alias
+        for (java.util.Map.Entry<String, String> e : tree.libraries.entrySet()) {
+            treeAlias.putIfAbsent(norm(e.getValue()), e.getKey());
+        }
+        java.util.Map<String, String> rename = new java.util.HashMap<>();   // alias → new alias
+        java.util.Map<String, String> next = new java.util.TreeMap<>();
+        java.util.Set<String> taken = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (java.util.Map.Entry<String, String> e : ds.libraries.entrySet()) {
+            String want = treeAlias.get(norm(e.getValue()));
+            if (want != null && taken.add(want)) {
+                next.put(want, e.getValue());
+                rename.put(e.getKey(), want);
+            }
+        }
+        taken.addAll(tree.libraries.keySet());   // a new DN never takes a folder the tree has for another
+        for (java.util.Map.Entry<String, String> e : ds.libraries.entrySet()) {
+            if (rename.containsKey(e.getKey())) {
+                continue;
+            }
+            String candidate = e.getKey();
+            for (int i = 2; taken.contains(candidate); i++) {
+                candidate = e.getKey() + "~" + i;
+            }
+            taken.add(candidate);
+            next.put(candidate, e.getValue());
+            rename.put(e.getKey(), candidate);
+        }
+        rename.entrySet().removeIf(e -> e.getKey().equals(e.getValue()));
+        if (rename.isEmpty()) {
+            return;
+        }
+        for (Artifact a : ds.library.artifacts()) {
+            if (a.library != null && rename.containsKey(a.library)) {
+                a.library = rename.get(a.library);
+            }
+        }
+        for (Driver d : ds.drivers) {
+            for (PolicyLink l : d.links) {
+                if (l.ref == null || !l.ref.startsWith("libraries/")) {
+                    continue;
+                }
+                int slash = l.ref.indexOf('/', "libraries/".length());
+                String alias = slash < 0 ? null : l.ref.substring("libraries/".length(), slash);
+                if (alias != null && rename.containsKey(alias)) {
+                    l.ref = Artifact.libraryPath(rename.get(alias), l.ref.substring(slash + 1));
+                }
+            }
+        }
+        ds.libraries.clear();
+        ds.libraries.putAll(next);
+    }
+
     /** The alias of the container at {@code dn}, or null when the set has none for it. */
     public static String aliasOf(DriverSet ds, String dn) {
         if (dn == null) {

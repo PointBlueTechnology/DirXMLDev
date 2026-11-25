@@ -542,6 +542,28 @@ public final class LdifReader {
         return libraries.contains(norm(parent)) && !sameDn(parent, "cn=Library," + dsDn);
     }
 
+    /**
+     * The DNs the driver set at {@code dsDn} and its drivers link outside the set, each once, as the links name
+     * them (#115). A read of the set's subtree doesn't hold these objects; the vault read fetches them so its
+     * tree has them as the LDIF and Designer imports do.
+     */
+    public static List<String> linkedOutside(Collection<Entry> entries, String dsDn) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Entry e : entries) {
+            boolean linker = sameDn(e.dn, dsDn) || e.hasClass("DirXML-Driver") && sameDn(parentDn(e.dn), dsDn);
+            if (!linker) {
+                continue;
+            }
+            for (String link : e.all("DirXML-Policies")) {
+                String target = linkTarget(link);
+                if (target != null && !target.isBlank() && !isUnder(target, dsDn)) {
+                    out.putIfAbsent(norm(target), target);
+                }
+            }
+        }
+        return new ArrayList<>(out.values());
+    }
+
     /** The DN in a {@code DirXML-Policies} value ({@code <dn>#<order>#<set>}), or null. */
     static String linkTarget(String link) {
         int h2 = link.lastIndexOf('#');
@@ -552,17 +574,18 @@ public final class LdifReader {
     /**
      * The DN of the Library an object outside the driver set lives in, when the set can use it: every
      * object of a Library outside every driver set (a vault's shared Library), and an object the set
-     * links in another set's Library. Null otherwise (another set's own objects: not this set's).
+     * links in any other container (another set's Library, an {@code ou}). Null otherwise (another set's
+     * own objects: not this set's).
      */
     static String usableLibrary(String dn, java.util.Set<String> libraries, List<String> driverSets, java.util.Set<String> linked) {
         String parent = parentDn(dn);
+        if (linked.contains(norm(dn))) {
+            return parent;   // what the set links, wherever it lives: a Library or any other container (#115)
+        }
         boolean inLibrary = libraries.contains(norm(parent))
             || libraries.isEmpty() && rdn(parent).equalsIgnoreCase("Library");   // an LDIF without the container entries
         if (!inLibrary) {
             return null;
-        }
-        if (linked.contains(norm(dn))) {
-            return parent;
         }
         for (String other : driverSets) {
             if (isUnder(dn, other)) {
@@ -582,12 +605,12 @@ public final class LdifReader {
         return String.join(",", out);
     }
 
-    static boolean sameDn(String a, String b) {
+    public static boolean sameDn(String a, String b) {
         return norm(a).equals(norm(b));
     }
 
     /** {@code dn} is strictly below {@code base}. */
-    static boolean isUnder(String dn, String base) {
+    public static boolean isUnder(String dn, String base) {
         String b = norm(base);
         return !b.isEmpty() && norm(dn).endsWith("," + b);
     }
@@ -833,7 +856,7 @@ public final class LdifReader {
         return unescape(eq >= 0 ? first.substring(eq + 1) : first);
     }
 
-    static String parentDn(String dn) {
+    public static String parentDn(String dn) {
         List<String> c = components(dn);
         return c.size() <= 1 ? "" : String.join(",", c.subList(1, c.size()));
     }
