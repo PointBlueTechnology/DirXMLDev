@@ -19,6 +19,10 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   name for each Library it already has. A read sees only the Libraries its links name, so it could name one
   differently (`Library` against the import's `Library@services`).
 - **The LDIF import** takes a linked object from any container outside the driver set, not only from a Library.
+- **Simulator 1.10.0:** `simulate` keeps structured values (entitlement refs, associations) whole in the fake
+  directory, so `if-entitlement … available` and `token-entitlement` see what a user already holds; and Matching,
+  Create and Placement run only when the engine's subscriber runs them (an associated modify no longer stops with
+  -9146). `bin/idm`, `bin/idm.cmd`, `bin/require-engine.sh` and `doctor` expect 1.10.0.
 
 ### Fixed
 
