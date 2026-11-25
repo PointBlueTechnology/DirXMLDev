@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.79.0] - 2026-11-25
+
 ### Changed
 
 - **Vault reads take in other Libraries (#115):** `import-live`, Compare, Plan, deploy's own read and capture now
