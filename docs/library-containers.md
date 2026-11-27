@@ -59,9 +59,28 @@ tree/
 - **The DN** lives once, in the folder's `library.xml` (`dn=`), instead of in every object's
   `library.dn` meta. `pathDn` reads it to give the link's DN back to a deploy.
 - **The alias** is the Library's `cn` when no other Library in the tree has that name. Otherwise
-  it is the `cn` plus the fewest parent RDN values that make it unique (`Library@services`,
-  `customizing@services.global`), with `~2` as a last resort. It's a label only: the DN in `library.xml`
-  is what counts.
+  it is the `cn`, `@`, and the nearest parent RDN values joined with `.`, adding one parent at a
+  time until no other container's alias at that length matches. A DN that runs out of parents
+  stops there. So `cn=customizing,o=services` and `cn=customizing,ou=services,o=global` both reach
+  `customizing@services` at one parent; the first has no more parents and keeps it, and the second
+  goes on to `customizing@services.global`. If two are still equal, the later one gets `~2`, `~3`…
+  It's a label only: the DN in `library.xml` is what counts (`Libraries.assignAliases`).
+- **Names compare without regard to case,** as LDAP names do: two aliases that differ only in
+  case count as the same, for `~2` and for the folder name, so the tree also works on the
+  case-insensitive file systems of macOS and Windows.
+- **Escaping:** a folder name is the alias through the same `fileSafe` as object and driver names
+  (`\ / : * ? " < > |` and control characters become `_`). An `@` already in a `cn` isn't
+  escaped, so `libraries/a@b/` could be the container `a@b` or `a` under `b`. The folder's
+  `library.xml` `dn=` tells them apart, and the aliases are still unique.
+- **Aliases across re-imports.** An alias read from the tree is kept while the tree is edited.
+  A re-import (`import-ldif`, `import-project`, **Update this branch**) works the aliases out
+  again from that source's containers: the same containers give the same aliases, but a new
+  container with an existing name can rename an existing folder (`customizing/` →
+  `customizing@services/`). Its files then move and the links' paths change in the tree's history.
+  Compare and deploy aren't affected: they match a link into `libraries/` by its DN
+  (`ModelDiff.linkKeys`), and they skip the objects in `libraries/` anyway. Promotion is, because
+  it copies those files by path. Keeping an existing alias on re-import (matched by DN) is open;
+  see below.
 - **Two of one name across Libraries stop being duplicates.** Each has its own path.
   `DuplicateArtifacts` remains only for two objects of one name in one container, as a Designer
   project can hold (#174).
@@ -78,7 +97,7 @@ tree/
 | Links and deploy | `VaultMapping.pathDn` and `policiesValues` take the DN from the folder's `library.xml`. `ModelDiff`'s skip and `Transaction`'s refusal key on `libraries/` instead of meta. |
 | Simulator export | `ExportWriter` embeds each linked object from its own path. Two objects of one name linked by one driver need distinct names in the export the simulator reads. To check in L2. |
 | Validation | `ValidationScope`, the compile and ECMAScript checks, and `library-other` (one line per folder) learn `libraries/`. A `token-map` that names a table in another Library by DN resolves to that folder. |
-| Promotion | Paths must match across projects. Matching uses the alias, so the alias must be the same in both projects (D2). |
+| Promotion | A file in `libraries/` promotes by path, with its folder's `library.xml`, so a folder's alias must be the same in both projects (D2); an alias a re-import changed (see Open) shows up here. The linkage compare matches a link into `libraries/` by DN, so it doesn't. |
 | Query and docs | `query` chain and fishbone print the alias. `tree-layout.md` and `model.md` describe `libraries/`. |
 | Web | The Library view groups objects by Library, own first. Links, `FlowView` and `PromoteView` show `libraries/…` paths. The read-only badge exists already. |
 | Designer project out | `ProjectWriter` should write each object into its own Library in the project. To check whether it writes other Libraries' objects today. |
@@ -93,6 +112,10 @@ tree/
    second Library inside the driver set, Libraries outside it, and any other non-driver container
    a driver links from.
 4. **D4:** objects in `libraries/` stay read-only: never compared, never deployed, edits refused.
+   This includes a second Library inside the driver set (`cn=SKyPRO`, D3), although it belongs to
+   that driver set. A deploy writes one Library, `cn=Library,<driver set>`, so SKyPRO stays a
+   reference, as it was from 0.74.0. Making it deployable would mean deploying a second container,
+   which is outside this design.
 5. **D6:** existing trees move by re-import (`import-ldif`, `import-project`, **Update this
    branch**); no `library.split` operation.
 
@@ -140,3 +163,10 @@ tree/
   Release web and update the lab.
 
 Not in scope: deploying them (D4). Vault reads of other Libraries came after, as #115 (core 0.79.0).
+
+## Open
+
+- **Keep aliases on re-import.** Seed the new model's aliases from the existing tree's
+  `library.xml` files, matched by DN, so only a container new to the tree gets a fresh alias. Then
+  a re-import never renames a folder, and promotion between projects whose vaults gained
+  Libraries at different times still lines up.
